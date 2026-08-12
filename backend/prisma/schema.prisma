@@ -1,0 +1,538 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// The connection is read from SUPABASE_DATABASE_URL, NOT from DATABASE_URL.
+//
+// This unusual name is load-bearing — do not "tidy" it back to DATABASE_URL.
+// backend/scripts/env.sh is regenerated from the Vibecode backend template
+// (commit "chore: upgrade backend scripts from template"), and that template
+// unconditionally does, in production only:
+//
+//     export DATABASE_URL="file:/data/production.db"
+//
+// The template assumes every backend is local SQLite. This project is Supabase
+// Postgres, so that export silently replaced the real database, the server
+// refused to boot, and every /api/* call on the live site returned 502. Editing
+// the script fixes it only until the next template sync overwrites it again.
+//
+// Reading a variable the template does not touch is what makes production
+// survive those syncs. See src/env.ts, which resolves the same variable and
+// discards the template's leftover `file:` value.
+datasource db {
+  provider  = "postgresql"
+  url       = env("SUPABASE_DATABASE_URL")
+  directUrl = env("SUPABASE_DIRECT_URL")
+}
+
+model User {
+  id                      String                  @id @default(cuid())
+  name                    String
+  username                String?                 @unique
+  email                   String                  @unique
+  emailVerified           Boolean                 @default(false)
+  role                    String                  @default("user")
+  image                   String?
+  bio                     String?
+  location                String?
+
+  // DO NOT REMOVE — this column is not read by this backend, it belongs to the
+  // Civic Voice mobile project, which shares this same Supabase database.
+  //
+  // It is declared here purely so `prisma db push` cannot delete it. This
+  // project and the mobile project BOTH run `prisma db push --accept-data-loss`
+  // on boot, and that command deletes anything missing from the schema it is
+  // pushing. On 2026-08-08 our boot dropped this column while it still held 423
+  // non-null values (see the "about to drop the column `banned`" warning in
+  // backend/server.log), which is what kept banning/unbanning breaking on
+  // mobile.
+  //
+  // Keeping our schema a strict SUPERSET of the live database is the defence:
+  // our boot push can then only ADD objects, never destroy them. That holds
+  // even when a template sync re-adds the push line to scripts/start.
+  //
+  // It looks unused. It is not. Leave it. Same goes for the three below, which
+  // are the rest of the mobile side's ban/username state (verified present in
+  // the live database on 2026-08-08).
+  banned                  Boolean                 @default(false)
+  banReason               String?
+  banExpiresAt            DateTime?
+  displayUsername         String?
+
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  accounts                Account[]
+  comments                Comment[]
+  delegationsReceived     Delegation[]            @relation("DelegationTo")
+  delegationsGiven        Delegation[]            @relation("DelegationFrom")
+  followers               Follow[]                @relation("Following")
+  following               Follow[]                @relation("Follower")
+  posts                   Post[]
+  sessions                Session[]
+  votes                   Vote[]
+  notifications           Notification[]
+  notificationPreference  NotificationPreference?
+}
+
+model AdminSession {
+  token     String   @id
+  adminId   String
+  username  String
+  role      String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Post {
+  id                      String               @id @default(cuid())
+  content                 String
+  authorId                String
+  billId                  String?
+  governmentReferenceId   String?              // Link to canonical GovernmentReference
+  referenceType           String?              // bill, executive_order, scotus_case (for backwards compat)
+  referenceId             String?              // ID of the referenced law/case/order (for backwards compat)
+  referenceTitle          String?              // Title of the referenced law (for backwards compat)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  comments                Comment[]
+  bill                    Bill?                @relation(fields: [billId], references: [id])
+  governmentReference     GovernmentReference? @relation("GovernmentReferencePosts", fields: [governmentReferenceId], references: [id])
+  author                  User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes                   PostLike[]
+  saves                   PostSave[]
+  shares                  PostShare[]
+  media                   Media[]
+
+  @@index([authorId])
+  @@index([billId])
+  @@index([governmentReferenceId])
+  @@index([referenceType])
+  @@index([referenceId])
+  @@index([createdAt])
+}
+
+model Media {
+  id           String   @id @default(cuid())
+  postId       String?
+  userId       String
+  type         String   // image, video, audio
+  url          String
+  thumbnailUrl String?
+  mimeType     String
+  sizeBytes    Int
+  durationMs   Int?     // For video/audio
+  width        Int?     // For images/video
+  height       Int?     // For images/video
+  createdAt    DateTime @default(now())
+  post         Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@index([createdAt]) // Index for recent likes queries
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  content   String
+  postId    String
+  authorId  String
+  parentId  String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([authorId])
+  @@index([parentId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Bill {
+  id             String    @id @default(cuid())
+  title          String
+  summary        String
+  fullText       String?
+  category       String
+  status         String
+  chamber        String
+  sponsor        String?
+  cosponsors     String?
+  introducedDate DateTime?
+  lastActionDate DateTime?
+  lastAction     String?
+  sourceUrl      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  posts          Post[]
+  votes          Vote[]
+
+  @@index([category])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Vote {
+  id        String   @id @default(cuid())
+  billId    String
+  userId    String
+  position  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bill      Bill     @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@unique([billId, userId])
+  @@index([billId])
+  @@index([userId])
+  @@index([userId, billId, position]) // Compound index for similarity calculations
+}
+
+model Delegation {
+  id         String   @id @default(cuid())
+  fromUserId String
+  toUserId   String
+  category   String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  toUser     User     @relation("DelegationTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  fromUser   User     @relation("DelegationFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId, category])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+// Social Feed Algorithm Models
+
+// Tracks all user interactions for feed personalization
+model UserInteraction {
+  id            String   @id @default(cuid())
+  userId        String
+  postId        String?
+  targetUserId  String?  // For follows, profile views
+  interactionType String // view, like, comment, share, save, follow, mention, dwell
+  dwellTimeMs   Int?     // Time spent viewing (for view interactions)
+  metadata      String?  // JSON string for additional context
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([postId])
+  @@index([targetUserId])
+  @@index([interactionType])
+  @@index([createdAt])
+  @@index([userId, interactionType, createdAt]) // Compound index for user preference queries
+  @@index([postId, interactionType]) // Compound index for post metric calculations
+}
+
+// Aggregated metrics for content creators (updated periodically)
+model CreatorMetrics {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  totalFollowers    Int      @default(0)
+  totalLikes        Int      @default(0)
+  totalComments     Int      @default(0)
+  totalShares       Int      @default(0)
+  totalMentions     Int      @default(0)
+  totalPosts        Int      @default(0)
+  avgEngagementRate Float    @default(0) // (likes + comments + shares) / followers
+  viralPostCount    Int      @default(0) // Posts that exceeded 10x avg engagement
+  influenceScore    Float    @default(0) // Calculated influence score
+  followerGrowthRate Float   @default(0) // 7-day growth rate
+  activeFollowerPct Float    @default(0) // % of followers who engage
+  topCategories     String?  // JSON array of top content categories
+  peakPostingHours  String?  // JSON array of optimal posting times
+  lastCalculated    DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([influenceScore])
+  @@index([totalFollowers])
+  @@index([avgEngagementRate])
+  @@index([influenceScore, totalFollowers]) // Compound index for creator ranking
+}
+
+// Post engagement metrics (updated in real-time)
+model PostMetrics {
+  id                 String   @id @default(cuid())
+  postId             String   @unique
+  viewCount          Int      @default(0)
+  uniqueViewers      Int      @default(0)
+  likeCount          Int      @default(0)
+  commentCount       Int      @default(0)
+  shareCount         Int      @default(0)
+  saveCount          Int      @default(0)
+  avgDwellTimeMs     Int      @default(0)
+  engagementRate     Float    @default(0)
+  viralityScore      Float    @default(0) // Engagement velocity
+  qualityScore       Float    @default(0) // Based on engagement quality
+  firstHourEngagement Int     @default(0) // Early signal for viral potential
+  peakEngagementHour DateTime?
+  lastEngagementAt   DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([viralityScore])
+  @@index([engagementRate])
+  @@index([createdAt])
+  @@index([viralityScore, createdAt]) // Compound index for trending queries
+  @@index([lastEngagementAt]) // Index for recent activity queries
+}
+
+// User feed preferences and behavior patterns
+model UserFeedProfile {
+  id                  String   @id @default(cuid())
+  userId              String   @unique
+  preferredCategories String?  // JSON array of category weights
+  preferredAuthors    String?  // JSON array of author IDs with weights
+  interactionPatterns String?  // JSON object of behavior patterns
+  avgSessionDuration  Int      @default(0)
+  postsPerSession     Int      @default(0)
+  likeRate            Float    @default(0) // % of viewed posts liked
+  commentRate         Float    @default(0) // % of viewed posts commented
+  shareRate           Float    @default(0) // % of viewed posts shared
+  peakActivityHours   String?  // JSON array of active hours
+  contentPreferences  String?  // JSON: {textLength, hasImage, hasBill, etc}
+  diversityPreference Float    @default(0.5) // 0 = echo chamber, 1 = diverse
+  lastActiveAt        DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([lastActiveAt])
+}
+
+// Stores post saves/bookmarks
+model PostSave {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId])
+  @@index([postId])
+  @@index([createdAt]) // Index for recent saves queries
+}
+
+// Stores post shares
+model PostShare {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  shareType String   @default("internal") // internal, external, dm
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// User mentions in posts/comments
+model Mention {
+  id              String   @id @default(cuid())
+  mentionedUserId String
+  mentionedByUserId String
+  postId          String?
+  commentId       String?
+  createdAt       DateTime @default(now())
+
+  @@index([mentionedUserId])
+  @@index([mentionedByUserId])
+  @@index([postId])
+  @@index([createdAt])
+}
+
+// Hashtag tracking
+model Hashtag {
+  id        String   @id @default(cuid())
+  tag       String   @unique
+  useCount  Int      @default(0)
+  trendingScore Float @default(0)
+  lastUsedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([trendingScore])
+  @@index([useCount])
+}
+
+model PostHashtag {
+  id        String   @id @default(cuid())
+  postId    String
+  hashtagId String
+  createdAt DateTime @default(now())
+
+  @@unique([postId, hashtagId])
+  @@index([postId])
+  @@index([hashtagId])
+}
+
+// Notification System Models
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // like, comment, reply, mention, follow, repost, new_follower_post
+  title     String
+  body      String
+  data      String?  // JSON string for additional context (postId, commentId, fromUserId, etc.)
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model NotificationPreference {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  likes           Boolean @default(true)
+  comments        Boolean @default(true)
+  replies         Boolean @default(true)
+  mentions        Boolean @default(true)
+  follows         Boolean @default(true)
+  reposts         Boolean @default(true)
+  newFollowerPosts Boolean @default(true)
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Government Reference System - Canonical reference for bills, executive orders, and SCOTUS cases
+model GovernmentReference {
+  id                String    @id @default(cuid())
+  masterReferenceId String    @unique
+  referenceType     String
+  title             String
+  shortTitle        String?
+  sourceUrl         String?
+  chamber           String?
+  congress          Int?
+  status            String
+  category          String?
+  description       String?
+  citizenBrief      String?
+  seedSupport       Int       @default(0)
+  seedOppose        Int       @default(0)
+  fullText          String?
+  citizenBriefJson  String?
+  citizenBriefAt    DateTime?
+  citizenBriefModel String?
+  fullTextSource    String?
+  fullTextUrl       String?
+  fullTextHash      String?
+  fullTextAt        DateTime?
+  sourceCheckedAt   DateTime?
+  contentStatus     String?
+  signedDate        DateTime?
+  decidedDate       DateTime?
+  aliases           String?
+  mergedIntoId      String?
+  supportVotes      Int       @default(0)
+  opposeVotes       Int       @default(0)
+  totalComments     Int       @default(0)
+  totalShares       Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  // Relations
+  mergedInto        GovernmentReference?  @relation("MergedReferences", fields: [mergedIntoId], references: [id])
+  mergedFrom        GovernmentReference[] @relation("MergedReferences")
+  posts             Post[]                @relation("GovernmentReferencePosts")
+  votes             GovernmentReferenceVote[]
+
+  @@index([referenceType])
+  @@index([status])
+  @@index([category])
+  @@index([createdAt])
+  @@index([supportVotes])
+  @@index([opposeVotes])
+  @@index([mergedIntoId])
+}
+
+// Votes on government references (separate from bill votes)
+model GovernmentReferenceVote {
+  id                    String              @id @default(cuid())
+  governmentReferenceId String
+  userId                String
+  position              String              // support, oppose
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  governmentReference   GovernmentReference @relation(fields: [governmentReferenceId], references: [id], onDelete: Cascade)
+
+  @@unique([governmentReferenceId, userId])
+  @@index([governmentReferenceId])
+  @@index([userId])
+  @@index([position])
+}

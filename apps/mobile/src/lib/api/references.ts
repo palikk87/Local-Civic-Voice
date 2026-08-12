@@ -1,0 +1,358 @@
+/**
+ * Government references API — the live, daily-synced store of bills, executive
+ * orders, and SCOTUS cases (GET /api/government-references/*). The Discover tabs
+ * read the 10 most popular per branch from /trending, and the detail screens
+ * resolve reference ids the static libraries don't know about.
+ *
+ * Mappers convert the server shape into the legacy Bill / ExecutiveOrder /
+ * SupremeCourtCase shapes the existing cards and detail screens render.
+ */
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "./api";
+import type { Bill, ExecutiveOrder, SupremeCourtCase, BillCategory } from "@/lib/types";
+
+export type ReferenceType = "bill" | "executive_order" | "scotus_case";
+
+export interface GovReference {
+  id: string;
+  masterReferenceId: string;
+  referenceType: ReferenceType;
+  title: string;
+  shortTitle: string | null;
+  status: string;
+  category: string | null;
+  chamber: string | null;
+  congress: number | null;
+  sourceUrl: string | null;
+  description?: string | null;
+  citizenBrief?: string | null;
+  signedDate: string | null;
+  decidedDate: string | null;
+  votes: { support: number; oppose: number; total: number };
+  engagement: { comments: number; shares: number; posts: number };
+  createdAt: string;
+}
+
+/** Three-panel brief stored on the master reference — same object both faucets render. */
+export interface CitizenBriefSections {
+  theGoal: string;
+  theWallet: string;
+  theDebate: string;
+}
+
+/** Panel headings vary by branch (a court case has a Question and a Ruling, not a Wallet). */
+export interface CitizenBriefLabels {
+  goal: string;
+  wallet: string;
+  debate: string;
+}
+
+/**
+ * ready         — text and brief are stored and current
+ * brief_pending — text is stored, the brief is being written right now (poll)
+ * fetching      — official text is being pulled from the source chain
+ * unavailable   — no source yielded text
+ */
+export type ReferenceContentStatus = "ready" | "brief_pending" | "fetching" | "unavailable";
+
+export interface GovReferenceDetail extends GovReference {
+  fullText: string | null;
+  userVote: "support" | "oppose" | null;
+  updatedAt: string;
+  /** Cached brief from the master reference. Null until the first reader triggers the pull. */
+  citizenBriefSections: CitizenBriefSections | null;
+  citizenBriefLabels: CitizenBriefLabels;
+  citizenBriefAt: string | null;
+  contentStatus: ReferenceContentStatus | null;
+  fullTextSource: string | null;
+  fullTextUrl: string | null;
+  fullTextAt: string | null;
+  sourceCheckedAt: string | null;
+}
+
+/**
+ * Identity of a live Library search result, sent to the server so it can find or
+ * create the master reference and write the brief from the FULL official text.
+ * Mirrors libraryResolveRequestSchema in backend/src/types.ts.
+ */
+export interface LibraryResolveRequest {
+  branch: "legislative" | "executive" | "judicial";
+  title: string;
+  sourceUrl?: string;
+  summary?: string;
+  masterReferenceId?: string;
+  congress?: number;
+  billType?: string;
+  billNumber?: string;
+  chamber?: string;
+  latestAction?: string;
+  documentNumber?: string;
+  eoNumber?: string;
+  docketNumber?: string;
+  opinionId?: number;
+}
+
+export interface LibraryResolveResponse {
+  reference: {
+    id: string;
+    masterReferenceId: string;
+    referenceType: ReferenceType;
+    contentStatus: ReferenceContentStatus | null;
+    created: boolean;
+  };
+}
+
+/**
+ * Turn a live Library search result into its master reference row so its brief
+ * comes from the same server pipeline (full official text) as every other screen.
+ */
+export function resolveLibraryDocument(input: LibraryResolveRequest) {
+  return api.post<LibraryResolveResponse>("/api/government-references/resolve", input);
+}
+
+export const referenceKeys = {
+  trending: (referenceType: ReferenceType, limit: number) =>
+    ["government-references", "trending", referenceType, limit] as const,
+  latest: (referenceType: ReferenceType, limit: number) =>
+    ["government-references", "latest", referenceType, limit] as const,
+  detail: (id: string) => ["government-references", "detail", id] as const,
+};
+
+/** Top N references for one branch, ranked by community engagement then recency. */
+export function useTrendingReferences(referenceType: ReferenceType, limit = 10) {
+  return useQuery({
+    queryKey: referenceKeys.trending(referenceType, limit),
+    queryFn: () =>
+      api.get<{ references: GovReference[] }>(
+        `/api/government-references/trending?referenceType=${referenceType}&limit=${limit}`
+      ),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Newest references for one branch — surfaces freshly synced items that have no votes yet. */
+export function useLatestReferences(referenceType: ReferenceType, limit = 30) {
+  return useQuery({
+    queryKey: referenceKeys.latest(referenceType, limit),
+    queryFn: () =>
+      api.get<{ references: GovReference[] }>(
+        `/api/government-references?referenceType=${referenceType}&sortBy=createdAt&sortOrder=desc&limit=${limit}`
+      ),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Single reference by database id — used by detail screens for synced items.
+ *
+ * Opening a law is what triggers the server to pull its official text and write
+ * the citizen brief onto the master reference (first reader pays, everyone after
+ * is served from storage). While that work is in flight the server reports
+ * contentStatus brief_pending/fetching, so we poll until it lands.
+ */
+export function useGovernmentReference(id: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: referenceKeys.detail(id ?? ""),
+    queryFn: () => api.get<{ reference: GovReferenceDetail }>(`/api/government-references/${id}`),
+    enabled: enabled && !!id,
+    staleTime: 60 * 1000,
+    retry: 1,
+    refetchInterval: (query) => {
+      const status = query.state.data?.reference?.contentStatus;
+      return status === "brief_pending" || status === "fetching" ? 4000 : false;
+    },
+  });
+}
+
+/**
+ * Ask the server to re-pull the official text and rewrite the brief on the master
+ * reference. Used by the brief card's refresh control on both faucets.
+ */
+export function useRefreshReferenceContent(id: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ status: string }>(`/api/government-references/${id}/refresh-content`),
+    onSuccess: () => {
+      if (id) queryClient.invalidateQueries({ queryKey: referenceKeys.detail(id) });
+    },
+  });
+}
+
+/** What the Citizen's Brief card needs when the brief lives on the master reference. */
+export interface ReferenceBriefProps {
+  initialBrief: CitizenBriefSections | null;
+  labels?: { goal?: string; wallet?: string; debate?: string };
+  serverPending: boolean;
+  onRefresh?: () => Promise<void>;
+}
+
+/**
+ * Brief card props sourced from the master reference. Everything is null/false for
+ * documents that have no reference row (static library items), so those callers
+ * keep their existing client-side generation path.
+ */
+export function useReferenceBriefProps(
+  id: string | undefined,
+  reference: GovReferenceDetail | undefined | null
+): ReferenceBriefProps {
+  const refresh = useRefreshReferenceContent(id);
+  const status = reference?.contentStatus ?? null;
+  const stored = reference?.citizenBriefSections ?? null;
+
+  return {
+    initialBrief: stored,
+    labels: reference?.citizenBriefLabels,
+    serverPending:
+      !stored &&
+      (refresh.isPending || status === "brief_pending" || status === "fetching"),
+    onRefresh: reference
+      ? async () => {
+          await refresh.mutateAsync().catch(() => undefined);
+        }
+      : undefined,
+  };
+}
+
+// ---------- Mappers to the legacy display shapes ----------
+
+const VALID_CATEGORIES: BillCategory[] = [
+  "healthcare", "education", "environment", "economy", "civil_rights",
+  "defense", "immigration", "technology", "housing", "infrastructure",
+];
+
+function toCategory(category: string | null | undefined): BillCategory {
+  if (category && (VALID_CATEGORIES as string[]).includes(category)) {
+    return category as BillCategory;
+  }
+  if (category === "justice") return "civil_rights";
+  return "economy";
+}
+
+function toVoteTally(votes: GovReference["votes"]) {
+  return { yea: votes.support, nay: votes.oppose, totalVoters: votes.total };
+}
+
+/** Who held the presidency on a given date — used when the source omits it. */
+export function presidentAtDate(dateStr: string | null): string {
+  const time = dateStr ? new Date(dateStr).getTime() : Date.now();
+  if (time >= new Date("2025-01-20").getTime()) return "Donald Trump";
+  if (time >= new Date("2021-01-20").getTime()) return "Joe Biden";
+  if (time >= new Date("2017-01-20").getTime()) return "Donald Trump";
+  if (time >= new Date("2009-01-20").getTime()) return "Barack Obama";
+  return "the President";
+}
+
+export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
+  const chamber: "house" | "senate" = ref.chamber === "senate" ? "senate" : "house";
+  const statusMap: Record<string, Bill["status"]> = {
+    proposed: "introduced",
+    introduced: "introduced",
+    committee: "in_committee",
+    passed: chamber === "senate" ? "passed_senate" : "passed_house",
+    enacted: "enacted",
+    signed: "signed_into_law",
+    vetoed: "vetoed",
+  };
+  const summary =
+    ref.citizenBrief ?? ref.description ?? ("fullText" in ref ? ref.fullText : null) ?? ref.title;
+  const congressNumber = ref.masterReferenceId
+    .replace(/-\d+$/, "")
+    .replace(/^([a-z]+)-/, (_, p: string) => `${p.toUpperCase()}.`)
+    .replace(/\.$/, ". ");
+
+  return {
+    id: ref.id,
+    title: ref.title,
+    shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
+    status: statusMap[ref.status] ?? "introduced",
+    chamber,
+    sponsor: {
+      id: "congress",
+      name: chamber === "senate" ? "U.S. Senate" : "U.S. House of Representatives",
+      party: "I",
+      state: "US",
+      chamber,
+      imageUrl: "",
+    },
+    introducedDate: ref.createdAt,
+    lastActionDate: ref.createdAt,
+    category: toCategory(ref.category),
+    congressNumber,
+    congressUrl: ref.sourceUrl ?? undefined,
+    fullText: ("fullText" in ref ? ref.fullText : null) ?? summary,
+    simplifiedText: summary,
+    realWorldImpact: ref.description ?? "",
+    relatedLaws: [],
+    communityVotes: toVoteTally(ref.votes),
+    projectedOutcome: ref.votes.support > ref.votes.oppose ? "likely_pass" : "uncertain",
+    branch: "legislative",
+  };
+}
+
+export function referenceToExecutiveOrder(ref: GovReference | GovReferenceDetail): ExecutiveOrder {
+  const statusMap: Record<string, ExecutiveOrder["status"]> = {
+    active: "active",
+    signed: "active",
+    revoked: "revoked",
+    superseded: "superseded",
+    expired: "expired",
+  };
+  const summary =
+    ref.citizenBrief ?? ref.description ?? `Executive order signed by President ${presidentAtDate(ref.signedDate)}.`;
+
+  return {
+    id: ref.id,
+    eoNumber: `EO ${ref.masterReferenceId.replace(/^eo-/i, "").toUpperCase()}`,
+    title: ref.title,
+    shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
+    president: presidentAtDate(ref.signedDate),
+    signedDate: ref.signedDate ?? ref.createdAt,
+    publishedDate: ref.signedDate ?? ref.createdAt,
+    status: statusMap[ref.status] ?? "active",
+    category: toCategory(ref.category),
+    federalRegisterUrl: ref.sourceUrl ?? undefined,
+    fullText: ("fullText" in ref ? ref.fullText : null) ?? summary,
+    simplifiedText: summary,
+    realWorldImpact: ref.description ?? "",
+    communityVotes: toVoteTally(ref.votes),
+    branch: "executive",
+  };
+}
+
+export function referenceToScotusCase(ref: GovReference | GovReferenceDetail): SupremeCourtCase {
+  const statusMap: Record<string, SupremeCourtCase["status"]> = {
+    decided: "decided",
+    argued: "argued",
+    pending: "pending",
+    dismissed: "dismissed",
+    remanded: "remanded",
+  };
+  // SCOTUS terms start in October: a June 2026 decision belongs to the 2025 term.
+  const decided = ref.decidedDate ? new Date(ref.decidedDate) : null;
+  const term = decided
+    ? String(decided.getMonth() + 1 >= 10 ? decided.getFullYear() : decided.getFullYear() - 1)
+    : String(new Date(ref.createdAt).getFullYear());
+  const [petitioner = "Petitioner", respondent = "Respondent"] = ref.title.split(/\s+v\.?\s+/i);
+  const question = ref.citizenBrief ?? ref.description ?? ref.title;
+
+  return {
+    id: ref.id,
+    docketNumber: ref.masterReferenceId.replace(/^scotus-/i, "").toUpperCase(),
+    caseName: ref.title,
+    shortName: ref.shortTitle ?? ref.title,
+    term,
+    decidedDate: ref.decidedDate ?? undefined,
+    status: statusMap[ref.status] ?? (ref.decidedDate ? "decided" : "pending"),
+    category: toCategory(ref.category),
+    lowerCourt: "Federal courts",
+    petitioner: petitioner.trim(),
+    respondent: respondent.trim(),
+    questionPresented: question,
+    simplifiedQuestion: question,
+    realWorldImpact: ref.description ?? "",
+    communityVotes: toVoteTally(ref.votes),
+    courtListenerUrl: ref.sourceUrl ?? undefined,
+    branch: "judicial",
+  };
+}

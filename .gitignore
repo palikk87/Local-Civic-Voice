@@ -1,0 +1,58 @@
+# ---------------------------------------------------------------------------
+# Secrets. This repository is public. Never commit a real .env.
+# The Vibecode exports shipped backend/.env with live Supabase, OpenAI, Gemini,
+# Congress, CourtListener and Tavily credentials in them; those files are
+# deliberately absent here. Use the .env.example files as templates.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Builds / caches
+dist/
+build/
+.expo/
+.next/
+out/
+*.tsbuildinfo
+.turbo/
+.vite/
+
+# Local databases (this project uses Supabase Postgres; SQLite files are
+# leftovers from the Vibecode template's local-SQLite assumption)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Prisma generated client
+**/generated/prisma/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+bun-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+__MACOSX/
+
+# Native build output
+android/
+ios/
+!apps/mobile/ios/Podfile
+*.keystore
+*.jks

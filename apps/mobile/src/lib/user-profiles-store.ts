@@ -1,0 +1,228 @@
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { CivicEngagementStats } from './types';
+import { currentUser, sampleUsers } from './mock-data';
+
+// Initialize default civic stats
+const defaultCivicStats: CivicEngagementStats = {
+  libraryPostsCount: 0,
+  totalSupportVotes: 0,
+  totalOpposeVotes: 0,
+  totalRepGapVotes: 0,
+  totalComments: 0,
+  civilLeaderScore: 0,
+};
+
+// Calculate Civil Leader score based on engagement
+function calculateCivilLeaderScore(stats: CivicEngagementStats): number {
+  // Weight different engagement types
+  const libraryPostWeight = 10;
+  const supportVoteWeight = 2;
+  const opposeVoteWeight = 2;
+  const repGapVoteWeight = 3;
+  const commentWeight = 1;
+
+  return (
+    stats.libraryPostsCount * libraryPostWeight +
+    stats.totalSupportVotes * supportVoteWeight +
+    stats.totalOpposeVotes * opposeVoteWeight +
+    stats.totalRepGapVotes * repGapVoteWeight +
+    stats.totalComments * commentWeight
+  );
+}
+
+interface UserProfilesState {
+  // Map of userId to their civic engagement stats
+  userStats: Record<string, CivicEngagementStats>;
+
+  // Actions to update stats
+  incrementLibraryPosts: (userId: string) => void;
+  incrementSupportVote: (authorId: string) => void;
+  decrementSupportVote: (authorId: string) => void;
+  incrementOpposeVote: (authorId: string) => void;
+  decrementOpposeVote: (authorId: string) => void;
+  incrementRepGapVote: (authorId: string) => void;
+  incrementComment: (authorId: string) => void;
+
+  // Getters
+  getUserStats: (userId: string) => CivicEngagementStats;
+  getCivilLeaderRank: (userId: string) => string;
+}
+
+export const useUserProfilesStore = create<UserProfilesState>()(
+  persist(
+    (set, get) => ({
+      userStats: {
+        // Initialize current user with default stats
+        [currentUser.id]: { ...defaultCivicStats },
+        // Initialize sample users with some mock engagement
+        ...sampleUsers.reduce((acc, user, index) => ({
+          ...acc,
+          [user.id]: {
+            libraryPostsCount: Math.floor(Math.random() * 10) + index,
+            totalSupportVotes: Math.floor(Math.random() * 50) + index * 10,
+            totalOpposeVotes: Math.floor(Math.random() * 30) + index * 5,
+            totalRepGapVotes: Math.floor(Math.random() * 40) + index * 8,
+            totalComments: Math.floor(Math.random() * 20) + index * 3,
+            civilLeaderScore: 0, // Will be calculated
+          },
+        }), {}),
+      },
+
+      incrementLibraryPosts: (userId) => {
+        set((state) => {
+          const current = state.userStats[userId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            libraryPostsCount: current.libraryPostsCount + 1,
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [userId]: updated,
+            },
+          };
+        });
+      },
+
+      incrementSupportVote: (authorId) => {
+        set((state) => {
+          const current = state.userStats[authorId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            totalSupportVotes: current.totalSupportVotes + 1,
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [authorId]: updated,
+            },
+          };
+        });
+      },
+
+      decrementSupportVote: (authorId) => {
+        set((state) => {
+          const current = state.userStats[authorId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            totalSupportVotes: Math.max(0, current.totalSupportVotes - 1),
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [authorId]: updated,
+            },
+          };
+        });
+      },
+
+      incrementOpposeVote: (authorId) => {
+        set((state) => {
+          const current = state.userStats[authorId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            totalOpposeVotes: current.totalOpposeVotes + 1,
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [authorId]: updated,
+            },
+          };
+        });
+      },
+
+      decrementOpposeVote: (authorId) => {
+        set((state) => {
+          const current = state.userStats[authorId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            totalOpposeVotes: Math.max(0, current.totalOpposeVotes - 1),
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [authorId]: updated,
+            },
+          };
+        });
+      },
+
+      incrementRepGapVote: (authorId) => {
+        set((state) => {
+          const current = state.userStats[authorId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            totalRepGapVotes: current.totalRepGapVotes + 1,
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [authorId]: updated,
+            },
+          };
+        });
+      },
+
+      incrementComment: (authorId) => {
+        set((state) => {
+          const current = state.userStats[authorId] ?? { ...defaultCivicStats };
+          const updated = {
+            ...current,
+            totalComments: current.totalComments + 1,
+          };
+          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          return {
+            userStats: {
+              ...state.userStats,
+              [authorId]: updated,
+            },
+          };
+        });
+      },
+
+      getUserStats: (userId) => {
+        const stats = get().userStats[userId] ?? { ...defaultCivicStats };
+        return {
+          ...stats,
+          civilLeaderScore: calculateCivilLeaderScore(stats),
+        };
+      },
+
+      getCivilLeaderRank: (userId) => {
+        const stats = get().userStats[userId] ?? { ...defaultCivicStats };
+        const score = calculateCivilLeaderScore(stats);
+
+        // Rank tiers based on Civil Leader score
+        if (score >= 500) return 'Civic Champion';
+        if (score >= 250) return 'Policy Leader';
+        if (score >= 100) return 'Active Citizen';
+        if (score >= 50) return 'Engaged Voter';
+        if (score >= 10) return 'New Voice';
+        return 'Observer';
+      },
+    }),
+    {
+      name: 'user-profiles-store',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        userStats: state.userStats,
+      }),
+    }
+  )
+);
+
+// Selectors
+export const selectUserStats = (userId: string) => (state: UserProfilesState) =>
+  state.userStats[userId] ?? defaultCivicStats;
+
+export const selectCivilLeaderRank = (userId: string) => (state: UserProfilesState) =>
+  state.getCivilLeaderRank(userId);

@@ -1,0 +1,353 @@
+/**
+ * Government data sync — pulls fresh, real-world items into GovernmentReference:
+ *   - Bills:            congress.gov recently-updated bills of the current congress
+ *   - Executive orders: Federal Register, newest executive orders
+ *   - SCOTUS cases:     CourtListener, newest Supreme Court opinions
+ *
+ * Runs at server start and once per day via the job queue (SYNC_GOVERNMENT_DATA).
+ * Rows are upserted by masterReferenceId, so community votes, comments, and
+ * citizen briefs on existing rows are never touched — only factual fields refresh.
+ * The Discover page then serves "10 most popular per branch" from
+ * GET /api/government-references/trending, which both faucets consume.
+ */
+
+import { prisma } from "../prisma";
+import { ReferenceType, normalizeReferenceId, seedTallyFor } from "./deduplication-service";
+
+const SYNC_COUNT = 10;
+const FETCH_TIMEOUT_MS = 20_000;
+
+// Re-syncing more often than this is a no-op (guards against dev hot reloads).
+const MIN_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+let lastSuccessfulSyncAt = 0;
+
+export interface GovernmentSyncResult {
+  bills: number;
+  executiveOrders: number;
+  scotusCases: number;
+  skipped: boolean;
+}
+
+async function fetchJson<T>(url: string, headers: Record<string, string> = {}): Promise<T | null> {
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", ...headers },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      console.error(`[GovSync] ${response.status} from ${url.split("?")[0]}`);
+      return null;
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    console.error(`[GovSync] fetch failed for ${url.split("?")[0]}:`, error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
+async function fetchText(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!response.ok) return null;
+    // Strip NUL/control bytes (GPO raw text embeds them; SQLite cuts strings at NUL).
+    // Never truncate — official text is stored in its entirety.
+    // eslint-disable-next-line no-control-regex
+    const text = (await response.text()).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+    return text.length > 0 ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Congress numbers advance every two years; the 119th began in January 2025. */
+function currentCongress(): number {
+  return Math.floor((new Date().getFullYear() - 1789) / 2) + 1;
+}
+
+const CATEGORY_KEYWORDS: Array<[string, RegExp]> = [
+  ["healthcare", /health|medicare|medicaid|insurance|drug|prescription|hospital|medical/i],
+  ["defense", /defense|military|armed forces|veterans?|national security|weapons?|army|navy/i],
+  ["environment", /environment|climate|energy|clean|emissions?|conservation|wildlife|agricultur/i],
+  ["education", /education|school|student|college|university|teacher/i],
+  ["immigration", /immigra|border|visa|asylum|citizenship|refugee/i],
+  ["technology", /technolog|artificial intelligence|cyber|internet|broadband|data privacy|quantum|semiconductor/i],
+  ["housing", /housing|mortgage|rent|homeless/i],
+  ["civil_rights", /civil rights|voting rights|discrimination|equality|free speech|first amendment/i],
+  ["justice", /court|justice|crime|criminal|police|prison|judicial|election|campaign/i],
+  ["economy", /econom|tax|trade|tariff|budget|small business|jobs?|labor|bank|fraud|fund/i],
+];
+
+export function categorize(title: string): string {
+  for (const [category, pattern] of CATEGORY_KEYWORDS) {
+    if (pattern.test(title)) return category;
+  }
+  return "economy";
+}
+
+export function billStatusFromAction(actionText: string | undefined): string {
+  const text = (actionText ?? "").toLowerCase();
+  if (/became public law|signed by president/.test(text)) return "passed";
+  if (/passed|agreed to/.test(text)) return "passed";
+  if (/committee|calendar/.test(text)) return "committee";
+  return "proposed";
+}
+
+interface UpsertData {
+  masterReferenceId: string;
+  referenceType: string;
+  title: string;
+  shortTitle?: string;
+  sourceUrl?: string;
+  chamber?: string;
+  congress?: number;
+  status: string;
+  category: string;
+  description?: string;
+  fullText?: string;
+  signedDate?: Date;
+  decidedDate?: Date;
+}
+
+/** Insert new rows or refresh factual fields, never touching votes/briefs. */
+async function upsertReference(data: UpsertData): Promise<void> {
+  const { masterReferenceId, ...fields } = data;
+  const seed = seedTallyFor(masterReferenceId);
+  await prisma.governmentReference.upsert({
+    where: { masterReferenceId },
+    create: {
+      masterReferenceId,
+      ...fields,
+      ...seed,
+      // Public tally starts as the seed layer; real votes add on top of it.
+      supportVotes: seed.seedSupport,
+      opposeVotes: seed.seedOppose,
+    },
+    update: {
+      title: fields.title,
+      status: fields.status,
+      ...(fields.shortTitle ? { shortTitle: fields.shortTitle } : {}),
+      ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
+      ...(fields.description ? { description: fields.description } : {}),
+      ...(fields.fullText ? { fullText: fields.fullText } : {}),
+      ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
+      ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
+    },
+  });
+}
+
+// ---------- Bills (congress.gov) ----------
+
+interface CongressListResponse {
+  bills?: Array<{
+    congress: number;
+    number: string;
+    title: string;
+    type: string;
+    originChamber: string;
+    updateDate?: string;
+    latestAction?: { actionDate: string; text: string };
+  }>;
+}
+
+async function syncBills(): Promise<number> {
+  const apiKey = process.env.CONGRESS_API_KEY;
+  if (!apiKey) {
+    console.warn("[GovSync] CONGRESS_API_KEY not set — skipping bills");
+    return 0;
+  }
+  const congress = currentCongress();
+  // NOTE: the API needs a literal "+" in sort — URL-encoding it to %2B makes
+  // congress.gov silently fall back to oldest-first order.
+  const url = `https://api.congress.gov/v3/bill/${congress}?limit=${SYNC_COUNT * 2}&format=json&api_key=${apiKey}&sort=updateDate+desc`;
+  const data = await fetchJson<CongressListResponse>(url);
+  if (!data?.bills) return 0;
+
+  let synced = 0;
+  for (const bill of data.bills) {
+    if (synced >= SYNC_COUNT) break;
+    if (!bill.title || !bill.number || !bill.type) continue;
+    const type = bill.type.toLowerCase();
+    const masterReferenceId = normalizeReferenceId(
+      ReferenceType.BILL,
+      `${type}-${bill.number}-${bill.congress ?? congress}`,
+    );
+    const chamberPath = type.startsWith("h") ? "house-bill" : "senate-bill";
+    await upsertReference({
+      masterReferenceId,
+      referenceType: "bill",
+      title: bill.title,
+      status: billStatusFromAction(bill.latestAction?.text),
+      category: categorize(bill.title),
+      chamber: bill.originChamber?.toLowerCase() === "senate" ? "senate" : "house",
+      congress: bill.congress ?? congress,
+      sourceUrl: `https://www.congress.gov/bill/${bill.congress ?? congress}th-congress/${chamberPath}/${bill.number}`,
+      description: bill.latestAction
+        ? `${bill.type.toUpperCase()} ${bill.number} — ${bill.congress ?? congress}th Congress. Latest action (${bill.latestAction.actionDate}): ${bill.latestAction.text}`
+        : undefined,
+    });
+    synced++;
+  }
+  return synced;
+}
+
+// ---------- Executive orders (Federal Register) ----------
+
+interface FederalRegisterListResponse {
+  results?: Array<{
+    executive_order_number?: string | number | null;
+    title: string;
+    abstract: string | null;
+    signing_date: string | null;
+    publication_date: string | null;
+    html_url: string;
+    document_number: string;
+    president?: { name?: string } | null;
+    raw_text_url?: string | null;
+  }>;
+}
+
+async function syncExecutiveOrders(): Promise<number> {
+  const url = new URL("https://www.federalregister.gov/api/v1/documents.json");
+  url.searchParams.set("conditions[presidential_document_type]", "executive_order");
+  url.searchParams.append("conditions[type][]", "PRESDOCU");
+  url.searchParams.set("order", "newest");
+  url.searchParams.set("per_page", String(SYNC_COUNT));
+  for (const field of ["executive_order_number", "title", "abstract", "signing_date", "publication_date", "html_url", "document_number", "president", "raw_text_url"]) {
+    url.searchParams.append("fields[]", field);
+  }
+  const data = await fetchJson<FederalRegisterListResponse>(url.toString());
+  if (!data?.results) return 0;
+
+  let synced = 0;
+  for (const doc of data.results) {
+    if (!doc.title) continue;
+    const eoNumber = doc.executive_order_number ? String(doc.executive_order_number).replace(/\D/g, "") : null;
+    const masterReferenceId = eoNumber ? `eo-${eoNumber}` : `eo-${doc.document_number.toLowerCase()}`;
+
+    const existing = await prisma.governmentReference.findUnique({
+      where: { masterReferenceId },
+      select: { id: true, fullText: true },
+    });
+    // Full text is a separate download per order — only fetch it once.
+    const fullText = !existing?.fullText && doc.raw_text_url ? await fetchText(doc.raw_text_url) : null;
+
+    const presidentName = doc.president?.name;
+    const descriptionParts = [
+      doc.abstract,
+      presidentName ? `Signed by President ${presidentName}${doc.signing_date ? ` on ${doc.signing_date}` : ""}.` : null,
+    ].filter(Boolean);
+
+    await upsertReference({
+      masterReferenceId,
+      referenceType: "executive_order",
+      title: doc.title,
+      status: "active",
+      category: categorize(doc.title),
+      sourceUrl: doc.html_url,
+      description: descriptionParts.length > 0 ? descriptionParts.join(" ") : undefined,
+      fullText: fullText ?? undefined,
+      signedDate: doc.signing_date ? new Date(doc.signing_date) : doc.publication_date ? new Date(doc.publication_date) : undefined,
+    });
+    synced++;
+  }
+  return synced;
+}
+
+// ---------- SCOTUS cases (CourtListener) ----------
+
+// CourtListener v4 search. Two shape changes from the retired v3 endpoint:
+// the per-opinion `snippet` moved from the result into the nested `opinions[]`
+// array, and `page_size` is ignored (fixed 20 per page, cursor-paginated via
+// `next`). Roughly half of SCOTUS results are "Revisions:" housekeeping copies
+// of a case we already have, so one page is not reliably SYNC_COUNT real cases.
+interface CourtListenerSearchResponse {
+  next?: string | null;
+  results?: Array<{
+    caseName?: string;
+    docketNumber?: string;
+    dateFiled?: string;
+    dateArgued?: string | null;
+    absolute_url: string;
+    status?: string;
+    opinions?: Array<{ snippet?: string | null }>;
+  }>;
+}
+
+// Cap the cursor walk so a page full of skippable entries can't loop forever.
+const COURTLISTENER_MAX_PAGES = 4;
+
+async function syncScotusCases(): Promise<number> {
+  const apiKey = process.env.COURTLISTENER_API_KEY;
+  if (!apiKey) {
+    console.warn("[GovSync] COURTLISTENER_API_KEY not set — skipping SCOTUS cases");
+    return 0;
+  }
+
+  const firstPage = new URL("https://www.courtlistener.com/api/rest/v4/search/");
+  firstPage.searchParams.set("type", "o");
+  firstPage.searchParams.set("court", "scotus");
+  firstPage.searchParams.set("order_by", "dateFiled desc");
+
+  let nextUrl: string | null = firstPage.toString();
+  let synced = 0;
+  const seen = new Set<string>();
+
+  for (let page = 0; page < COURTLISTENER_MAX_PAGES && nextUrl && synced < SYNC_COUNT; page++) {
+    const data: CourtListenerSearchResponse | null = await fetchJson<CourtListenerSearchResponse>(nextUrl, {
+      Authorization: `Token ${apiKey}`,
+    });
+    if (!data?.results?.length) break;
+    nextUrl = data.next ?? null;
+
+    for (const opinion of data.results) {
+      if (synced >= SYNC_COUNT) break;
+      if (!opinion.caseName || !opinion.docketNumber) continue;
+      // Skip housekeeping entries like "Trump v. ... Revisions: 7/01/26"
+      if (/revisions?:/i.test(opinion.caseName)) continue;
+      const masterReferenceId = normalizeReferenceId(ReferenceType.SCOTUS_CASE, opinion.docketNumber);
+      if (seen.has(masterReferenceId)) continue;
+      seen.add(masterReferenceId);
+
+      const snippet = opinion.opinions
+        ?.map((o) => o.snippet)
+        .find((s): s is string => typeof s === "string" && s.trim().length > 0)
+        ?.replace(/\s+/g, " ")
+        .trim();
+      await upsertReference({
+        masterReferenceId,
+        referenceType: "scotus_case",
+        title: opinion.caseName,
+        shortTitle: opinion.caseName.length > 200 ? `${opinion.caseName.slice(0, 197)}...` : opinion.caseName,
+        status: "decided",
+        category: categorize(opinion.caseName + " " + (snippet ?? "")),
+        sourceUrl: `https://www.courtlistener.com${opinion.absolute_url}`,
+        description: snippet ? (snippet.length > 500 ? `${snippet.slice(0, 497)}...` : snippet) : undefined,
+        decidedDate: opinion.dateFiled ? new Date(opinion.dateFiled) : undefined,
+      });
+      synced++;
+    }
+  }
+  return synced;
+}
+
+// ---------- Entry point ----------
+
+export async function syncGovernmentData(trigger: string = "manual"): Promise<GovernmentSyncResult> {
+  if (trigger !== "manual" && Date.now() - lastSuccessfulSyncAt < MIN_SYNC_INTERVAL_MS) {
+    console.log("[GovSync] Skipping — last sync was under 6 hours ago");
+    return { bills: 0, executiveOrders: 0, scotusCases: 0, skipped: true };
+  }
+
+  console.log(`[GovSync] Starting government data sync (trigger: ${trigger})`);
+  const [bills, executiveOrders, scotusCases] = await Promise.all([
+    syncBills(),
+    syncExecutiveOrders(),
+    syncScotusCases(),
+  ]);
+
+  if (bills + executiveOrders + scotusCases > 0) {
+    lastSuccessfulSyncAt = Date.now();
+  }
+  console.log(`[GovSync] Done — bills: ${bills}, executive orders: ${executiveOrders}, SCOTUS cases: ${scotusCases}`);
+  return { bills, executiveOrders, scotusCases, skipped: false };
+}

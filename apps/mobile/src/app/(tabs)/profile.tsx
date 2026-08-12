@@ -1,0 +1,812 @@
+import React, { useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  Image,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import {
+  Settings,
+  ThumbsUp,
+  ThumbsDown,
+  Calendar,
+  MapPin,
+  Users,
+  Award,
+  ChevronRight,
+  TrendingUp,
+  Bookmark,
+  LogOut,
+  UserCheck,
+  Shield,
+  Scroll,
+  BookOpen,
+  BarChart3,
+} from 'lucide-react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
+import { mockBills, categoryColors, categoryLabels } from '@/lib/mock-data';
+import { useVotingStore } from '@/lib/voting-store';
+import { useAuthStore } from '@/lib/auth-store';
+import { useDelegationStore, selectActiveDelegationsCount } from '@/lib/delegation-store';
+import { useAdminStore } from '@/lib/admin-store';
+import { useB2BStore } from '@/lib/b2b-store';
+import { usePermissions, useCurrentUser } from '@/lib/auth/use-civic-auth';
+import { cn } from '@/lib/cn';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
+import { useUserVoteHistory } from '@/lib/hooks';
+import type { Bill, BillCategory } from '@/lib/types';
+import type { VoteWithBill } from '@/lib/database.types';
+import { AuthGate } from '@/components/auth/AuthGate';
+import { useQueryClient } from '@tanstack/react-query';
+import { authClient } from '@/lib/auth/auth-client';
+import * as SecureStore from 'expo-secure-store';
+
+// Where the Better Auth expo plugin keeps the session (see auth-client.ts:
+// storagePrefix "civic"). Sign-out clears these directly so the phone ends up
+// signed out even if the network call to the server fails or is rate-limited.
+const SESSION_STORAGE_KEYS = ['civic_cookie', 'civic_session_data'];
+
+function StatCard({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  color: string;
+}) {
+  return (
+    <View
+      className="flex-1 rounded-xl p-3 border"
+      style={{
+        backgroundColor: `${color}15`,
+        borderColor: `${color}30`,
+      }}
+    >
+      <View className="flex-row items-center mb-1">
+        {icon}
+        <Text className="text-xs ml-1.5 font-medium" style={{ color }}>
+          {label}
+        </Text>
+      </View>
+      <Text className="text-white font-bold text-xl">{value}</Text>
+    </View>
+  );
+}
+
+function VoteHistoryCard({
+  billId,
+  vote,
+  index,
+  bill,
+}: {
+  billId: string;
+  vote: 'yea' | 'nay';
+  index: number;
+  bill?: Bill | null;
+}) {
+  const router = useRouter();
+
+  // Fall back to mock bill if not provided
+  const displayBill = bill ?? mockBills.find((b) => b.id === billId);
+
+  if (!displayBill) return null;
+
+  const categoryColor = categoryColors[displayBill.category] ?? '#64748B';
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(index * 60).springify()}
+      className="mb-3"
+    >
+      <Pressable
+        onPress={() => router.push(`/bill/${displayBill.id}`)}
+        className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/40"
+      >
+        <View className="flex-row items-start">
+          <View
+            className={cn(
+              'w-10 h-10 rounded-full items-center justify-center mr-3',
+              vote === 'yea' ? 'bg-emerald-900/60' : 'bg-red-900/60'
+            )}
+          >
+            {vote === 'yea' ? (
+              <ThumbsUp size={18} color="#22C55E" />
+            ) : (
+              <ThumbsDown size={18} color="#EF4444" />
+            )}
+          </View>
+
+          <View className="flex-1">
+            <View className="flex-row items-center mb-1">
+              <View
+                className="px-2 py-0.5 rounded-full mr-2"
+                style={{ backgroundColor: `${categoryColor}30` }}
+              >
+                <Text style={{ color: categoryColor }} className="text-xs font-medium">
+                  {categoryLabels[displayBill.category]}
+                </Text>
+              </View>
+              <View
+                className={cn(
+                  'px-2 py-0.5 rounded-full',
+                  vote === 'yea' ? 'bg-emerald-900/60' : 'bg-red-900/60'
+                )}
+              >
+                <Text
+                  className={cn(
+                    'text-xs font-medium',
+                    vote === 'yea' ? 'text-emerald-400' : 'text-red-400'
+                  )}
+                >
+                  {vote === 'yea' ? 'YEA' : 'NAY'}
+                </Text>
+              </View>
+            </View>
+
+            <Text className="text-white font-semibold" numberOfLines={1}>
+              {displayBill.shortTitle}
+            </Text>
+            <Text className="text-slate-400 text-sm" numberOfLines={1}>
+              {displayBill.title}
+            </Text>
+          </View>
+
+          <ChevronRight size={20} color="#64748B" />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function AchievementBadge({
+  title,
+  description,
+  icon,
+  earned,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  earned: boolean;
+}) {
+  return (
+    <View
+      className={cn(
+        'items-center p-3 rounded-xl mr-3 border',
+        earned
+          ? 'bg-amber-900/30 border-amber-700/50'
+          : 'bg-slate-800/40 border-slate-700/30'
+      )}
+      style={{ width: 100 }}
+    >
+      <View
+        className={cn(
+          'w-12 h-12 rounded-full items-center justify-center mb-2',
+          earned ? 'bg-amber-500/30' : 'bg-slate-700/50'
+        )}
+      >
+        {icon}
+      </View>
+      <Text
+        className={cn(
+          'text-xs font-semibold text-center',
+          earned ? 'text-amber-400' : 'text-slate-500'
+        )}
+      >
+        {title}
+      </Text>
+      <Text
+        className={cn(
+          'text-xs text-center mt-0.5',
+          earned ? 'text-amber-500/70' : 'text-slate-600'
+        )}
+      >
+        {description}
+      </Text>
+    </View>
+  );
+}
+
+export default function ProfileScreen() {
+  return (
+    <AuthGate capability="viewProfile" reason="Sign in to view your profile and civic record.">
+      <ProfileContent />
+    </AuthGate>
+  );
+}
+
+function ProfileContent() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const useSupabase = isSupabaseConfigured();
+
+  // Auth
+  const supabaseAuth = useAuth();
+  const mockUser = useAuthStore((s) => s.user);
+  const mockSignOut = useAuthStore((s) => s.signOut);
+  const { isAuthenticated, isLoading: sessionLoading } = useCurrentUser();
+  const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
+
+  const user = useSupabase
+    ? supabaseAuth.profile
+      ? {
+          id: supabaseAuth.profile.id,
+          username: supabaseAuth.profile.username,
+          displayName: supabaseAuth.profile.display_name,
+          avatar: supabaseAuth.profile.avatar ?? `https://api.dicebear.com/7.x/avataaars/png?seed=${supabaseAuth.profile.username}`,
+          bio: supabaseAuth.profile.bio ?? '',
+          location: supabaseAuth.profile.location ?? 'United States',
+          joinedDate: supabaseAuth.profile.joined_date,
+          followers: supabaseAuth.profile.followers_count,
+          following: supabaseAuth.profile.following_count,
+          votesCount: supabaseAuth.profile.votes_count,
+        }
+      : null
+    : mockUser;
+
+  // Votes
+  const mockUserVotes = useVotingStore((s) => s.userVotes);
+  const { data: supabaseVoteHistory, isLoading: votesLoading } = useUserVoteHistory(
+    useSupabase ? supabaseAuth.user?.id : undefined
+  );
+
+  const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
+
+  // Portal entry points. The admin tier comes from the separate admin-console
+  // session, never from a citizen account — a brand-new signup is `user`, so the
+  // console card stays hidden. B2B is its own login, so B2B clients keep theirs.
+  const { can } = usePermissions();
+  const hasB2BSession = useB2BStore((s) => s.isAuthenticated);
+
+  // The platform's master admin account (matches the superadmin in
+  // backend/src/routes/admin.ts). Seeing the entry cards doesn't grant access —
+  // the admin console and B2B portal still require their own logins.
+  const isMasterAdmin = (user?.username ?? '').toLowerCase() === 'palikk87';
+
+  // Calculate vote stats
+  const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
+    if (useSupabase && supabaseVoteHistory) {
+      const yea = supabaseVoteHistory.filter((v) => v.vote === 'yea').length;
+      const nay = supabaseVoteHistory.filter((v) => v.vote === 'nay').length;
+      return {
+        yeaVotes: yea,
+        nayVotes: nay,
+        totalVotes: supabaseVoteHistory.length,
+        voteEntries: supabaseVoteHistory,
+      };
+    }
+
+    const entries = Object.entries(mockUserVotes);
+    const yea = entries.filter(([_, v]) => v === 'yea').length;
+    const nay = entries.filter(([_, v]) => v === 'nay').length;
+    return {
+      yeaVotes: yea,
+      nayVotes: nay,
+      totalVotes: entries.length,
+      voteEntries: entries,
+    };
+  }, [useSupabase, supabaseVoteHistory, mockUserVotes]);
+
+  const handleSignOut = async () => {
+    // One tap = one sign-out. Without this the button fired again on every tap while
+    // the first request was still in flight, which tripped the auth rate limiter and
+    // left the session alive.
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // End the real Better Auth session (the one the backend checks), then clear the
+    // local mirror. Same outcome as the web app's sign-out.
+    try {
+      await authClient.signOut();
+    } catch {
+      // Server said no (already signed out, offline, rate-limited) — we still sign
+      // out locally below, so the app never gets stuck in a half-signed-in state.
+    }
+    await Promise.all(
+      SESSION_STORAGE_KEYS.map((key) => SecureStore.deleteItemAsync(key).catch(() => {})),
+    );
+    if (useSupabase) {
+      await supabaseAuth.signOut();
+    }
+    mockSignOut();
+    queryClient.clear();
+    await queryClient.invalidateQueries();
+    setIsSigningOut(false);
+    router.replace('/(tabs)');
+  };
+
+  const handleOpenSettings = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/notification-settings');
+  };
+
+  const achievements = [
+    {
+      title: 'First Vote',
+      description: 'Cast your first vote',
+      icon: <ThumbsUp size={20} color={totalVotes > 0 ? '#F59E0B' : '#64748B'} />,
+      earned: totalVotes > 0,
+    },
+    {
+      title: 'Voice Heard',
+      description: '10 votes cast',
+      icon: <TrendingUp size={20} color={totalVotes >= 10 ? '#F59E0B' : '#64748B'} />,
+      earned: totalVotes >= 10,
+    },
+    {
+      title: 'Civic Hero',
+      description: '50 votes cast',
+      icon: <Award size={20} color={totalVotes >= 50 ? '#F59E0B' : '#64748B'} />,
+      earned: totalVotes >= 50,
+    },
+    {
+      title: 'Engaged',
+      description: '5 followers',
+      icon: <Users size={20} color={(user?.followers ?? 0) >= 5 ? '#F59E0B' : '#64748B'} />,
+      earned: (user?.followers ?? 0) >= 5,
+    },
+  ];
+
+  if (!user) {
+    // No profile yet. Only a spinner while the session is still resolving — once it
+    // says "signed out", AuthGate above shows the sign-in wall, so spinning here
+    // forever (the old behaviour after sign-out) would just hide it.
+    const stillResolving = sessionLoading || (isAuthenticated && !isSigningOut);
+    if (!stillResolving) return null;
+
+    return (
+      <View className="flex-1 bg-slate-900 items-center justify-center">
+        <ActivityIndicator size="large" color="#F59E0B" />
+        <Text className="text-slate-400 mt-4">
+          {isSigningOut ? 'Signing out...' : 'Loading profile...'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-slate-900">
+      <LinearGradient
+        colors={['#0F172A', '#1E293B', '#0F172A']}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+
+      <SafeAreaView edges={['top']} className="flex-1">
+        {/* Header */}
+        <View className="flex-row items-center justify-between px-4 py-3">
+          <Text className="text-2xl font-bold text-white">Profile</Text>
+          <View className="flex-row items-center">
+            <Pressable
+              onPress={handleSignOut}
+              disabled={isSigningOut}
+              accessibilityLabel="Sign out"
+              className={cn(
+                'bg-red-900/40 p-2 rounded-full mr-2',
+                isSigningOut && 'opacity-50',
+              )}
+            >
+              {isSigningOut ? (
+                <ActivityIndicator size="small" color="#EF4444" />
+              ) : (
+                <LogOut size={20} color="#EF4444" />
+              )}
+            </Pressable>
+            <Pressable
+              onPress={handleOpenSettings}
+              accessibilityLabel="Settings"
+              className="bg-slate-800 p-2 rounded-full"
+            >
+              <Settings size={22} color="#64748B" />
+            </Pressable>
+          </View>
+        </View>
+
+        <ScrollView
+          className="flex-1"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
+          {/* Profile Header */}
+          <View className="items-center px-4 py-6">
+            <View className="relative">
+              <Image
+                source={{ uri: user.avatar }}
+                className="w-24 h-24 rounded-full border-4 border-amber-500/30"
+              />
+              <View className="absolute -bottom-1 -right-1 bg-amber-500 w-8 h-8 rounded-full items-center justify-center border-4 border-slate-900">
+                <Text className="text-slate-900 font-bold text-xs">
+                  {totalVotes}
+                </Text>
+              </View>
+            </View>
+
+            <Text className="text-white font-bold text-xl mt-4">
+              {user.displayName}
+            </Text>
+            <Text className="text-slate-400">@{user.username}</Text>
+
+            {user.bio ? (
+              <Text className="text-slate-300 text-center mt-2 px-8">
+                {user.bio}
+              </Text>
+            ) : null}
+
+            <View className="flex-row items-center mt-2">
+              <MapPin size={14} color="#64748B" />
+              <Text className="text-slate-400 text-sm ml-1">
+                {user.location}
+              </Text>
+              <Text className="text-slate-600 mx-2">·</Text>
+              <Calendar size={14} color="#64748B" />
+              <Text className="text-slate-400 text-sm ml-1">
+                Joined {new Date(user.joinedDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+              </Text>
+            </View>
+
+            {/* Follow Stats */}
+            <View className="flex-row mt-4">
+              <Pressable className="items-center mr-6">
+                <Text className="text-white font-bold text-lg">
+                  {user.followers}
+                </Text>
+                <Text className="text-slate-400 text-sm">Followers</Text>
+              </Pressable>
+              <Pressable className="items-center">
+                <Text className="text-white font-bold text-lg">
+                  {user.following}
+                </Text>
+                <Text className="text-slate-400 text-sm">Following</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Stats */}
+          <View className="flex-row px-4 mb-6">
+            <StatCard
+              icon={<ThumbsUp size={14} color="#22C55E" />}
+              label="Yea Votes"
+              value={yeaVotes}
+              color="#22C55E"
+            />
+            <View className="w-2" />
+            <StatCard
+              icon={<ThumbsDown size={14} color="#EF4444" />}
+              label="Nay Votes"
+              value={nayVotes}
+              color="#EF4444"
+            />
+            <View className="w-2" />
+            <StatCard
+              icon={<Award size={14} color="#F59E0B" />}
+              label="Total"
+              value={totalVotes}
+              color="#F59E0B"
+            />
+          </View>
+
+          {/* Founding Documents */}
+          <View className="px-4 mb-6">
+            <Text className="text-white font-semibold text-lg mb-3">
+              Founding Documents
+            </Text>
+
+            {/* Constitution Card */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/constitution');
+              }}
+              className="rounded-xl overflow-hidden border border-slate-600/30 mb-3"
+            >
+              <LinearGradient
+                colors={['#334155', '#1e293b']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 16 }}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center flex-1">
+                    <View className="w-12 h-12 rounded-full bg-slate-500/20 items-center justify-center mr-3">
+                      <BookOpen size={24} color="#94A3B8" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-slate-100 font-semibold text-lg">
+                        Constitution
+                      </Text>
+                      <Text className="text-slate-400 text-sm">
+                        The supreme law of the platform
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={20} color="#94A3B8" />
+                </View>
+              </LinearGradient>
+            </Pressable>
+
+            {/* Bill of Rights Card */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/bill-of-rights');
+              }}
+              className="rounded-xl overflow-hidden border border-amber-700/30"
+            >
+              <LinearGradient
+                colors={['#78350f', '#451a03']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 16 }}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center flex-1">
+                    <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center mr-3">
+                      <Scroll size={24} color="#FCD34D" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-amber-100 font-semibold text-lg">
+                        Bill of Rights
+                      </Text>
+                      <Text className="text-amber-300/70 text-sm">
+                        Your individual protections
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={20} color="#FCD34D" />
+                </View>
+              </LinearGradient>
+            </Pressable>
+
+            {/* Article V - Self-Correction Card */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/article-v');
+              }}
+              className="rounded-xl overflow-hidden border border-red-700/30 mt-3"
+            >
+              <LinearGradient
+                colors={['#7F1D1D', '#450A0A']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 16 }}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center flex-1">
+                    <View className="w-12 h-12 rounded-full bg-red-500/20 items-center justify-center mr-3">
+                      <Shield size={24} color="#FCA5A5" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-red-100 font-semibold text-lg">
+                        Article V: Self-Correction
+                      </Text>
+                      <Text className="text-red-300/70 text-sm">
+                        Impeachment & System Reset
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={20} color="#FCA5A5" />
+                </View>
+              </LinearGradient>
+            </Pressable>
+          </View>
+
+          {/* Liquid Democracy Card */}
+          <View className="px-4 mb-6">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/delegates');
+              }}
+              className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl p-4 border border-amber-700/30"
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-12 h-12 rounded-full bg-amber-500/20 items-center justify-center mr-3">
+                    <UserCheck size={24} color="#F59E0B" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-white font-semibold text-lg">
+                      Liquid Democracy
+                    </Text>
+                    <Text className="text-slate-400 text-sm">
+                      {activeDelegationsCount > 0
+                        ? `${activeDelegationsCount} active delegation${activeDelegationsCount > 1 ? 's' : ''}`
+                        : 'Delegate your vote to experts'}
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={20} color="#F59E0B" />
+              </View>
+
+              {activeDelegationsCount > 0 && (
+                <View className="flex-row items-center mt-3 pt-3 border-t border-amber-700/30">
+                  <Shield size={14} color="#22C55E" />
+                  <Text className="text-emerald-400 text-sm ml-2">
+                    Your vote is being represented
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
+
+          {/* Admin Console — master admin account or holders of an admin-console session */}
+          {can('viewAdmin') || isMasterAdmin ? (
+          <View className="px-4 mb-6">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/admin/login');
+              }}
+              className="rounded-xl overflow-hidden border border-purple-700/30"
+            >
+              <LinearGradient
+                colors={['#581C87', '#3B0764']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 16 }}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center flex-1">
+                    <View className="w-12 h-12 rounded-full bg-purple-500/20 items-center justify-center mr-3">
+                      <Shield size={24} color="#C084FC" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-purple-100 font-semibold text-lg">
+                        Admin Console
+                      </Text>
+                      <Text className="text-purple-300/70 text-sm">
+                        Manage users, content & analytics
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={20} color="#C084FC" />
+                </View>
+              </LinearGradient>
+            </Pressable>
+          </View>
+          ) : null}
+
+          {/* B2B Analytics Portal — master admin, admins, or clients already signed
+              into the B2B portal. Not advertised to ordinary citizen accounts. */}
+          {can('viewAdmin') || hasB2BSession || isMasterAdmin ? (
+          <View className="px-4 mb-6">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/b2b/login');
+              }}
+              className="rounded-xl overflow-hidden border border-indigo-700/30"
+            >
+              <LinearGradient
+                colors={['#312E81', '#1E1B4B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ padding: 16 }}
+              >
+                <View className="flex-row items-center justify-between">
+                  <View className="flex-row items-center flex-1">
+                    <View className="w-12 h-12 rounded-full bg-indigo-500/20 items-center justify-center mr-3">
+                      <BarChart3 size={24} color="#818CF8" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-indigo-100 font-semibold text-lg">
+                        B2B Analytics
+                      </Text>
+                      <Text className="text-indigo-300/70 text-sm">
+                        Civic Intelligence Platform
+                      </Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={20} color="#818CF8" />
+                </View>
+              </LinearGradient>
+            </Pressable>
+          </View>
+          ) : null}
+
+          {/* Achievements */}
+          <View className="px-4 mb-6">
+            <Text className="text-white font-semibold text-lg mb-3">
+              Achievements
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={{ flexGrow: 0 }}
+            >
+              {achievements.map((achievement, index) => (
+                <AchievementBadge key={index} {...achievement} />
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* Vote History */}
+          <View className="px-4">
+            <View className="flex-row items-center justify-between mb-3">
+              <Text className="text-white font-semibold text-lg">
+                Voting History
+              </Text>
+              <Text className="text-slate-400 text-sm">{totalVotes} votes</Text>
+            </View>
+
+            {votesLoading ? (
+              <View className="bg-slate-800/40 rounded-xl p-8 items-center border border-slate-700/30">
+                <ActivityIndicator size="large" color="#F59E0B" />
+                <Text className="text-slate-400 mt-4">Loading vote history...</Text>
+              </View>
+            ) : useSupabase && Array.isArray(voteEntries) && voteEntries.length > 0 ? (
+              // Supabase vote history
+              (voteEntries as VoteWithBill[])
+                .filter((voteItem) => voteItem.bill != null)
+                .map((voteItem, index) => (
+                <VoteHistoryCard
+                  key={voteItem.id}
+                  billId={voteItem.bill_id}
+                  vote={voteItem.vote}
+                  index={index}
+                  bill={{
+                    id: voteItem.bill!.id,
+                    title: voteItem.bill!.title,
+                    shortTitle: voteItem.bill!.short_title,
+                    status: voteItem.bill!.status,
+                    chamber: voteItem.bill!.chamber,
+                    category: voteItem.bill!.category as BillCategory,
+                    sponsor: {
+                      id: voteItem.bill!.sponsor_id ?? '',
+                      name: 'Sponsor',
+                      party: 'D',
+                      state: 'US',
+                      chamber: voteItem.bill!.chamber,
+                      imageUrl: '',
+                    },
+                    introducedDate: voteItem.bill!.introduced_date,
+                    lastActionDate: voteItem.bill!.last_action_date,
+                    fullText: voteItem.bill!.full_text,
+                    simplifiedText: voteItem.bill!.simplified_text ?? '',
+                    realWorldImpact: voteItem.bill!.real_world_impact ?? '',
+                    relatedLaws: [],
+                    communityVotes: {
+                      yea: voteItem.bill!.yea_count,
+                      nay: voteItem.bill!.nay_count,
+                      totalVoters: voteItem.bill!.total_votes || 1,
+                    },
+                    projectedOutcome: voteItem.bill!.projected_outcome,
+                  }}
+                />
+              ))
+            ) : !useSupabase && Array.isArray(voteEntries) === false && Object.keys(voteEntries).length > 0 ? (
+              // Mock vote history
+              (Object.entries(voteEntries as Record<string, 'yea' | 'nay'>)).map(([billId, vote], index) => (
+                <VoteHistoryCard
+                  key={billId}
+                  billId={billId}
+                  vote={vote}
+                  index={index}
+                />
+              ))
+            ) : (
+              <View className="bg-slate-800/40 rounded-xl p-8 items-center border border-slate-700/30">
+                <Bookmark size={40} color="#64748B" />
+                <Text className="text-slate-400 text-lg mt-4">No votes yet</Text>
+                <Text className="text-slate-500 text-sm mt-1 text-center">
+                  Start voting on bills to see your history here
+                </Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
+  );
+}

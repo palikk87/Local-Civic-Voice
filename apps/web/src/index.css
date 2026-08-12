@@ -1,0 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&display=optional');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=optional');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Civic Voice design system.
+  Aesthetic: civic editorial — deep navy base, parchment surfaces, warm gold accent.
+  All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Parchment / light institutional theme */
+    --background: 40 33% 97%;
+    --foreground: 218 42% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 218 42% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 218 42% 14%;
+
+    /* Deep constitutional navy */
+    --primary: 218 55% 20%;
+    --primary-foreground: 40 33% 97%;
+
+    --secondary: 40 24% 92%;
+    --secondary-foreground: 218 42% 18%;
+
+    --muted: 40 20% 93%;
+    --muted-foreground: 218 12% 42%;
+
+    /* Warm brass / gold accent */
+    --accent: 38 68% 48%;
+    --accent-foreground: 218 42% 14%;
+
+    /* Civic signal colors */
+    --support: 158 64% 33%;
+    --support-foreground: 0 0% 100%;
+    --oppose: 356 68% 47%;
+    --oppose-foreground: 0 0% 100%;
+
+    --destructive: 356 68% 47%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 38 22% 86%;
+    --input: 38 22% 84%;
+    --ring: 38 68% 48%;
+
+    --radius: 0.5rem;
+
+    /* Branch accents */
+    --legislative: 218 55% 30%;
+    --executive: 38 68% 44%;
+    --judicial: 268 40% 42%;
+
+    --sidebar-background: 218 55% 12%;
+    --sidebar-foreground: 40 33% 92%;
+    --sidebar-primary: 38 68% 48%;
+    --sidebar-primary-foreground: 218 42% 14%;
+    --sidebar-accent: 218 40% 20%;
+    --sidebar-accent-foreground: 40 33% 92%;
+    --sidebar-border: 218 30% 22%;
+    --sidebar-ring: 38 68% 48%;
+  }
+
+  .dark {
+    /* Civic Voice dark — slate-900 base (#0F172A), amber-500 accent (#F59E0B). */
+    --background: 222 47% 11%;      /* slate-900 #0F172A */
+    --foreground: 210 40% 96%;      /* near-white slate-50 */
+
+    --card: 217 40% 15%;            /* lifted slate */
+    --card-foreground: 210 40% 96%;
+
+    --popover: 217 40% 15%;
+    --popover-foreground: 210 40% 96%;
+
+    /* Navy surface used for headers/footers */
+    --primary: 215 45% 22%;         /* #1E3A5F-ish navy */
+    --primary-foreground: 210 40% 96%;
+
+    --secondary: 217 33% 18%;       /* slate-800 */
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 33% 18%;           /* slate-800 */
+    --muted-foreground: 215 20% 65%; /* slate-400 */
+
+    /* Amber-500 accent */
+    --accent: 38 92% 50%;           /* #F59E0B */
+    --accent-foreground: 222 47% 11%; /* slate-900 text on amber */
+
+    --support: 158 64% 45%;
+    --support-foreground: 222 47% 11%;
+    --oppose: 356 75% 60%;
+    --oppose-foreground: 0 0% 100%;
+
+    --destructive: 356 75% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 27%;          /* slate-700 */
+    --input: 215 25% 27%;           /* slate-700 */
+    --ring: 38 92% 50%;             /* amber */
+
+    --legislative: 214 80% 66%;
+    --executive: 38 92% 56%;
+    --judicial: 268 55% 70%;
+
+    --sidebar-background: 222 47% 9%;
+    --sidebar-foreground: 210 40% 92%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 222 47% 11%;
+    --sidebar-accent: 217 33% 18%;
+    --sidebar-accent-foreground: 210 40% 92%;
+    --sidebar-border: 215 25% 22%;
+    --sidebar-ring: 38 92% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "ss01", "cv01";
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Public Sans", system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Fraunces", Georgia, serif;
+  }
+  .font-sans {
+    font-family: "Public Sans", system-ui, sans-serif;
+  }
+  .font-mono {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  /* Fine engraved-paper texture for hero / document surfaces */
+  .bg-grain {
+    background-image:
+      radial-gradient(hsl(var(--foreground) / 0.03) 1px, transparent 1px);
+    background-size: 4px 4px;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .tracking-institutional {
+    letter-spacing: 0.22em;
+  }
+}

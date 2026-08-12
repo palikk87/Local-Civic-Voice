@@ -1,0 +1,272 @@
+// Web port of mobile/src/components/ShareModal.tsx
+import { useState } from "react";
+import { X, Share2, MessageCircle, Send, Copy, FileText, Check } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { useTimelineStore, type TimelinePost } from "@/lib/mobile/timeline-store";
+import { sampleUsers, currentUser } from "@/lib/mobile/mock-data";
+import type { User } from "@/lib/mobile/types";
+import { useRequireAuth } from "@/hooks/use-civic-auth";
+import { cn } from "@/lib/utils";
+
+type ShareTarget = "timeline" | "message";
+
+interface ShareModalProps {
+  visible: boolean;
+  onClose: () => void;
+  post?: TimelinePost;
+  content?: {
+    type: "bill" | "executive_order" | "scotus_case";
+    id: string;
+    title: string;
+  };
+}
+
+export default function ShareModal({ visible, onClose, post, content }: ShareModalProps) {
+  const [shareTarget, setShareTarget] = useState<ShareTarget>("timeline");
+  const [opinion, setOpinion] = useState("");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const sharePost = useTimelineStore((s) => s.sharePost);
+  const shareContent = useTimelineStore((s) => s.shareContent);
+  const shareToMessage = useTimelineStore((s) => s.shareToMessage);
+  const requireAuth = useRequireAuth();
+
+  const shareTitle = post
+    ? post.sharedContent?.title ?? post.content.slice(0, 50) + "..."
+    : content?.title ?? "";
+
+  const shareType = post ? post.contentType : content?.type ?? "text";
+
+  const handleShareToTimeline = () => {
+    if (!requireAuth("Sign in to share to your timeline.")) return;
+    if (post) {
+      sharePost(post.id, opinion || undefined);
+    } else if (content) {
+      shareContent(content.type, content.id, content.title, opinion || undefined);
+    }
+
+    setOpinion("");
+    onClose();
+  };
+
+  const handleShareToMessage = () => {
+    if (!requireAuth("Sign in to send this in a message.")) return;
+    if (!selectedUser || !post) return;
+
+    shareToMessage(selectedUser.id, post);
+
+    setSelectedUser(null);
+    setOpinion("");
+    onClose();
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href).catch(() => undefined);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleClose = () => {
+    setOpinion("");
+    setSelectedUser(null);
+    setShareTarget("timeline");
+    onClose();
+  };
+
+  return (
+    <Dialog open={visible} onOpenChange={(open) => (!open ? handleClose() : undefined)}>
+      <DialogContent className="bg-slate-900 border-slate-800 p-0 max-w-lg max-h-[85vh] flex flex-col overflow-hidden [&>button]:hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+          <button onClick={handleClose} className="w-10 h-10 flex items-center justify-center">
+            <X size={24} color="#94A3B8" />
+          </button>
+
+          <span className="text-white font-semibold text-lg">Share</span>
+
+          <span className="w-10" />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Content Preview */}
+          <div className="mx-4 mt-4 p-4 bg-slate-800/60 rounded-xl border border-slate-700/50">
+            <div className="flex items-start">
+              <span className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center mr-3 shrink-0">
+                <FileText size={20} color="#F59E0B" />
+              </span>
+              <div className="flex-1">
+                <p className="text-slate-400 text-xs mb-1">
+                  {shareType === "bill"
+                    ? "Bill"
+                    : shareType === "executive_order"
+                    ? "Executive Order"
+                    : shareType === "scotus_case"
+                    ? "Supreme Court Case"
+                    : "Post"}
+                </p>
+                <p className="text-white font-medium line-clamp-2">{shareTitle}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Share Options */}
+          <div className="flex px-4 mt-4">
+            <button
+              onClick={() => setShareTarget("timeline")}
+              className={cn(
+                "flex-1 py-3 rounded-xl mr-2 flex flex-col items-center border",
+                shareTarget === "timeline"
+                  ? "bg-amber-500/20 border-amber-500/50"
+                  : "bg-slate-800/60 border-slate-700/50"
+              )}
+            >
+              <Share2 size={20} color={shareTarget === "timeline" ? "#F59E0B" : "#64748B"} />
+              <span
+                className={cn(
+                  "mt-1 font-medium",
+                  shareTarget === "timeline" ? "text-amber-500" : "text-slate-400"
+                )}
+              >
+                Timeline
+              </span>
+            </button>
+
+            <button
+              onClick={() => setShareTarget("message")}
+              className={cn(
+                "flex-1 py-3 rounded-xl flex flex-col items-center border",
+                shareTarget === "message"
+                  ? "bg-amber-500/20 border-amber-500/50"
+                  : "bg-slate-800/60 border-slate-700/50"
+              )}
+            >
+              <MessageCircle size={20} color={shareTarget === "message" ? "#F59E0B" : "#64748B"} />
+              <span
+                className={cn(
+                  "mt-1 font-medium",
+                  shareTarget === "message" ? "text-amber-500" : "text-slate-400"
+                )}
+              >
+                Message
+              </span>
+            </button>
+          </div>
+
+          {/* Share to Timeline */}
+          {shareTarget === "timeline" ? (
+            <div className="px-4 mt-4">
+              <p className="text-slate-400 text-sm mb-2">Add your opinion (optional)</p>
+              <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
+                <div className="flex mb-3">
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.displayName}
+                    className="w-10 h-10 rounded-full"
+                  />
+                  <div className="ml-3">
+                    <p className="text-white font-semibold">{currentUser.displayName}</p>
+                    <p className="text-slate-400 text-sm">@{currentUser.username}</p>
+                  </div>
+                </div>
+
+                <textarea
+                  value={opinion}
+                  onChange={(e) => setOpinion(e.target.value)}
+                  placeholder="What do you think about this?"
+                  className="w-full bg-transparent text-white text-base min-h-24 outline-none resize-none placeholder:text-slate-500"
+                />
+              </div>
+
+              <button
+                onClick={handleShareToTimeline}
+                className="mt-4 w-full bg-amber-500 py-4 rounded-xl flex items-center justify-center hover:bg-amber-400 transition-colors"
+              >
+                <Share2 size={20} color="#0F172A" />
+                <span className="text-slate-900 font-semibold text-lg ml-2">Share to Timeline</span>
+              </button>
+            </div>
+          ) : null}
+
+          {/* Share to Message */}
+          {shareTarget === "message" ? (
+            <div className="px-4 mt-4">
+              <p className="text-slate-400 text-sm mb-2">Select a person to share with</p>
+
+              <div className="max-h-64 overflow-y-auto">
+                {sampleUsers
+                  .filter((u) => u.id !== currentUser.id)
+                  .map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => setSelectedUser(item)}
+                      className={cn(
+                        "w-full flex items-center p-3 rounded-xl mb-2 border text-left",
+                        selectedUser?.id === item.id
+                          ? "bg-amber-500/20 border-amber-500/50"
+                          : "bg-slate-800/60 border-slate-700/50"
+                      )}
+                    >
+                      <img
+                        src={item.avatar}
+                        alt={item.displayName}
+                        className="w-12 h-12 rounded-full"
+                      />
+                      <div className="flex-1 ml-3">
+                        <p className="text-white font-semibold">{item.displayName}</p>
+                        <p className="text-slate-400 text-sm">@{item.username}</p>
+                      </div>
+                      {selectedUser?.id === item.id ? (
+                        <span className="w-6 h-6 rounded-full bg-amber-500 flex items-center justify-center">
+                          <Check size={14} color="#0F172A" />
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+              </div>
+
+              <button
+                onClick={handleShareToMessage}
+                disabled={!selectedUser}
+                className={cn(
+                  "mt-4 w-full py-4 rounded-xl flex items-center justify-center",
+                  selectedUser ? "bg-amber-500 hover:bg-amber-400 transition-colors" : "bg-slate-700"
+                )}
+              >
+                <Send size={20} color={selectedUser ? "#0F172A" : "#64748B"} />
+                <span
+                  className={cn(
+                    "font-semibold text-lg ml-2",
+                    selectedUser ? "text-slate-900" : "text-slate-500"
+                  )}
+                >
+                  Send Message
+                </span>
+              </button>
+            </div>
+          ) : null}
+
+          {/* Copy Link */}
+          <div className="px-4 pb-4 mt-4">
+            <button
+              onClick={handleCopyLink}
+              className="w-full flex items-center justify-center py-3 bg-slate-800/60 rounded-xl border border-slate-700/50"
+            >
+              {copied ? (
+                <>
+                  <Check size={18} color="#22C55E" />
+                  <span className="text-emerald-500 font-medium ml-2">Link Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={18} color="#64748B" />
+                  <span className="text-slate-400 font-medium ml-2">Copy Link</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -1,0 +1,404 @@
+================================================================================
+CIVIC VOICE MOBILE APP - FEATURE AUDIT SUMMARY
+================================================================================
+
+AUDIT CONDUCTED: July 24, 2026
+SCOPE: Complete feature inventory of React Native mobile app
+PURPOSE: Identify all features needed for web app parity
+
+================================================================================
+KEY STATISTICS
+================================================================================
+
+Total Mobile App Screens/Pages:              45
+Total Library Modules:                       30+
+Total Reusable Components:                   15
+Total Lines of App Code:                     ~17,600
+Total Lines of Library Code:                 ~5,000+
+Total Zustand Stores:                        10+
+Total Custom React Hooks:                    15+
+
+================================================================================
+FEATURES BY CATEGORY
+================================================================================
+
+CORE PAGES (Tab Navigation):
+  - Home Feed with 5 feed types
+  - Timeline (user-generated posts)
+  - Discover (4 tabs: trending, executive, judicial, gov map)
+  - Library (search government documents)
+  - People (user discovery and follow)
+
+DETAIL PAGES:
+  - Bill Details (971 lines)
+  - Executive Order Details (474 lines)
+  - Supreme Court Case Details (620 lines)
+  - User Profiles (845 lines)
+
+EDUCATION PAGES:
+  - Constitution
+  - Bill of Rights
+  - Article V (Impeachment)
+
+ENGAGEMENT PAGES:
+  - Delegates / Liquid Democracy (419 lines)
+  - Messages
+  - Notifications
+  - Conversation Threads
+  - Notification Settings
+
+ADMIN PORTAL:
+  - Dashboard (433 lines)
+  - User Management (540 lines)
+  - Post Moderation (422 lines)
+  - Analytics (charts & metrics)
+  - Logs (audit trail)
+  - Announcements
+  - Settings
+  - Login
+
+B2B PORTAL:
+  - Dashboard (433 lines)
+  - Issue Tracking (404 lines)
+  - State Analysis
+  - Heatmap (490 lines)
+  - Forecasting (425 lines)
+  - Reports (396 lines)
+  - Login
+
+================================================================================
+CRITICAL SYSTEMS MISSING IN WEB APP
+================================================================================
+
+1. FEED ALGORITHM
+   - 5 feed types (For You, Following, Trending, Gaps, Local)
+   - Weighted ranking and scoring
+   - Representation Gap detection
+   - Session-based bill exclusion
+   - Fisher-Yates shuffle randomization
+   - Discovery score randomization
+   - Feed reason badges (7+ types)
+
+2. SOCIAL SYSTEM
+   - Timeline/post creation
+   - Comments with threading
+   - Mention parsing
+   - Like/favorite system
+   - Post editing/deletion
+   - User following
+   - Share functionality
+
+3. LIQUID DEMOCRACY DELEGATIONS
+   - Category-specific delegations (10 policy categories + global)
+   - Delegation chaining detection
+   - Individual vote override enforcement
+   - Featured delegates showcase
+   - Delegation validation
+
+4. GAMIFICATION
+   - Civic Score (0-1000+)
+   - 5 Civic Levels (Novice → Champion)
+   - Daily voting streak tracking
+   - Achievement badges (4+ achievements)
+   - Category-specific XP bonuses
+   - Level-up notifications
+
+5. NOTIFICATIONS
+   - 8+ notification types
+   - Read/unread tracking
+   - Reference linking
+   - Notification settings
+   - Unread count aggregation
+
+6. USER SYSTEM ENHANCEMENTS
+   - Civic engagement stats tracking
+   - Civil Leader ranking system
+   - User search and discovery
+   - Suggested users
+   - Follower/following system
+   - Vote history display
+
+7. GOVERNMENT DATA
+   - Congressional leadership (Speaker, Majority/Minority Leaders)
+   - Cabinet members with roles
+   - Supreme Court justices (all 9 with ideology classification)
+   - Presidential succession line
+   - Federal departments directory
+   - Government search API integration
+
+8. ADMIN DASHBOARD
+   - System statistics (users, posts, votes, flags)
+   - User management (suspend, ban, role assignment)
+   - Content moderation workflow
+   - System analytics with charts
+   - Audit logs
+   - Announcements system
+   - Settings management
+
+9. B2B ANALYTICS PORTAL
+   - Organization dashboard
+   - Issue/bill tracking
+   - State-by-state analysis
+   - Heatmap visualizations (geographic & demographic)
+   - Bill passage forecasting (ML-based)
+   - Report generation & scheduling
+   - Export functionality
+
+10. GOVERNMENT DETAIL PAGES
+    - Executive Order pages (474 lines of features)
+    - Supreme Court case pages (620 lines of features)
+    - Founding documents (Constitution, Bill of Rights, Article V)
+
+11. MESSAGING SYSTEM
+    - Direct user-to-user messaging
+    - Conversation threading
+    - Message history
+    - Read receipts
+
+12. TRUST & VERIFICATION
+    - Trust verification badges (Verified, Updated, Needs Review, Unverified)
+    - Data currency checking
+    - Source verification
+    - Citizens Brief (AI-generated bill summaries)
+
+================================================================================
+PARTIALLY IMPLEMENTED IN WEB APP
+================================================================================
+
+- User Authentication (basic exists, needs enhancement)
+- Bill Voting (basic exists, but lacks representation gap)
+- User Profiles (basic exists, missing civic stats and achievements)
+- Share Modal (may exist, needs verification)
+- Bill Search (basic exists, needs government data integration)
+
+================================================================================
+REUSABLE COMPONENTS MISSING
+================================================================================
+
+1. Citizens Brief (bill summary display)
+2. Comment Section (nested threading)
+3. Create Post Modal
+4. Daily Bill Digest (carousel)
+5. Global Pulse Drawer (metrics)
+6. Pulse Gap Badge
+7. Bill of Rights Badge
+8. News Reel Carousel
+9. Post Options Modal
+10. Reference Search Modal
+11. Vote Buttons (branded)
+12. Feed Cards
+13. User Cards
+14. Achievement Badge
+15. Trust Badge
+
+================================================================================
+DATA STRUCTURES & LOGIC MISSING
+================================================================================
+
+Core Data Types:
+- ScoredFeedItem (scored with ranking reason)
+- FeedReason (7+ feed reason types)
+- RepresentationGap (public vs Congress comparison)
+- Delegation (category-specific, chainable)
+- DelegateProfile (expertise, delegators, voting record)
+- TimelinePost (with content type references)
+- CommentThread (nested replies)
+- CivicScore (total, level, XP to next)
+- Streak (daily vote streak)
+- CivicStats (engagement metrics per user)
+
+Core Algorithms:
+- rankFeedItems() - Main feed ranking
+- getTrendingItems() - Trending calculation
+- getGapItems() - Gap detection and ranking
+- fisherYatesShuffle() - Weighted randomization
+- calculateRepresentationGap() - Public vs official vote
+- detectDelegationChain() - Cycle prevention
+- calculateCivicScore() - Engagement scoring
+- parseMentions() - @username parsing
+
+================================================================================
+API ENDPOINTS NEEDED
+================================================================================
+
+Bills & Government:        15+ endpoints
+Voting:                     5 endpoints
+Feed:                       8 endpoints
+Timeline/Posts:            10 endpoints
+Users & Social:            12 endpoints
+Delegations:                8 endpoints
+Notifications:              8 endpoints
+Messaging:                  6 endpoints
+Admin:                     25+ endpoints
+B2B:                       20+ endpoints
+Authentication:            3-4 endpoints
+                          _______________
+TOTAL:                    ~120+ endpoints
+
+================================================================================
+DATABASE TABLES NEEDED (Supabase)
+================================================================================
+
+Core Tables:
+- profiles (user accounts)
+- votes (user votes on bills)
+- delegations (liquid democracy)
+- feed_items (user posts)
+- feed_comments (post comments)
+- feed_likes (post engagement)
+- follows (user relationships)
+- messages (direct messaging)
+- notifications (user notifications)
+- civic_scores (gamification)
+
+Government Data:
+- bills (cached from API)
+- bill_votes (official congressional votes)
+- representation_gaps (pre-calculated)
+- executive_orders
+- scotus_cases
+
+Admin & B2B:
+- admin_logs (audit trail)
+- announcements (system-wide)
+- b2b_organizations
+- b2b_issues
+- b2b_forecasts
+- reports (generated)
+
+TOTAL TABLES: 20+
+
+================================================================================
+STATE MANAGEMENT NEEDED
+================================================================================
+
+Zustand Stores (10+):
+1. useVotingStore - Votes and feed likes
+2. useDelegationStore - Delegations and delegates
+3. useGamificationStore - Civic score, levels, streaks
+4. useEngagementStore - Session and unread counts
+5. useTimelineStore - Posts and comments
+6. useNotificationStore - Notifications
+7. useAuthStore - Mock user (development)
+8. useAdminStore - Admin session
+9. useB2BStore - B2B session
+10. useSeenBillsStore - Session-based exclusion
+
+React Query Keys (30+):
+- Bills (with filters, search, trending)
+- Feed (all 5 types)
+- Votes (user history, bill votes)
+- Delegations (user's, featured)
+- Users (profiles, search, suggested)
+- Posts (feed, comments)
+- Notifications (unread)
+- Messages (conversations)
+- Admin/B2B specific queries
+
+================================================================================
+PORTING EFFORT ESTIMATE
+================================================================================
+
+BY SYSTEM:
+  Feed Algorithm:           40-60 hours
+  Timeline/Comments:        30-40 hours
+  Delegation System:        25-35 hours
+  Gamification:             20-30 hours
+  Notifications:            20-25 hours
+  Discover Tabs:            25-35 hours
+  User System:              20-30 hours
+  Government Data:          20-30 hours
+  Admin Dashboard:          40-50 hours
+  B2B Portal:               50-70 hours
+  Components:               30-40 hours
+  Testing & Polish:         40-60 hours
+                            ___________
+TOTAL ESTIMATE:           400-500 hours
+                          (10-12 weeks @ 40 hrs/week)
+
+BY PRIORITY:
+  Phase 1 (MVP):            80-100 hours (2-3 weeks)
+  Phase 2 (Core):           100-120 hours (2-3 weeks)
+  Phase 3 (Social):         80-100 hours (2-3 weeks)
+  Phase 4 (Admin/B2B):      140-180 hours (3-5 weeks)
+
+================================================================================
+RECOMMENDED PORTING SEQUENCE
+================================================================================
+
+WEEK 1: Feed Algorithm + Vote System
+WEEK 2: Timeline + Comments + Posts
+WEEK 3: Discover Tabs + Government Data
+WEEK 4: User Profiles + Follow System
+WEEK 5: Delegation System + Gamification
+WEEK 6: Notifications + Messaging
+WEEK 7: Admin Dashboard
+WEEK 8: B2B Portal
+WEEK 9+: Polish, Testing, Advanced Features
+
+================================================================================
+CONCLUSION
+================================================================================
+
+The mobile app is a comprehensive civic engagement platform with 45+ screens,
+30+ library modules, and sophisticated algorithms for bill ranking, delegation,
+and engagement tracking.
+
+Porting to web requires building 80%+ of these features from scratch, as most
+are entirely missing from the current web app.
+
+Current web app has:
+  ✓ Basic bill browsing and voting
+  ✓ Simple user profiles
+  ✗ MISSING: Feed algorithm, social system, delegations, gamification,
+             notifications, discovery, government data, admin/B2B
+
+Estimated effort: 400-500 developer hours (10-12 weeks)
+
+Key dependencies:
+  1. Supabase backend infrastructure
+  2. Feed algorithm implementation
+  3. Social system (posts/comments)
+  4. Government data APIs
+  5. Analytics/reporting systems
+
+================================================================================
+FILES GENERATED
+================================================================================
+
+1. MOBILE_FEATURE_AUDIT.md (575 lines)
+   - Comprehensive feature inventory by page/system
+   - API calls and data structures documented
+   - Component list with status
+
+2. FEATURE_PORTING_CHECKLIST.md (465 lines)
+   - 45 pages to port (45 checkboxes)
+   - Core systems to build (55+ checkboxes)
+   - Components to build (15 checkboxes)
+   - Data structures (30+ checkboxes)
+   - API endpoints to create (120+)
+   - Database tables needed (20+)
+   - Store/state management (40+ checkboxes)
+   - Priority sequencing
+
+3. AUDIT_SUMMARY.txt (this file)
+   - High-level statistics
+   - Key findings and gaps
+   - Effort estimates
+   - Recommended timeline
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Review audit findings with team
+2. Prioritize Phase 1 features (MVP)
+3. Create backend schemas (Supabase)
+4. Begin Phase 1 implementation (feed algorithm)
+5. Establish API contracts
+6. Set up state management structure
+7. Build shared UI components
+
+================================================================================
+AUDIT COMPLETED: July 24, 2026
+================================================================================

@@ -1,0 +1,37 @@
+#!/bin/bash
+set -o errexit
+set -o nounset
+set -o pipefail
+
+# Load shared environment setup
+source "$(dirname "$0")/env.sh"
+
+# Install dependencies
+echo "Installing dependencies..."
+bun install
+
+if [[ -f "prisma/schema.prisma" ]]; then
+  echo "Generating Prisma client..."
+  bunx prisma generate
+
+  # Apply committed migrations.
+  #
+  # This replaces the Vibecode template's `prisma db push --accept-data-loss`,
+  # which ran on EVERY boot and would drop whatever it took to make the live
+  # database match the local schema — against a Postgres instance shared with
+  # the mobile client. `migrate deploy` only applies migrations that are
+  # committed to this repo and not yet recorded in _prisma_migrations, and it
+  # never drops anything on its own.
+  echo "Applying migrations..."
+  bunx prisma migrate deploy
+fi
+
+# Start server based on environment
+# Use bun directly (not "bun run") so signals propagate correctly
+if [[ "${ENVIRONMENT}" == "production" ]]; then
+  echo "Starting server in production mode..."
+  exec bun src/index.ts
+else
+  echo "Starting server in dev mode with hot reload..."
+  exec bun --hot src/index.ts
+fi

@@ -1,0 +1,206 @@
+import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  ExternalLink,
+  Building2,
+  CalendarDays,
+  Hash,
+  MessageSquare,
+  Share2,
+} from "lucide-react";
+import { AppShell } from "@/components/layout/AppShell";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
+import { VotePanel } from "@/components/civic/VotePanel";
+import { CommentThread } from "@/components/feed/CommentThread";
+import {
+  ReferenceTypeBadge,
+  CategoryBadge,
+  StatusBadge,
+} from "@/components/civic/badges";
+import { civicApi, formatDate, titleCase } from "@/lib/civic";
+
+function MetaRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof Hash;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2.5">
+      <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <Icon className="h-4 w-4" /> {label}
+      </span>
+      <span className="text-right text-sm font-medium text-foreground">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+export default function ReferenceDetail() {
+  const { id = "" } = useParams();
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["reference", id],
+    queryFn: () => civicApi.getReference(id),
+    enabled: !!id,
+  });
+
+  const reference = data?.reference;
+
+  return (
+    <AppShell wide>
+      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+        <Button variant="ghost" size="sm" asChild className="mb-6 -ml-2">
+          <Link to="/explore">
+            <ArrowLeft className="mr-1 h-4 w-4" /> Back to Explore
+          </Link>
+        </Button>
+
+        {isLoading ? (
+          <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+            <div className="space-y-4">
+              <Skeleton className="h-8 w-40" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-64 w-full" />
+            </div>
+            <Skeleton className="h-96 w-full rounded-2xl" />
+          </div>
+        ) : isError || !reference ? (
+          <div className="rounded-xl border border-dashed border-border py-20 text-center">
+            <p className="font-display text-lg text-foreground">
+              We couldn't load this reference
+            </p>
+            <Button variant="outline" asChild className="mt-4">
+              <Link to="/explore">Return to Explore</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+            {/* Main column */}
+            <article>
+              <div className="flex flex-wrap items-center gap-3">
+                <ReferenceTypeBadge type={reference.referenceType} />
+                <CategoryBadge category={reference.category} />
+                <StatusBadge status={reference.status} />
+              </div>
+
+              <h1 className="mt-4 font-display text-3xl font-semibold leading-tight tracking-tight text-foreground text-balance sm:text-4xl">
+                {reference.title}
+              </h1>
+              {reference.shortTitle ? (
+                <p className="mt-2 text-lg text-muted-foreground">
+                  {reference.shortTitle}
+                </p>
+              ) : null}
+
+              <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5">
+                  <MessageSquare className="h-4 w-4" />
+                  {reference.engagement.comments} comments
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Share2 className="h-4 w-4" />
+                  {reference.engagement.shares} shares
+                </span>
+              </div>
+
+              <Separator className="my-6" />
+
+              {reference.citizenBrief ? (
+                <div>
+                  <h2 className="font-display text-xl font-semibold text-foreground">
+                    Citizen Brief
+                  </h2>
+                  <p className="mt-3 leading-relaxed text-foreground/90">
+                    {reference.citizenBrief}
+                  </p>
+                </div>
+              ) : null}
+
+              {reference.description ? (
+                <div className={reference.citizenBrief ? "mt-8" : ""}>
+                  <h2 className="font-display text-xl font-semibold text-foreground">
+                    Summary
+                  </h2>
+                  <p className="mt-3 leading-relaxed text-foreground/90">
+                    {reference.description}
+                  </p>
+                </div>
+              ) : null}
+
+              {reference.fullText ? (
+                <div className="mt-8">
+                  <h2 className="font-display text-xl font-semibold text-foreground">
+                    Full text
+                  </h2>
+                  <div className="mt-3 max-h-[28rem] overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-secondary/40 p-5 font-mono text-sm leading-relaxed text-foreground/80">
+                    {reference.fullText}
+                  </div>
+                </div>
+              ) : null}
+
+              {reference.aliases?.length ? (
+                <div className="mt-8">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Also known as
+                  </h3>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {reference.aliases.map((alias) => (
+                      <span
+                        key={alias}
+                        className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground"
+                      >
+                        {alias}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Metadata */}
+              <div className="mt-8 rounded-xl border border-border bg-card p-5">
+                <h3 className="font-display text-base font-semibold text-foreground">
+                  Official record
+                </h3>
+                <div className="mt-2 divide-y divide-border/60">
+                  <MetaRow icon={Hash} label="Master reference ID" value={reference.masterReferenceId} />
+                  {reference.chamber ? (
+                    <MetaRow icon={Building2} label="Chamber" value={titleCase(reference.chamber)} />
+                  ) : null}
+                  {reference.congress ? (
+                    <MetaRow icon={Building2} label="Congress" value={`${reference.congress}th`} />
+                  ) : null}
+                  {reference.signedDate ? (
+                    <MetaRow icon={CalendarDays} label="Signed" value={formatDate(reference.signedDate) ?? ""} />
+                  ) : null}
+                  {reference.decidedDate ? (
+                    <MetaRow icon={CalendarDays} label="Decided" value={formatDate(reference.decidedDate) ?? ""} />
+                  ) : null}
+                </div>
+                {reference.sourceUrl ? (
+                  <Button variant="outline" size="sm" asChild className="mt-4">
+                    <a href={reference.sourceUrl} target="_blank" rel="noreferrer">
+                      View official source <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
+                    </a>
+                  </Button>
+                ) : null}
+              </div>
+            </article>
+
+            {/* Vote sidebar */}
+            <aside className="lg:sticky lg:top-20">
+              <VotePanel reference={reference} />
+            </aside>
+          </div>
+        )}
+      </div>
+    </AppShell>
+  );
+}

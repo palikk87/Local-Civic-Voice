@@ -1,0 +1,185 @@
+import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
+import type { auth } from "../auth";
+import {
+  getUserNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  getUnreadNotificationCount,
+  getUserNotificationPreferences,
+  updateNotificationPreferences,
+} from "../services/notification-service";
+
+type AuthVariables = {
+  user: typeof auth.$Infer.Session.user | null;
+  session: typeof auth.$Infer.Session.session | null;
+};
+
+const notificationsRouter = new Hono<{ Variables: AuthVariables }>();
+
+// Validation schemas
+const paginationSchema = z.object({
+  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
+  cursor: z.string().optional(),
+});
+
+const preferencesSchema = z.object({
+  likes: z.boolean().optional(),
+  comments: z.boolean().optional(),
+  replies: z.boolean().optional(),
+  mentions: z.boolean().optional(),
+  follows: z.boolean().optional(),
+  reposts: z.boolean().optional(),
+  newFollowerPosts: z.boolean().optional(),
+});
+
+/**
+ * GET /api/notifications
+ * Get user notifications with pagination
+ */
+notificationsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const { limit, cursor } = c.req.valid("query");
+
+  try {
+    const result = await getUserNotifications(user.id, limit, cursor);
+    return c.json(result);
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    return c.json({ error: "Failed to fetch notifications" }, 500);
+  }
+});
+
+/**
+ * POST /api/notifications/:id/read
+ * Mark a single notification as read
+ */
+notificationsRouter.post("/:id/read", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const notificationId = c.req.param("id");
+
+  try {
+    const result = await markNotificationAsRead(notificationId, user.id);
+    if (!result.success) {
+      return c.json({ error: "Notification not found or not owned by user" }, 404);
+    }
+    return c.json({ success: true });
+  } catch (error) {
+    console.error("Error marking notification as read:", error);
+    return c.json({ error: "Failed to mark notification as read" }, 500);
+  }
+});
+
+/**
+ * POST /api/notifications/read-all
+ * Mark all notifications as read
+ */
+notificationsRouter.post("/read-all", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const result = await markAllNotificationsAsRead(user.id);
+    return c.json({ success: true, count: result.count });
+  } catch (error) {
+    console.error("Error marking all notifications as read:", error);
+    return c.json({ error: "Failed to mark notifications as read" }, 500);
+  }
+});
+
+/**
+ * GET /api/notifications/unread-count
+ * Get unread notification count
+ */
+notificationsRouter.get("/unread-count", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const count = await getUnreadNotificationCount(user.id);
+    return c.json({ count });
+  } catch (error) {
+    console.error("Error fetching unread count:", error);
+    return c.json({ error: "Failed to fetch unread count" }, 500);
+  }
+});
+
+/**
+ * GET /api/notifications/preferences
+ * Get user notification preferences
+ */
+notificationsRouter.get("/preferences", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  try {
+    const preferences = await getUserNotificationPreferences(user.id);
+    return c.json({
+      preferences: {
+        likes: preferences.likes,
+        comments: preferences.comments,
+        replies: preferences.replies,
+        mentions: preferences.mentions,
+        follows: preferences.follows,
+        reposts: preferences.reposts,
+        newFollowerPosts: preferences.newFollowerPosts,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching notification preferences:", error);
+    return c.json({ error: "Failed to fetch notification preferences" }, 500);
+  }
+});
+
+/**
+ * PUT /api/notifications/preferences
+ * Update user notification preferences
+ */
+notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const preferences = c.req.valid("json");
+
+  // Ensure at least one preference is being updated
+  if (Object.keys(preferences).length === 0) {
+    return c.json({ error: "No preferences provided" }, 400);
+  }
+
+  try {
+    const updated = await updateNotificationPreferences(user.id, preferences);
+    return c.json({
+      preferences: {
+        likes: updated.likes,
+        comments: updated.comments,
+        replies: updated.replies,
+        mentions: updated.mentions,
+        follows: updated.follows,
+        reposts: updated.reposts,
+        newFollowerPosts: updated.newFollowerPosts,
+      },
+    });
+  } catch (error) {
+    console.error("Error updating notification preferences:", error);
+    return c.json({ error: "Failed to update notification preferences" }, 500);
+  }
+});
+
+export { notificationsRouter };

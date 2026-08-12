@@ -1,0 +1,637 @@
+// Web port of mobile/src/app/(tabs)/profile.tsx
+import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  Settings,
+  ThumbsUp,
+  ThumbsDown,
+  Calendar,
+  MapPin,
+  Users,
+  Award,
+  ChevronRight,
+  TrendingUp,
+  Bookmark,
+  LogOut,
+  UserCheck,
+  Shield,
+  Scroll,
+  BookOpen,
+  BarChart3,
+  Loader2,
+} from "lucide-react";
+import { MotionDiv } from "@/components/civic/Motion";
+import { AppShell } from "@/components/layout/AppShell";
+import { mockBills, categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
+import { useVotingStore } from "@/lib/mobile/voting-store";
+import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
+import {
+  useDelegationStore,
+  selectActiveDelegationsCount,
+} from "@/lib/mobile/delegation-store";
+import { cn } from "@/lib/utils";
+import { isSupabaseConfigured } from "@/lib/mobile/supabase";
+import { useUserVoteHistory } from "@/lib/mobile/hooks";
+import { useCurrentUser, usePermissions } from "@/hooks/use-civic-auth";
+import { signOut as betterAuthSignOut } from "@/lib/auth-client";
+import type { Bill } from "@/lib/mobile/types";
+
+function StatCard({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  color: string;
+}) {
+  return (
+    <div
+      className="flex-1 rounded-xl p-3 border"
+      style={{
+        backgroundColor: `${color}15`,
+        borderColor: `${color}30`,
+      }}
+    >
+      <div className="flex items-center mb-1">
+        {icon}
+        <span className="text-xs ml-1.5 font-medium" style={{ color }}>
+          {label}
+        </span>
+      </div>
+      <span className="block text-white font-bold text-xl">{value}</span>
+    </div>
+  );
+}
+
+function VoteHistoryCard({
+  billId,
+  vote,
+  index,
+  bill,
+}: {
+  billId: string;
+  vote: "yea" | "nay";
+  index: number;
+  bill?: Bill | null;
+}) {
+  const navigate = useNavigate();
+
+  // Fall back to mock bill if not provided
+  const displayBill = bill ?? mockBills.find((b) => b.id === billId);
+
+  if (!displayBill) return null;
+
+  const categoryColor = categoryColors[displayBill.category] ?? "#64748B";
+
+  return (
+    <MotionDiv
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.06, type: "spring", stiffness: 120, damping: 16 }}
+      className="mb-3"
+    >
+      <button
+        onClick={() => navigate(`/bill/${displayBill.id}`)}
+        className="w-full text-left bg-slate-800/60 rounded-xl p-4 border border-slate-700/40"
+      >
+        <div className="flex items-start">
+          <div
+            className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center mr-3 shrink-0",
+              vote === "yea" ? "bg-emerald-900/60" : "bg-red-900/60"
+            )}
+          >
+            {vote === "yea" ? (
+              <ThumbsUp size={18} color="#22C55E" />
+            ) : (
+              <ThumbsDown size={18} color="#EF4444" />
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center mb-1">
+              <span
+                className="px-2 py-0.5 rounded-full mr-2 text-xs font-medium"
+                style={{ backgroundColor: `${categoryColor}30`, color: categoryColor }}
+              >
+                {categoryLabels[displayBill.category]}
+              </span>
+              <span
+                className={cn(
+                  "px-2 py-0.5 rounded-full text-xs font-medium",
+                  vote === "yea"
+                    ? "bg-emerald-900/60 text-emerald-400"
+                    : "bg-red-900/60 text-red-400"
+                )}
+              >
+                {vote === "yea" ? "YEA" : "NAY"}
+              </span>
+            </div>
+
+            <span className="block text-white font-semibold truncate">
+              {displayBill.shortTitle}
+            </span>
+            <span className="block text-slate-400 text-sm truncate">
+              {displayBill.title}
+            </span>
+          </div>
+
+          <ChevronRight size={20} color="#64748B" className="shrink-0" />
+        </div>
+      </button>
+    </MotionDiv>
+  );
+}
+
+function AchievementBadge({
+  title,
+  description,
+  icon,
+  earned,
+}: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  earned: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center p-3 rounded-xl mr-3 border shrink-0",
+        earned
+          ? "bg-amber-900/30 border-amber-700/50"
+          : "bg-slate-800/40 border-slate-700/30"
+      )}
+      style={{ width: 100 }}
+    >
+      <div
+        className={cn(
+          "w-12 h-12 rounded-full flex items-center justify-center mb-2",
+          earned ? "bg-amber-500/30" : "bg-slate-700/50"
+        )}
+      >
+        {icon}
+      </div>
+      <span
+        className={cn(
+          "text-xs font-semibold text-center",
+          earned ? "text-amber-400" : "text-slate-500"
+        )}
+      >
+        {title}
+      </span>
+      <span
+        className={cn(
+          "text-xs text-center mt-0.5",
+          earned ? "text-amber-500/70" : "text-slate-600"
+        )}
+      >
+        {description}
+      </span>
+    </div>
+  );
+}
+
+export default function Profile() {
+  const navigate = useNavigate();
+  // Supabase is hard-disabled (see lib/mobile/supabase.ts) — same as mobile.
+  const useSupabase = isSupabaseConfigured();
+
+  // Auth — web equivalent of mobile: login populates the mock auth store from
+  // the Better Auth session (mobile login.tsx does the same mapping after OTP
+  // sign-in). If the store is empty but a session exists, derive the user.
+  const { user: sessionUser, isLoading: sessionLoading } = useCurrentUser();
+  // Admin tier comes from the separate admin-console session, never from a citizen
+  // account — a brand-new signup is `user`, so the console card stays hidden.
+  const { can } = usePermissions();
+  const mockUser = useAuthStore((s) => s.user);
+  const mockSignOut = useAuthStore((s) => s.signOut);
+  const queryClient = useQueryClient();
+  const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
+
+  const user = mockUser ?? (sessionUser ? authUserFromSession(sessionUser) : null);
+
+  // The platform's master admin account (matches the superadmin in
+  // backend/src/routes/admin.ts). Seeing the entry cards doesn't grant access —
+  // the admin console and B2B portal still require their own logins.
+  const isMasterAdmin = (user?.username ?? "").toLowerCase() === "palikk87";
+
+  // Votes
+  const mockUserVotes = useVotingStore((s) => s.userVotes);
+  const { data: supabaseVoteHistory, isLoading: votesLoading } = useUserVoteHistory(
+    useSupabase ? sessionUser?.id : undefined
+  );
+
+  const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
+
+  // Calculate vote stats
+  const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
+    if (useSupabase && supabaseVoteHistory) {
+      const yea = supabaseVoteHistory.filter((v) => v.vote === "yea").length;
+      const nay = supabaseVoteHistory.filter((v) => v.vote === "nay").length;
+      return {
+        yeaVotes: yea,
+        nayVotes: nay,
+        totalVotes: supabaseVoteHistory.length,
+        voteEntries: [] as [string, "yea" | "nay"][],
+      };
+    }
+
+    const entries = Object.entries(mockUserVotes) as [string, "yea" | "nay"][];
+    const yea = entries.filter(([, v]) => v === "yea").length;
+    const nay = entries.filter(([, v]) => v === "nay").length;
+    return {
+      yeaVotes: yea,
+      nayVotes: nay,
+      totalVotes: entries.length,
+      voteEntries: entries,
+    };
+  }, [useSupabase, supabaseVoteHistory, mockUserVotes]);
+
+  const handleSignOut = async () => {
+    // One click = one sign-out. Matches mobile: without the guard the button fired
+    // again on every click while the first request was in flight, which tripped the
+    // auth rate limiter and left the session alive.
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+
+    try {
+      await betterAuthSignOut();
+    } catch {
+      // Server said no (already signed out, offline, rate-limited) — we still sign
+      // out locally below, so the app never gets stuck half-signed-in.
+    }
+    mockSignOut();
+    // Drop every cached response belonging to the signed-out user (mobile does the
+    // same) so the next visitor never sees the last person's data.
+    queryClient.clear();
+    setIsSigningOut(false);
+    navigate("/");
+  };
+
+  const achievements = [
+    {
+      title: "First Vote",
+      description: "Cast your first vote",
+      icon: <ThumbsUp size={20} color={totalVotes > 0 ? "#F59E0B" : "#64748B"} />,
+      earned: totalVotes > 0,
+    },
+    {
+      title: "Voice Heard",
+      description: "10 votes cast",
+      icon: <TrendingUp size={20} color={totalVotes >= 10 ? "#F59E0B" : "#64748B"} />,
+      earned: totalVotes >= 10,
+    },
+    {
+      title: "Civic Hero",
+      description: "50 votes cast",
+      icon: <Award size={20} color={totalVotes >= 50 ? "#F59E0B" : "#64748B"} />,
+      earned: totalVotes >= 50,
+    },
+    {
+      title: "Engaged",
+      description: "5 followers",
+      icon: (
+        <Users size={20} color={(user?.followers ?? 0) >= 5 ? "#F59E0B" : "#64748B"} />
+      ),
+      earned: (user?.followers ?? 0) >= 5,
+    },
+  ];
+
+  if (!user) {
+    // No profile yet. Only spin while the session is still resolving — once it says
+    // "signed out", the RouteGuard around this page shows the sign-in wall, so
+    // spinning here forever (the old behaviour after sign-out) would just hide it.
+    const stillResolving = sessionLoading || (!!sessionUser && !isSigningOut);
+    if (!stillResolving) return null;
+
+    return (
+      <AppShell>
+        <div className="flex flex-col items-center justify-center py-32">
+          <Loader2 className="h-10 w-10 animate-spin" color="#F59E0B" />
+          <span className="text-slate-400 mt-4">
+            {isSigningOut ? "Signing out..." : "Loading profile..."}
+          </span>
+        </div>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell>
+      <div className="max-w-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between px-1 py-3">
+          <h1 className="text-2xl font-bold text-white">Profile</h1>
+          <div className="flex items-center">
+            <button
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+              className="bg-red-900/40 p-2 rounded-full mr-2 transition hover:bg-red-900/60 disabled:opacity-50"
+              aria-label="Sign out"
+            >
+              {isSigningOut ? (
+                <Loader2 className="h-5 w-5 animate-spin" color="#EF4444" />
+              ) : (
+                <LogOut size={20} color="#EF4444" />
+              )}
+            </button>
+            <button
+              onClick={() => navigate("/settings")}
+              className="bg-slate-800 p-2 rounded-full transition hover:bg-slate-700"
+              aria-label="Settings"
+            >
+              <Settings size={22} color="#64748B" />
+            </button>
+          </div>
+        </div>
+
+        <div className="pb-5">
+          {/* Profile Header */}
+          <div className="flex flex-col items-center px-4 py-6">
+            <div className="relative">
+              <img
+                src={user.avatar}
+                alt={user.displayName}
+                className="w-24 h-24 rounded-full border-4 border-amber-500/30 object-cover"
+              />
+              <div className="absolute -bottom-1 -right-1 bg-amber-500 w-8 h-8 rounded-full flex items-center justify-center border-4 border-slate-900">
+                <span className="text-slate-900 font-bold text-xs">{totalVotes}</span>
+              </div>
+            </div>
+
+            <span className="text-white font-bold text-xl mt-4">
+              {user.displayName}
+            </span>
+            <span className="text-slate-400">@{user.username}</span>
+
+            {user.bio ? (
+              <p className="text-slate-300 text-center mt-2 px-8">{user.bio}</p>
+            ) : null}
+
+            <div className="flex items-center mt-2">
+              <MapPin size={14} color="#64748B" />
+              <span className="text-slate-400 text-sm ml-1">{user.location}</span>
+              <span className="text-slate-600 mx-2">·</span>
+              <Calendar size={14} color="#64748B" />
+              <span className="text-slate-400 text-sm ml-1">
+                Joined{" "}
+                {new Date(user.joinedDate).toLocaleDateString("en-US", {
+                  month: "short",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+
+            {/* Follow Stats */}
+            <div className="flex mt-4">
+              <button className="flex flex-col items-center mr-6">
+                <span className="text-white font-bold text-lg">{user.followers}</span>
+                <span className="text-slate-400 text-sm">Followers</span>
+              </button>
+              <button className="flex flex-col items-center">
+                <span className="text-white font-bold text-lg">{user.following}</span>
+                <span className="text-slate-400 text-sm">Following</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="flex px-4 mb-6 gap-2">
+            <StatCard
+              icon={<ThumbsUp size={14} color="#22C55E" />}
+              label="Yea Votes"
+              value={yeaVotes}
+              color="#22C55E"
+            />
+            <StatCard
+              icon={<ThumbsDown size={14} color="#EF4444" />}
+              label="Nay Votes"
+              value={nayVotes}
+              color="#EF4444"
+            />
+            <StatCard
+              icon={<Award size={14} color="#F59E0B" />}
+              label="Total"
+              value={totalVotes}
+              color="#F59E0B"
+            />
+          </div>
+
+          {/* Founding Documents */}
+          <div className="px-4 mb-6">
+            <h2 className="text-white font-semibold text-lg mb-3">
+              Founding Documents
+            </h2>
+
+            {/* Constitution Card */}
+            <button
+              onClick={() => navigate("/constitution")}
+              className="w-full text-left rounded-xl overflow-hidden border border-slate-600/30 mb-3 bg-gradient-to-br from-[#334155] to-[#1e293b] p-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-1">
+                  <div className="w-12 h-12 rounded-full bg-slate-500/20 flex items-center justify-center mr-3 shrink-0">
+                    <BookOpen size={24} color="#94A3B8" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="block text-slate-100 font-semibold text-lg">
+                      Constitution
+                    </span>
+                    <span className="block text-slate-400 text-sm">
+                      The supreme law of the platform
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={20} color="#94A3B8" />
+              </div>
+            </button>
+
+            {/* Bill of Rights Card */}
+            <button
+              onClick={() => navigate("/bill-of-rights")}
+              className="w-full text-left rounded-xl overflow-hidden border border-amber-700/30 bg-gradient-to-br from-[#78350f] to-[#451a03] p-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-1">
+                  <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mr-3 shrink-0">
+                    <Scroll size={24} color="#FCD34D" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="block text-amber-100 font-semibold text-lg">
+                      Bill of Rights
+                    </span>
+                    <span className="block text-amber-300/70 text-sm">
+                      Your individual protections
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={20} color="#FCD34D" />
+              </div>
+            </button>
+
+            {/* Article V - Self-Correction Card */}
+            <button
+              onClick={() => navigate("/article-v")}
+              className="w-full text-left rounded-xl overflow-hidden border border-red-700/30 mt-3 bg-gradient-to-br from-[#7F1D1D] to-[#450A0A] p-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-1">
+                  <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mr-3 shrink-0">
+                    <Shield size={24} color="#FCA5A5" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="block text-red-100 font-semibold text-lg">
+                      Article V: Self-Correction
+                    </span>
+                    <span className="block text-red-300/70 text-sm">
+                      Impeachment &amp; System Reset
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={20} color="#FCA5A5" />
+              </div>
+            </button>
+          </div>
+
+          {/* Liquid Democracy Card */}
+          <div className="px-4 mb-6">
+            <button
+              onClick={() => navigate("/delegates")}
+              className="w-full text-left bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl p-4 border border-amber-700/30"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-1">
+                  <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mr-3 shrink-0">
+                    <UserCheck size={24} color="#F59E0B" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="block text-white font-semibold text-lg">
+                      Liquid Democracy
+                    </span>
+                    <span className="block text-slate-400 text-sm">
+                      {activeDelegationsCount > 0
+                        ? `${activeDelegationsCount} active delegation${activeDelegationsCount > 1 ? "s" : ""}`
+                        : "Delegate your vote to experts"}
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={20} color="#F59E0B" />
+              </div>
+
+              {activeDelegationsCount > 0 ? (
+                <div className="flex items-center mt-3 pt-3 border-t border-amber-700/30">
+                  <Shield size={14} color="#22C55E" />
+                  <span className="text-emerald-400 text-sm ml-2">
+                    Your vote is being represented
+                  </span>
+                </div>
+              ) : null}
+            </button>
+          </div>
+
+          {/* Admin Console — master admin account or holders of an admin-console session */}
+          {can("viewAdmin") || isMasterAdmin ? (
+          <div className="px-4 mb-6">
+            <button
+              onClick={() => navigate("/admin/login")}
+              className="w-full text-left rounded-xl overflow-hidden border border-purple-700/30 bg-gradient-to-br from-[#581C87] to-[#3B0764] p-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-1">
+                  <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mr-3 shrink-0">
+                    <Shield size={24} color="#C084FC" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="block text-purple-100 font-semibold text-lg">
+                      Admin Console
+                    </span>
+                    <span className="block text-purple-300/70 text-sm">
+                      Manage users, content &amp; analytics
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={20} color="#C084FC" />
+              </div>
+            </button>
+          </div>
+          ) : null}
+
+          {/* B2B Analytics Portal — master admin account or admin-console holders.
+              Not advertised to ordinary citizen accounts (same rule as mobile). */}
+          {can("viewAdmin") || isMasterAdmin ? (
+          <div className="px-4 mb-6">
+            <button
+              onClick={() => navigate("/b2b/login")}
+              className="w-full text-left rounded-xl overflow-hidden border border-indigo-700/30 bg-gradient-to-br from-[#312E81] to-[#1E1B4B] p-4"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center flex-1">
+                  <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3 shrink-0">
+                    <BarChart3 size={24} color="#818CF8" />
+                  </div>
+                  <div className="flex-1">
+                    <span className="block text-indigo-100 font-semibold text-lg">
+                      B2B Analytics
+                    </span>
+                    <span className="block text-indigo-300/70 text-sm">
+                      Civic Intelligence Platform
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight size={20} color="#818CF8" />
+              </div>
+            </button>
+          </div>
+          ) : null}
+
+          {/* Achievements */}
+          <div className="px-4 mb-6">
+            <h2 className="text-white font-semibold text-lg mb-3">Achievements</h2>
+            <div className="flex overflow-x-auto pb-1">
+              {achievements.map((achievement, index) => (
+                <AchievementBadge key={index} {...achievement} />
+              ))}
+            </div>
+          </div>
+
+          {/* Vote History */}
+          <div className="px-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-white font-semibold text-lg">Voting History</h2>
+              <span className="text-slate-400 text-sm">{totalVotes} votes</span>
+            </div>
+
+            {votesLoading ? (
+              <div className="bg-slate-800/40 rounded-xl p-8 flex flex-col items-center border border-slate-700/30">
+                <Loader2 className="h-9 w-9 animate-spin" color="#F59E0B" />
+                <span className="text-slate-400 mt-4">Loading vote history...</span>
+              </div>
+            ) : voteEntries.length > 0 ? (
+              voteEntries.map(([billId, vote], index) => (
+                <VoteHistoryCard
+                  key={billId}
+                  billId={billId}
+                  vote={vote}
+                  index={index}
+                />
+              ))
+            ) : (
+              <div className="bg-slate-800/40 rounded-xl p-8 flex flex-col items-center border border-slate-700/30">
+                <Bookmark size={40} color="#64748B" />
+                <span className="text-slate-400 text-lg mt-4">No votes yet</span>
+                <span className="text-slate-500 text-sm mt-1 text-center">
+                  Start voting on bills to see your history here
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
