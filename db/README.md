@@ -71,36 +71,53 @@ ever rebuilt from this repo, they would not come back:
 | `refresh_search_materialized_views` | function | — |
 | `upsert_search_caches_from_bills` | function | — |
 
-Only their shape is recorded here — that is what the REST API exposes. The
-defining SQL still needs capturing. Run this in the Supabase SQL Editor and save
-the output as `db/live-objects/search-objects.sql`:
+Their definitions are now captured in `live-objects/search-objects.sql`.
 
-```sql
-select 'MATERIALIZED VIEW ' || matviewname as object, definition
-  from pg_matviews
- where schemaname = 'public'
-union all
-select 'FUNCTION ' || p.proname, pg_get_functiondef(p.oid)
-  from pg_proc p
-  join pg_namespace n on n.oid = p.pronamespace
- where n.nspname = 'public'
-   and p.proname in (
-     'get_bill_with_cache_check',
-     'refresh_search_materialized_views',
-     'upsert_search_caches_from_bills'
-   );
-```
+Capturing them turned up two things worth knowing.
 
-Until that lands, this repo cannot fully rebuild the database.
+**They do not read the Prisma tables.** All four data-touching objects target the
+snake_case `legacy` schema, not `public."Bill"` and friends. The search
+infrastructure and the application schema are two separate worlds that happen to
+share a database.
+
+**Two of the three functions are broken in production.**
+
+| Object | State |
+|---|---|
+| `mv_bills_search` | working, populated |
+| `mv_legislative_search` | working, populated |
+| `refresh_search_materialized_views` | working |
+| `get_bill_with_cache_check` | **broken** — `42P01: relation "bill_cache" does not exist` |
+| `upsert_search_caches_from_bills` | **broken** — every relation it names is missing from `public` |
+
+`get_bill_with_cache_check` declares `RETURNS SETOF legacy.bill_cache` but
+queries `bill_cache` unqualified, so it resolves against a search_path that does
+not include `legacy`. Confirmed by calling it: every call throws.
+
+`upsert_search_caches_from_bills` reads `public.bills` and writes
+`public.bill_cache` / `public.ai_search_cache`. None of those exist in `public` —
+they are in `legacy`. It was left behind when the tables moved schema, and it is
+`SECURITY DEFINER`, so it bypasses RLS if repaired carelessly.
+
+Both are preserved as-is rather than fixed. Repairing them means first deciding
+whether the legacy search path is still wanted, and nothing in this repo calls
+either one. `search-objects.sql` documents the fix for each.
 
 ## `legacy/`
 
 - `0001_init_supabase_native_UNAPPLIED.sql` — an earlier Supabase-native schema
   using snake_case tables (`bills`, `votes`, `feed_items`, `bill_cache`,
-  `timeline_posts`) plus RLS policies and a `search_bills` function. It is a
-  completely different design from the Prisma schema and was **never deployed** —
-  production has the PascalCase Prisma tables. Kept for reference only. Do not
-  apply it.
+  `timeline_posts`) plus RLS policies and a `search_bills` function. A completely
+  different design from the Prisma schema.
+
+  The `_UNAPPLIED` suffix is **misleading and kept only for filename stability**.
+  This design *was* deployed — it lives in a separate `legacy` schema, which
+  still holds `legacy.bills`, `legacy.legislative_items` and `legacy.bill_cache`
+  with data in them. It is not in `public`, which is why it does not show up in
+  the PostgREST table listing (PostgREST exposes `public` only).
+
+  Do not apply this file to `public`. The search objects in `live-objects/` read
+  from `legacy`, so the schema cannot simply be dropped either — see below.
 
 - `sqlite-era-migrations/` — migrations from when the backend targeted local
   SQLite, including the unapplied `reference_content_cache`.

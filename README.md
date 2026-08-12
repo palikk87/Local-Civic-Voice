@@ -92,9 +92,11 @@ See `db/README.md` for both.
 
 ## Known gaps
 
-- Five database objects (two search materialized views, three functions) exist
-  only in production, with no source in either export. `db/README.md` has the
-  query to capture them.
+- Two production search functions are broken and left that way deliberately:
+  `get_bill_with_cache_check` throws on every call, and
+  `upsert_search_caches_from_bills` targets tables that are not in the schema it
+  names. Both read the legacy snake_case schema, not the Prisma tables, and
+  nothing in this repo calls either. See `db/live-objects/search-objects.sql`.
 - The two auth systems above should be consolidated.
 - `bun install` has not been run against these manifests since the
   `@vibecodeapp/*` packages were removed; those were private-registry packages
