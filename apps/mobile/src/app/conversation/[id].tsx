@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,12 +20,13 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { type TimelinePost } from '@/lib/timeline-store';
 import {
-  useTimelineStore,
-  type Message,
-  type TimelinePost,
-} from '@/lib/timeline-store';
-import { currentUser } from '@/lib/mock-data';
+  useConversation,
+  useSendMessage,
+  type DirectMessage,
+} from '@/lib/api/messages';
+import { useCurrentUser } from '@/lib/auth/use-civic-auth';
 import { cn } from '@/lib/cn';
 import { AuthGate } from '@/components/auth/AuthGate';
 
@@ -35,7 +36,7 @@ function MessageBubble({
   isOwn,
   showAvatar,
 }: {
-  message: Message;
+  message: DirectMessage;
   isOwn: boolean;
   showAvatar: boolean;
 }) {
@@ -133,25 +134,17 @@ function ConversationContent() {
   const [messageText, setMessageText] = useState('');
   const flatListRef = useRef<FlatList>(null);
 
-  // Get conversation directly using id to avoid infinite loop with selector
-  const conversation = useTimelineStore((s) =>
-    s.conversations.find((c) => c.id === id) ?? null
-  );
-  const messages = useTimelineStore((s) => s.messages[id ?? ''] ?? []);
-  const sendMessage = useTimelineStore((s) => s.sendMessage);
-  const setActiveConversation = useTimelineStore((s) => s.setActiveConversation);
-  const loadMessages = useTimelineStore((s) => s.loadMessages);
+  const { user } = useCurrentUser();
+  const { data, isLoading } = useConversation(id);
+  const sendMessage = useSendMessage(id);
 
-  // Set active conversation on mount
-  useEffect(() => {
-    if (id) {
-      setActiveConversation(id);
-      loadMessages(id);
-    }
-    return () => {
-      setActiveConversation(null);
-    };
-  }, [id, setActiveConversation, loadMessages]);
+  const conversation = data?.conversation ?? null;
+  // The API returns newest first for paging; the thread renders oldest at the
+  // top, so reverse for display.
+  const messages = useMemo(
+    () => (data?.messages ? [...data.messages].reverse() : []),
+    [data?.messages]
+  );
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -163,15 +156,20 @@ function ConversationContent() {
   }, [messages.length]);
 
   const otherParticipant = conversation?.participants.find(
-    (p) => p.id !== currentUser.id
+    (p) => p.id !== user?.id
   );
 
   const handleSend = () => {
-    if (!messageText.trim() || !id) return;
+    const content = messageText.trim();
+    if (!content || !id) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    sendMessage(id, messageText.trim());
+    // Clear optimistically so the input frees up immediately; the mutation
+    // refetches the thread on success.
     setMessageText('');
+    sendMessage.mutate(content, {
+      onError: () => setMessageText(content),
+    });
   };
 
   const handleBack = () => {
@@ -244,7 +242,7 @@ function ConversationContent() {
               return (
                 <MessageBubble
                   message={item}
-                  isOwn={item.sender.id === currentUser.id}
+                  isOwn={item.sender.id === user?.id}
                   showAvatar={showAvatar}
                 />
               );

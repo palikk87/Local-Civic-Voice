@@ -322,6 +322,20 @@ export const searchRateLimit = createRateLimiter({
   message: "Too many search requests. Please slow down.",
 });
 
+/**
+ * AI generation rate limit: 10 requests per minute
+ *
+ * Every call here spends real money against the server-side provider keys, so
+ * this is far tighter than the general limit. The route also requires
+ * authentication, which means getClientIdentifier keys on user id rather than
+ * IP and one account cannot multiply its budget across addresses.
+ */
+export const aiRateLimit = createRateLimiter({
+  maxRequests: 10,
+  windowMs: 60 * 1000, // 1 minute
+  message: "Too many AI requests. Please wait a moment before trying again.",
+});
+
 // Export the rate limiter instance for advanced usage
 export { rateLimiter, SlidingWindowRateLimiter };
 

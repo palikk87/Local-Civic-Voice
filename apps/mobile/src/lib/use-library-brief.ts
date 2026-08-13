@@ -9,6 +9,7 @@
  * There is no on-device brief writer any more. If no official source yields text,
  * the server reports `unavailable` and we say so — we never invent a brief.
  */
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   resolveLibraryDocument,
@@ -36,10 +37,20 @@ export function useLibraryBrief(
   result: GovernmentSearchResult | null,
   enabled = true
 ): LibraryBrief {
+  // Key on the resolve request, not just result.id.
+  //
+  // toResolveRequest reads branch, title, sourceUrl, rawText, status and the
+  // metadata block — none of which were in the old key. Ids are only unique
+  // within a branch, so two results sharing one resolved to whichever was
+  // fetched first, and re-searching with corrected metadata kept serving the
+  // stale brief for the full 30-minute staleTime. React Query hashes keys
+  // deterministically, so the request object can be the key.
+  const request = useMemo(() => (result ? toResolveRequest(result) : null), [result]);
+
   const resolve = useQuery({
-    queryKey: ["library-resolve", result?.id],
-    queryFn: () => resolveLibraryDocument(toResolveRequest(result!)),
-    enabled: enabled && !!result,
+    queryKey: ["library-resolve", request],
+    queryFn: () => resolveLibraryDocument(request!),
+    enabled: enabled && !!request,
     staleTime: 30 * 60 * 1000,
     retry: false,
   });

@@ -72,6 +72,8 @@ model User {
   votes                   Vote[]
   notifications           Notification[]
   notificationPreference  NotificationPreference?
+  conversations           ConversationParticipant[]
+  messagesSent            Message[]
 }
 
 model AdminSession {
@@ -535,4 +537,57 @@ model GovernmentReferenceVote {
   @@index([governmentReferenceId])
   @@index([userId])
   @@index([position])
+}
+
+// ---------------------------------------------------------------------------
+// Direct messaging.
+//
+// Replaces the in-memory mock that routes/messages.ts used to serve, which had
+// a hardcoded "current_user" and lost everything on restart.
+//
+// Read state lives on ConversationParticipant.lastReadAt rather than a per-row
+// isRead flag: marking a conversation read is then one UPDATE instead of one
+// per message, and unread counts stay correct no matter how far behind a
+// participant is. The API still exposes a per-message isRead, computed from the
+// relevant participant's lastReadAt.
+// ---------------------------------------------------------------------------
+
+model Conversation {
+  id           String                    @id @default(cuid())
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  // Conversation lists are ordered by most recent activity.
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One row per user per conversation; also the lookup for "is this user a
+  // participant", which every message endpoint checks before authorizing.
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  // Paging a thread is (conversationId, createdAt) ordered.
+  @@index([conversationId, createdAt])
+  @@index([senderId])
 }

@@ -540,6 +540,104 @@ postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c
 });
 
 /**
+ * GET /api/posts/:id/comments/:commentId/replies
+ * Get the replies to a comment.
+ *
+ * The clients have called this since the threaded-comments UI shipped, but it
+ * was never implemented, so expanding a thread always 404'd. Same response
+ * shape as GET /:id/comments so the two can share a renderer.
+ */
+postsRouter.get(
+  "/:id/comments/:commentId/replies",
+  zValidator("query", paginationSchema),
+  async (c) => {
+    const postId = c.req.param("id");
+    const commentId = c.req.param("commentId");
+    const { limit, cursor } = c.req.valid("query");
+
+    // Scope by postId too: a comment id from another post must not resolve here.
+    const parent = await prisma.comment.findFirst({
+      where: { id: commentId, postId },
+      select: { id: true },
+    });
+    if (!parent) {
+      return c.json({ error: "Comment not found" }, 404);
+    }
+
+    const replies = await prisma.comment.findMany({
+      where: { postId, parentId: commentId },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      orderBy: { createdAt: "asc" },
+      include: {
+        author: { select: { id: true, name: true, email: true, image: true } },
+        _count: { select: { replies: true } },
+      },
+    });
+
+    const hasMore = replies.length > limit;
+    const results = hasMore ? replies.slice(0, -1) : replies;
+    const nextCursor = hasMore ? results[results.length - 1]?.id : undefined;
+
+    return c.json({
+      comments: results.map((comment) => ({
+        id: comment.id,
+        content: comment.content,
+        author: {
+          id: comment.author.id,
+          displayName: comment.author.name,
+          username: comment.author.email.split("@")[0],
+          avatar: comment.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.id}`,
+        },
+        repliesCount: comment._count.replies,
+        createdAt: comment.createdAt.toISOString(),
+      })),
+      nextCursor,
+      hasMore,
+    });
+  }
+);
+
+/**
+ * DELETE /api/posts/:id/comments/:commentId
+ * Delete your own comment.
+ *
+ * Also never implemented, so the delete button in the web client 404'd.
+ * Authorization mirrors DELETE /api/posts/:id — author only.
+ */
+postsRouter.delete("/:id/comments/:commentId", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const postId = c.req.param("id");
+  const commentId = c.req.param("commentId");
+
+  const comment = await prisma.comment.findFirst({
+    where: { id: commentId, postId },
+    select: { id: true, authorId: true },
+  });
+  if (!comment) {
+    return c.json({ error: "Comment not found" }, 404);
+  }
+
+  if (comment.authorId !== user.id) {
+    return c.json({ error: "Not authorized" }, 403);
+  }
+
+  // Remove the replies with the comment. Comment.parentId is an optional
+  // relation, so Prisma's default onDelete would set it to null instead —
+  // silently promoting every reply to a top-level comment on the post.
+  await prisma.$transaction([
+    prisma.comment.deleteMany({ where: { parentId: commentId } }),
+    prisma.comment.delete({ where: { id: commentId } }),
+  ]);
+
+  return c.json({ success: true });
+});
+
+/**
  * POST /api/posts/:id/comments
  * Add a comment to a post
  */

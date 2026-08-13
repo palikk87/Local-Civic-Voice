@@ -6,6 +6,7 @@ import {
   Image,
   FlatList,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,11 +22,12 @@ import {
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
-  useTimelineStore,
-  selectConversations,
-  type Conversation,
-} from '@/lib/timeline-store';
-import { currentUser, sampleUsers } from '@/lib/mock-data';
+  useConversations,
+  useStartConversation,
+  type DirectConversation,
+} from '@/lib/api/messages';
+import { useSearchUsers } from '@/lib/api/hooks';
+import { useCurrentUser } from '@/lib/auth/use-civic-auth';
 import { cn } from '@/lib/cn';
 import { AuthGate } from '@/components/auth/AuthGate';
 
@@ -47,19 +49,21 @@ function ConversationItem({
   conversation,
   index,
   onPress,
+  currentUserId,
 }: {
-  conversation: Conversation;
+  conversation: DirectConversation;
   index: number;
   onPress: () => void;
+  currentUserId: string | undefined;
 }) {
   const otherParticipant = conversation.participants.find(
-    (p) => p.id !== currentUser.id
+    (p) => p.id !== currentUserId
   );
 
   if (!otherParticipant) return null;
 
   const lastMessage = conversation.lastMessage;
-  const isOwn = lastMessage?.sender.id === currentUser.id;
+  const isOwn = lastMessage?.sender.id === currentUserId;
   const timeAgo = lastMessage
     ? getRelativeTime(lastMessage.createdAt)
     : getRelativeTime(conversation.createdAt);
@@ -149,11 +153,12 @@ function NewConversationSheet({
   onSelect: (userId: string) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const searchUsers = useTimelineStore((s) => s.searchUsers);
+  const { user } = useCurrentUser();
 
-  const filteredUsers = searchQuery
-    ? searchUsers(searchQuery)
-    : sampleUsers.filter((u) => u.id !== currentUser.id);
+  // Real user search. This used to filter a local sampleUsers array, so the
+  // compose sheet could only ever offer fabricated people.
+  const { data: searchData } = useSearchUsers(searchQuery);
+  const filteredUsers = (searchData?.results ?? []).filter((u) => u.id !== user?.id);
 
   if (!visible) return null;
 
@@ -218,8 +223,12 @@ function NewConversationSheet({
             </Animated.View>
           )}
           ListEmptyComponent={
+            // Search runs server-side and is disabled until there is a query,
+            // so an empty box means "type a name", not "nobody matched".
             <View className="items-center py-10">
-              <Text className="text-slate-500">No users found</Text>
+              <Text className="text-slate-500">
+                {searchQuery ? 'No users found' : 'Search for someone to message'}
+              </Text>
             </View>
           }
         />
@@ -240,21 +249,23 @@ function MessagesContent() {
   const router = useRouter();
   const [showNewConversation, setShowNewConversation] = useState(false);
 
-  const conversations = useTimelineStore(selectConversations);
-  const startConversation = useTimelineStore((s) => s.startConversation);
+  const { user } = useCurrentUser();
+  const { data, isLoading } = useConversations();
+  const conversations = data?.results ?? [];
+  const startConversation = useStartConversation();
 
   const handleConversationPress = (conversationId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push(`/conversation/${conversationId}`);
   };
 
-  const handleNewConversation = (userId: string) => {
-    const user = sampleUsers.find((u) => u.id === userId);
-    if (!user) return;
-
-    const conversationId = startConversation(user);
+  const handleNewConversation = async (userId: string) => {
+    // The server resolves an existing thread with this person if there is one,
+    // so picking the same person twice reopens the conversation instead of
+    // creating a duplicate.
+    const result = await startConversation.mutateAsync({ participantId: userId });
     setShowNewConversation(false);
-    router.push(`/conversation/${conversationId}`);
+    router.push(`/conversation/${result.conversation.id}`);
   };
 
   const handleBack = () => {
@@ -305,20 +316,30 @@ function MessagesContent() {
               conversation={item}
               index={index}
               onPress={() => handleConversationPress(item.id)}
+              currentUserId={user?.id}
             />
           )}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center py-20">
-              <View className="w-20 h-20 rounded-full bg-slate-800 items-center justify-center mb-4">
-                <MessageCircle size={36} color="#64748B" />
+            // Conversations are fetched now rather than read from a local
+            // store, so the first paint has nothing yet. Without this the
+            // screen flashes "No messages yet" before the list arrives.
+            isLoading ? (
+              <View className="flex-1 items-center justify-center py-20">
+                <ActivityIndicator color="#F59E0B" />
               </View>
-              <Text className="text-white font-semibold text-lg">
-                No messages yet
-              </Text>
-              <Text className="text-slate-400 text-sm mt-1 text-center px-8">
-                Start a conversation by tapping the + button above
-              </Text>
-            </View>
+            ) : (
+              <View className="flex-1 items-center justify-center py-20">
+                <View className="w-20 h-20 rounded-full bg-slate-800 items-center justify-center mb-4">
+                  <MessageCircle size={36} color="#64748B" />
+                </View>
+                <Text className="text-white font-semibold text-lg">
+                  No messages yet
+                </Text>
+                <Text className="text-slate-400 text-sm mt-1 text-center px-8">
+                  Start a conversation by tapping the + button above
+                </Text>
+              </View>
+            )
           }
         />
       </SafeAreaView>

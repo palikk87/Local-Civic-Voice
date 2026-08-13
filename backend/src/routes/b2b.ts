@@ -980,6 +980,79 @@ b2bRouter.get("/reports/summary", async (c) => {
 // Forecasting Endpoints (Enterprise tier)
 // ==========================================
 
+/**
+ * Deterministic PRNG, seeded from a string.
+ *
+ * The random walk below used to call Math.random() directly, so the same bill
+ * returned a different 30-day projection on every request — a chart that
+ * reshuffled itself on refresh, and two clients comparing the same bill never
+ * agreed. Seeding from the row id keeps the walk's shape while making a given
+ * subject's forecast stable and reproducible.
+ */
+function seededRandom(seed: string): () => number {
+  let h = 1779033703 ^ seed.length;
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+
+type ForecastRow = {
+  yea_count?: number | null;
+  nay_count?: number | null;
+  total_votes?: number | null;
+};
+
+/**
+ * Project 30 days of sentiment for a bill row.
+ *
+ * Shared by the bill and issue forecast endpoints: a b2b "issue" is a bill
+ * remapped for presentation (see GET /issues) and carries the same id, so the
+ * projection is the same computation over the same row.
+ */
+function buildSentimentForecast(seed: string, row: ForecastRow) {
+  const support = row.yea_count || 0;
+  const oppose = row.nay_count || 0;
+  const total = row.total_votes || 0;
+  const currentSentiment = total > 0 ? (support - oppose) / total : 0;
+
+  const forecast: Array<{ date: string; predicted: number; lowerBound: number; upperBound: number }> = [];
+  const now = new Date();
+  const rand = seededRandom(seed);
+  let value = currentSentiment;
+
+  for (let i = 1; i <= 30; i++) {
+    const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+    const change = (rand() - 0.5) * 0.05;
+    value = Math.max(-1, Math.min(1, value + change));
+
+    forecast.push({
+      date: date.toISOString().split("T")[0] || "",
+      predicted: parseFloat(value.toFixed(3)),
+      lowerBound: parseFloat(Math.max(-1, value - 0.15).toFixed(3)),
+      upperBound: parseFloat(Math.min(1, value + 0.15).toFixed(3)),
+    });
+  }
+
+  return {
+    currentSentiment: parseFloat(currentSentiment.toFixed(3)),
+    forecast,
+    confidence: total > 10 ? 0.8 : 0.5,
+    keyFactors: [
+      { factor: "Current engagement", impact: total > 10 ? 0.2 : -0.1 },
+      { factor: "Support ratio", impact: parseFloat((currentSentiment * 0.3).toFixed(2)) },
+    ],
+    modelVersion: "v2.3.1",
+    lastUpdated: new Date().toISOString(),
+  };
+}
+
 b2bRouter.get("/forecast/bills/:billId", zValidator("param", billIdParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
   const session = getClientFromToken(authHeader);
@@ -1004,43 +1077,48 @@ b2bRouter.get("/forecast/bills/:billId", zValidator("param", billIdParamSchema),
       return c.json({ error: "Bill not found" }, { status: 404 });
     }
 
-    const support = bill.yea_count || 0;
-    const oppose = bill.nay_count || 0;
-    const total = bill.total_votes || 0;
-    const currentSentiment = total > 0 ? (support - oppose) / total : 0;
-
-    // Generate forecast based on current sentiment
-    const forecast: Array<{ date: string; predicted: number; lowerBound: number; upperBound: number }> = [];
-    const now = new Date();
-    let value = currentSentiment;
-
-    for (let i = 1; i <= 30; i++) {
-      const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
-      const change = (Math.random() - 0.5) * 0.05;
-      value = Math.max(-1, Math.min(1, value + change));
-
-      forecast.push({
-        date: date.toISOString().split("T")[0] || "",
-        predicted: parseFloat(value.toFixed(3)),
-        lowerBound: parseFloat(Math.max(-1, value - 0.15).toFixed(3)),
-        upperBound: parseFloat(Math.min(1, value + 0.15).toFixed(3)),
-      });
-    }
-
-    return c.json({
-      billId,
-      currentSentiment: parseFloat(currentSentiment.toFixed(3)),
-      forecast,
-      confidence: total > 10 ? 0.8 : 0.5,
-      keyFactors: [
-        { factor: "Current engagement", impact: total > 10 ? 0.2 : -0.1 },
-        { factor: "Support ratio", impact: parseFloat((currentSentiment * 0.3).toFixed(2)) },
-      ],
-      modelVersion: "v2.3.1",
-      lastUpdated: new Date().toISOString(),
-    });
+    return c.json({ billId, ...buildSentimentForecast(billId, bill) });
   } catch (error) {
     console.error("Error fetching forecast:", error);
+    return c.json({ error: "Failed to fetch forecast" }, { status: 500 });
+  }
+});
+
+/**
+ * GET /api/b2b/forecast/issues/:issueId
+ *
+ * The b2b dashboard has always called this for non-bill targets, but it was
+ * never implemented, so issue forecasting 404'd. An issue is a bill remapped by
+ * GET /issues and carries the same id, so this resolves the same row and runs
+ * the same projection — only the response key differs.
+ */
+b2bRouter.get("/forecast/issues/:issueId", zValidator("param", issueIdParamSchema), async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = getClientFromToken(authHeader);
+
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  if (!checkTierAccess(session.tier, "enterprise")) {
+    return c.json({
+      error: "Forecasting features require Enterprise tier",
+      requiredTier: "enterprise",
+    }, { status: 403 });
+  }
+
+  const { issueId } = c.req.valid("param");
+
+  try {
+    const row = await getBillRowById(issueId);
+
+    if (!row) {
+      return c.json({ error: "Issue not found" }, { status: 404 });
+    }
+
+    return c.json({ issueId, ...buildSentimentForecast(issueId, row) });
+  } catch (error) {
+    console.error("Error fetching issue forecast:", error);
     return c.json({ error: "Failed to fetch forecast" }, { status: 500 });
   }
 });

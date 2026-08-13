@@ -535,7 +535,13 @@ feedRouter.post("/refresh-creator-metrics/:userId", async (c) => {
     return c.json({ error: "Authentication required" }, 401);
   }
 
-  const targetUserId = c.req.param("userId");
+  // "me" resolves to the caller. The clients have always sent the literal
+  // "me" here (see refreshMyCreatorMetrics in lib/api/feed.ts, whose comment
+  // says the endpoint takes the id from the session), but this handler compared
+  // the raw segment against user.id — and "me" never equals a cuid, so every
+  // call returned 403. Accepting the alias is what the callers already assume.
+  const rawUserId = c.req.param("userId");
+  const targetUserId = rawUserId === "me" ? user.id : rawUserId;
 
   // Only allow refreshing own metrics or if admin
   if (targetUserId !== user.id) {

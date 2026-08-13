@@ -2,7 +2,7 @@
 // GET /api/delegations/delegates (computed server-side from routine activity),
 // delegating/revoking goes through /api/delegations, and delegated votes are
 // counted into every reference tally. Web twin: webapp/src/pages/Delegates.tsx
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -239,8 +239,17 @@ function DelegatesContent() {
     },
   });
 
-  const activeDelegations = (mine?.delegations ?? []).filter((d) => d.isActive);
-  const delegationsByUser = new Map(activeDelegations.map((d) => [d.toUser.id, d]));
+  // Memoised because handleSelectDelegate and renderItem depend on them. Rebuilt
+  // inline, they were new objects on every render, so those useCallbacks were
+  // never actually stable and every FlatList row re-rendered on any state change.
+  const activeDelegations = useMemo(
+    () => (mine?.delegations ?? []).filter((d) => d.isActive),
+    [mine?.delegations]
+  );
+  const delegationsByUser = useMemo(
+    () => new Map(activeDelegations.map((d) => [d.toUser.id, d])),
+    [activeDelegations]
+  );
   const activeDelegationsCount = activeDelegations.length;
   const requirements = data?.requirements;
 
@@ -253,16 +262,22 @@ function DelegatesContent() {
       d.topCategories.some((c) => c.toLowerCase().includes(query))
   );
 
+  // Destructured: a useMutation result is a new object every render, so passing
+  // the mutation objects themselves as dependencies made this callback unstable.
+  // The .mutate functions are stable.
+  const { mutate: delegate } = delegateMutation;
+  const { mutate: revoke } = revokeMutation;
+
   const handleSelectDelegate = useCallback(
-    (delegate: DelegateListing) => {
-      const existing = delegationsByUser.get(delegate.id);
+    (delegateListing: DelegateListing) => {
+      const existing = delegationsByUser.get(delegateListing.id);
       if (existing) {
-        revokeMutation.mutate(existing.id);
+        revoke(existing.id);
       } else {
-        delegateMutation.mutate(delegate.id);
+        delegate(delegateListing.id);
       }
     },
-    [delegationsByUser, delegateMutation, revokeMutation]
+    [delegationsByUser, delegate, revoke]
   );
 
   const handleRevokeAll = useCallback(async () => {

@@ -59,6 +59,18 @@ unresponsive Supabase project locks everyone out of login.
 
 Consolidating onto one system is the obvious next cleanup.
 
+## Messaging
+
+Backed by `Conversation` / `ConversationParticipant` / `Message`. Read state
+lives on `ConversationParticipant.lastReadAt`, so marking a thread read is one
+UPDATE rather than one per message; the per-message `isRead` in the API is
+derived from it.
+
+This replaced an in-memory mock — a hardcoded `current_user`, module-level
+arrays, integer id counters — that the mobile client never even called, reading
+`timeline-store`'s `generateMockConversations()` instead. Messages now persist
+and actually reach the other participant.
+
 ## Migration off Vibecode
 
 Both apps were built on Vibecode and exported as ZIPs. Each export contained its
@@ -92,11 +104,21 @@ See `db/README.md` for both.
 
 ## Known gaps
 
+- **Two migrations are written but not yet applied to production.**
+  `20260812150000_repair_govref_columns_and_adminsession` and
+  `20260812151000_add_direct_messaging` ship in this branch and must be deployed
+  (`bunx prisma migrate deploy`) before the Citizen's Brief, delegation tallies,
+  admin login, or messaging will work against the live database. Both are
+  additive and idempotent. See `db/README.md`.
 - Two production search functions are broken and left that way deliberately:
   `get_bill_with_cache_check` throws on every call, and
   `upsert_search_caches_from_bills` targets tables that are not in the schema it
   names. Both read the legacy snake_case schema, not the Prisma tables, and
   nothing in this repo calls either. See `db/live-objects/search-objects.sql`.
+- Sharing a post into a DM renders if a message carries `sharedPost`, but nothing
+  produces one — the `Message` table has no column for it. The render paths are
+  typed and ready; wiring it needs a `sharedPostId` on the backend model.
+- Still no tests in any package.
 - The two auth systems above should be consolidated.
 - `bun install` has not been run against these manifests since the
   `@vibecodeapp/*` packages were removed; those were private-registry packages
