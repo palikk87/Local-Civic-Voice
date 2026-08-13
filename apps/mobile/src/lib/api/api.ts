@@ -1,7 +1,8 @@
 import { fetch } from "expo/fetch";
 import { authClient } from "../auth/auth-client";
+import { BACKEND_URL } from "../config";
 
-const baseUrl = (process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL)!;
+const baseUrl = BACKEND_URL;
 
 // IMPORTANT: This sets the cookies/auth token in the headers
 const request = async <T>(

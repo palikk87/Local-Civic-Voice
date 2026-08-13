@@ -1,5 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 import { emailOTPClient } from "better-auth/client/plugins";
+import { BACKEND_URL } from "@/lib/config";
 
 // Web-only auth client.
 // Metro automatically picks this `.web.ts` file over `auth-client.ts` when
@@ -9,10 +10,8 @@ import { emailOTPClient } from "better-auth/client/plugins";
 // HTTP cookie that the browser sends automatically on every request that uses
 // `credentials: "include"`.
 
-const baseURL = (process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL) || "http://localhost:3000";
-
 const client = createAuthClient({
-  baseURL,
+  baseURL: BACKEND_URL,
   plugins: [emailOTPClient()],
 });
 

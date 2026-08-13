@@ -5,15 +5,15 @@
     "": {
       "name": "backend",
       "dependencies": {
-        "@better-auth/expo": "^1.5.3",
-        "@better-auth/prisma-adapter": "^1.5.3",
+        "@better-auth/expo": "1.6.24",
+        "@better-auth/prisma-adapter": "1.6.24",
         "@hono/node-server": "1.12.0",
         "@hono/zod-validator": "^0.7.6",
         "@prisma/client": "6",
         "@supabase/supabase-js": "^2.98.0",
-        "better-auth": "^1.5.3",
+        "better-auth": "1.6.24",
         "hono": "4.6.0",
-        "zod": "4.1.11",
+        "zod": "4.3.6",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -179,7 +179,7 @@
 
     "undici-types": ["undici-types@7.13.0", "", {}, "sha512-Ov2Rr9Sx+fRgagJ5AX0qvItZG/JKKoBRAVITs1zk7IqZGTJUwgUr7qoYBpWwakpWilTZFM98rG/AFRocu10iIQ=="],
 
-    "zod": ["zod@4.1.11", "", {}, "sha512-WPsqwxITS2tzx1bzhIKsEs19ABD5vmCVa4xBo2tq/SrV4RNZtfws1EnCWQXM6yh8bD08a1idvkB5MZSBiZsjwg=="],
+    "zod": ["zod@4.3.6", "", {}, "sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg=="],
 
     "@better-auth/core/zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 

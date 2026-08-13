@@ -11,7 +11,7 @@ import { AlertTriangle, RefreshCw, ShieldCheck } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAdminStore } from '@/lib/admin-store';
 
-const BACKEND_URL = (process.env.EXPO_PUBLIC_BACKEND_URL || process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL) || 'http://localhost:3000';
+import { BACKEND_URL } from '@/lib/config';
 
 interface StorageHealth {
   databaseDurable: boolean;
