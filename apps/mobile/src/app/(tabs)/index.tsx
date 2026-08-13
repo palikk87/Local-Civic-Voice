@@ -51,8 +51,7 @@ import { cn } from '@/lib/cn';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useFeed, useTrendingBills, useUserFeedLikes, useToggleFeedLike, useRandomizedBillFeed } from '@/lib/hooks';
 import { useAlgorithmicFeed, algorithmicPostToFeedItem } from '@/lib/algorithmic-feed';
-import { useAuth } from '@/lib/auth-context';
-import { useRequireAuth } from '@/lib/auth/use-civic-auth';
+import { useCurrentUser, useRequireAuth } from '@/lib/auth/use-civic-auth';
 import type { FeedItemWithDetails, Bill as SupabaseBill } from '@/lib/database.types';
 
 // Import new systems
@@ -874,7 +873,10 @@ export default function HomeScreen() {
   const [branchFilter, setBranchFilter] = useState<GovernmentBranch | 'all'>('all');
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ScoredFeedItem | null>(null);
-  const { user } = useAuth();
+  // Better Auth session. Was the Supabase context, which is never populated —
+  // so user?.id was always undefined here and the Supabase-backed like state
+  // below could never resolve for a real account.
+  const { user } = useCurrentUser();
   const useSupabase = isSupabaseConfigured();
   const router = useRouter();
   const requireAuth = useRequireAuth();

@@ -39,7 +39,6 @@ import { useB2BStore } from '@/lib/b2b-store';
 import { usePermissions, useCurrentUser } from '@/lib/auth/use-civic-auth';
 import { cn } from '@/lib/cn';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { useAuth } from '@/lib/auth-context';
 import { useUserVoteHistory } from '@/lib/hooks';
 import type { Bill, BillCategory } from '@/lib/types';
 import type { VoteWithBill } from '@/lib/database.types';
@@ -230,34 +229,26 @@ function ProfileContent() {
   const queryClient = useQueryClient();
   const useSupabase = isSupabaseConfigured();
 
-  // Auth
-  const supabaseAuth = useAuth();
-  const mockUser = useAuthStore((s) => s.user);
-  const mockSignOut = useAuthStore((s) => s.signOut);
-  const { isAuthenticated, isLoading: sessionLoading } = useCurrentUser();
+  // Auth — Better Auth only.
+  //
+  // This used to branch on isSupabaseConfigured() and read a Supabase profile
+  // when the flag was on. That made one flag swap both the data source AND the
+  // identity, which is why web and mobile could disagree about who was signed
+  // in. The flag now gates data alone; identity always comes from Better Auth,
+  // mirrored into the store by SessionBridge.
+  const storedUser = useAuthStore((s) => s.user);
+  const storeSignOut = useAuthStore((s) => s.signOut);
+  const { user: sessionUser, isAuthenticated, isLoading: sessionLoading } = useCurrentUser();
   const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
 
-  const user = useSupabase
-    ? supabaseAuth.profile
-      ? {
-          id: supabaseAuth.profile.id,
-          username: supabaseAuth.profile.username,
-          displayName: supabaseAuth.profile.display_name,
-          avatar: supabaseAuth.profile.avatar ?? `https://api.dicebear.com/7.x/avataaars/png?seed=${supabaseAuth.profile.username}`,
-          bio: supabaseAuth.profile.bio ?? '',
-          location: supabaseAuth.profile.location ?? 'United States',
-          joinedDate: supabaseAuth.profile.joined_date,
-          followers: supabaseAuth.profile.followers_count,
-          following: supabaseAuth.profile.following_count,
-          votesCount: supabaseAuth.profile.votes_count,
-        }
-      : null
-    : mockUser;
+  const user = storedUser;
 
   // Votes
   const mockUserVotes = useVotingStore((s) => s.userVotes);
   const { data: supabaseVoteHistory, isLoading: votesLoading } = useUserVoteHistory(
-    useSupabase ? supabaseAuth.user?.id : undefined
+    // The flag still selects the vote-history data source; the identity it is
+    // looked up by now comes from the Better Auth session either way.
+    useSupabase ? sessionUser?.id : undefined
   );
 
   const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
@@ -316,10 +307,7 @@ function ProfileContent() {
     await Promise.all(
       SESSION_STORAGE_KEYS.map((key) => SecureStore.deleteItemAsync(key).catch(() => {})),
     );
-    if (useSupabase) {
-      await supabaseAuth.signOut();
-    }
-    mockSignOut();
+    storeSignOut();
     queryClient.clear();
     await queryClient.invalidateQueries();
     setIsSigningOut(false);

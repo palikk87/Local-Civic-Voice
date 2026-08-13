@@ -7,7 +7,6 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '@/lib/query-client';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { AuthProvider } from '@/lib/auth-context';
 import { AuthUIProvider } from '@/lib/auth/use-civic-auth';
 import { AuthSheet } from '@/components/auth/AuthSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -71,16 +70,20 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <AuthUIProvider>
-            <GestureHandlerRootView style={{ flex: 1 }}>
-              <KeyboardProvider>
-                <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
-                <RootLayoutNav colorScheme={colorScheme} />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </AuthUIProvider>
-        </AuthProvider>
+        {/*
+          One auth provider. A Supabase-Auth AuthProvider used to wrap this one,
+          mounting a second, never-populated session that three tab screens read
+          from — which is how a signed-in user could still be `undefined` to half
+          the app. Better Auth is the only session now.
+        */}
+        <AuthUIProvider>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <KeyboardProvider>
+              <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+              <RootLayoutNav colorScheme={colorScheme} />
+            </KeyboardProvider>
+          </GestureHandlerRootView>
+        </AuthUIProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

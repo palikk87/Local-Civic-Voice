@@ -14,7 +14,7 @@ import { useRouter } from 'expo-router';
 import { Search, UserPlus, TrendingUp, Clock, X } from 'lucide-react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/api';
-import { useAuth } from '@/lib/auth-context';
+import { useCurrentUser } from '@/lib/auth/use-civic-auth';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import * as Haptics from 'expo-haptics';
@@ -170,7 +170,12 @@ function SectionHeader({ icon, title, subtitle }: SectionHeaderProps) {
 export default function PeopleScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  // Better Auth is the only session on this app. This previously read the
+  // dormant Supabase context, which is never populated, so currentUserId was
+  // permanently undefined: the signed-in user saw a Follow button on their own
+  // card, and every user's suggestions collapsed into the one cache entry
+  // keyed on ['suggestedUsers', undefined].
+  const { user } = useCurrentUser();
   const currentUserId = user?.id;
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);

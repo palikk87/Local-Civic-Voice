@@ -1,3 +1,16 @@
+/**
+ * NOT MOUNTED. Retained for reference, not in the render tree.
+ *
+ * This is the Supabase-Auth session. It used to wrap AuthUIProvider in
+ * app/_layout.tsx and was read by three tab screens, while Better Auth ran
+ * underneath it — two session systems at once. Because EXPO_PUBLIC_SUPABASE_ENABLED
+ * is false, `supabase` is null and this context's user was permanently null, so
+ * those screens saw an undefined user id even for a signed-in account.
+ *
+ * Better Auth is now the only session: see lib/auth/use-civic-auth.tsx. Nothing
+ * imports this file. Do not re-mount it without removing the Better Auth
+ * provider first — running both is what caused the original bug.
+ */
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query'
 import { Session, User } from '@supabase/supabase-js'
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
