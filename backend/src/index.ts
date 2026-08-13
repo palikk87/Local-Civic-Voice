@@ -37,6 +37,7 @@ import { initializeProcessors } from "./services/job-processors";
 
 // Import cache stats
 import { getCacheStats } from "./services/cache";
+import { isEmailConfigured } from "./services/email";
 
 // Type the Hono app with user/session variables
 const app = new Hono<{
@@ -97,6 +98,9 @@ app.get("/health", (c) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    // Surfaced because an unsent one-time code is otherwise invisible: sign-in
+    // and password reset both fail at the moment a user needs them, not at boot.
+    email: { configured: isEmailConfigured() },
     cache: {
       caches: cacheStats.caches.map((cache) => ({
         name: cache.name,

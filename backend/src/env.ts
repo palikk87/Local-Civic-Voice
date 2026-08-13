@@ -97,6 +97,18 @@ const envSchema = z.object({
   // Auth
   BETTER_AUTH_SECRET: z.string().min(1, "BETTER_AUTH_SECRET is required"),
 
+  // Transactional email (Resend). Carries the sign-in and password-reset
+  // one-time codes.
+  //
+  // Optional at boot so a local checkout without a key still starts; the send
+  // path throws instead. That split is deliberate — the implementation this
+  // replaced returned silently when it could not send, which is how password
+  // reset came to be broken in production without anyone noticing.
+  RESEND_API_KEY: z.string().optional(),
+  // Must be a verified sender on a domain you control in Resend, or delivery
+  // fails even with a valid key.
+  EMAIL_FROM: z.string().optional().default("Civic Voice <noreply@civicvoice.app>"),
+
   // Government API Keys
   CONGRESS_API_KEY: z.string().optional(),
   COURTLISTENER_API_KEY: z.string().optional(),

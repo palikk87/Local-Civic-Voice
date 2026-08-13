@@ -4,6 +4,7 @@ import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { emailOTP } from "better-auth/plugins";
 import { prisma } from "./prisma";
 import { env } from "./env";
+import { sendOtpEmail } from "./services/email";
 
 /** Seeded sample accounts, so signup logs only report real people. */
 function isSampleAccount(user: { email: string }): boolean {
@@ -49,24 +50,22 @@ export const auth = betterAuth({
   plugins: [
     expo(),
     emailOTP({
+      /**
+       * Delivers every code type, not just sign-in.
+       *
+       * This handler used to open with `if (type !== "sign-in") return;`. The
+       * forgot-password flow calls sendVerificationOtp({ type:
+       * "forget-password" }), so reset codes were generated and recorded but
+       * never sent — and the early return meant no error surfaced anywhere.
+       * Password reset was broken in production for as long as that guard
+       * existed, on both clients, with nothing in the logs.
+       *
+       * Transport is Resend (services/email.ts). The previous one was a
+       * hardcoded POST to Vibecode's own relay, which does not survive the
+       * move off that platform.
+       */
       async sendVerificationOTP({ email, otp, type }) {
-        if (type !== "sign-in") return;
-
-        const response = await fetch("https://smtp.vibecodeapp.com/v1/send/otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: email,
-            code: String(otp),
-            fromName: "Civic",
-            lang: "en",
-          }),
-        });
-
-        if (!response.ok) {
-          const data = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error || `Failed to send OTP (HTTP ${response.status})`);
-        }
+        await sendOtpEmail(email, String(otp), type);
       },
     }),
   ],
