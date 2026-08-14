@@ -19,7 +19,16 @@ type AuthVariables = {
 const mediaRouter = new Hono<{ Variables: AuthVariables }>();
 
 // Configuration
-const UPLOADS_DIR = join(process.cwd(), "uploads");
+//
+// Where user uploads live on disk. This used to be hardcoded to
+// `process.cwd()/uploads`, which is inside the container image on any modern
+// host — so every image, video, and audio clip a user had posted vanished on
+// the next deploy while the Media rows still referenced them.
+//
+// UPLOADS_DIR lets the host point this at a persistent volume (the Dockerfile
+// sets /data/uploads). The old path stays the default so a local checkout and
+// the current deployment behave exactly as before.
+const UPLOADS_DIR = process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_AUDIO_SIZE = 50 * 1024 * 1024; // 50MB

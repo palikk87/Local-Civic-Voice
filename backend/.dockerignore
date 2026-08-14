@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.*
+!.env.example
+*.db
+*.db-journal
+*.sqlite
+uploads
+dist
+.git
+.DS_Store
+*.log

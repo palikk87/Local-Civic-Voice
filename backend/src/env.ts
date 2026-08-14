@@ -97,6 +97,20 @@ const envSchema = z.object({
   // Auth
   BETTER_AUTH_SECRET: z.string().min(1, "BETTER_AUTH_SECRET is required"),
 
+  // Comma-separated list of web origins allowed to make credentialed requests,
+  // e.g. "https://civicvoice.app,https://www.civicvoice.app".
+  //
+  // Both the CORS allowlist (index.ts) and Better Auth's trustedOrigins
+  // (auth.ts) are derived from this. They used to be maintained as two separate
+  // hardcoded lists where CORS was a strict subset of trustedOrigins — so a
+  // domain added to one but not the other produced a login that failed with no
+  // useful error. One variable, both lists.
+  APP_ORIGINS: z.string().optional().default(""),
+
+  // Comma-separated deep-link schemes for the native app, e.g. "civicvoice".
+  // Must match expo.scheme in app.json and the scheme passed to expoClient().
+  APP_SCHEMES: z.string().optional().default(""),
+
   // Transactional email (Resend). Carries the sign-in and password-reset
   // one-time codes.
   //
@@ -148,6 +162,54 @@ export const env = validateEnv();
  * Type of the validated environment variables
  */
 export type Env = z.infer<typeof envSchema>;
+
+const isProduction = env.NODE_ENV === "production";
+
+function splitList(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+}
+
+/**
+ * Web origins permitted to make credentialed browser requests.
+ *
+ * Single source for the CORS allowlist and Better Auth's trustedOrigins. Those
+ * were previously two hardcoded lists in different files, with CORS a strict
+ * subset — so an origin present in one but not the other produced a login that
+ * failed with no useful error. Adding a domain is now one env var.
+ *
+ * Localhost is included outside production so a local web build can talk to a
+ * deployed API; production takes exactly what APP_ORIGINS lists.
+ */
+export const appOrigins: string[] = splitList(env.APP_ORIGINS);
+
+export const corsOriginPatterns: RegExp[] = [
+  ...appOrigins.map(
+    (origin) => new RegExp(`^${origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)
+  ),
+  ...(isProduction
+    ? []
+    : [/^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/]),
+];
+
+/**
+ * Origins Better Auth will accept, including the native app's deep-link scheme.
+ * Expo's `exp://` is dev-only and deliberately absent in production.
+ */
+export const trustedOrigins: string[] = [
+  ...appOrigins,
+  ...splitList(env.APP_SCHEMES).map((scheme) => `${scheme}://*/*`),
+  ...(isProduction ? [] : ["exp://*/*", "http://localhost:*", "http://127.0.0.1:*"]),
+];
+
+if (isProduction && appOrigins.length === 0) {
+  console.warn(
+    "⚠️  APP_ORIGINS is empty in production. No browser origin can complete a " +
+      "credentialed login — set it to your web domain(s), comma-separated."
+  );
+}
 
 /**
  * Extend process.env with our environment variables

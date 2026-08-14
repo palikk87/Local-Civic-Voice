@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import "./env";
+import { corsOriginPatterns } from "./env";
 import { auth } from "./auth";
 import { sampleRouter } from "./routes/sample";
 import { governmentRouter } from "./routes/government";
@@ -21,6 +22,7 @@ import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
+import { basename, dirname, join } from "node:path";
 
 // Import rate limiters
 import {
@@ -47,18 +49,16 @@ const app = new Hono<{
   };
 }>();
 
-// CORS middleware - validates origin against allowlist
-const allowed = [
-  /^http:\/\/localhost(:\d+)?$/,
-  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https:\/\/[a-z0-9-]+\.dev\.vibecode\.run$/,
-  /^https:\/\/[a-z0-9-]+\.vibecode\.run$/,
-];
-
+// CORS — same source as Better Auth's trustedOrigins (see env.ts).
+//
+// These were two separately-maintained lists, and CORS was the narrower of the
+// two, so an origin Better Auth accepted could still be refused here. That
+// combination fails a login without producing a useful error anywhere.
 app.use(
   "*",
   cors({
-    origin: (origin) => (origin && allowed.some((re) => re.test(origin)) ? origin : null),
+    origin: (origin) =>
+      origin && corsOriginPatterns.some((re) => re.test(origin)) ? origin : null,
     credentials: true,
   })
 );
@@ -168,8 +168,24 @@ app.route("/api/representatives", representativesRouter);
 app.route("/api/delegations", delegationsRouter);
 app.route("/api/ai", aiRouter);
 
-// Serve static files from uploads directory
-app.use("/uploads/*", serveStatic({ root: "./" }));
+// Serve user uploads.
+//
+// Must resolve to the same place routes/media.ts writes to. That is UPLOADS_DIR
+// when set (a persistent volume in production) and ./uploads otherwise, so
+// serveStatic is rooted at the parent and the public /uploads/* prefix is
+// rewritten to the real directory name. Hardcoding root "./" here would 404
+// every upload the moment the volume lives outside the working directory.
+const uploadsDir = process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
+const uploadsRoot = dirname(uploadsDir);
+const uploadsLeaf = basename(uploadsDir);
+
+app.use(
+  "/uploads/*",
+  serveStatic({
+    root: uploadsRoot,
+    rewriteRequestPath: (path) => path.replace(/^\/uploads/, `/${uploadsLeaf}`),
+  })
+);
 
 const port = Number(process.env.PORT) || 3000;
 

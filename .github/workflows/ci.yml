@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# The project has no test suite yet, so typecheck, lint, and build are the only
+# ratchet keeping the three packages honest — particularly the shared-package
+# refactor still ahead, where a move that changes behaviour must fail loudly.
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - run: bun install --frozen-lockfile
+        working-directory: backend
+      - name: Generate Prisma client
+        # Placeholder URLs: `prisma generate` only reads the schema, but env.ts
+        # rejects a missing or non-Postgres connection string at import time.
+        run: bunx prisma generate
+        working-directory: backend
+        env:
+          SUPABASE_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          SUPABASE_DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+      - run: bunx tsc --noEmit
+        working-directory: backend
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - run: bun install --frozen-lockfile
+        working-directory: apps/web
+      - run: bunx tsc --noEmit
+        working-directory: apps/web
+      - run: bun run lint
+        working-directory: apps/web
+      - run: bun run build
+        working-directory: apps/web
+        env:
+          # Any absolute URL satisfies the production guard in lib/config; the
+          # build only needs to prove it compiles, not to reach a real API.
+          VITE_BACKEND_URL: https://ci.invalid
+
+  mobile:
+    name: mobile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+      - run: bun install --frozen-lockfile
+        working-directory: apps/mobile
+      - run: bunx tsc --noEmit
+        working-directory: apps/mobile
+      - run: bun run lint
+        working-directory: apps/mobile

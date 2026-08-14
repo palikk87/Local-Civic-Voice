@@ -3,7 +3,7 @@ import { expo } from "@better-auth/expo";
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { emailOTP } from "better-auth/plugins";
 import { prisma } from "./prisma";
-import { env } from "./env";
+import { env, trustedOrigins } from "./env";
 import { sendOtpEmail } from "./services/email";
 
 /** Seeded sample accounts, so signup logs only report real people. */
@@ -28,17 +28,11 @@ export const auth = betterAuth({
     },
   },
 
-  trustedOrigins: [
-    "vibecode://*/*",
-    "exp://*/*",
-    "http://localhost:*",
-    "http://127.0.0.1:*",
-    "https://*.dev.vibecode.run",
-    "https://*.vibecode.run",
-    "https://*.vibecodeapp.com",
-    "https://*.vibecode.dev",
-    "https://vibecode.dev",
-  ],
+  // Derived from APP_ORIGINS / APP_SCHEMES so this and the CORS allowlist in
+  // index.ts can never drift apart again. The Vibecode wildcards that used to
+  // live here are gone: they granted login to domains this project does not
+  // control, and they were a superset of what CORS actually permitted.
+  trustedOrigins,
 
   emailAndPassword: {
     enabled: true,
