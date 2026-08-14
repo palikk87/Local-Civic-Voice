@@ -11,16 +11,32 @@
 --   * CREATE TABLE IF NOT EXISTS "Conversation" (+1 index)
 --   * CREATE TABLE IF NOT EXISTS "ConversationParticipant" (+2 indexes)
 --   * CREATE TABLE IF NOT EXISTS "Message" (+2 indexes)
---   * INSERT 2 bookkeeping rows into "_prisma_migrations"  (ON CONFLICT DO NOTHING)
+--   * INSERT 2 bookkeeping rows into "_prisma_migrations", guarded by
+--     WHERE NOT EXISTS on migration_name
+--   * DELETE duplicate "_prisma_migrations" rows for those two migration names
 --
 -- SAFETY, stated precisely so it survives a grep:
 --
---   * No DROP, no TRUNCATE, no DELETE statement, no UPDATE statement.
+--   * No DROP, no TRUNCATE, no UPDATE statement.
+--   * There IS one DELETE, and it touches only the "_prisma_migrations"
+--     bookkeeping table, only rows whose migration_name is one of the two names
+--     added by this file, and only duplicates of them (it keeps the earliest row
+--     per name). It cannot touch application data — no user, post, vote, or
+--     reference row is reachable from it.
 --   * No existing table is altered except "GovernmentReference", and only by
 --     ADD COLUMN IF NOT EXISTS. No column is removed, retyped, or renamed.
---   * Every statement is guarded by IF NOT EXISTS, so a second run is a no-op.
+--   * Every schema statement is guarded by IF NOT EXISTS, so a second run is a
+--     no-op.
 --   * The whole thing is wrapped in BEGIN/COMMIT — it applies completely or
 --     not at all.
+--
+-- Why the DELETE exists: the bookkeeping INSERT previously used
+-- `VALUES (gen_random_uuid(), …) ON CONFLICT DO NOTHING`. The id is fresh on
+-- every run, so it never collided and the conflict clause never fired — each
+-- re-run appended another row instead of doing nothing. That left several rows
+-- per migration_name and made _prisma_migrations useless as evidence of what
+-- had actually been applied. The DELETE clears that up; the INSERT is now
+-- guarded on migration_name so it cannot recur.
 --
 -- Grepping for "delete" WILL return four hits. They are ON DELETE CASCADE
 -- clauses in the foreign keys of the three NEW messaging tables:
@@ -39,16 +55,19 @@
 -- statements themselves:
 --
 --     grep -v '^--' db/apply-migrations.sql | grep -inE '\b(drop|truncate)\b'
---     grep -v '^--' db/apply-migrations.sql | grep -inE '^ *(delete|update)\b'
+--     grep -v '^--' db/apply-migrations.sql | grep -inE '^ *update\b'
 --
--- Both return nothing.
+-- Both return nothing. A search for DELETE returns the single
+-- "_prisma_migrations" de-duplication described above and the four
+-- ON DELETE CASCADE column definitions — read them and confirm for yourself.
 --
 -- The two INTEGER columns are added NOT NULL DEFAULT 0, which backfills existing
 -- rows to 0 — the correct seed value for a vote counter.
 
 -- Civic Voice: apply the two pending migrations.
 -- Paste into the Supabase SQL Editor and Run. Safe to run more than once:
--- every statement is IF NOT EXISTS, and the bookkeeping insert is ON CONFLICT DO NOTHING.
+-- every schema statement is IF NOT EXISTS and the bookkeeping insert is guarded
+-- on migration_name.
 --
 -- Generated from the migration files committed on
 -- claude/migrate-vibecode-projects-jrasfg (193c622).
@@ -181,15 +200,41 @@ CREATE INDEX IF NOT EXISTS "Message_senderId_idx" ON "Message"("senderId");
 
 -- ===========================================================================
 -- Record both as applied, so prisma migrate deploy does not re-run them.
--- Checksums are the sha256 of the committed migration.sql files, which is
--- what Prisma compares against.
+--
+-- Checksums are the sha256 of the committed migration.sql files, which is what
+-- Prisma compares against.
+--
+-- INSERT ... SELECT ... WHERE NOT EXISTS, not ON CONFLICT DO NOTHING. The id is
+-- a fresh gen_random_uuid() every run, so it never collides with an existing
+-- row and the conflict clause never fires — re-running this file appended a
+-- duplicate row each time instead of doing nothing. Keying the guard on
+-- migration_name is what actually makes it idempotent.
+--
+-- The DELETE first clears duplicates a previous run left behind, keeping the
+-- earliest row per migration_name. It touches only these two names.
 -- ===========================================================================
-INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
-VALUES (gen_random_uuid()::text, 'b30e5ab6b9797b47e7f737ef2acd485df5958ab609df17a19235451b0cdeef23', now(), '20260812150000_repair_govref_columns_and_adminsession', NULL, NULL, now(), 1)
-ON CONFLICT DO NOTHING;
+
+DELETE FROM "_prisma_migrations" a
+USING "_prisma_migrations" b
+WHERE a.migration_name = b.migration_name
+  AND a.migration_name IN (
+    '20260812150000_repair_govref_columns_and_adminsession',
+    '20260812151000_add_direct_messaging'
+  )
+  AND a.ctid > b.ctid;
 
 INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
-VALUES (gen_random_uuid()::text, '5a26bbc0eab125cb7c414ef8ab4199ab3aa892d2973838a26dd08065786e6eea', now(), '20260812151000_add_direct_messaging', NULL, NULL, now(), 1)
-ON CONFLICT DO NOTHING;
+SELECT gen_random_uuid()::text, 'b30e5ab6b9797b47e7f737ef2acd485df5958ab609df17a19235451b0cdeef23', now(), '20260812150000_repair_govref_columns_and_adminsession', NULL, NULL, now(), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "_prisma_migrations"
+  WHERE migration_name = '20260812150000_repair_govref_columns_and_adminsession'
+);
+
+INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+SELECT gen_random_uuid()::text, '5a26bbc0eab125cb7c414ef8ab4199ab3aa892d2973838a26dd08065786e6eea', now(), '20260812151000_add_direct_messaging', NULL, NULL, now(), 1
+WHERE NOT EXISTS (
+  SELECT 1 FROM "_prisma_migrations"
+  WHERE migration_name = '20260812151000_add_direct_messaging'
+);
 
 COMMIT;
