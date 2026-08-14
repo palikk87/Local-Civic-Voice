@@ -15,11 +15,12 @@ jobs:
   # ran `db push --accept-data-loss` at boot, so whichever booted last reshaped
   # the database to match its own schema: 423 rows of User.banned destroyed,
   # twelve GovernmentReference columns and the AdminSession table dropped and
-  # recreated 507 times in 16 days. The Vibecode template also regenerated the
-  # boot script, so deleting the line by hand did not keep it deleted.
+  # recreated 507 times in 16 days.
   #
-  # backend/scripts/start carries the same check at runtime; this one catches it
-  # at review time, and covers the Dockerfile and package.json scripts too.
+  # This is now the only copy of the guard, and the right place for one. The
+  # runtime check that used to sit in backend/scripts/start could only inspect
+  # the file it was written in; this scan covers the Dockerfile, package.json
+  # scripts, workflows, and every shell script in the repo.
   no-db-push:
     name: no db push
     runs-on: ubuntu-latest
@@ -41,6 +42,19 @@ jobs:
   backend:
     name: backend
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cleanslate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -54,10 +68,26 @@ jobs:
         run: bunx prisma generate
         working-directory: backend
         env:
-          SUPABASE_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
-          SUPABASE_DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          DIRECT_URL: postgresql://ci:ci@localhost:5432/ci
       - run: bunx tsc --noEmit
         working-directory: backend
+
+      # The claim the whole migration rests on: an empty Postgres, one command,
+      # a schema equivalent to schema.prisma. Asserting it in a comment is how
+      # this project spent months believing something that was not true, so it
+      # is asserted here instead, on every push.
+      - name: Build the schema from empty and prove zero drift
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/cleanslate
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/cleanslate
+        run: |
+          bunx prisma migrate deploy
+          bunx prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code
 
   web:
     name: web

@@ -27,11 +27,11 @@ import { BACKEND_URL } from "@/lib/config";
  * Revisit when the upstream signature is fixed.
  */
 const expoPlugin = expoClient({
-  // Must stay in lockstep with `expo.scheme` in app.json and with the
-  // `<scheme>://*/*` entry in the backend's trustedOrigins. All three change
-  // together during the Civic Voice rename, or the deep-link auth callback
-  // breaks silently in new builds.
-  scheme: "vibecode",
+  // Must stay in lockstep with `expo.scheme` in app.json and with APP_SCHEMES on
+  // the backend, which feeds Better Auth's trustedOrigins. If those three ever
+  // disagree the deep-link auth callback fails silently in new builds — no
+  // error, the app simply never completes sign-in.
+  scheme: "civicvoice",
   storagePrefix: "civic",
   storage: SecureStore,
 }) as unknown as BetterAuthClientPlugin;

@@ -5,39 +5,17 @@ set -o pipefail
 
 # Civic Voice API boot script.
 #
-# Host-agnostic: works under Docker (see ../Dockerfile), Railway, Render, Fly, or
-# a plain `bash scripts/start` on a laptop. It assumes nothing about Vibecode's
-# run conventions, which is what it used to be generated from.
+# Host-agnostic by design. It runs identically under Docker (see ../Dockerfile),
+# on Railway, Render, Fly, or a bare VPS, and with `bash scripts/start` on a
+# laptop. It reads only ordinary environment variables — no platform SDK, no
+# magic host-injected names, nothing that ties this app to one vendor.
+#
+# NODE_ENV is the only mode switch. Set it to "production" on a deployment.
 
-source "$(dirname "$0")/env.sh"
+NODE_ENV="${NODE_ENV:-development}"
+export NODE_ENV
 
-# ---------------------------------------------------------------------------
-# Guard: never `prisma db push` against this database.
-#
-# The Vibecode template put `bunx prisma db push --accept-data-loss` here and
-# regenerated the file on every template sync, so removing it by hand did not
-# stay removed. `db push` makes the database match the local schema by any means
-# available, including dropping columns and tables.
-#
-# Two backends shared this one Postgres instance. The consequences are on the
-# record: 423 rows of User.banned destroyed, twelve GovernmentReference columns
-# and the whole AdminSession table repeatedly dropped and recreated — 507 DDL
-# calls in 16 days — by a crash-looping deployment re-pushing an outdated schema
-# on every restart.
-#
-# If a sync or a well-meaning edit ever reintroduces it, this fails the boot
-# loudly instead of silently reshaping production.
-# ---------------------------------------------------------------------------
-# Comment lines are stripped first, because this block discusses the command in
-# prose. The lines forming the check are tagged guard-self and skipped too —
-# without that the pattern matches its own source and blocks every boot.
-if grep -vE '^[[:space:]]*#' "$0" | grep -v 'guard-self' \
-   | grep -qE 'prisma[[:space:]]+db[[:space:]]+push'; then  # guard-self
-  echo "FATAL: this script contains 'prisma db push'." >&2  # guard-self
-  echo "  It drops columns and tables to force the database to match the local" >&2
-  echo "  schema, and this database is shared. Use 'prisma migrate deploy'." >&2
-  exit 1
-fi
+echo "Starting in ${NODE_ENV} mode..."
 
 # Dependencies are installed at image build time in Docker. Only install here
 # when they are actually missing, so a container restart is not a reinstall.
@@ -50,19 +28,25 @@ if [[ -f "prisma/schema.prisma" ]]; then
   echo "Generating Prisma client..."
   bunx prisma generate
 
-  # Applies only migrations committed to this repo and not yet recorded in
-  # _prisma_migrations. Additive, ordered, and it never drops anything on its
-  # own — unlike the db push this replaced.
+  # There is one migration and it builds the schema from empty, so this single
+  # command brings up a brand new database and is a no-op on an existing one.
+  #
+  # Never `prisma db push` here. It makes the database match the local schema by
+  # any means available, including dropping columns and tables. This project has
+  # the receipts: a boot-time push destroyed 423 rows of User.banned and dropped
+  # the AdminSession table repeatedly. A CI job fails the build if that command
+  # reappears anywhere in the repo, which is where that guard belongs — checking
+  # for it here only ever caught the file it was written in.
   echo "Applying migrations..."
   bunx prisma migrate deploy
 fi
 
 # exec so the server is PID 1 and receives SIGTERM directly; without it the
 # shell swallows the signal and the platform has to SIGKILL on every deploy.
-if [[ "${NODE_ENV:-development}" == "production" ]]; then
-  echo "Starting server in production mode..."
+if [[ "${NODE_ENV}" == "production" ]]; then
+  echo "Starting server..."
   exec bun src/index.ts
 else
-  echo "Starting server in dev mode with hot reload..."
+  echo "Starting server with hot reload..."
   exec bun --hot src/index.ts
 fi

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { verifyPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
 import { applyWeightedTally } from "../services/delegation-service";
-import { supabase, isSupabaseConfigured } from "../supabase";
+import { checkStorage } from "../services/storage";
 
 // ==========================================
 // Type Definitions
@@ -760,24 +760,41 @@ adminRouter.get("/storage-health", async (c) => {
   try {
     const databaseUrl = process.env.DATABASE_URL ?? "";
     const durable = databaseUrl.startsWith("postgres://") || databaseUrl.startsWith("postgresql://");
-    const provider = databaseUrl.includes("supabase.com") ? "Supabase Postgres" : "Postgres";
+
+    // Report the host, don't name a vendor. Nothing in this codebase should
+    // encode whose account it runs in — the same build has to be correct
+    // whether this Postgres is Supabase, Neon, RDS, or a box in a closet.
+    let databaseHost = "unknown";
+    try {
+      databaseHost = new URL(databaseUrl).hostname;
+    } catch {
+      // Unparseable URL: `durable` is already false, and the warning covers it.
+    }
 
     // A real account is one someone can sign in with — it has a credential row.
-    const [totalUsers, realAccounts] = await Promise.all([
+    const [totalUsers, realAccounts, storage] = await Promise.all([
       prisma.user.count(),
       prisma.user.count({ where: { accounts: { some: { providerId: "credential" } } } }),
+      checkStorage(),
     ]);
 
     return c.json({
       data: {
         databaseDurable: durable,
-        databaseKind: durable ? provider : "container-file",
+        databaseKind: durable ? "postgres" : "not-postgres",
+        databaseHost,
         totalUsers,
         realAccounts,
         accountsProtected: durable,
+        // Media is the half of durability the database cannot cover: bytes
+        // written to a container's filesystem are gone on the next deploy, and
+        // nothing surfaces that until a user's photo 404s.
+        mediaStorageDriver: storage.driver,
+        mediaStorageOk: storage.ok,
+        mediaStorageDetail: storage.detail,
         warning: durable
           ? null
-          : "DATABASE_URL is not an external Postgres connection. Accounts are on disposable container storage and can be lost on restart.",
+          : "DATABASE_URL is not a Postgres connection. Accounts are on disposable container storage and can be lost on restart.",
       },
     });
   } catch (error) {

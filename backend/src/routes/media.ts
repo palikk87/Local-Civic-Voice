@@ -3,11 +3,12 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import type { auth } from "../auth";
-import { writeFile, unlink, mkdir, stat } from "fs/promises";
-import { existsSync } from "fs";
+import { writeFile, mkdir, readFile, rm } from "fs/promises";
 import { join } from "path";
+import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { putObject, deleteObject, publicUrlFor } from "../services/storage";
 
 const execAsync = promisify(exec);
 
@@ -20,15 +21,14 @@ const mediaRouter = new Hono<{ Variables: AuthVariables }>();
 
 // Configuration
 //
-// Where user uploads live on disk. This used to be hardcoded to
-// `process.cwd()/uploads`, which is inside the container image on any modern
-// host — so every image, video, and audio clip a user had posted vanished on
-// the next deploy while the Media rows still referenced them.
+// Bytes go to services/storage.ts, which is either an S3-compatible bucket or
+// local disk depending on MEDIA_STORAGE. This route no longer knows or cares:
+// it hands over a key and gets back a URL.
 //
-// UPLOADS_DIR lets the host point this at a persistent volume (the Dockerfile
-// sets /data/uploads). The old path stays the default so a local checkout and
-// the current deployment behave exactly as before.
-const UPLOADS_DIR = process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
+// It does still need a real filesystem, but only briefly — ffmpeg and ffprobe
+// read files, not streams, so an upload lands in a per-request temp directory
+// long enough to be probed and thumbnailed, then is uploaded and deleted. The
+// temp directory is scratch space; nothing durable lives there.
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_AUDIO_SIZE = 50 * 1024 * 1024; // 50MB
@@ -68,19 +68,11 @@ const MIME_TO_EXTENSION: Record<string, string> = {
   "audio/x-wav": ".wav",
 };
 
-// Ensure uploads directory exists
-async function ensureUploadsDir(): Promise<void> {
-  if (!existsSync(UPLOADS_DIR)) {
-    await mkdir(UPLOADS_DIR, { recursive: true });
-  }
-  // Create subdirectories for organization
-  const subdirs = ["images", "videos", "audio", "thumbnails"];
-  for (const subdir of subdirs) {
-    const path = join(UPLOADS_DIR, subdir);
-    if (!existsSync(path)) {
-      await mkdir(path, { recursive: true });
-    }
-  }
+// Scratch space for one upload, so ffmpeg/ffprobe have real files to read.
+async function makeScratchDir(): Promise<string> {
+  const dir = join(tmpdir(), `civicvoice-upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+  await mkdir(dir, { recursive: true });
+  return dir;
 }
 
 // Generate a unique filename
@@ -176,6 +168,41 @@ interface MediaResponse {
 }
 
 /**
+ * The one place a stored key becomes a URL.
+ *
+ * `media.url` holds a storage key ("images/abc.jpg"), never a URL, so the same
+ * row renders correctly whether the bytes sit in a bucket or on local disk —
+ * and keeps rendering if the bucket moves to another provider. Building the URL
+ * used to be three hand-written `/uploads${...}` template strings in three
+ * handlers, which is exactly the kind of thing that drifts.
+ */
+function toMediaResponse(media: {
+  id: string;
+  type: string;
+  url: string;
+  thumbnailUrl: string | null;
+  mimeType: string;
+  sizeBytes: number;
+  durationMs: number | null;
+  width: number | null;
+  height: number | null;
+  createdAt: Date;
+}): MediaResponse {
+  return {
+    id: media.id,
+    type: media.type,
+    url: publicUrlFor(media.url),
+    thumbnailUrl: media.thumbnailUrl ? publicUrlFor(media.thumbnailUrl) : null,
+    mimeType: media.mimeType,
+    sizeBytes: media.sizeBytes,
+    durationMs: media.durationMs,
+    width: media.width,
+    height: media.height,
+    createdAt: media.createdAt.toISOString(),
+  };
+}
+
+/**
  * POST /api/media/upload
  * Upload a media file
  */
@@ -185,9 +212,9 @@ mediaRouter.post("/upload", async (c) => {
     return c.json({ error: "Authentication required" }, 401);
   }
 
-  try {
-    await ensureUploadsDir();
+  let scratchDir: string | null = null;
 
+  try {
     const formData = await c.req.formData();
     const file = formData.get("file") as File | null;
 
@@ -220,59 +247,64 @@ mediaRouter.post("/upload", async (c) => {
       );
     }
 
-    // Generate filename and paths
+    // Storage keys. No leading slash: these are object keys, not URL paths, and
+    // publicUrlFor() turns them into whichever URL the configured driver serves.
     const extension = MIME_TO_EXTENSION[file.type] || "";
     const filename = generateFilename(file.name, extension);
     const subdir = mimeConfig.type === "image" ? "images" : mimeConfig.type === "video" ? "videos" : "audio";
-    const filePath = join(UPLOADS_DIR, subdir, filename);
-    const relativePath = `/${subdir}/${filename}`;
+    const key = `${subdir}/${filename}`;
 
-    // Write file to disk
-    const arrayBuffer = await file.arrayBuffer();
-    await writeFile(filePath, Buffer.from(arrayBuffer));
+    // Land the bytes in scratch space so ffprobe/ffmpeg can read them.
+    scratchDir = await makeScratchDir();
+    const scratchPath = join(scratchDir, filename);
+    const bytes = Buffer.from(await file.arrayBuffer());
+    await writeFile(scratchPath, bytes);
 
     // Initialize metadata
-    let thumbnailUrl: string | null = null;
+    let thumbnailKey: string | null = null;
     let durationMs: number | null = null;
     let width: number | null = null;
     let height: number | null = null;
 
     // Process based on media type
     if (mimeConfig.type === "video") {
-      // Generate thumbnail
       const thumbnailFilename = filename.replace(extension, "_thumb.jpg");
-      const thumbnailPath = join(UPLOADS_DIR, "thumbnails", thumbnailFilename);
-      const thumbnailGenerated = await generateVideoThumbnail(filePath, thumbnailPath);
+      const thumbnailScratchPath = join(scratchDir, thumbnailFilename);
+      const thumbnailGenerated = await generateVideoThumbnail(scratchPath, thumbnailScratchPath);
       if (thumbnailGenerated) {
-        thumbnailUrl = `/thumbnails/${thumbnailFilename}`;
+        // Upload the thumbnail before the record exists. If this throws, the
+        // catch below returns 500 and no Media row is written — better than a
+        // row promising a thumbnail that was never stored.
+        thumbnailKey = `thumbnails/${thumbnailFilename}`;
+        await putObject(thumbnailKey, await readFile(thumbnailScratchPath), "image/jpeg");
       }
 
-      // Get video duration and dimensions
-      durationMs = await getMediaDuration(filePath);
-      const dimensions = await getImageDimensions(filePath);
+      durationMs = await getMediaDuration(scratchPath);
+      const dimensions = await getImageDimensions(scratchPath);
       if (dimensions) {
         width = dimensions.width;
         height = dimensions.height;
       }
     } else if (mimeConfig.type === "audio") {
-      // Get audio duration
-      durationMs = await getMediaDuration(filePath);
+      durationMs = await getMediaDuration(scratchPath);
     } else if (mimeConfig.type === "image") {
-      // Get image dimensions
-      const dimensions = await getImageDimensions(filePath);
+      const dimensions = await getImageDimensions(scratchPath);
       if (dimensions) {
         width = dimensions.width;
         height = dimensions.height;
       }
     }
 
+    // Store the original only after probing succeeded.
+    await putObject(key, bytes, file.type);
+
     // Create database record
     const media = await prisma.media.create({
       data: {
         userId: user.id,
         type: mimeConfig.type,
-        url: relativePath,
-        thumbnailUrl,
+        url: key,
+        thumbnailUrl: thumbnailKey,
         mimeType: file.type,
         sizeBytes: file.size,
         durationMs,
@@ -281,23 +313,16 @@ mediaRouter.post("/upload", async (c) => {
       },
     });
 
-    const response: MediaResponse = {
-      id: media.id,
-      type: media.type,
-      url: `/uploads${media.url}`,
-      thumbnailUrl: media.thumbnailUrl ? `/uploads${media.thumbnailUrl}` : null,
-      mimeType: media.mimeType,
-      sizeBytes: media.sizeBytes,
-      durationMs: media.durationMs,
-      width: media.width,
-      height: media.height,
-      createdAt: media.createdAt.toISOString(),
-    };
-
-    return c.json({ media: response }, 201);
+    return c.json({ media: toMediaResponse(media) }, 201);
   } catch (error) {
     console.error("Media upload error:", error);
     return c.json({ error: "Failed to upload media" }, 500);
+  } finally {
+    // Scratch space is per-request and must go whether we succeeded or not;
+    // leaking it fills the container's disk one upload at a time.
+    if (scratchDir) {
+      await rm(scratchDir, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 });
 
@@ -316,20 +341,7 @@ mediaRouter.get("/:id", async (c) => {
     return c.json({ error: "Media not found" }, 404);
   }
 
-  const response: MediaResponse = {
-    id: media.id,
-    type: media.type,
-    url: `/uploads${media.url}`,
-    thumbnailUrl: media.thumbnailUrl ? `/uploads${media.thumbnailUrl}` : null,
-    mimeType: media.mimeType,
-    sizeBytes: media.sizeBytes,
-    durationMs: media.durationMs,
-    width: media.width,
-    height: media.height,
-    createdAt: media.createdAt.toISOString(),
-  };
-
-  return c.json({ media: response });
+  return c.json({ media: toMediaResponse(media) });
 });
 
 /**
@@ -356,22 +368,15 @@ mediaRouter.delete("/:id", async (c) => {
     return c.json({ error: "Not authorized" }, 403);
   }
 
-  // Delete files from disk
+  // Remove the stored bytes. Failing here must not block the row deletion —
+  // an orphaned object costs storage, an undeletable post costs trust.
   try {
-    const filePath = join(UPLOADS_DIR, media.url);
-    if (existsSync(filePath)) {
-      await unlink(filePath);
-    }
-
+    await deleteObject(media.url);
     if (media.thumbnailUrl) {
-      const thumbnailPath = join(UPLOADS_DIR, media.thumbnailUrl);
-      if (existsSync(thumbnailPath)) {
-        await unlink(thumbnailPath);
-      }
+      await deleteObject(media.thumbnailUrl);
     }
   } catch (error) {
-    console.error("Failed to delete media files:", error);
-    // Continue with database deletion even if file deletion fails
+    console.error("Failed to delete stored media objects:", error);
   }
 
   // Delete database record
@@ -412,18 +417,7 @@ mediaRouter.get(
     const nextCursor = hasMore ? results[results.length - 1]?.id : undefined;
 
     return c.json({
-      media: results.map((m): MediaResponse => ({
-        id: m.id,
-        type: m.type,
-        url: `/uploads${m.url}`,
-        thumbnailUrl: m.thumbnailUrl ? `/uploads${m.thumbnailUrl}` : null,
-        mimeType: m.mimeType,
-        sizeBytes: m.sizeBytes,
-        durationMs: m.durationMs,
-        width: m.width,
-        height: m.height,
-        createdAt: m.createdAt.toISOString(),
-      })),
+      media: results.map(toMediaResponse),
       nextCursor,
       hasMore,
     });

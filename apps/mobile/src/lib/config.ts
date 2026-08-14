@@ -14,12 +14,7 @@
  * in a release build.
  */
 
-const RAW_BACKEND_URL =
-  process.env.EXPO_PUBLIC_BACKEND_URL ||
-  // Legacy name from the Vibecode era. Kept so existing builds and any
-  // deployment still setting it keep working; remove once nothing sets it.
-  process.env.EXPO_PUBLIC_VIBECODE_BACKEND_URL ||
-  "";
+const RAW_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
 /**
  * Base URL of the Civic Voice API.

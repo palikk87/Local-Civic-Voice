@@ -9,7 +9,6 @@
 
 import type { CongressBill, Bill, Representative } from './types';
 import { representatives } from './mock-data';
-import { supabase, isSupabaseConfigured } from './supabase';
 
 const CONGRESS_API_BASE = 'https://api.congress.gov/v3';
 
@@ -22,8 +21,14 @@ let cacheTimestamp: number = 0;
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
 /**
- * Get the current congress number from system_settings
- * Uses caching to minimize database calls
+ * Get the current congress number.
+ *
+ * This used to try a `system_settings` lookup in Supabase first, behind an
+ * `isSupabaseConfigured()` gate that has always been false, and fall back to
+ * DEFAULT_CONGRESS. The lookup went with the Supabase SDK; the fallback was the
+ * only path that ever ran, and it is the path that remains.
+ *
+ * The caching stays because callers call this on every render pass.
  */
 export async function getCurrentCongress(): Promise<number> {
   const now = Date.now();
@@ -33,27 +38,6 @@ export async function getCurrentCongress(): Promise<number> {
     return cachedCurrentCongress;
   }
 
-  // Try to fetch from database
-  if (isSupabaseConfigured()) {
-    try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'current_congress')
-        .single();
-
-      if (!error && data) {
-        const result = data as { value: string };
-        cachedCurrentCongress = parseInt(result.value, 10);
-        cacheTimestamp = now;
-        return cachedCurrentCongress;
-      }
-    } catch (err) {
-      console.warn('Failed to fetch current congress from database:', err);
-    }
-  }
-
-  // Fallback to default
   cachedCurrentCongress = DEFAULT_CONGRESS;
   cacheTimestamp = now;
   return DEFAULT_CONGRESS;

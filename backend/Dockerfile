@@ -26,9 +26,11 @@ RUN bunx prisma generate
 
 COPY . .
 
-# User uploads. Mount a persistent volume here, or every image and video a user
-# has posted disappears on the next deploy while the database rows still point
-# at them. See UPLOADS_DIR in src/routes/media.ts.
+# Uploads default to local disk, which on this image means the container's own
+# filesystem — fine for a smoke test, wrong for a deployment. Set MEDIA_STORAGE=s3
+# and the S3_* variables (see .env.example) so media survives a redeploy and is
+# not tied to one host. UPLOADS_DIR only matters if you deliberately keep the
+# local driver and mount a persistent volume here.
 ENV UPLOADS_DIR=/data/uploads
 RUN mkdir -p /data/uploads
 

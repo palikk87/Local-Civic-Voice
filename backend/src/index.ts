@@ -22,7 +22,8 @@ import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
 import { logger } from "hono/logger";
 import { serveStatic } from "hono/bun";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname } from "node:path";
+import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
 
 // Import rate limiters
 import {
@@ -168,24 +169,24 @@ app.route("/api/representatives", representativesRouter);
 app.route("/api/delegations", delegationsRouter);
 app.route("/api/ai", aiRouter);
 
-// Serve user uploads.
+// Serve user uploads — only when storage is local disk.
 //
-// Must resolve to the same place routes/media.ts writes to. That is UPLOADS_DIR
-// when set (a persistent volume in production) and ./uploads otherwise, so
-// serveStatic is rooted at the parent and the public /uploads/* prefix is
-// rewritten to the real directory name. Hardcoding root "./" here would 404
-// every upload the moment the volume lives outside the working directory.
-const uploadsDir = process.env.UPLOADS_DIR || join(process.cwd(), "uploads");
-const uploadsRoot = dirname(uploadsDir);
-const uploadsLeaf = basename(uploadsDir);
+// With MEDIA_STORAGE=s3 the bucket serves the bytes directly and this mount is
+// dead weight, so it is not registered at all. Keeping it registered would be
+// worse than useless: it would answer /uploads/* with 404s from an empty
+// directory instead of letting the absence be obvious.
+if (storageDriver === "local") {
+  const uploadsRoot = dirname(UPLOADS_DIR);
+  const uploadsLeaf = basename(UPLOADS_DIR);
 
-app.use(
-  "/uploads/*",
-  serveStatic({
-    root: uploadsRoot,
-    rewriteRequestPath: (path) => path.replace(/^\/uploads/, `/${uploadsLeaf}`),
-  })
-);
+  app.use(
+    "/uploads/*",
+    serveStatic({
+      root: uploadsRoot,
+      rewriteRequestPath: (path) => path.replace(/^\/uploads/, `/${uploadsLeaf}`),
+    })
+  );
+}
 
 const port = Number(process.env.PORT) || 3000;
 
@@ -201,9 +202,24 @@ const GOVERNMENT_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 enqueueGovernmentSync("startup");
 setInterval(() => enqueueGovernmentSync("daily"), GOVERNMENT_SYNC_INTERVAL_MS);
 
-// Accounts need no backup/restore protocol any more: they live in Supabase
-// Postgres, which is external to this container and survives restarts on its own.
-// The old account-vault service (which mirrored a SQLite file off-container) is gone.
+// Accounts live in Postgres, external to this container, so they survive
+// restarts without any backup/restore protocol here.
+//
+// Media is the one thing that does not: it is bytes, it cannot be regenerated
+// from an upstream source, and a misconfigured bucket is invisible until
+// somebody's upload disappears. So check it at boot and say so out loud.
+void checkStorage().then(({ ok, driver, detail }) => {
+  console.log(`[Storage] driver=${driver} — ${detail}`);
+  if (!ok) {
+    console.error("[Storage] ⚠️  Uploads will fail until this is fixed.");
+  } else if (driver === "local" && process.env.NODE_ENV === "production") {
+    console.warn(
+      "[Storage] ⚠️  MEDIA_STORAGE is local in production. Unless UPLOADS_DIR is a " +
+        "persistent volume, every uploaded file is lost on the next deploy while the " +
+        "database rows keep pointing at it. Set MEDIA_STORAGE=s3."
+    );
+  }
+});
 
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string): Promise<void> {
