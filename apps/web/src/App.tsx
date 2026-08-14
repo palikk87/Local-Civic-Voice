@@ -25,6 +25,7 @@ const BillOfRights = lazy(() => import("./pages/BillOfRights"));
 const ArticleV = lazy(() => import("./pages/ArticleV"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Auth = lazy(() => import("./pages/Auth"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const Delegates = lazy(() => import("./pages/Delegates"));
 const Saved = lazy(() => import("./pages/Saved"));
@@ -153,6 +154,8 @@ const App = () => (
               <Route path="/b2b/reports" element={<B2BReports />} />
               <Route path="/b2b/states" element={<B2BStates />} />
               <Route path="/auth" element={<Auth />} />
+              {/* Same path as the mobile route, so a reset link works on either client. */}
+              <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/user/:id" element={<UserProfile />} />
               <Route path="/bill/:id" element={<BillDetail />} />
               <Route path="/executive-order/:id" element={<ExecutiveOrderDetail />} />

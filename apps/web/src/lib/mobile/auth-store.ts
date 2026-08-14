@@ -32,24 +32,43 @@ interface AuthState {
   updateProfile: (updates: Partial<AuthUser>) => void;
 }
 
-// Same AuthUser derivation as mobile login.tsx performs after Better Auth sign-in
+/**
+ * Build the local AuthUser from a Better Auth session.
+ *
+ * `username`, `bio` and `location` come from the session itself — the backend
+ * returns them via `user.additionalFields` (see backend/src/auth.ts).
+ *
+ * They used to be invented here: username was `email.split('@')[0]` and bio and
+ * location were hardcoded. Mobile meanwhile fetched the real record from
+ * /api/users/:id, so the same account displayed a different handle depending on
+ * which client you opened. The email fallback remains only for a session issued
+ * before those fields were added, and for accounts that genuinely have no
+ * username set.
+ */
 export function authUserFromSession(sessionUser: {
   id: string;
   email: string;
   name?: string | null;
   image?: string | null;
   createdAt?: Date | string;
+  username?: string | null;
+  displayUsername?: string | null;
+  bio?: string | null;
+  location?: string | null;
 }): AuthUser {
+  const handle =
+    sessionUser.displayUsername || sessionUser.username || sessionUser.email.split('@')[0];
+
   return {
     id: sessionUser.id,
     email: sessionUser.email,
-    username: sessionUser.email.split('@')[0],
-    displayName: sessionUser.name || sessionUser.email.split('@')[0],
+    username: handle,
+    displayName: sessionUser.name || handle,
     avatar:
       sessionUser.image ??
       `https://api.dicebear.com/7.x/avataaars/png?seed=${sessionUser.email}`,
-    bio: '',
-    location: 'United States',
+    bio: sessionUser.bio ?? '',
+    location: sessionUser.location ?? 'United States',
     joinedDate: sessionUser.createdAt
       ? new Date(sessionUser.createdAt).toISOString().split('T')[0]
       : new Date().toISOString().split('T')[0],

@@ -17,6 +17,30 @@ export const auth = betterAuth({
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BACKEND_URL,
 
+  /**
+   * Profile fields carried in the session payload.
+   *
+   * Without these, each client had to reconstruct the profile itself and the
+   * two did it differently: mobile's SessionBridge fetched /api/users/:id for
+   * the real record, while web derived the handle from `email.split('@')[0]`.
+   * The same account therefore displayed a different username depending on
+   * which client you opened — the clearest symptom of "one account, two
+   * experiences".
+   *
+   * Returning them here makes both clients read the same values from the same
+   * place, so they agree by construction rather than by two hand-maintained
+   * code paths staying in sync.
+   */
+  user: {
+    additionalFields: {
+      username: { type: "string", required: false },
+      displayUsername: { type: "string", required: false },
+      bio: { type: "string", required: false },
+      location: { type: "string", required: false },
+      role: { type: "string", required: false },
+    },
+  },
+
   databaseHooks: {
     user: {
       create: {

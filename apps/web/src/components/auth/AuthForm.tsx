@@ -301,6 +301,19 @@ export function AuthForm({
           )}
         </Button>
 
+        {/* Sign-in only. Mobile has offered this since the OTP flow shipped;
+            web had no reset route at all until now. */}
+        {!isSignup ? (
+          <div className="flex justify-center text-sm">
+            <Link
+              to="/forgot-password"
+              className="font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+        ) : null}
+
         <div className="flex justify-center gap-1 text-sm">
           <span className="text-muted-foreground">
             {isSignup ? "Already have an account?" : "Don't have an account?"}

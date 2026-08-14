@@ -1,4 +1,9 @@
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "";
+import { BACKEND_URL } from "./config";
+
+// Single resolver, shared with auth-client.ts. These used to fall back
+// differently — "" here, undefined there — so an unset VITE_BACKEND_URL sent
+// data requests and session requests to different hosts.
+const API_BASE_URL = BACKEND_URL;
 
 class ApiError extends Error {
   constructor(message: string, public status: number, public data?: unknown) {
