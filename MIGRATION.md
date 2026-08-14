@@ -151,6 +151,16 @@ The API key works, but no verified domain exists on the account, and
 reset cannot deliver until a domain is verified. DNS propagation is the slow
 part, so start it early.
 
+### 3b. If Railway provisions a *fresh* Postgres
+
+Deploying against the existing Supabase database works as-is. If you ever point
+the backend at an empty database instead, `prisma migrate deploy` **fails on the
+first migration** — the two oldest ones are SQLite dialect and cannot execute on
+Postgres. Production only survives them because they were baselined.
+
+`db/postgres-baseline.sql` plus the three-step procedure in `db/README.md`
+handles that case.
+
 ### 4. Deploy
 
 Full walkthrough in `DEPLOYMENT.md`. Summary:

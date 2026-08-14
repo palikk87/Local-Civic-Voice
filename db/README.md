@@ -7,6 +7,40 @@ no second database — the two clients share every table.
 That sharing is the single most important fact about this database. A schema
 change made for one client lands on the other immediately.
 
+## The two oldest migrations cannot run on Postgres
+
+`20260310204227_initial` and `20260310204800_add_government_reference_system`
+are **SQLite dialect** — `DATETIME` columns, `PRAGMA` statements, and SQLite's
+table-rebuild dance (`CREATE new_Post` / `INSERT SELECT` / `DROP TABLE` /
+`RENAME`). They are leftovers from the Vibecode template's SQLite era. Postgres
+has no `PRAGMA` and no `DATETIME` type, so neither file can execute against it.
+
+Production is unaffected because both are **baselined**: `_prisma_migrations`
+records them with `applied_steps_count = 0`, meaning marked applied without ever
+running. That is why `migrate deploy` succeeds against the live database.
+
+It would **fail on the first migration against an empty one**. An earlier version
+of this document claimed the repo could rebuild the database; it could not.
+
+For a fresh database, use `db/postgres-baseline.sql` — generated from
+`schema.prisma` via `prisma migrate diff --from-empty` and therefore genuine
+Postgres DDL — then baseline the two SQLite migrations and apply the rest:
+
+```bash
+# 1. create the schema
+psql "$SUPABASE_DIRECT_URL" -f db/postgres-baseline.sql
+
+# 2. mark the two SQLite migrations applied so deploy skips them
+cd backend
+bunx prisma migrate resolve --applied 20260310204227_initial
+bunx prisma migrate resolve --applied 20260310204800_add_government_reference_system
+
+# 3. apply the Postgres-dialect migrations normally
+bunx prisma migrate deploy
+```
+
+The four newer migrations are all Postgres-safe and run normally.
+
 ## Schema source of truth
 
 `backend/prisma/schema.prisma` — 26 models. Migrations live in
