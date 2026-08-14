@@ -9,6 +9,35 @@ on:
 # ratchet keeping the three packages honest — particularly the shared-package
 # refactor still ahead, where a move that changes behaviour must fail loudly.
 jobs:
+  # Fails the build if `prisma db push` reappears in anything executable.
+  #
+  # It is not a style rule. Two backends shared one Postgres instance and each
+  # ran `db push --accept-data-loss` at boot, so whichever booted last reshaped
+  # the database to match its own schema: 423 rows of User.banned destroyed,
+  # twelve GovernmentReference columns and the AdminSession table dropped and
+  # recreated 507 times in 16 days. The Vibecode template also regenerated the
+  # boot script, so deleting the line by hand did not keep it deleted.
+  #
+  # backend/scripts/start carries the same check at runtime; this one catches it
+  # at review time, and covers the Dockerfile and package.json scripts too.
+  no-db-push:
+    name: no db push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # guard-self on the two lines below: they contain the phrase being
+      # searched for, and would otherwise match the scan and fail every run.
+      - name: Scan executable files for the forbidden schema command # guard-self
+        run: |
+          if grep -rnE 'prisma[[:space:]]+db[[:space:]]+push' \
+               --include='*.sh' --include='start' --include='Dockerfile' \
+               --include='package.json' --include='*.yml' --include='*.yaml' \
+               . 2>/dev/null | grep -v 'guard-self' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'; then
+            echo "::error::Forbidden schema command found in an executable file. Use 'prisma migrate deploy'." # guard-self
+            exit 1
+          fi
+          echo "No db push found in executable files."
+
   backend:
     name: backend
     runs-on: ubuntu-latest
