@@ -1,36 +1,3 @@
--- GENERATED — Postgres baseline for a FRESH database.
---
--- Produced by:
---   bunx prisma migrate diff --from-empty \
---       --to-schema-datamodel prisma/schema.prisma --script
---
--- WHY THIS EXISTS
---
--- The two oldest migrations in backend/prisma/migrations are SQLite dialect —
--- DATETIME columns, PRAGMA statements, and SQLite's table-rebuild dance
--- (CREATE new_X / INSERT SELECT / DROP / RENAME). They are leftovers from the
--- Vibecode template's SQLite era and can never execute against Postgres.
---
--- Production survives them because it was baselined: both are recorded in
--- _prisma_migrations with applied_steps_count = 0, i.e. marked applied without
--- ever running. That is why `migrate deploy` works against the live database
--- and would fail on the first migration against an empty one.
---
--- FRESH DATABASE PROCEDURE
---
---   1. Run this file against the new database.
---   2. Mark the two SQLite migrations as already applied, so deploy skips them:
---        bunx prisma migrate resolve --applied 20260310204227_initial
---        bunx prisma migrate resolve --applied 20260310204800_add_government_reference_system
---   3. Apply the rest normally:
---        bunx prisma migrate deploy
---
--- Do NOT run this against the existing production database — its tables already
--- exist and the CREATE statements below are not guarded.
-
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -826,4 +793,3 @@ ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

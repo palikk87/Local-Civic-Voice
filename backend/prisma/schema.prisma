@@ -2,27 +2,20 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// The connection is read from SUPABASE_DATABASE_URL, NOT from DATABASE_URL.
+// This file is the single source of truth for the database.
 //
-// This unusual name is load-bearing — do not "tidy" it back to DATABASE_URL.
-// backend/scripts/env.sh is regenerated from the Vibecode backend template
-// (commit "chore: upgrade backend scripts from template"), and that template
-// unconditionally does, in production only:
+// There is exactly one migration, generated from this schema. A brand new empty
+// Postgres is brought to the full schema by `prisma migrate deploy` and nothing
+// else — no baseline file, no `migrate resolve`, no manual SQL.
 //
-//     export DATABASE_URL="file:/data/production.db"
-//
-// The template assumes every backend is local SQLite. This project is Supabase
-// Postgres, so that export silently replaced the real database, the server
-// refused to boot, and every /api/* call on the live site returned 502. Editing
-// the script fixes it only until the next template sync overwrites it again.
-//
-// Reading a variable the template does not touch is what makes production
-// survive those syncs. See src/env.ts, which resolves the same variable and
-// discards the template's leftover `file:` value.
+// DATABASE_URL is the pooled connection the server uses. DIRECT_URL is the
+// unpooled one Prisma needs for migrations. Neither has a fallback: if they are
+// unset the process fails at startup rather than connecting to somewhere
+// unexpected. See src/env.ts.
 datasource db {
   provider  = "postgresql"
-  url       = env("SUPABASE_DATABASE_URL")
-  directUrl = env("SUPABASE_DIRECT_URL")
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
