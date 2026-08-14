@@ -1,85 +1,110 @@
-# Migrating Civic Voice off Vibecode
+# Migrating Civic Voice onto its own infrastructure
 
-What changed in the code, and what only you can do.
+The old plan was to repair the existing Supabase database and stop whatever kept
+rewriting it. That plan is abandoned. This one starts from an empty database on
+accounts you own, and does not touch the old one at all.
+
+Two documents: this one says what changed and why. `DEPLOYMENT.md` is the
+step-by-step for standing it up.
 
 ---
 
 ## Part 1 — What changed in code
 
-### The platform is gone
+### The database can now be built from the repo
 
-All five `@vibecodeapp/*` packages are removed, along with the proxy import, the
-Vite plugin, and the Metro wrapper. SVG handling that the Metro wrapper provided
-is wired explicitly to `react-native-svg-transformer`.
+This had never worked. Six migrations existed and none of them could create a
+database: the two oldest were SQLite dialect, left over from a template that
+assumed local SQLite, and `migrate deploy` against an empty Postgres died on the
+first file with `type "datetime" does not exist`. Production survived only
+because those two had been *baselined* — recorded as applied without ever
+running. That holds exactly as long as you never need a second database, which
+is the situation you are now in.
 
-`EXPO_PUBLIC_VIBECODE_BACKEND_URL` became `EXPO_PUBLIC_BACKEND_URL` (the old name
-still works as a fallback), and the `candy-lark.vibecode.run` default host is
-gone — previously, an unset variable silently pointed the app at Vibecode.
+The history is replaced with one migration generated from `schema.prisma`.
+Verified against a real, empty Postgres 16 — created empty, then `migrate
+deploy` and nothing else:
 
-That those packages were private to Vibecode's registry is why `bun install`
-succeeding now is the real proof the project is off the platform.
+```
+tables_before = 0
+tables_after  = 30   (29 models + _prisma_migrations)
+indexes       = 122
+foreign keys  = 26
 
-### `prisma db push` is gone, and cannot come back
+prisma migrate diff --from-url $DATABASE_URL \
+  --to-schema-datamodel prisma/schema.prisma --exit-code
+→ No difference detected.
+```
 
-This was the most destructive thing in the project.
+CI now runs that same check on every push, against a real Postgres service.
+Assertions in comments are what let this project believe something untrue for
+months; this one is executed.
 
-Both backends ran `bunx prisma db push --accept-data-loss` at boot. `db push`
-makes the database match the local schema by whatever means necessary, including
-dropping columns and tables — and both backends shared **one** Postgres
-instance. Whichever booted last reshaped the database under the other.
+### Nothing references Vibecode
 
-Confirmed damage:
+`scripts/env.sh` is deleted — it existed to be regenerated from a template that
+injected `DATABASE_URL="file:/data/production.db"` in production, silently
+replacing the real database. The `SUPABASE_DATABASE_URL` indirection that hid
+the connection string from that template is deleted with it. The datasource
+reads `DATABASE_URL` and `DIRECT_URL` like any other project.
 
-- 423 rows of `User.banned` destroyed (recorded in the migration comments)
-- 12 `GovernmentReference` columns and the entire `AdminSession` table dropped
-  and recreated **507 times in 16 days**
-- Both `20260808` migrations recorded as applied in `_prisma_migrations` with
-  none of their effects present in the database
+`scripts/start` is rewritten around `NODE_ENV` alone. App identity is Civic
+Voice: slug `civic-voice`, scheme `civicvoice`, bundle id `com.civicvoice.app`.
 
-Boot now runs `prisma migrate deploy`, which applies only committed migrations
-and never drops anything. Two guards stop it returning:
+### No vendor is load-bearing
 
-- `backend/scripts/start` refuses to boot if the command reappears in it. The
-  Vibecode template used to regenerate this file, so deleting the line by hand
-  did not keep it deleted.
-- A CI job scans every executable file for it.
+This is the part that matters beyond this migration. Nothing in the codebase
+encodes whose account it runs in, so any one of the three services can be
+replaced without an application change.
 
-### One backend, one schema
+- **Database** — plain Postgres over a connection string, through Prisma and
+  standard SQL. No RLS-dependent auth, no edge functions, no PostgREST. Point
+  `DATABASE_URL` at a different Postgres and the app works.
+- **Backend host** — one Dockerfile, no host-specific APIs or buildpacks. Runs
+  on Railway, Fly, Render, or a VPS.
+- **Web host** — a standard Vite build producing static files. Vercel, Netlify,
+  Cloudflare Pages, or any static host.
+- **Media** — S3-compatible storage, so the same code and env vars run against
+  Cloudflare R2, Backblaze B2, MinIO, DigitalOcean Spaces, AWS S3, or Supabase's
+  S3 endpoint.
 
-The two exports each carried a full backend copy, and they had diverged. The
-webapp-side copy was a strict superset — same 26 models, no missing exports,
-plus extra routes and services — so it became the single backend. There is now
-exactly one `schema.prisma`.
+`@supabase/supabase-js` is removed from all three packages. The client-side
+Supabase data layer went with it — 21 hooks, six timeline functions and a
+`system_settings` lookup, all querying a snake_case schema unrelated to
+`schema.prisma`, every one behind a gate that has always been false. Their
+signatures and disabled-path return values are preserved exactly, so screens
+compile and behave as they did.
 
-Migration history was reassembled from three locations, since no single copy had
-all four applied migrations, and an ordering bug was fixed:
-`001_add_admin_session` sorted *before* the migration creating the `User` table
-it alters, so a rebuild from scratch would have failed.
+### `prisma db push` cannot come back
+
+Both backends used to run `bunx prisma db push --accept-data-loss` at boot
+against one shared Postgres. `db push` makes the database match the local schema
+by whatever means necessary, including dropping columns. On the record: 423 rows
+of `User.banned` destroyed, and twelve `GovernmentReference` columns plus the
+whole `AdminSession` table dropped and recreated 507 times in 16 days.
+
+Boot runs `prisma migrate deploy`. A CI job fails the build if `db push`
+reappears in any script, workflow, Dockerfile, or package.json.
 
 ### Auth is one system
 
-Mobile mounted two session providers at once — Better Auth, wrapped in a
-Supabase-Auth provider that was never populated. Three tab screens read the dead
-one, so a signed-in user was `undefined` to half the app: they saw a Follow
-button on their own profile card, and every user's suggestions collapsed into one
-shared cache entry.
+Mobile had two session providers mounted at once — Better Auth wrapped in a
+never-populated Supabase provider. Three tab screens read the dead one, so a
+signed-in user was `undefined` to half the app: a Follow button on their own
+profile card, and every user's suggestions collapsing into one shared cache
+entry. Better Auth is now the only session, pinned to 1.6.24 across all three
+packages.
 
-Better Auth is now the only session. `SUPABASE_ENABLED` gates data only, on both
-platforms. `lib/auth-context.tsx` is retained but unmounted, with a header
-explaining why it must not be rewired.
-
-Better Auth is pinned to exactly 1.6.24 across all three packages — mobile had
-been running a 1.5 client against a 1.6 server.
+Profile fields (`username`, `bio`, `location`, `role`) travel in the session
+itself, so the same account shows the same handle on both platforms by
+construction rather than through two hand-maintained code paths.
 
 ### Password reset was broken and is fixed
 
 The OTP handler opened with `if (type !== "sign-in") return;`. Forgot-password
 sends `type: "forget-password"`, so reset codes were generated, written to the
-database, and dropped — no error, no log. Anyone who requested a reset never
-received one.
-
-It now sends every code type through **Resend**. When `RESEND_API_KEY` is unset
-the send path throws rather than returning quietly.
+database, and dropped — no error, no log. Every code type now sends, through
+Resend, and the send path throws rather than returning quietly when unconfigured.
 
 ### Features that were broken or missing
 
@@ -89,122 +114,97 @@ the send path throws rather than returning quietly.
   replies, comment delete, and b2b issue forecast.
 - **`refresh-creator-metrics/me`** always returned 403 — the client sent the
   literal `"me"`, which never equals a user id.
-- **`/api/ai/generate` had no auth** while spending your OpenAI and Gemini keys.
-- **Stale-cache bug** in `useLibraryBrief`, a `ShareModal` crash, and a
+- **`/api/ai/generate` had no auth** while spending your AI provider keys.
+- A stale-cache bug in `useLibraryBrief`, a `ShareModal` crash, and a
   non-deterministic b2b forecast that changed on every page load.
-
-### Deployment
-
-`backend/Dockerfile` (Bun + ffmpeg — the media pipeline degrades silently
-without it), `apps/web/vercel.json` (SPA fallback plus an `/api/*` rewrite that
-keeps the browser on one origin so the session cookie stays first-party), and CI
-running typecheck, lint, and build across all three packages.
-
-CORS and Better Auth's trusted origins now derive from one `APP_ORIGINS`
-variable. They were two hardcoded lists where CORS was the narrower — an origin
-accepted by one and refused by the other fails a login with no useful error.
 
 ---
 
-## Part 2 — What only you can do
+## Part 2 — The content question, answered
 
-I have no infrastructure access. These are yours.
+**`GovernmentReference` does not need exporting from the old database. It
+re-seeds itself from the upstream sources.**
 
-### 1. Stop the `candy-lark` deployment — do this first
+This was worth checking rather than assuming, so here is the evidence.
 
-`candy-lark.vibecode.run` is the backend the mobile app points at. It is
-**crash-looping**: it returns 502 on roughly five of every six requests, and
-briefly 200 in between. Each restart re-runs `db push` with an outdated schema
-and reverts the database.
+`backend/src/services/government-sync.ts` pulls all three content types from the
+government's own APIs, at boot and then daily:
 
-That is why applied migrations vanish within seconds, and it is also the entire
-Supabase egress overage — a flat ~300 MB/day with no day/night variation, 100%
-pooler egress, one full schema introspection every ~26 seconds.
+| Content | Source | Key needed |
+|---|---|---|
+| Bills | congress.gov, recently-updated bills of the current congress | `CONGRESS_API_KEY` |
+| Executive orders | Federal Register, newest EOs, including full text | none |
+| SCOTUS cases | CourtListener, newest opinions | `COURTLISTENER_API_KEY` |
 
-For comparison, `civicvoice.vibecode.run` has been up 6.15 days without
-restarting. It is not the offender.
+Rows are upserted by `masterReferenceId`, so a fresh database fills itself on
+first boot with no manual step.
 
-**Impact of stopping it: effectively none.** Web users are unaffected — that runs
-on its own host. The mobile app loses its backend, but it is already
-unreachable, and no store build has ever shipped. Your 423 accounts are in
-Postgres and are untouched.
+Three details that make the re-seed faithful rather than approximate:
 
-### 2. Apply the migration
+1. **The seeded vote tallies reproduce exactly.** `seedTallyFor()` is a
+   deterministic hash of `masterReferenceId`, not a random draw. The same bill
+   gets the same starting numbers on the new database as on the old one.
+2. **Citizen briefs and full text regenerate on demand.** `ensureReferenceContent()`
+   is triggered lazily when a reference is viewed or resolved, so the AI-written
+   brief, the fetched full text, and the content hashes all rebuild themselves.
+   They cost AI provider calls, not a data migration.
+3. **The seeded set is small by design** — ten items per branch, which is what
+   the Discover page serves. You are not reproducing a large corpus.
 
-Once `candy-lark` is stopped, run `db/apply-migrations.sql` in the Supabase SQL
-Editor. It is additive, idempotent, and safe to re-run. This fixes, in one go:
+Two caveats, stated plainly:
 
-| Currently broken | Cause |
-|---|---|
-| Main feed (500) | missing columns |
-| Posts (500) | missing columns |
-| Trending references (500) | missing columns |
-| Admin portal (500) | missing `AdminSession` table |
+- **Community activity on those rows does not survive**: votes, comments, shares,
+  and vote counts belong to the 423 dummy accounts, which are disposable.
+- **References created by hand** through `POST /api/government-references` (the
+  admin path) would not be re-seeded, since they came from a person rather than
+  an upstream feed. Whether any exist can only be answered by querying the old
+  database. If that matters, the check is one query before you walk away from it:
+  ```sql
+  SELECT count(*) FROM "GovernmentReference"
+  WHERE "masterReferenceId" NOT LIKE 'bill-%'
+    AND "masterReferenceId" NOT LIKE 'eo-%'
+    AND "masterReferenceId" NOT LIKE 'scotus-%';
+  ```
 
-The admin login failure is a server error, not a rejected password — it fails
-before your credentials are checked.
+**User accounts** are explicitly disposable — the 423 are test data — so there is
+no user migration path, by decision.
 
-### 3. Verify a sending domain in Resend
+**Media** is the one category that genuinely cannot be regenerated. If any
+uploaded photo or video is worth keeping, copy it out of the old deployment
+before that deployment goes away; nothing recreates it.
 
-The API key works, but no verified domain exists on the account, and
-`EMAIL_FROM` points at `civicvoice.app`, which isn't in Resend at all. Password
-reset cannot deliver until a domain is verified. DNS propagation is the slow
-part, so start it early.
+---
 
-### 3b. Building on a *fresh* Postgres
+## Part 3 — What only you can do
 
-This is now the plan of record: a new database that Vibecode has never had
-credentials for. It works, and it has been proven rather than assumed.
+Full walkthrough in `DEPLOYMENT.md`, including what each account costs and how to
+leave it. In short:
 
-`prisma migrate deploy` **on its own cannot build this schema from empty.** The
-two oldest migrations are SQLite dialect — running them against Postgres fails
-immediately with `42704: type "datetime" does not exist`. Production only
-survives them because they were baselined years of drift ago.
-
-The three-step procedure in `db/README.md` (`db/postgres-baseline.sql` → baseline
-the two SQLite migrations → `migrate deploy`) does build it. Verified against a
-real, empty Postgres 16: 30 tables, and `prisma migrate diff` against
-`schema.prisma` reports **no difference detected**.
-
-Finding that took spinning up an actual database. The first run of my own
-documented procedure failed — `20260808134500` had no `IF NOT EXISTS` guards and
-collided with the baseline. That migration is now idempotent. The lesson is in
-`db/README.md`: every new migration here must guard every statement.
-
-### 4. Deploy
-
-Full walkthrough in `DEPLOYMENT.md`. Summary:
-
-- **API → Railway** (or Render/Fly): root directory `backend`, set the
-  environment variables listed there, and **pin it to exactly one instance** —
-  the job queue, cache, rate limiter, and admin ban list are all per-process.
-- **Web → Vercel**: root directory `apps/web`. **Edit the placeholder in
-  `apps/web/vercel.json` first** — leaving it loads every page and breaks all
-  data.
-- Set `APP_ORIGINS` on the API to your web address, then redeploy. Login will not
-  work until you do.
-
-### 5. Point DNS, then retire Vibecode
-
-Keep the Vibecode deployment serving until the new host is verified — it is
-currently the live product. Note that `civicvoice.vibecode.run` disappears when
-you leave, and nobody holding that link gets a redirect.
-
-### 6. Rotate credentials before launch
-
-Deferred by choice, listed so it isn't forgotten: the Supabase `service_role`
-key and five AI provider keys are in the public repo's history, the admin
-password was hardcoded in `scripts/seed-admin.ts` (now environment-driven), and
-the admin and B2B passwords have been shared in chat.
+1. **Create the accounts** — Postgres, container host, static host, object
+   storage, Resend, and the two government API keys. All under your own email
+   and billing, so you hold the keys to every piece.
+2. **Verify a sending domain in Resend.** DNS propagation is the slow part; start
+   it early. Password reset cannot deliver until it is done.
+3. **Fill in the environment variables** from `.env.example`, which tags every
+   variable with the platform that needs it.
+4. **Seed the admin account** — one command, `bun scripts/seed-admin.ts`, with
+   `ADMIN_USERNAME` and `ADMIN_PASSWORD` set for that command only.
+5. **Point DNS**, and keep the old deployment serving until the new one is
+   verified.
+6. **Rotate credentials before launch.** Deferred by your decision, listed so it
+   is not forgotten: the old service-role key and several AI provider keys are in
+   this repo's git history, and the admin password has been shared in chat. The
+   new accounts should get new secrets, not the old ones.
 
 ---
 
 ## Still outstanding in code
 
-- Web has no messaging UI, no forgot-password page, and one `/admin` page with
-  tabs where mobile has 8 URLs — so a mobile admin link 404s on web
+Not blockers for standing the app up, but real:
+
+- Web has no messaging UI, and one `/admin` page with tabs where mobile has 8
+  URLs — so a mobile admin link 404s on web
 - `apps/web/src/lib/mobile/` is 15,016 lines hand-copied from mobile and drifting
 - Mobile has no colour theme; web's semantic tokens should be ported
-- App identity is still `vibecode` in `app.json`; no `eas.json` exists, so no
-  binary can be built
+- No `eas.json`, so no mobile binary can be built yet
 - No tests in any package

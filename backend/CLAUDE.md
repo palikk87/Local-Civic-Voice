@@ -72,10 +72,13 @@
   A database IS configured: Supabase Postgres, via Prisma. Do NOT run the database-auth skill —
   it sets up SQLite and reintroduces `prisma db push`, both of which break this project.
 
-  Connection: read from SUPABASE_DATABASE_URL / SUPABASE_DIRECT_URL, NOT DATABASE_URL. This is
-  deliberate and load-bearing — see the comment above `datasource db` in prisma/schema.prisma.
-  The template's scripts/env.sh overwrites DATABASE_URL with a local SQLite `file:` path in
-  production, which took the live site down with 502s on every /api/* call.
+  Connection: DATABASE_URL (pooled) and DIRECT_URL (unpooled, for migrations). Neither has a
+  fallback — a missing value fails the boot rather than resolving to something else. The old
+  SUPABASE_DATABASE_URL indirection is gone along with the template that made it necessary.
+
+  There is exactly one migration and it builds the schema from empty. `prisma migrate deploy`
+  brings up a brand new database with no baseline file and no manual step; CI proves this on
+  every push.
 
   <never_db_push>
     NEVER run `prisma db push` against this database, with or without --accept-data-loss.

@@ -93,33 +93,30 @@ flow, which is what the backend actually implements.
 **Removed.** All five `@vibecodeapp/*` packages, the proxy import, the Vite
 plugin, and the Metro wrapper. SVG handling — which the Metro wrapper had
 provided — is now wired explicitly to `react-native-svg-transformer`.
-`EXPO_PUBLIC_VIBECODE_BACKEND_URL` became `EXPO_PUBLIC_BACKEND_URL` (the old name
-still works as a fallback), and the `candy-lark.vibecode.run` default host is
-gone.
+`EXPO_PUBLIC_BACKEND_URL` is the only backend-address variable, with no fallback:
+a release build without it throws at startup rather than sending requests
+somewhere unexpected.
 
 **Fixed.** `scripts/start` no longer runs `prisma db push --accept-data-loss` on
-every boot, and `scripts/env.sh` no longer overwrites `DATABASE_URL` with a
-SQLite path. Migration history was reassembled and an ordering bug corrected.
-See `db/README.md` for both.
+every boot — a CI job now fails the build if that command reappears anywhere.
+`scripts/env.sh` is deleted along with the template that regenerated it, and the
+`SUPABASE_DATABASE_URL` indirection that existed to hide the real connection
+string from that template. The migration history was replaced with one migration
+generated from `schema.prisma`; see `db/README.md`.
 
 ## Known gaps
 
-- **Two migrations are written but not yet applied to production.**
-  `20260812150000_repair_govref_columns_and_adminsession` and
-  `20260812151000_add_direct_messaging` ship in this branch and must be deployed
-  (`bunx prisma migrate deploy`) before the Citizen's Brief, delegation tallies,
-  admin login, or messaging will work against the live database. Both are
-  additive and idempotent. See `db/README.md`.
-- Two production search functions are broken and left that way deliberately:
-  `get_bill_with_cache_check` throws on every call, and
-  `upsert_search_caches_from_bills` targets tables that are not in the schema it
-  names. Both read the legacy snake_case schema, not the Prisma tables, and
-  nothing in this repo calls either. See `db/live-objects/search-objects.sql`.
+- **The app has not been deployed to its new infrastructure yet.** The code is
+  ready and the schema builds from empty with one command; the accounts, the
+  connection strings, and DNS are the remaining work. See `DEPLOYMENT.md`.
+- The old database's out-of-band search objects (two materialized views, three
+  functions, two of which were broken) are not carried over. They read a legacy
+  snake_case schema, not the Prisma tables, and nothing in this repo calls them.
 - Sharing a post into a DM renders if a message carries `sharedPost`, but nothing
   produces one — the `Message` table has no column for it. The render paths are
   typed and ready; wiring it needs a `sharedPostId` on the backend model.
 - Still no tests in any package.
-- The two auth systems above should be consolidated.
-- `bun install` has not been run against these manifests since the
-  `@vibecodeapp/*` packages were removed; those were private-registry packages
-  and could not be resolved from outside Vibecode.
+- Web has no messaging UI, and one `/admin` page with tabs where mobile has eight
+  URLs — so a mobile admin link 404s on web.
+- `apps/web/src/lib/mobile/` is ~15,000 lines hand-copied from mobile, drifting.
+- No `eas.json`, so no mobile binary can be built yet.
