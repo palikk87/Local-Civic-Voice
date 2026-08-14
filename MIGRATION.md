@@ -151,15 +151,25 @@ The API key works, but no verified domain exists on the account, and
 reset cannot deliver until a domain is verified. DNS propagation is the slow
 part, so start it early.
 
-### 3b. If Railway provisions a *fresh* Postgres
+### 3b. Building on a *fresh* Postgres
 
-Deploying against the existing Supabase database works as-is. If you ever point
-the backend at an empty database instead, `prisma migrate deploy` **fails on the
-first migration** — the two oldest ones are SQLite dialect and cannot execute on
-Postgres. Production only survives them because they were baselined.
+This is now the plan of record: a new database that Vibecode has never had
+credentials for. It works, and it has been proven rather than assumed.
 
-`db/postgres-baseline.sql` plus the three-step procedure in `db/README.md`
-handles that case.
+`prisma migrate deploy` **on its own cannot build this schema from empty.** The
+two oldest migrations are SQLite dialect — running them against Postgres fails
+immediately with `42704: type "datetime" does not exist`. Production only
+survives them because they were baselined years of drift ago.
+
+The three-step procedure in `db/README.md` (`db/postgres-baseline.sql` → baseline
+the two SQLite migrations → `migrate deploy`) does build it. Verified against a
+real, empty Postgres 16: 30 tables, and `prisma migrate diff` against
+`schema.prisma` reports **no difference detected**.
+
+Finding that took spinning up an actual database. The first run of my own
+documented procedure failed — `20260808134500` had no `IF NOT EXISTS` guards and
+collided with the baseline. That migration is now idempotent. The lesson is in
+`db/README.md`: every new migration here must guard every statement.
 
 ### 4. Deploy
 

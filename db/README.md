@@ -39,6 +39,42 @@ bunx prisma migrate resolve --applied 20260310204800_add_government_reference_sy
 bunx prisma migrate deploy
 ```
 
+This procedure has been run end to end against a real, empty Postgres 16 — not
+reasoned about. The result: 30 tables (29 models plus `_prisma_migrations`),
+`migrate deploy` reporting "All migrations have been successfully applied", and
+the check that actually settles it:
+
+```bash
+bunx prisma migrate diff --from-url "$URL" \
+  --to-schema-datamodel prisma/schema.prisma --exit-code
+# No difference detected.
+```
+
+A database built this way is equivalent to `schema.prisma`, not merely close to
+it. Re-run that diff after changing any migration.
+
+The first attempt **failed**, and what it exposed is worth keeping in mind
+before editing any migration in this repo. Step 3 stopped with:
+
+```
+ERROR: column "citizenBrief" of relation "GovernmentReference" already exists
+DbError { code: SqlState(E42701) }
+```
+
+`postgres-baseline.sql` is generated from `schema.prisma`, so it already
+contains every object the later migrations add. A migration that assumes an
+object is absent therefore cannot survive the baseline path.
+`20260808134500_restore_web_adminsession_and_govref_fields` was written without
+guards and had to be made idempotent (`ADD COLUMN IF NOT EXISTS`,
+`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`).
+
+**Rule for new migrations: guard every statement.** Two independent forces make
+this non-optional here — the baseline path above, and the fact that this
+database has been reshaped underneath the application by an external writer
+many times. Note that Postgres has no `IF NOT EXISTS` for a multi-column
+`ALTER TABLE`, so a combined `ADD COLUMN, ADD COLUMN` must be split into one
+statement per column.
+
 The four newer migrations are all Postgres-safe and run normally.
 
 ## Schema source of truth
