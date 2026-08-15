@@ -10,6 +10,7 @@ import {
   Landmark,
   LogOut,
   Newspaper,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 import { Seal } from "@/components/civic/Seal";
@@ -34,6 +35,7 @@ const NAV: NavItem[] = [
   { to: "/library", label: "Library", icon: BookOpen },
   { to: "/discover", label: "Discover", icon: Compass },
   { to: "/people", label: "People", icon: Users },
+  { to: "/messages", label: "Messages", icon: MessageCircle, capability: "viewMessages" },
   { to: "/government", label: "Government", icon: Landmark },
   { to: "/profile", label: "Profile", icon: User, capability: "viewProfile" },
 ];

@@ -27,6 +27,8 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const Messages = lazy(() => import("./pages/Messages"));
+const Conversation = lazy(() => import("./pages/Conversation"));
 const Delegates = lazy(() => import("./pages/Delegates"));
 const Saved = lazy(() => import("./pages/Saved"));
 const Trending = lazy(() => import("./pages/Trending"));
@@ -90,6 +92,22 @@ const App = () => (
                 element={
                   <RouteGuard capability="viewProfile" reason="Sign in to view your profile and civic record.">
                     <Profile />
+                  </RouteGuard>
+                }
+              />
+              <Route
+                path="/messages"
+                element={
+                  <RouteGuard capability="viewMessages" reason="Sign in to read your messages.">
+                    <Messages />
+                  </RouteGuard>
+                }
+              />
+              <Route
+                path="/conversation/:id"
+                element={
+                  <RouteGuard capability="viewMessages" reason="Sign in to read your messages.">
+                    <Conversation />
                   </RouteGuard>
                 }
               />
