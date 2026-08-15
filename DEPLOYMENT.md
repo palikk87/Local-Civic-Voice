@@ -100,7 +100,14 @@ Railway-specific.
 
 5. **Set the instance count to exactly 1**, and do not enable autoscaling. This
    is not a preference — see [One instance only](#one-instance-only).
-6. Deploy, then check `https://<your-api>/health` returns JSON.
+6. **Make the port agree.** `backend/Dockerfile` sets `PORT=3000`, so the app
+   binds 3000 unless you override it. If the host routes to a different port —
+   Railway's generated domains often default to 8080 — either set a `PORT`
+   variable matching it, or change the host's target port to 3000.
+
+   Get this wrong and the server starts perfectly, the logs look clean, and
+   every request returns 502. It reads exactly like a crash.
+7. Deploy, then check `https://<your-api>/health` returns JSON.
 
 On first boot the log should show the schema being created, then:
 
