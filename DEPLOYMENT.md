@@ -92,7 +92,24 @@ Railway-specific.
 4. Add the variables tagged `[API]` in `.env.example`. At minimum:
    `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BACKEND_URL`,
    `APP_ORIGINS`, `APP_SCHEMES`, `NODE_ENV=production`, the `S3_*` set,
-   `RESEND_API_KEY`, `EMAIL_FROM`, `CONGRESS_API_KEY`, `COURTLISTENER_API_KEY`.
+   `RESEND_API_KEY`, `EMAIL_FROM`, `CONGRESS_API_KEY`, `COURTLISTENER_API_KEY`,
+   and the six `B2B_*` values.
+
+   The `B2B_*` six are required and have no defaults — the server will not boot
+   without them, and will name each one it is missing:
+
+   | Variable | What it is |
+   |---|---|
+   | `B2B_DEMO_USERNAME` | standard analytics login |
+   | `B2B_DEMO_PASSWORD` | its password |
+   | `B2B_DEMO_API_KEY` | machine access, sent as `Authorization: ApiKey <value>` |
+   | `B2B_ADMIN_USERNAME` | superadmin login |
+   | `B2B_ADMIN_PASSWORD` | its password |
+   | `B2B_ADMIN_API_KEY` | machine access for the superadmin account |
+
+   Generate all six with a password manager. They were previously hardcoded in
+   a public source file, so **any value that appeared in this repository's
+   history must be considered burned** and must not be reused here.
 
    `APP_ORIGINS` needs the web address, which you do not have yet. Put a
    placeholder and come back to it in step 4 — login will not work until it is
@@ -293,6 +310,16 @@ application code.
 - **Lock-in:** none, and no alternative either — these are the official sources.
 - **Note:** without them `GovernmentReference` stays empty and Discover has
   nothing in it. They are how the product gets its content.
+
+### B2B portal accounts
+
+- **Supplies:** the six `B2B_*` variables
+- **Cost:** none — these are values you generate, not a service you buy
+- **Note:** the values that used to be compiled into `routes/b2b.ts` are in this
+  repository's git history and on any clone. They are burned. Set new ones.
+- **Follow-up:** these live in environment variables rather than a database
+  table with hashed passwords. That is a large improvement on source literals
+  and still not where this should end up — see the note in `routes/b2b.ts`.
 
 ### What stays yours regardless
 

@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { env } from "../env";
 import { prisma } from "../prisma";
 
 /** Live platform counts from the shared Prisma database (votes use position support/oppose). */
@@ -106,15 +108,27 @@ interface SentimentData {
 }
 
 // ==========================================
-// In-Memory Stores (for B2B auth only)
+// B2B accounts
 // ==========================================
+//
+// Usernames, passwords and API keys come from the environment. They used to be
+// literals in this file — plaintext credentials in a public repository, one pair
+// of which granted the superadmin tier, so reading the source was enough to own
+// the business dashboard. See B2B_* in .env.example.
+//
+// env.ts requires all six with no defaults, so a missing one fails the boot
+// rather than silently falling back to a value an attacker already knows.
+//
+// FOLLOW-UP, deliberately not done here: these accounts belong in a database
+// table with hashed passwords, alongside a B2BSession model. Both are noted at
+// the bottom of this block.
 
 const b2bClients: B2BClient[] = [
   {
     id: "b2b-1",
-    name: "Demo Analytics Corp",
+    name: "Demo Analytics",
     type: "research",
-    apiKey: "b2b_demo_key_2024",
+    apiKey: env.B2B_DEMO_API_KEY,
     tier: "enterprise",
     createdAt: "2024-01-01T00:00:00Z",
   },
@@ -122,17 +136,44 @@ const b2bClients: B2BClient[] = [
     id: "b2b-superadmin",
     name: "Civic Platform Admin",
     type: "research",
-    apiKey: "b2b_superadmin_key",
+    apiKey: env.B2B_ADMIN_API_KEY,
     tier: "enterprise",
     createdAt: "2024-01-01T00:00:00Z",
   },
 ];
 
 const b2bCredentials: Record<string, { password: string; clientId: string }> = {
-  "b2b_demo": { password: "DemoB2B2024!", clientId: "b2b-1" },
-  "PaliKK87": { password: "Highsc60", clientId: "b2b-superadmin" },
+  [env.B2B_DEMO_USERNAME]: { password: env.B2B_DEMO_PASSWORD, clientId: "b2b-1" },
+  [env.B2B_ADMIN_USERNAME]: { password: env.B2B_ADMIN_PASSWORD, clientId: "b2b-superadmin" },
 };
 
+/**
+ * Compare two secrets without leaking their contents through timing.
+ *
+ * `a === b` on strings returns as soon as it finds a differing byte, so the
+ * time it takes reveals how much of a guess was correct. That is only worth
+ * caring about because these are long-lived shared secrets rather than
+ * per-user passwords behind a rate limiter.
+ *
+ * Lengths are hashed to a fixed width first, because timingSafeEqual itself
+ * throws on mismatched lengths — which would reintroduce the leak it prevents.
+ */
+function secretsMatch(a: string, b: string): boolean {
+  const ha = createHash("sha256").update(a).digest();
+  const hb = createHash("sha256").update(b).digest();
+  return timingSafeEqual(ha, hb);
+}
+
+/**
+ * Active B2B portal sessions.
+ *
+ * KNOWN LIMITATION, not fixed in this change: this is process memory, so every
+ * redeploy signs out every business user with no warning, and it rules out
+ * running more than one instance. Admin sessions had exactly this problem and
+ * were moved to the AdminSession table; the same fix applies here and needs a
+ * B2BSession model plus a migration. Tracked as follow-up rather than smuggled
+ * into a credentials change.
+ */
 const b2bSessions: Map<string, B2BSession> = new Map();
 
 // State information for geographic data
@@ -221,7 +262,7 @@ function getClientFromToken(authHeader: string | undefined): B2BSession | null {
     return session;
   } else if (authHeader.startsWith("ApiKey ")) {
     const apiKey = authHeader.substring(7);
-    const client = b2bClients.find(c => c.apiKey === apiKey);
+    const client = b2bClients.find((c) => secretsMatch(c.apiKey, apiKey));
     if (!client) return null;
 
     return {
@@ -301,7 +342,7 @@ const b2bRouter = new Hono();
 b2bRouter.post("/auth/login", zValidator("json", loginSchema), (c) => {
   const { apiKey } = c.req.valid("json");
 
-  const client = b2bClients.find(cl => cl.apiKey === apiKey);
+  const client = b2bClients.find((cl) => secretsMatch(cl.apiKey, apiKey));
   if (!client) {
     return c.json({ error: "Invalid API key" }, { status: 401 });
   }
@@ -342,7 +383,7 @@ b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchem
     k => k.toLowerCase() === username.toLowerCase()
   );
   const credentials = credKey ? b2bCredentials[credKey] : undefined;
-  if (!credentials || credentials.password !== password) {
+  if (!credentials || !secretsMatch(credentials.password, password)) {
     return c.json({ error: "Invalid credentials" }, { status: 401 });
   }
 

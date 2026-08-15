@@ -15,11 +15,14 @@
 
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
+  B2B_TEST,
   BASE_URL,
   prisma,
   resetData,
+  freshClientHeaders,
   serverLog,
   signUp,
+  waitForLog,
   startServer,
   stopServer,
 } from "./helpers/server";
@@ -93,7 +96,9 @@ describe("auth", () => {
       data: { username: "fieldstester", bio: "Testing", location: "Denver, CO" },
     });
 
-    const response = await fetch(`${BASE_URL}/api/auth/get-session`, { headers: { cookie } });
+    const response = await fetch(`${BASE_URL}/api/auth/get-session`, {
+      headers: freshClientHeaders({ cookie }),
+    });
     expect(response.status).toBe(200);
 
     const body = (await response.json()) as {
@@ -122,7 +127,7 @@ describe("auth", () => {
 
     const response = await fetch(`${BASE_URL}/api/auth/email-otp/send-verification-otp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ email: "reset@example.com", type: "forget-password" }),
     });
 
@@ -136,9 +141,10 @@ describe("auth", () => {
     // written to the database, and dropped — no email, no error, no log line,
     // nothing to notice. This asserts the opposite property: a reset request
     // now reaches the send path, and an unconfigured mailer says so out loud.
-    await Bun.sleep(250); // give the async handler a moment to write
-    const emitted = serverLog().slice(before);
-    expect(emitted).toContain("RESEND_API_KEY");
+    // Poll rather than sleep a fixed interval. The handler writes this line
+    // asynchronously, so a fixed wait passes on a fast machine and fails on a
+    // loaded one — which it did, intermittently, before this was changed.
+    expect(await waitForLog("RESEND_API_KEY", before)).toBe(true);
   });
 });
 
@@ -200,7 +206,10 @@ describe("b2b", () => {
     const response = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: "b2b_demo", password: "DemoB2B2024!" }),
+      body: JSON.stringify({
+        username: B2B_TEST.demoUsername,
+        password: B2B_TEST.demoPassword,
+      }),
     });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { token: string };

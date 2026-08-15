@@ -24,6 +24,22 @@ const DATABASE_URL =
 let server: Subprocess | null = null;
 
 /**
+ * Throwaway B2B credentials for the test server.
+ *
+ * Exported so the tests log in with these rather than repeating literals — the
+ * whole point of this change is that no credential is hardcoded anywhere a
+ * reader can reach, and a test file is exactly such a place.
+ */
+export const B2B_TEST = {
+  demoUsername: "test_demo_client",
+  demoPassword: "test-demo-password-not-a-real-one",
+  demoApiKey: "test-demo-api-key-not-a-real-one",
+  adminUsername: "test_admin_client",
+  adminPassword: "test-admin-password-not-a-real-one",
+  adminApiKey: "test-admin-api-key-not-a-real-one",
+} as const;
+
+/**
  * Everything the server has written to stdout/stderr since boot.
  *
  * Needed because some failures are deliberately invisible over HTTP. Better
@@ -37,6 +53,25 @@ let serverOutput = "";
 
 export function serverLog(): string {
   return serverOutput;
+}
+
+/**
+ * Wait until the server logs something matching `needle`, or give up.
+ *
+ * Polling rather than sleeping a fixed interval: the handler that writes the
+ * line is async, and a fixed wait is a race that passes on a fast machine and
+ * fails on a loaded one. It did exactly that here before this was added.
+ *
+ * `from` is an offset into the accumulated log so a test only sees output
+ * produced after it started.
+ */
+export async function waitForLog(needle: string, from = 0, timeoutMs = 5000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (serverOutput.slice(from).includes(needle)) return true;
+    await Bun.sleep(50);
+  }
+  return false;
 }
 
 export const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
@@ -58,6 +93,16 @@ function env(): Record<string, string> {
     UPLOADS_DIR: "/tmp/civicvoice-test-uploads",
     // No RESEND_API_KEY on purpose: the send path must throw rather than
     // silently succeed, and one of the tests asserts exactly that.
+
+    // B2B portal accounts. Required with no defaults, so the harness must
+    // supply them — which is itself the assertion that the boot fails without
+    // them. Values are throwaway and exist only inside this process.
+    B2B_DEMO_USERNAME: B2B_TEST.demoUsername,
+    B2B_DEMO_PASSWORD: B2B_TEST.demoPassword,
+    B2B_DEMO_API_KEY: B2B_TEST.demoApiKey,
+    B2B_ADMIN_USERNAME: B2B_TEST.adminUsername,
+    B2B_ADMIN_PASSWORD: B2B_TEST.adminPassword,
+    B2B_ADMIN_API_KEY: B2B_TEST.adminApiKey,
   };
 }
 
@@ -80,6 +125,21 @@ async function waitForHealth(timeoutMs = 30_000): Promise<void> {
 }
 
 export async function startServer(): Promise<void> {
+  // Refuse to start on top of somebody else.
+  //
+  // stopServer() used to call kill() and return immediately, so a previous
+  // run's process could still hold the port. This run's server then failed to
+  // bind, waitForHealth() was answered by the DYING one, and the suite ran
+  // against a server carrying the last run's rate-limiter state — which
+  // produced a perfect alternating pass/fail across consecutive runs.
+  const squatter = await fetch(`${BASE_URL}/health`).catch(() => null);
+  if (squatter?.ok) {
+    throw new Error(
+      `Something is already serving ${BASE_URL}. Stop it before running the tests — ` +
+        `otherwise they run against a process this suite does not control.`,
+    );
+  }
+
   // One command, empty database to full schema. If this ever needs a second
   // step, the clean-slate migration has regressed and the tests should say so.
   const migrate = spawn({
@@ -119,8 +179,13 @@ export async function startServer(): Promise<void> {
 
 export async function stopServer(): Promise<void> {
   await prisma.$disconnect();
-  server?.kill();
-  server = null;
+  if (server) {
+    server.kill();
+    // Wait for it to actually exit. kill() only sends the signal; returning
+    // before the process is gone leaves the port held for the next run.
+    await server.exited;
+    server = null;
+  }
 }
 
 /** Wipe rows between tests without touching the schema. */
@@ -152,6 +217,27 @@ export async function resetData(): Promise<void> {
  * alternative was raising the limit for tests, i.e. testing a configuration
  * that never ships. Distinct clients is what the real world looks like.
  */
+let clientCounter = 0;
+
+/**
+ * A distinct client address for one request.
+ *
+ * Everything under /api/auth/* shares a 10-per-minute limit keyed by IP, and a
+ * request with no X-Forwarded-For falls back to a single shared key — so
+ * sign-up, get-session and the OTP endpoint all counted against each other and
+ * the suite tripped its own limiter intermittently, depending on order and
+ * timing. Giving each call its own address is what a real set of users looks
+ * like; raising the limit for tests would mean testing a configuration that
+ * never ships.
+ */
+export function freshClientHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  clientCounter += 1;
+  return {
+    "x-forwarded-for": `203.0.113.${clientCounter % 250}`,
+    ...extra,
+  };
+}
+
 let signUpCount = 0;
 
 export async function signUp(input: {
@@ -162,10 +248,7 @@ export async function signUp(input: {
   signUpCount += 1;
   const response = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-forwarded-for": `203.0.113.${signUpCount % 250}`,
-    },
+    headers: freshClientHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(input),
   });
 

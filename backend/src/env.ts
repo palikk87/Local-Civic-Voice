@@ -75,6 +75,25 @@ const envSchema = z.object({
   // Live web-search grounding for legislative search (services/web-search.ts).
   // Optional — search falls back to unaided AI interpretation without it.
   TAVILY_API_KEY: z.string().optional(),
+
+  // ---------------------------------------------------------------------------
+  // B2B analytics portal credentials
+  // ---------------------------------------------------------------------------
+  // These were literals in routes/b2b.ts — plaintext passwords and API keys in a
+  // public repository, one pair of which granted the superadmin tier. Anyone who
+  // opened that file had the business dashboard.
+  //
+  // Required, with no defaults, deliberately. A default here would be worse than
+  // the bug it replaces: every deployment that forgot to set them would share one
+  // publicly-known password, and nothing would say so. Missing values fail the
+  // boot with a message naming each one.
+  B2B_DEMO_USERNAME: z.string().min(1, "B2B_DEMO_USERNAME is required"),
+  B2B_DEMO_PASSWORD: z.string().min(1, "B2B_DEMO_PASSWORD is required"),
+  B2B_DEMO_API_KEY: z.string().min(1, "B2B_DEMO_API_KEY is required"),
+
+  B2B_ADMIN_USERNAME: z.string().min(1, "B2B_ADMIN_USERNAME is required"),
+  B2B_ADMIN_PASSWORD: z.string().min(1, "B2B_ADMIN_PASSWORD is required"),
+  B2B_ADMIN_API_KEY: z.string().min(1, "B2B_ADMIN_API_KEY is required"),
 });
 
 /**
