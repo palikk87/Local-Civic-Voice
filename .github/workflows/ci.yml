@@ -5,9 +5,10 @@ on:
     branches: ["**"]
   pull_request:
 
-# The project has no test suite yet, so typecheck, lint, and build are the only
-# ratchet keeping the three packages honest — particularly the shared-package
-# refactor still ahead, where a move that changes behaviour must fail loudly.
+# Four ratchets: the schema must build from empty, the server must boot and pass
+# its tests, the web app must build, and the mobile app must bundle. Each one
+# exists because the corresponding thing was silently broken here at some point
+# and nothing noticed for months.
 jobs:
   # Fails the build if `prisma db push` reappears in anything executable.
   #
@@ -88,6 +89,17 @@ jobs:
             --from-url "$DATABASE_URL" \
             --to-schema-datamodel prisma/schema.prisma \
             --exit-code
+
+      # Boots the real server against a real Postgres and drives it over HTTP.
+      # Every production failure this project suffered happened at boot rather
+      # than inside a handler, so the tests do not shortcut past it.
+      - name: Test
+        working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_test
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE civicvoice_test;'
+          bun test
 
   web:
     name: web
