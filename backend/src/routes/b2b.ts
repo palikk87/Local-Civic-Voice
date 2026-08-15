@@ -164,17 +164,10 @@ function secretsMatch(a: string, b: string): boolean {
   return timingSafeEqual(ha, hb);
 }
 
-/**
- * Active B2B portal sessions.
- *
- * KNOWN LIMITATION, not fixed in this change: this is process memory, so every
- * redeploy signs out every business user with no warning, and it rules out
- * running more than one instance. Admin sessions had exactly this problem and
- * were moved to the AdminSession table; the same fix applies here and needs a
- * B2BSession model plus a migration. Tracked as follow-up rather than smuggled
- * into a credentials change.
- */
-const b2bSessions: Map<string, B2BSession> = new Map();
+// Sessions live in the B2BSession table, not in this process. They used to be
+// a module-level Map, so every redeploy signed out every business customer with
+// no warning and the API could never run more than one instance — the same bug
+// admin sessions had before they moved to AdminSession.
 
 // State information for geographic data
 const stateInfo: Record<string, { name: string; districtCount: number; lat: number; lng: number }> = {
@@ -246,20 +239,47 @@ function generateToken(): string {
   return `b2b_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 }
 
-function getClientFromToken(authHeader: string | undefined): B2BSession | null {
+/**
+ * Resolve a request's B2B session.
+ *
+ * Async because Bearer tokens are now rows in B2BSession rather than entries in
+ * a process-local Map. Mirrors getAdminFromToken in routes/admin.ts: look the
+ * token up, delete it if it has expired, otherwise return it.
+ *
+ * CALLERS MUST AWAIT. An un-awaited call returns a Promise, every Promise is
+ * truthy, and `if (!session) return 401` would therefore pass for any request —
+ * an auth bypass that TypeScript does not flag at the truthiness check. All
+ * fourteen call sites were converted together with this signature.
+ *
+ * ApiKey stays synchronous in substance: it authenticates against the configured
+ * clients rather than a stored session, so there is nothing to read.
+ */
+async function getClientFromToken(
+  authHeader: string | undefined
+): Promise<B2BSession | null> {
   if (!authHeader) return null;
 
   let token: string;
 
   if (authHeader.startsWith("Bearer ")) {
     token = authHeader.substring(7);
-    const session = b2bSessions.get(token);
-    if (!session) return null;
-    if (new Date(session.expiresAt) < new Date()) {
-      b2bSessions.delete(token);
+
+    const row = await prisma.b2BSession.findUnique({ where: { token } });
+    if (!row) return null;
+
+    if (row.expiresAt < new Date()) {
+      await prisma.b2BSession.delete({ where: { token } }).catch(() => {});
       return null;
     }
-    return session;
+
+    return {
+      token: row.token,
+      clientId: row.clientId,
+      clientName: row.clientName,
+      tier: row.tier as B2BSession["tier"],
+      createdAt: row.createdAt.toISOString(),
+      expiresAt: row.expiresAt.toISOString(),
+    };
   } else if (authHeader.startsWith("ApiKey ")) {
     const apiKey = authHeader.substring(7);
     const client = b2bClients.find((c) => secretsMatch(c.apiKey, apiKey));
@@ -339,7 +359,7 @@ const b2bRouter = new Hono();
 // B2B Authentication Endpoints
 // ==========================================
 
-b2bRouter.post("/auth/login", zValidator("json", loginSchema), (c) => {
+b2bRouter.post("/auth/login", zValidator("json", loginSchema), async (c) => {
   const { apiKey } = c.req.valid("json");
 
   const client = b2bClients.find((cl) => secretsMatch(cl.apiKey, apiKey));
@@ -360,7 +380,21 @@ b2bRouter.post("/auth/login", zValidator("json", loginSchema), (c) => {
     expiresAt: expiresAt.toISOString(),
   };
 
-  b2bSessions.set(token, session);
+  await prisma.b2BSession.create({
+    data: {
+      token,
+      clientId: session.clientId,
+      clientName: session.clientName,
+      tier: session.tier,
+      createdAt: now,
+      expiresAt,
+    },
+  });
+
+  // Opportunistic cleanup so expired rows don't pile up, same as the admin
+  // console does on its own login.
+  await prisma.b2BSession.deleteMany({ where: { expiresAt: { lt: now } } }).catch(() => {});
+
   client.lastAccess = now.toISOString();
 
   return c.json({
@@ -376,7 +410,7 @@ b2bRouter.post("/auth/login", zValidator("json", loginSchema), (c) => {
   });
 });
 
-b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchema), (c) => {
+b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchema), async (c) => {
   const { username, password } = c.req.valid("json");
 
   const credKey = Object.keys(b2bCredentials).find(
@@ -405,7 +439,21 @@ b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchem
     expiresAt: expiresAt.toISOString(),
   };
 
-  b2bSessions.set(token, session);
+  await prisma.b2BSession.create({
+    data: {
+      token,
+      clientId: session.clientId,
+      clientName: session.clientName,
+      tier: session.tier,
+      createdAt: now,
+      expiresAt,
+    },
+  });
+
+  // Opportunistic cleanup so expired rows don't pile up, same as the admin
+  // console does on its own login.
+  await prisma.b2BSession.deleteMany({ where: { expiresAt: { lt: now } } }).catch(() => {});
+
   client.lastAccess = now.toISOString();
 
   return c.json({
@@ -421,9 +469,9 @@ b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchem
   });
 });
 
-b2bRouter.get("/auth/verify", (c) => {
+b2bRouter.get("/auth/verify", async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ valid: false, error: "Invalid or expired credentials" }, { status: 401 });
@@ -440,11 +488,11 @@ b2bRouter.get("/auth/verify", (c) => {
   });
 });
 
-b2bRouter.post("/auth/logout", (c) => {
+b2bRouter.post("/auth/logout", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (authHeader && authHeader.startsWith("Bearer ")) {
     const token = authHeader.substring(7);
-    b2bSessions.delete(token);
+    await prisma.b2BSession.delete({ where: { token } }).catch(() => {});
   }
   return c.json({ success: true, message: "Logged out successfully" });
 });
@@ -455,7 +503,7 @@ b2bRouter.post("/auth/logout", (c) => {
 
 b2bRouter.get("/sentiment/overview", async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -532,7 +580,7 @@ b2bRouter.get("/sentiment/overview", async (c) => {
 
 b2bRouter.get("/sentiment/issues", zValidator("query", paginationQuerySchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -585,7 +633,7 @@ b2bRouter.get("/sentiment/issues", zValidator("query", paginationQuerySchema), a
 
 b2bRouter.get("/sentiment/bills/:billId", zValidator("param", billIdParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -645,7 +693,7 @@ b2bRouter.get("/sentiment/bills/:billId", zValidator("param", billIdParamSchema)
 
 b2bRouter.get("/geo/states", zValidator("query", paginationQuerySchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -708,7 +756,7 @@ b2bRouter.get("/geo/states", zValidator("query", paginationQuerySchema), async (
 
 b2bRouter.get("/geo/states/:stateCode", zValidator("param", stateCodeParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -867,7 +915,7 @@ function generateDistricts(counts: {
 
 b2bRouter.get("/geo/districts", zValidator("query", paginationQuerySchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -920,7 +968,7 @@ b2bRouter.get("/geo/districts", zValidator("query", paginationQuerySchema), asyn
  */
 b2bRouter.get("/geo/heatmap", zValidator("query", heatmapQuerySchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -989,7 +1037,7 @@ b2bRouter.get("/geo/heatmap", zValidator("query", heatmapQuerySchema), async (c)
  */
 b2bRouter.get("/sentiment/trends", async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -1055,7 +1103,7 @@ b2bRouter.get("/sentiment/trends", async (c) => {
 
 b2bRouter.get("/issues", zValidator("query", paginationQuerySchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -1111,7 +1159,7 @@ b2bRouter.get("/issues", zValidator("query", paginationQuerySchema), async (c) =
 
 b2bRouter.get("/issues/:issueId", zValidator("param", issueIdParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -1163,7 +1211,7 @@ b2bRouter.get("/issues/:issueId", zValidator("param", issueIdParamSchema), async
 
 b2bRouter.get("/reports/summary", async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -1299,7 +1347,7 @@ function buildSentimentForecast(seed: string, row: ForecastRow) {
 
 b2bRouter.get("/forecast/bills/:billId", zValidator("param", billIdParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
@@ -1338,7 +1386,7 @@ b2bRouter.get("/forecast/bills/:billId", zValidator("param", billIdParamSchema),
  */
 b2bRouter.get("/forecast/issues/:issueId", zValidator("param", issueIdParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
-  const session = getClientFromToken(authHeader);
+  const session = await getClientFromToken(authHeader);
 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });

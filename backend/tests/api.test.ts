@@ -249,6 +249,93 @@ describe("b2b", () => {
     }
   });
 
+  /**
+   * Every endpoint that resolves a session must reject a token that is not one.
+   *
+   * This is the guard for a specific, silent failure mode. getClientFromToken
+   * is async — sessions are rows in B2BSession — and an un-awaited call returns
+   * a Promise. Every Promise is truthy, so `if (!session) return 401` passes for
+   * any request, and the endpoint serves data to anyone.
+   *
+   * TypeScript does NOT catch that. Verified by deliberately removing one await
+   * and running tsc: it exited 0, because the handler only tests the value for
+   * truthiness and never reads a property off it. A grep proves the code is
+   * correct today; this proves it stays correct.
+   *
+   * The list is every path that calls getClientFromToken, and its length is
+   * asserted so that adding a protected endpoint without adding it here fails.
+   */
+  const PROTECTED_ENDPOINTS = [
+    "/api/b2b/auth/verify",
+    "/api/b2b/sentiment/overview",
+    "/api/b2b/sentiment/issues",
+    "/api/b2b/sentiment/bills/some-bill-id",
+    "/api/b2b/geo/states",
+    "/api/b2b/geo/states/CA",
+    "/api/b2b/geo/districts",
+    "/api/b2b/geo/heatmap",
+    "/api/b2b/sentiment/trends",
+    "/api/b2b/issues",
+    "/api/b2b/issues/some-issue-id",
+    "/api/b2b/reports/summary",
+    "/api/b2b/forecast/bills/some-bill-id",
+    "/api/b2b/forecast/issues/some-issue-id",
+  ] as const;
+
+  test("every protected endpoint rejects a bogus bearer token", async () => {
+    expect(PROTECTED_ENDPOINTS.length).toBe(14);
+
+    for (const path of PROTECTED_ENDPOINTS) {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        headers: { Authorization: "Bearer definitely-not-a-real-session-token" },
+      });
+      // 401 and nothing else. A 200 here means a call site lost its await.
+      expect({ path, status: response.status }).toEqual({ path, status: 401 });
+    }
+  });
+
+  test("a session survives a server restart", async () => {
+    // The whole point of moving off the in-memory Map: a redeploy used to sign
+    // out every business customer. Written directly to the table and then read
+    // back through the HTTP layer, which is the path a restarted process takes.
+    const token = "test-session-token-that-outlives-a-restart";
+    await prisma.b2BSession.create({
+      data: {
+        token,
+        clientId: "b2b-1",
+        clientName: "Demo Analytics",
+        tier: "enterprise",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+
+    const response = await fetch(`${BASE_URL}/api/b2b/auth/verify`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+  });
+
+  test("an expired session is rejected and cleaned up", async () => {
+    const token = "test-session-token-that-has-expired";
+    await prisma.b2BSession.create({
+      data: {
+        token,
+        clientId: "b2b-1",
+        clientName: "Demo Analytics",
+        tier: "enterprise",
+        expiresAt: new Date(Date.now() - 1000),
+      },
+    });
+
+    const response = await fetch(`${BASE_URL}/api/b2b/auth/verify`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(401);
+
+    // Same opportunistic delete-on-read the admin console does.
+    expect(await prisma.b2BSession.findUnique({ where: { token } })).toBeNull();
+  });
+
   test("the heatmap rejects an unauthenticated request", async () => {
     const response = await fetch(`${BASE_URL}/api/b2b/geo/heatmap`);
     expect(response.status).toBe(401);

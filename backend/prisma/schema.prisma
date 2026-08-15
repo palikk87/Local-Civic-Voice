@@ -78,6 +78,28 @@ model AdminSession {
   @@index([expiresAt])
 }
 
+/// Sessions for the B2B analytics portal.
+///
+/// Mirrors AdminSession, for the same reason: this was a module-level Map in
+/// routes/b2b.ts, so every redeploy signed out every business customer with no
+/// warning and the API could never run more than one instance.
+///
+/// Denormalised on purpose — clientName and tier are copied in rather than
+/// joined, because the B2B client list is not a table yet. When it becomes one,
+/// these become a relation.
+model B2BSession {
+  token      String   @id
+  clientId   String
+  clientName String
+  /// basic | professional | enterprise
+  tier       String
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([clientId])
+  @@index([expiresAt])
+}
+
 /// Site-wide notices written by an admin and read by both clients.
 ///
 /// This was a module-level array. Every restart silently emptied it while the
