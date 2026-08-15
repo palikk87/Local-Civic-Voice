@@ -186,6 +186,24 @@ The bucket must be publicly readable, or `MEDIA_PUBLIC_URL` must point at a CDN
 in front of it that is. This app serves media by URL and does not issue signed
 read links.
 
+**So the object key is the access control.** Anyone who knows a key can fetch
+that object, whether or not the post it belongs to was ever published. Keys are
+128 bits of CSPRNG output for exactly that reason, and they deliberately do not
+contain the upload time or the uploader's original filename — both of which they
+used to, which made one person's uploads enumerable by a stranger who could
+bracket when they posted.
+
+Two consequences worth being deliberate about:
+
+- **Do not enable bucket listing.** Unguessable keys are worthless if the bucket
+  will hand out an index of them. On R2 and B2 listing is off by default; on AWS
+  S3, check that `s3:ListBucket` is not in the public policy.
+- **Deleting a post does not delete its media.** `DELETE /api/posts/:id` drops
+  the row and nothing else; the bucket object survives, and its key keeps
+  working. Only `DELETE /api/media/:id` removes the object. That is the usual
+  trade for public-bucket media, but it means a key that leaked stays good until
+  someone deletes the media specifically.
+
 Provider quirks, since they cost time otherwise:
 
 - **Cloudflare R2** — `S3_REGION=auto`. The endpoint is the bucket's "S3 API"

@@ -18,6 +18,7 @@ import {
   B2B_TEST,
   BASE_URL,
   b2bClientIds,
+  TEST_UPLOADS_PATH,
   prisma,
   resetData,
   freshClientHeaders,
@@ -28,6 +29,8 @@ import {
   stopServer,
 } from "./helpers/server";
 import { generateAdminToken, generateB2BToken } from "../src/session-token";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 beforeAll(async () => {
   await startServer();
@@ -475,5 +478,129 @@ describe("session tokens", () => {
     // And it is the token that was stored, not a different one returned.
     const stored = await prisma.b2BSession.findUnique({ where: { token } });
     expect(stored).not.toBeNull();
+  });
+});
+
+describe("media keys", () => {
+  /** A 1x1 PNG. Small enough to inline, real enough that the handler accepts it. */
+  const ONE_PIXEL_PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  /**
+   * A key in the format uploads used to get, written straight into the row:
+   *
+   *   images/${Date.now()}_${Math.random().toString(36)...}_${originalName}.jpg
+   *
+   * Nothing renames stored objects, so keys of this shape are still in the
+   * database and still have to resolve.
+   */
+  const LEGACY_KEY = "images/1786803117409_a6vx2j9y3wj_IMG_1234.jpg";
+
+  async function signedInCookie(): Promise<string> {
+    const { cookie } = await signUp({
+      email: `media-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Media Tester",
+    });
+    return cookie;
+  }
+
+  test("a key stored in the old format still resolves to its bytes", async () => {
+    // Written to disk at the legacy path, exactly where a pre-change upload
+    // would have put it, then fetched over HTTP the way a browser does. This is
+    // the check that the change did not orphan existing media — asserting only
+    // that the string round-trips would prove nothing about the bytes.
+    const path = join(TEST_UPLOADS_PATH, LEGACY_KEY);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, ONE_PIXEL_PNG);
+
+    const { userId } = await signUp({
+      email: "legacy-media@example.com",
+      password: "correct horse battery staple",
+      name: "Legacy Media",
+    });
+
+    const media = await prisma.media.create({
+      data: {
+        userId,
+        type: "image",
+        url: LEGACY_KEY,
+        mimeType: "image/png",
+        sizeBytes: ONE_PIXEL_PNG.byteLength,
+      },
+    });
+
+    // The API turns the stored key into a URL without parsing it.
+    const api = await fetch(`${BASE_URL}/api/media/${media.id}`);
+    expect(api.status).toBe(200);
+    const body = (await api.json()) as { media: { url: string } };
+    expect(body.media.url).toBe(`${BASE_URL}/uploads/${LEGACY_KEY}`);
+
+    // And that URL actually serves the file.
+    const fetched = await fetch(body.media.url);
+    expect(fetched.status).toBe(200);
+    expect(new Uint8Array(await fetched.arrayBuffer())).toEqual(
+      new Uint8Array(ONE_PIXEL_PNG),
+    );
+  });
+
+  test("a new upload gets an unguessable key with no timestamp and no filename", async () => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new File([ONE_PIXEL_PNG], "Screenshot_2026_03_14_private.png", { type: "image/png" }),
+    );
+
+    const response = await fetch(`${BASE_URL}/api/media/upload`, {
+      method: "POST",
+      headers: { cookie: await signedInCookie() },
+      body: form,
+    });
+    // 201, not 200: the handler creates a resource.
+    expect(response.status).toBe(201);
+
+    const { media } = (await response.json()) as { media: { id: string; url: string } };
+    const stored = await prisma.media.findUniqueOrThrow({ where: { id: media.id } });
+
+    // 16 bytes of base64url is 22 characters. The extension is kept because
+    // CDNs sniff content type from it.
+    expect(stored.url).toMatch(/^images\/[A-Za-z0-9_-]{22}\.png$/);
+
+    // The two properties that made the old format guessable, asserted
+    // separately so a failure says which one came back.
+    expect({ key: stored.url, hasTimestamp: /\d{13}/.test(stored.url) }).toEqual({
+      key: stored.url,
+      hasTimestamp: false,
+    });
+    expect(stored.url).not.toContain("Screenshot");
+    expect(stored.url).not.toContain("private");
+
+    // And the object is really there under that key.
+    const fetched = await fetch(media.url);
+    expect(fetched.status).toBe(200);
+  });
+
+  test("two uploads of the same file get different keys", async () => {
+    const cookie = await signedInCookie();
+    const keys = new Set<string>();
+
+    for (let i = 0; i < 3; i += 1) {
+      const form = new FormData();
+      form.append("file", new File([ONE_PIXEL_PNG], "same.png", { type: "image/png" }));
+      const response = await fetch(`${BASE_URL}/api/media/upload`, {
+        method: "POST",
+        headers: { cookie },
+        body: form,
+      });
+      expect(response.status).toBe(201);
+      const { media } = (await response.json()) as { media: { id: string } };
+      keys.add((await prisma.media.findUniqueOrThrow({ where: { id: media.id } })).url);
+    }
+
+    // Under the old format these would share a timestamp and differ only in the
+    // Math.random() half. Now they share nothing.
+    expect(keys.size).toBe(3);
   });
 });

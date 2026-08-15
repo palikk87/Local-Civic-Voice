@@ -14,6 +14,7 @@
 
 import { spawn, type Subprocess } from "bun";
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "better-auth/crypto";
 
@@ -24,6 +25,26 @@ const DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:5432/civicvoice_test";
 
 let server: Subprocess | null = null;
+
+/**
+ * Where the test server writes uploads.
+ *
+ * Exported so a test can put a file there directly. That is how "media stored
+ * under the old key format still resolves" is checked: write the bytes at a key
+ * of the old shape, then fetch it over HTTP the way a browser would.
+ *
+ * RELATIVE, and it has to be. Hono's bun serveStatic resolves `root` against
+ * process.cwd(), so the /uploads/* mount in src/index.ts serves nothing when
+ * UPLOADS_DIR is an absolute path — verified by running the server both ways
+ * against the same file: relative returned 200 and the bytes, absolute returned
+ * 404. That is a real bug in the local driver, and it is not this suite's to
+ * fix; but pointing the harness at an absolute path would mean the media tests
+ * silently exercised a dead route instead of the one users hit.
+ *
+ * TEST_UPLOADS_PATH is the same directory resolved, for tests that write to it.
+ */
+export const TEST_UPLOADS_DIR = ".test-uploads";
+export const TEST_UPLOADS_PATH = resolve(process.cwd(), TEST_UPLOADS_DIR);
 
 /**
  * Throwaway B2B credentials for the test server.
@@ -97,7 +118,7 @@ function env(): Record<string, string> {
     APP_ORIGINS: BASE_URL,
     APP_SCHEMES: "civicvoice",
     MEDIA_STORAGE: "local",
-    UPLOADS_DIR: "/tmp/civicvoice-test-uploads",
+    UPLOADS_DIR: TEST_UPLOADS_DIR,
     // No RESEND_API_KEY on purpose: the send path must throw rather than
     // silently succeed, and one of the tests asserts exactly that.
     //

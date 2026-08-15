@@ -5,6 +5,7 @@ import { prisma } from "../prisma";
 import type { auth } from "../auth";
 import { writeFile, mkdir, readFile, rm } from "fs/promises";
 import { join } from "path";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
@@ -75,12 +76,46 @@ async function makeScratchDir(): Promise<string> {
   return dir;
 }
 
-// Generate a unique filename
-function generateFilename(originalName: string, extension: string): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 15);
-  const sanitized = originalName.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 20);
-  return `${timestamp}_${random}_${sanitized}${extension}`;
+/**
+ * The random part of a stored object's key.
+ *
+ * This is NOT a session token and deliberately does not come from
+ * src/session-token.ts — that module names what it makes, and a media key is a
+ * different kind of thing: it identifies an object, it is meant to appear in
+ * every `<img src>` in the app, and it is not a credential anyone presents. The
+ * one thing it shares with a session token is where its randomness comes from,
+ * and one line of `randomBytes` is not worth coupling two unrelated concepts
+ * together to avoid.
+ *
+ * It has to be unguessable because the bucket answers to whoever knows the key.
+ * services/storage.ts issues no signed URLs — `publicUrlFor()` returns a plain
+ * unsigned URL, and the bucket has to be publicly readable for that to work
+ * (see the module header there and the storage section of DEPLOYMENT.md). So
+ * the key IS the access control. Anyone who can guess one can fetch the object,
+ * whether or not the post it belongs to was ever published.
+ *
+ * What it replaces was guessable in three separate ways at once:
+ *
+ *   `${Date.now()}_${Math.random().toString(36).substring(2, 15)}_${name}`
+ *
+ *   - Date.now() is public. The API returns createdAt on the post and on the
+ *     media row, so the millisecond window is small and known.
+ *   - Math.random() is V8's xorshift128+, not a CSPRNG. Its state can be solved
+ *     for from a handful of outputs — and the upload endpoint hands the caller
+ *     a fresh output every time it is used. Upload a few files of your own,
+ *     recover the state, and you can predict the random half of everyone else's
+ *     uploads in that process. The API runs as a single pinned instance, so
+ *     "that process" is all of them.
+ *   - The user's original filename was embedded in the key, sanitised but not
+ *     removed, which both narrowed the search and published the filename.
+ *
+ * 16 bytes from the OS CSPRNG, base64url, is 128 bits in 22 characters. There
+ * is no way to amplify a guess here — each attempt is one HTTP request against
+ * a bucket — so 128 bits is far past sufficient, and shorter than 32 bytes
+ * matters a little when the value is in every image URL the app renders.
+ */
+function randomObjectStem(): string {
+  return randomBytes(16).toString("base64url");
 }
 
 // Check if ffmpeg is available
@@ -249,8 +284,14 @@ mediaRouter.post("/upload", async (c) => {
 
     // Storage keys. No leading slash: these are object keys, not URL paths, and
     // publicUrlFor() turns them into whichever URL the configured driver serves.
+    //
+    // One random stem, both names derived from it. The original filename is
+    // deliberately not in here: a key is a public URL, so a user-chosen string
+    // in it publishes whatever the file was called on their device. Nothing on
+    // either client reads it back out.
     const extension = MIME_TO_EXTENSION[file.type] || "";
-    const filename = generateFilename(file.name, extension);
+    const stem = randomObjectStem();
+    const filename = `${stem}${extension}`;
     const subdir = mimeConfig.type === "image" ? "images" : mimeConfig.type === "video" ? "videos" : "audio";
     const key = `${subdir}/${filename}`;
 
@@ -268,7 +309,10 @@ mediaRouter.post("/upload", async (c) => {
 
     // Process based on media type
     if (mimeConfig.type === "video") {
-      const thumbnailFilename = filename.replace(extension, "_thumb.jpg");
+      // Built from the stem, not by string-replacing the extension off the
+      // filename. `"x".replace("", "_thumb.jpg")` PREPENDS, so the old form
+      // produced a mangled name for any mime with no extension mapping.
+      const thumbnailFilename = `${stem}_thumb.jpg`;
       const thumbnailScratchPath = join(scratchDir, thumbnailFilename);
       const thumbnailGenerated = await generateVideoThumbnail(scratchPath, thumbnailScratchPath);
       if (thumbnailGenerated) {
