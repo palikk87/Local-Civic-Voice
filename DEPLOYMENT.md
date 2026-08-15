@@ -391,3 +391,30 @@ the API.
 - Upload a photo, redeploy the API, confirm the photo still loads. This is the
   check that proves media is not on disposable storage.
 - Request a password reset and confirm the email arrives
+
+---
+
+## Upgrading an already-running deployment
+
+Ordinary deploys need nothing here. These are the ones with a step you would
+otherwise find out about from a user.
+
+### One-time: admin and B2B sessions are all signed out
+
+The deploy carrying migration `20260815150608_invalidate_weak_session_tokens`
+deletes every row in `AdminSession` and `B2BSession`.
+
+Session tokens used to be built from `Date.now()` and `Math.random()`, neither
+of which is unpredictable, so every token issued before that deploy is weaker
+than it looks. Changing the generator does not repair tokens already handed out
+— they would stay valid for the rest of their 24-hour life. Deleting them is
+what ends it.
+
+What it costs: anyone signed in to the admin console or the `/b2b` dashboard at
+that moment is signed out and signs in again with the same credentials. Nothing
+else changes and nothing is lost. **Ordinary user accounts are not affected** —
+those sessions are Better Auth's, in a different table, with a different
+generator.
+
+It runs automatically as part of `prisma migrate deploy` at container start.
+There is nothing to do except not be surprised by it.

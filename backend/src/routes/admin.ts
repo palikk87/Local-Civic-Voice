@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { verifyPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
+import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 
@@ -79,10 +80,6 @@ const ADMIN_SESSION_MS = 24 * 60 * 60 * 1000;
 // ==========================================
 // Helper Functions
 // ==========================================
-
-function generateToken(): string {
-  return `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-}
 
 /**
  * Record an admin action in the audit trail.
@@ -320,7 +317,7 @@ adminRouter.post("/login", zValidator("json", loginSchema), async (c) => {
     return c.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const token = generateToken();
+  const token = generateAdminToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ADMIN_SESSION_MS);
   const displayName = dbUser.username || dbUser.name || dbUser.email;

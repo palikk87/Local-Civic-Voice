@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createHash, randomBytes } from "node:crypto";
 import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
+import { generateB2BToken } from "../session-token";
 
 /** Live platform counts from the shared Prisma database (votes use position support/oppose). */
 async function getPlatformCounts() {
@@ -288,10 +289,6 @@ const issueCategories = [
 // Helper Functions
 // ==========================================
 
-function generateToken(): string {
-  return `b2b_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-}
-
 /**
  * Resolve a request's B2B session.
  *
@@ -432,7 +429,7 @@ const b2bRouter = new Hono();
  * in real time.
  */
 async function startSession(row: B2BClientRow) {
-  const token = generateToken();
+  const token = generateB2BToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 

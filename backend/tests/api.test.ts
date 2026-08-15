@@ -27,6 +27,7 @@ import {
   startServer,
   stopServer,
 } from "./helpers/server";
+import { generateAdminToken, generateB2BToken } from "../src/session-token";
 
 beforeAll(async () => {
   await startServer();
@@ -410,5 +411,69 @@ describe("b2b", () => {
       where: { username: B2B_TEST.demoUsername },
     });
     expect(row.lastAccessAt).not.toBeNull();
+  });
+});
+
+describe("session tokens", () => {
+  /**
+   * The shape of a token issued by the old generator, which both routers used:
+   *
+   *   admin_1786803117409_a6vx2j9y3wj
+   *
+   * A 13-digit millisecond timestamp between two underscores. Nothing about the
+   * new format can produce that — base64url has no underscore-delimited runs of
+   * digits of that length by construction, and the issue time is not in the
+   * token at all. This is what fails if anyone reintroduces `Date.now()`.
+   */
+  const EMBEDS_A_TIMESTAMP = /_\d{13}_/;
+
+  /** prefix, then 32 bytes of base64url. 32 bytes is 43 characters unpadded. */
+  const NEW_FORMAT = /^(admin|b2b)_[A-Za-z0-9_-]{43}$/;
+
+  test("neither generator embeds the issue time", () => {
+    for (const token of [generateAdminToken(), generateB2BToken()]) {
+      expect({ token, embedsTime: EMBEDS_A_TIMESTAMP.test(token) }).toEqual({
+        token,
+        embedsTime: false,
+      });
+      expect(token).toMatch(NEW_FORMAT);
+    }
+  });
+
+  test("tokens carry 256 bits and do not repeat", () => {
+    // Uniqueness alone would not distinguish the old generator from the new
+    // one — the point of the count is the decoded width. 32 bytes is the claim
+    // the format rests on, and it is checked here rather than assumed from the
+    // string length, because base64url length and byte length are easy to get
+    // one character apart.
+    const tokens = new Set<string>();
+    for (let i = 0; i < 500; i += 1) {
+      const token = generateB2BToken();
+      expect(Buffer.from(token.slice("b2b_".length), "base64url")).toHaveLength(32);
+      tokens.add(token);
+    }
+    expect(tokens.size).toBe(500);
+  });
+
+  test("the token a real login hands out has the new format", async () => {
+    // The unit checks above prove the generator. This proves the login endpoint
+    // actually calls it, which is the part a refactor can quietly undo.
+    const response = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: B2B_TEST.demoUsername,
+        password: B2B_TEST.demoPassword,
+      }),
+    });
+    expect(response.status).toBe(200);
+
+    const { token } = (await response.json()) as { token: string };
+    expect(token).toMatch(NEW_FORMAT);
+    expect(EMBEDS_A_TIMESTAMP.test(token)).toBe(false);
+
+    // And it is the token that was stored, not a different one returned.
+    const stored = await prisma.b2BSession.findUnique({ where: { token } });
+    expect(stored).not.toBeNull();
   });
 });
