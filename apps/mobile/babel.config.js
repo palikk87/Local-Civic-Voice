@@ -1,3 +1,5 @@
+const path = require("path");
+
 module.exports = function (api) {
   api.cache(true);
   return {
@@ -20,6 +22,13 @@ module.exports = function (api) {
           // "./src/shared/x" and metro's handler never ran. Nothing imports it.
           alias: {
             "@": "./src",
+            // Shared with apps/web. Absolute, because module-resolver resolves
+            // relative aliases against the importing file, which would send
+            // every nested import somewhere different.
+            //
+            // Declared AFTER "@" is fine — these prefixes do not overlap. The
+            // old "@/shared" alias did overlap, which is why it never fired.
+            "@civic/core": path.resolve(__dirname, "../../packages/civic-core/src"),
           },
         },
       ],

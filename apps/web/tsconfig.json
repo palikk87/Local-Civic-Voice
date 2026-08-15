@@ -4,7 +4,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@civic/core/*": ["../../packages/civic-core/src/*"]
     },
     "noImplicitAny": false,
     "noUnusedParameters": false,

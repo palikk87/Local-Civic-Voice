@@ -22,6 +22,18 @@ if (sharedFolderExists) {
   config.watchFolders = [sharedFolder];
 }
 
+// packages/civic-core — pure TypeScript shared with apps/web, resolved by the
+// "@civic/core" babel alias. Metro refuses to serve files outside the project
+// root unless they are in watchFolders, and the failure is a bundling error at
+// build time that no typecheck catches.
+//
+// Unrelated to the `sharedFolder` block above, which points at apps/shared, has
+// never existed, and would switch on unstable_enablePackageExports if created.
+const civicCore = path.resolve(__dirname, "../../packages/civic-core");
+if (fs.existsSync(civicCore)) {
+  config.watchFolders = [...(config.watchFolders || []), civicCore];
+}
+
 // Disable Watchman for file watching.
 config.resolver.useWatchman = false;
 

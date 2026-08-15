@@ -124,3 +124,14 @@ jobs:
         working-directory: apps/mobile
       - run: bun run lint
         working-directory: apps/mobile
+
+      # Bundle, don't just typecheck.
+      #
+      # TypeScript resolves @civic/core through tsconfig paths and passes
+      # happily while Metro fails on the same import, because Metro will not
+      # serve files outside its project root unless they are in watchFolders.
+      # This repo shipped for months in a state where `expo export` could not
+      # complete at all and nothing caught it.
+      - name: Bundle for iOS
+        run: bunx expo export --platform ios --output-dir /tmp/expo-ci
+        working-directory: apps/mobile

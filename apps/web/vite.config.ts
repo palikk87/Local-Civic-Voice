@@ -29,6 +29,10 @@ export default defineConfig(() => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Shared with apps/mobile. Deliberately a path alias rather than a
+      // workspace dependency: making these packages workspace members would
+      // relocate backend/bun.lock, which backend/Dockerfile copies by path.
+      "@civic/core": path.resolve(__dirname, "../../packages/civic-core/src"),
     },
   },
 }));
