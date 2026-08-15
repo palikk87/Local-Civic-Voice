@@ -92,24 +92,13 @@ Railway-specific.
 4. Add the variables tagged `[API]` in `.env.example`. At minimum:
    `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BACKEND_URL`,
    `APP_ORIGINS`, `APP_SCHEMES`, `NODE_ENV=production`, the `S3_*` set,
-   `RESEND_API_KEY`, `EMAIL_FROM`, `CONGRESS_API_KEY`, `COURTLISTENER_API_KEY`,
-   and the six `B2B_*` values.
+   `RESEND_API_KEY`, `EMAIL_FROM`, `CONGRESS_API_KEY`, and
+   `COURTLISTENER_API_KEY`.
 
-   The `B2B_*` six are required and have no defaults — the server will not boot
-   without them, and will name each one it is missing:
-
-   | Variable | What it is |
-   |---|---|
-   | `B2B_DEMO_USERNAME` | standard analytics login |
-   | `B2B_DEMO_PASSWORD` | its password |
-   | `B2B_DEMO_API_KEY` | machine access, sent as `Authorization: ApiKey <value>` |
-   | `B2B_ADMIN_USERNAME` | superadmin login |
-   | `B2B_ADMIN_PASSWORD` | its password |
-   | `B2B_ADMIN_API_KEY` | machine access for the superadmin account |
-
-   Generate all six with a password manager. They were previously hardcoded in
-   a public source file, so **any value that appeared in this repository's
-   history must be considered burned** and must not be reused here.
+   The six `B2B_*` values are **not** service variables. They are tagged
+   `[SEED]` in `.env.example` and belong in the shell that runs
+   [Seed the B2B portal accounts](#seed-the-b2b-portal-accounts) below. Setting
+   them here does nothing — the server does not read them.
 
    `APP_ORIGINS` needs the web address, which you do not have yet. Put a
    placeholder and come back to it in step 4 — login will not work until it is
@@ -152,6 +141,39 @@ bun scripts/seed-admin.ts
 
 All three are required. `ADMIN_NAME` is optional and defaults to the username.
 Set them for that command only — the server never reads them.
+
+### Seed the B2B portal accounts
+
+Same idea, same moment, different script. The two business-dashboard logins are
+rows in the `B2BClient` table with hashed credentials; this is what creates them.
+**Until it has run, nobody can sign in to `/b2b`** — the login endpoint has no
+accounts to check against and answers 401. Nothing else is affected: the rest of
+the API boots and serves normally with the table empty.
+
+```bash
+cd backend
+B2B_DEMO_USERNAME=demo \
+B2B_DEMO_PASSWORD='a real password' \
+B2B_DEMO_API_KEY="$(openssl rand -base64 48)" \
+B2B_ADMIN_USERNAME=civicadmin \
+B2B_ADMIN_PASSWORD='a different real password' \
+B2B_ADMIN_API_KEY="$(openssl rand -base64 48)" \
+bun scripts/seed-b2b.ts
+```
+
+Capture the two API keys as you generate them — they are hashed on the way in
+and cannot be read back out. Losing one means running this again with a new one.
+
+All six are required and the script names every one it is missing. It is safe to
+re-run: on an account that already exists it overwrites the password and the API
+key, which is also how you rotate either of them.
+
+The two keys must differ from each other. Generate them with `openssl rand
+-base64 48` rather than typing something: an API key is stored as a plain
+SHA-256 digest with no key-stretching — deliberately, because it is looked up by
+that digest — so its entropy is the whole defence. Passwords are stored with
+scrypt and are checked one row at a time, which is why they can afford to be
+human-chosen.
 
 ---
 
@@ -313,13 +335,14 @@ application code.
 
 ### B2B portal accounts
 
-- **Supplies:** the six `B2B_*` variables
+- **Supplies:** the six `B2B_*` values, as input to `scripts/seed-b2b.ts`
 - **Cost:** none — these are values you generate, not a service you buy
+- **Lock-in:** none. They end up as two rows in your own Postgres, hashed. They
+  move with the database dump like any other data.
 - **Note:** the values that used to be compiled into `routes/b2b.ts` are in this
   repository's git history and on any clone. They are burned. Set new ones.
-- **Follow-up:** these live in environment variables rather than a database
-  table with hashed passwords. That is a large improvement on source literals
-  and still not where this should end up — see the note in `routes/b2b.ts`.
+- **Recovery:** if you lose the API keys, re-run the seed script with new ones.
+  Nothing can read them back out — that is the point of storing digests.
 
 ### What stays yours regardless
 

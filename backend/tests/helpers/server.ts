@@ -13,7 +13,9 @@
  */
 
 import { spawn, type Subprocess } from "bun";
+import { createHash } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
+import { hashPassword } from "better-auth/crypto";
 
 const PORT = Number(process.env.TEST_PORT ?? 3999);
 export const BASE_URL = `http://127.0.0.1:${PORT}`;
@@ -29,6 +31,11 @@ let server: Subprocess | null = null;
  * Exported so the tests log in with these rather than repeating literals — the
  * whole point of this change is that no credential is hardcoded anywhere a
  * reader can reach, and a test file is exactly such a place.
+ *
+ * These are no longer environment variables the server reads. They are what
+ * seedB2BClients() writes into B2BClient, the same way scripts/seed-b2b.ts does
+ * in production — so the tests exercise the real credential store rather than a
+ * test-only shortcut into it.
  */
 export const B2B_TEST = {
   demoUsername: "test_demo_client",
@@ -93,17 +100,68 @@ function env(): Record<string, string> {
     UPLOADS_DIR: "/tmp/civicvoice-test-uploads",
     // No RESEND_API_KEY on purpose: the send path must throw rather than
     // silently succeed, and one of the tests asserts exactly that.
-
-    // B2B portal accounts. Required with no defaults, so the harness must
-    // supply them — which is itself the assertion that the boot fails without
-    // them. Values are throwaway and exist only inside this process.
-    B2B_DEMO_USERNAME: B2B_TEST.demoUsername,
-    B2B_DEMO_PASSWORD: B2B_TEST.demoPassword,
-    B2B_DEMO_API_KEY: B2B_TEST.demoApiKey,
-    B2B_ADMIN_USERNAME: B2B_TEST.adminUsername,
-    B2B_ADMIN_PASSWORD: B2B_TEST.adminPassword,
-    B2B_ADMIN_API_KEY: B2B_TEST.adminApiKey,
+    //
+    // No B2B_* either. The server does not read them any more — B2B accounts
+    // are rows, written by seedB2BClients() below.
   };
+}
+
+/**
+ * The two seeded accounts' database ids, available after startServer().
+ *
+ * They are cuids now rather than the fixture array's "b2b-1" and
+ * "b2b-superadmin", so a test that needs to write a B2BSession row has to ask
+ * rather than assume.
+ */
+export const b2bClientIds = { demo: "", admin: "" };
+
+/**
+ * Create the two B2B accounts, the same way scripts/seed-b2b.ts does.
+ *
+ * Deliberately the real code path — hashPassword for the password, a SHA-256
+ * digest for the API key — rather than inserting a row the server would never
+ * have written. A test that seeded its own hash format would pass while the
+ * production seed script produced rows nobody could log in to.
+ *
+ * Runs once per startServer(), not per test. See resetData() for why these rows
+ * are not truncated between tests.
+ */
+async function seedB2BClients(): Promise<void> {
+  const accounts = [
+    {
+      key: "demo" as const,
+      username: B2B_TEST.demoUsername,
+      password: B2B_TEST.demoPassword,
+      apiKey: B2B_TEST.demoApiKey,
+      name: "Test Demo Analytics",
+    },
+    {
+      key: "admin" as const,
+      username: B2B_TEST.adminUsername,
+      password: B2B_TEST.adminPassword,
+      apiKey: B2B_TEST.adminApiKey,
+      name: "Test Civic Platform Admin",
+    },
+  ];
+
+  for (const account of accounts) {
+    const data = {
+      name: account.name,
+      type: "research",
+      tier: "enterprise",
+      passwordHash: await hashPassword(account.password),
+      apiKeyHash: createHash("sha256").update(account.apiKey).digest("hex"),
+    };
+
+    // Upsert, because a re-run finds last run's rows still there.
+    const row = await prisma.b2BClient.upsert({
+      where: { username: account.username },
+      update: data,
+      create: { username: account.username, ...data },
+    });
+
+    b2bClientIds[account.key] = row.id;
+  }
 }
 
 async function waitForHealth(timeoutMs = 30_000): Promise<void> {
@@ -153,6 +211,8 @@ export async function startServer(): Promise<void> {
     throw new Error(`prisma migrate deploy failed: ${await new Response(migrate.stderr).text()}`);
   }
 
+  await seedB2BClients();
+
   serverOutput = "";
   server = spawn({
     cmd: ["bun", "src/index.ts"],
@@ -193,6 +253,16 @@ export async function resetData(): Promise<void> {
   // Order matters only where cascades do not cover it; truncating together with
   // CASCADE keeps this from becoming a dependency puzzle every time a model is
   // added.
+  //
+  // B2BClient is deliberately NOT in this list. It holds the two accounts, not
+  // test data — truncating it would delete the credentials every test logs in
+  // with, so every test would have to pay for two scrypt hashes to put them
+  // back. Nothing here creates a B2BClient row, and seedB2BClients() upserts,
+  // so a re-run does not collide on the unique username the way B2BSession
+  // once collided on its primary key.
+  //
+  // The one thing tests do change is lastAccessAt, written on each login. No
+  // test reads it, and it is overwritten rather than accumulated.
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "Session", "Account", "Verification",

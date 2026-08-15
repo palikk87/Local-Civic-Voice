@@ -77,23 +77,21 @@ const envSchema = z.object({
   TAVILY_API_KEY: z.string().optional(),
 
   // ---------------------------------------------------------------------------
-  // B2B analytics portal credentials
+  // NOT HERE ANY MORE: the six B2B_* variables
   // ---------------------------------------------------------------------------
-  // These were literals in routes/b2b.ts — plaintext passwords and API keys in a
-  // public repository, one pair of which granted the superadmin tier. Anyone who
-  // opened that file had the business dashboard.
+  // B2B_DEMO_USERNAME / _PASSWORD / _API_KEY and B2B_ADMIN_USERNAME / _PASSWORD
+  // / _API_KEY used to be required here, because routes/b2b.ts built its client
+  // list out of them at import time.
   //
-  // Required, with no defaults, deliberately. A default here would be worse than
-  // the bug it replaces: every deployment that forgot to set them would share one
-  // publicly-known password, and nothing would say so. Missing values fail the
-  // boot with a message naming each one.
-  B2B_DEMO_USERNAME: z.string().min(1, "B2B_DEMO_USERNAME is required"),
-  B2B_DEMO_PASSWORD: z.string().min(1, "B2B_DEMO_PASSWORD is required"),
-  B2B_DEMO_API_KEY: z.string().min(1, "B2B_DEMO_API_KEY is required"),
-
-  B2B_ADMIN_USERNAME: z.string().min(1, "B2B_ADMIN_USERNAME is required"),
-  B2B_ADMIN_PASSWORD: z.string().min(1, "B2B_ADMIN_PASSWORD is required"),
-  B2B_ADMIN_API_KEY: z.string().min(1, "B2B_ADMIN_API_KEY is required"),
+  // Accounts are rows in the B2BClient table now, with hashed credentials, so
+  // the API reads none of them. They are input to scripts/seed-b2b.ts, in the
+  // same way ADMIN_EMAIL and ADMIN_PASSWORD are input to scripts/seed-admin.ts
+  // and are likewise absent from this file.
+  //
+  // Nothing validates them, on purpose: they are set in whatever shell runs the
+  // seed, once, and a variable this process never reads has no business failing
+  // this process's boot. Leaving them set on the host is harmless — extra
+  // variables are ignored — but they can be deleted once the seed has run.
 });
 
 /**

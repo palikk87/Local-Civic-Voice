@@ -78,6 +78,42 @@ model AdminSession {
   @@index([expiresAt])
 }
 
+/// Accounts for the B2B analytics portal.
+///
+/// Was a hardcoded fixture array in routes/b2b.ts. Two credentials live here,
+/// stored differently on purpose:
+///
+///   passwordHash — scrypt, via better-auth/crypto, same as every other password
+///   in this system. Passwords are low-entropy and human-chosen, so the defence
+///   against an offline attack on a leaked dump is the KDF being slow.
+///
+///   apiKeyHash — SHA-256 of a high-entropy key the operator generated. NOT a
+///   KDF, deliberately. A KDF cannot be looked up, so hashing an API key that
+///   way turns every ApiKey request into a full table scan running scrypt once
+///   per row. A key with 256 bits of entropy is not brute-forceable regardless,
+///   so the KDF's slowness buys nothing and costs a scan. A digest is
+///   non-reversible, unique, and indexed — one equality lookup per request.
+///
+/// `username` is stored lowercased; login lowercases before matching, which
+/// preserves the case-insensitive behaviour the fixture array had.
+model B2BClient {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  name         String
+  /// research | media | campaign | government
+  type         String
+  /// basic | professional | enterprise
+  tier         String
+  passwordHash String
+  /// SHA-256 hex digest of the API key. Unique, so it is an indexed lookup.
+  apiKeyHash   String    @unique
+  /// Last successful login. Written at login only, not per request — a write on
+  /// every authenticated call would be pointless contention on one row.
+  lastAccessAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
 /// Sessions for the B2B analytics portal.
 ///
 /// Mirrors AdminSession, for the same reason: this was a module-level Map in

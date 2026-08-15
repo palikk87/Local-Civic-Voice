@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { createHash, timingSafeEqual } from "node:crypto";
-import { env } from "../env";
+import { createHash, randomBytes } from "node:crypto";
+import { hashPassword, verifyPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
 
 /** Live platform counts from the shared Prisma database (votes use position support/oppose). */
@@ -77,11 +77,22 @@ async function getBillRowById(id: string): Promise<BillRow | null> {
 // Type Definitions
 // ==========================================
 
+/**
+ * The client object the login endpoints return.
+ *
+ * Not the stored row — this is the public projection of it, and it deliberately
+ * carries no secret. It matches the B2BClient interface both b2b-store.ts files
+ * declare (apps/mobile/src/lib/b2b-store.ts and its web port at
+ * apps/web/src/lib/mobile/b2b-store.ts, which are identical on this type).
+ *
+ * `apiKey` used to be on here. Neither client ever declared it and no response
+ * ever sent it, so removing it costs nothing and stops the shape from implying
+ * the key is something a caller gets handed back.
+ */
 interface B2BClient {
   id: string;
   name: string;
   type: "lobbyist" | "ngo" | "corporation" | "campaign" | "media" | "research";
-  apiKey: string;
   tier: "basic" | "professional" | "enterprise";
   createdAt: string;
   lastAccess?: string;
@@ -111,57 +122,99 @@ interface SentimentData {
 // B2B accounts
 // ==========================================
 //
-// Usernames, passwords and API keys come from the environment. They used to be
-// literals in this file — plaintext credentials in a public repository, one pair
-// of which granted the superadmin tier, so reading the source was enough to own
-// the business dashboard. See B2B_* in .env.example.
+// Accounts are rows in B2BClient. They were a hardcoded fixture array here, with
+// the credentials read out of six B2B_* environment variables — which meant the
+// account list was fixed at build time, the passwords were compared as plaintext
+// against process memory, and `lastAccess` was written by mutating the array,
+// where it survived nothing and was invisible to any other instance.
 //
-// env.ts requires all six with no defaults, so a missing one fails the boot
-// rather than silently falling back to a value an attacker already knows.
+// Those six variables are now input to scripts/seed-b2b.ts, not runtime config.
+// This file reads no environment at all: the credential store is the database.
 //
-// FOLLOW-UP, deliberately not done here: these accounts belong in a database
-// table with hashed passwords, alongside a B2BSession model. Both are noted at
-// the bottom of this block.
-
-const b2bClients: B2BClient[] = [
-  {
-    id: "b2b-1",
-    name: "Demo Analytics",
-    type: "research",
-    apiKey: env.B2B_DEMO_API_KEY,
-    tier: "enterprise",
-    createdAt: "2024-01-01T00:00:00Z",
-  },
-  {
-    id: "b2b-superadmin",
-    name: "Civic Platform Admin",
-    type: "research",
-    apiKey: env.B2B_ADMIN_API_KEY,
-    tier: "enterprise",
-    createdAt: "2024-01-01T00:00:00Z",
-  },
-];
-
-const b2bCredentials: Record<string, { password: string; clientId: string }> = {
-  [env.B2B_DEMO_USERNAME]: { password: env.B2B_DEMO_PASSWORD, clientId: "b2b-1" },
-  [env.B2B_ADMIN_USERNAME]: { password: env.B2B_ADMIN_PASSWORD, clientId: "b2b-superadmin" },
-};
+// Two secrets, stored two different ways, and the difference is the point:
+//
+//   passwordHash — scrypt, via better-auth/crypto, the same helpers admin
+//   login uses. A human-chosen password is low entropy, so the defence has to
+//   be that each guess is expensive. We can afford that because we know which
+//   row to check before we check it: the username identifies it.
+//
+//   apiKeyHash — a plain SHA-256 digest, deliberately NOT a KDF. See
+//   hashApiKey below for why doing this "the same way" would be wrong.
 
 /**
- * Compare two secrets without leaking their contents through timing.
+ * SHA-256 hex digest of an API key. Must match hashApiKey() in
+ * scripts/seed-b2b.ts, which is what writes the stored value.
  *
- * `a === b` on strings returns as soon as it finds a differing byte, so the
- * time it takes reveals how much of a guess was correct. That is only worth
- * caring about because these are long-lived shared secrets rather than
- * per-user passwords behind a rate limiter.
+ * WHY NOT A KDF, given the password column next to it uses one:
  *
- * Lengths are hashed to a fixed width first, because timingSafeEqual itself
- * throws on mismatched lengths — which would reintroduce the leak it prevents.
+ * An API key arrives with no username attached — the digest IS the lookup key.
+ * A KDF cannot be looked up: scrypt salts every hash, so the same input hashes
+ * to a different string every time, and finding the matching row means reading
+ * every row and running the KDF against each one. That is a full table scan
+ * with a deliberately-slow function per row, on the hot path of every ApiKey
+ * request, and it gets slower as accounts are added. A digest is deterministic,
+ * so the stored column is unique and indexed and the lookup is one b-tree probe.
+ *
+ * The reason a KDF is worth that cost for passwords is that passwords are
+ * guessable, and slowness is what makes guessing infeasible. It buys nothing
+ * here: these keys are generated with `openssl rand -base64 48`, and no amount
+ * of hashing speed makes 256+ bits of entropy searchable. Stretching a value
+ * that is already unguessable defends against nothing.
+ *
+ * What the digest does still buy is the thing that actually matters — a stolen
+ * database dump does not contain usable keys. That was the whole problem with
+ * the old fixture array, which held them in cleartext.
+ *
+ * Timing: the comparison now happens inside Postgres on an index of digests, so
+ * the constant-time compare this file used to do is gone. Nothing is lost.
+ * Timing there can leak at most that some stored digest shares a prefix with
+ * the digest of the attacker's guess, and SHA-256 is not invertible, so that is
+ * not a step toward the key. Timing against a raw secret, which is what the old
+ * code compared, genuinely was.
  */
-function secretsMatch(a: string, b: string): boolean {
-  const ha = createHash("sha256").update(a).digest();
-  const hb = createHash("sha256").update(b).digest();
-  return timingSafeEqual(ha, hb);
+function hashApiKey(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("hex");
+}
+
+/**
+ * A real hash of a value nobody has, verified against when the username does
+ * not exist.
+ *
+ * Without it, an unknown username returns in microseconds while a known one
+ * pays for a scrypt verification — so response time answers "does this account
+ * exist?" for anyone who asks. There are two B2B accounts and their usernames
+ * are chosen by the operator, so this is a small oracle, but it costs one
+ * function to close.
+ *
+ * Built once, lazily: at import it would add a scrypt run to every boot,
+ * including the boots that never see a failed login. The first bad username
+ * after a restart pays for it, and every one after that does not.
+ */
+let dummyPasswordHash: Promise<string> | null = null;
+
+function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashPassword(randomBytes(32).toString("hex"));
+  return dummyPasswordHash;
+}
+
+/** Stored account, exactly as Prisma returns it. Carries both hashes. */
+type B2BClientRow = NonNullable<Awaited<ReturnType<typeof findClientByApiKey>>>;
+
+/** One indexed equality lookup. No scan, no per-row hashing. */
+function findClientByApiKey(apiKey: string) {
+  return prisma.b2BClient.findUnique({ where: { apiKeyHash: hashApiKey(apiKey) } });
+}
+
+/** The public projection of a stored account. Never includes either hash. */
+function toPublicClient(row: B2BClientRow): B2BClient {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type as B2BClient["type"],
+    tier: row.tier as B2BClient["tier"],
+    createdAt: row.createdAt.toISOString(),
+    lastAccess: row.lastAccessAt?.toISOString(),
+  };
 }
 
 // Sessions live in the B2BSession table, not in this process. They used to be
@@ -251,8 +304,8 @@ function generateToken(): string {
  * an auth bypass that TypeScript does not flag at the truthiness check. All
  * fourteen call sites were converted together with this signature.
  *
- * ApiKey stays synchronous in substance: it authenticates against the configured
- * clients rather than a stored session, so there is nothing to read.
+ * The ApiKey branch is now a database read too — accounts moved from a fixture
+ * array into B2BClient — so the same rule covers both branches.
  */
 async function getClientFromToken(
   authHeader: string | undefined
@@ -281,15 +334,17 @@ async function getClientFromToken(
       expiresAt: row.expiresAt.toISOString(),
     };
   } else if (authHeader.startsWith("ApiKey ")) {
-    const apiKey = authHeader.substring(7);
-    const client = b2bClients.find((c) => secretsMatch(c.apiKey, apiKey));
+    const client = await findClientByApiKey(authHeader.substring(7));
     if (!client) return null;
 
+    // Synthesised, not stored: an API key authenticates each request on its own
+    // and never creates a B2BSession row, so this session exists only for the
+    // duration of the call.
     return {
-      token: apiKey,
+      token: `apikey:${client.id}`,
       clientId: client.id,
       clientName: client.name,
-      tier: client.tier,
+      tier: client.tier as B2BSession["tier"],
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
     };
@@ -359,33 +414,39 @@ const b2bRouter = new Hono();
 // B2B Authentication Endpoints
 // ==========================================
 
-b2bRouter.post("/auth/login", zValidator("json", loginSchema), async (c) => {
-  const { apiKey } = c.req.valid("json");
-
-  const client = b2bClients.find((cl) => secretsMatch(cl.apiKey, apiKey));
-  if (!client) {
-    return c.json({ error: "Invalid API key" }, { status: 401 });
-  }
-
+/**
+ * Issue a 24-hour session for an authenticated account, and record the login.
+ *
+ * Both login endpoints did this identically, line for line, once they had a
+ * client — so it is written once. The only difference between them is how the
+ * account is identified: /auth/login by API key, /auth/credential-login by
+ * username and password.
+ *
+ * lastAccessAt is a column now. It used to be `client.lastAccess = …` against
+ * the fixture array, which meant it lived in one process's memory: lost on
+ * every redeploy, invisible to any other instance, and never read by anything.
+ * It is written here and only here — at login, not per request — which is
+ * exactly what the array assignment did, so this is the same event made
+ * durable rather than a new one. Per-request would mean a write on every
+ * analytics call, which is a lot of write traffic for a timestamp nobody reads
+ * in real time.
+ */
+async function startSession(row: B2BClientRow) {
   const token = generateToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-  const session: B2BSession = {
-    token,
-    clientId: client.id,
-    clientName: client.name,
-    tier: client.tier,
-    createdAt: now.toISOString(),
-    expiresAt: expiresAt.toISOString(),
-  };
+  const updated = await prisma.b2BClient.update({
+    where: { id: row.id },
+    data: { lastAccessAt: now },
+  });
 
   await prisma.b2BSession.create({
     data: {
       token,
-      clientId: session.clientId,
-      clientName: session.clientName,
-      tier: session.tier,
+      clientId: updated.id,
+      clientName: updated.name,
+      tier: updated.tier,
       createdAt: now,
       expiresAt,
     },
@@ -395,78 +456,55 @@ b2bRouter.post("/auth/login", zValidator("json", loginSchema), async (c) => {
   // console does on its own login.
   await prisma.b2BSession.deleteMany({ where: { expiresAt: { lt: now } } }).catch(() => {});
 
-  client.lastAccess = now.toISOString();
-
-  return c.json({
+  return {
     success: true,
     token,
-    client: {
-      id: client.id,
-      name: client.name,
-      type: client.type,
-      tier: client.tier,
-    },
-    expiresAt: session.expiresAt,
-  });
+    client: toPublicClient(updated),
+    expiresAt: expiresAt.toISOString(),
+  };
+}
+
+b2bRouter.post("/auth/login", zValidator("json", loginSchema), async (c) => {
+  const { apiKey } = c.req.valid("json");
+
+  const client = await findClientByApiKey(apiKey);
+  if (!client) {
+    return c.json({ error: "Invalid API key" }, { status: 401 });
+  }
+
+  return c.json(await startSession(client));
 });
 
 b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchema), async (c) => {
   const { username, password } = c.req.valid("json");
 
-  const credKey = Object.keys(b2bCredentials).find(
-    k => k.toLowerCase() === username.toLowerCase()
-  );
-  const credentials = credKey ? b2bCredentials[credKey] : undefined;
-  if (!credentials || !secretsMatch(credentials.password, password)) {
+  // Usernames are stored lowercased by scripts/seed-b2b.ts, so this is the
+  // case-insensitive match the fixture array's Object.keys().find() did — minus
+  // the scan.
+  const client = await prisma.b2BClient.findUnique({
+    where: { username: username.toLowerCase() },
+  });
+
+  // Same 401 whether the account is missing or the password is wrong, and the
+  // password is verified either way — otherwise the response time says which of
+  // the two happened, and that is an account-enumeration oracle.
+  let passwordOk = false;
+  try {
+    passwordOk = await verifyPassword({
+      hash: client?.passwordHash ?? (await getDummyPasswordHash()),
+      password,
+    });
+  } catch (error) {
+    // A stored hash that scrypt cannot parse is an operator problem, not a
+    // caller problem. Log it rather than letting it 500 as an opaque failure.
+    console.error("[B2B] Password verification failed:", error);
+  }
+
+  if (!client || !passwordOk) {
     return c.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  const client = b2bClients.find(cl => cl.id === credentials.clientId);
-  if (!client) {
-    return c.json({ error: "Client not found" }, { status: 404 });
-  }
-
-  const token = generateToken();
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-
-  const session: B2BSession = {
-    token,
-    clientId: client.id,
-    clientName: client.name,
-    tier: client.tier,
-    createdAt: now.toISOString(),
-    expiresAt: expiresAt.toISOString(),
-  };
-
-  await prisma.b2BSession.create({
-    data: {
-      token,
-      clientId: session.clientId,
-      clientName: session.clientName,
-      tier: session.tier,
-      createdAt: now,
-      expiresAt,
-    },
-  });
-
-  // Opportunistic cleanup so expired rows don't pile up, same as the admin
-  // console does on its own login.
-  await prisma.b2BSession.deleteMany({ where: { expiresAt: { lt: now } } }).catch(() => {});
-
-  client.lastAccess = now.toISOString();
-
-  return c.json({
-    success: true,
-    token,
-    client: {
-      id: client.id,
-      name: client.name,
-      type: client.type,
-      tier: client.tier,
-    },
-    expiresAt: session.expiresAt,
-  });
+  return c.json(await startSession(client));
 });
 
 b2bRouter.get("/auth/verify", async (c) => {

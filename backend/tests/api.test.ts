@@ -17,6 +17,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import {
   B2B_TEST,
   BASE_URL,
+  b2bClientIds,
   prisma,
   resetData,
   freshClientHeaders,
@@ -45,9 +46,11 @@ describe("boot", () => {
       SELECT count(*) FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `;
-    // 29 models plus _prisma_migrations. If this drops, a model was removed
-    // without anyone meaning to.
-    expect(Number(tables[0]!.count)).toBeGreaterThanOrEqual(30);
+    // 33 models plus _prisma_migrations. If this drops, a model was removed
+    // without anyone meaning to. The number was stale at 30 and therefore no
+    // longer a guard against anything — B2BSession and B2BClient had both been
+    // added underneath it.
+    expect(Number(tables[0]!.count)).toBeGreaterThanOrEqual(34);
   });
 
   test("health reports email configuration honestly", async () => {
@@ -302,8 +305,8 @@ describe("b2b", () => {
     await prisma.b2BSession.create({
       data: {
         token,
-        clientId: "b2b-1",
-        clientName: "Demo Analytics",
+        clientId: b2bClientIds.demo,
+        clientName: "Test Demo Analytics",
         tier: "enterprise",
         expiresAt: new Date(Date.now() + 60 * 60 * 1000),
       },
@@ -320,8 +323,8 @@ describe("b2b", () => {
     await prisma.b2BSession.create({
       data: {
         token,
-        clientId: "b2b-1",
-        clientName: "Demo Analytics",
+        clientId: b2bClientIds.demo,
+        clientName: "Test Demo Analytics",
         tier: "enterprise",
         expiresAt: new Date(Date.now() - 1000),
       },
@@ -339,5 +342,73 @@ describe("b2b", () => {
   test("the heatmap rejects an unauthenticated request", async () => {
     const response = await fetch(`${BASE_URL}/api/b2b/geo/heatmap`);
     expect(response.status).toBe(401);
+  });
+
+  test("the stored account holds neither the password nor the API key", async () => {
+    // The fixture array held both in cleartext, in a source file, in a public
+    // repository. This asserts the property that replaced it: what is on disk
+    // cannot be presented at the login endpoint.
+    const row = await prisma.b2BClient.findUniqueOrThrow({
+      where: { username: B2B_TEST.demoUsername },
+    });
+
+    expect(row.passwordHash).not.toBe(B2B_TEST.demoPassword);
+    expect(row.passwordHash).not.toContain(B2B_TEST.demoPassword);
+    expect(row.apiKeyHash).not.toBe(B2B_TEST.demoApiKey);
+    expect(row.apiKeyHash).not.toContain(B2B_TEST.demoApiKey);
+
+    // The API key is a digest and nothing else — deterministic, 64 hex chars,
+    // which is what makes it a unique indexed column the lookup can use. If
+    // this ever becomes a salted KDF hash, the ApiKey path silently degrades from
+    // one index probe to a full scan with a KDF per row.
+    expect(row.apiKeyHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  test("a wrong password and an unknown username are both rejected", async () => {
+    for (const body of [
+      { username: B2B_TEST.demoUsername, password: "not the password" },
+      { username: "nobody_by_that_name", password: B2B_TEST.demoPassword },
+    ]) {
+      const response = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      expect({ username: body.username, status: response.status }).toEqual({
+        username: body.username,
+        status: 401,
+      });
+    }
+  });
+
+  test("an API key authenticates, and a wrong one does not", async () => {
+    // Authorization: ApiKey <value> is the machine path. It resolves the account
+    // by the digest of the key, with no session row involved.
+    const ok = await fetch(`${BASE_URL}/api/b2b/geo/heatmap`, {
+      headers: { Authorization: `ApiKey ${B2B_TEST.demoApiKey}` },
+    });
+    expect(ok.status).toBe(200);
+
+    const bad = await fetch(`${BASE_URL}/api/b2b/geo/heatmap`, {
+      headers: { Authorization: "ApiKey not-a-real-api-key" },
+    });
+    expect(bad.status).toBe(401);
+  });
+
+  test("logging in records lastAccessAt on the row", async () => {
+    // It used to be `client.lastAccess = …` against a module-level array: lost
+    // on every redeploy, invisible to any other process, and never actually
+    // stored anywhere. Now it is a column, so this can be read back at all.
+    await prisma.b2BClient.update({
+      where: { username: B2B_TEST.demoUsername },
+      data: { lastAccessAt: null },
+    });
+
+    await b2bToken();
+
+    const row = await prisma.b2BClient.findUniqueOrThrow({
+      where: { username: B2B_TEST.demoUsername },
+    });
+    expect(row.lastAccessAt).not.toBeNull();
   });
 });
