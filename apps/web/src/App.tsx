@@ -162,6 +162,14 @@ const App = () => (
                   </RouteGuard>
                 }
               />
+              <Route
+                path="/admin/:tab"
+                element={
+                  <RouteGuard capability="viewAdmin" reason="Sign in with an administrator account to open the admin console.">
+                    <Admin />
+                  </RouteGuard>
+                }
+              />
               {/* ---- B2B Analytics portal (separate B2B login; pages self-guard) ---- */}
               <Route path="/b2b/login" element={<B2BLogin />} />
               <Route path="/b2b" element={<Navigate to="/b2b/dashboard" replace />} />
