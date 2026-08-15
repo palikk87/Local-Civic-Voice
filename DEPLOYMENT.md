@@ -198,11 +198,24 @@ Two consequences worth being deliberate about:
 - **Do not enable bucket listing.** Unguessable keys are worthless if the bucket
   will hand out an index of them. On R2 and B2 listing is off by default; on AWS
   S3, check that `s3:ListBucket` is not in the public policy.
-- **Deleting a post does not delete its media.** `DELETE /api/posts/:id` drops
-  the row and nothing else; the bucket object survives, and its key keeps
-  working. Only `DELETE /api/media/:id` removes the object. That is the usual
-  trade for public-bucket media, but it means a key that leaked stays good until
-  someone deletes the media specifically.
+- **Deleting a post deletes its media objects, and fails loudly if it cannot.**
+  `DELETE /api/posts/:id` removes the bucket objects first and only then the
+  row. If storage refuses, the API returns 500, logs every key it could not
+  remove, and leaves the post intact — because the key lives only in that row,
+  so destroying the row would leave an object nothing can ever find, still
+  readable by anyone holding its URL. Retrying is safe: an object that is
+  already gone counts as success.
+
+  If you see `Refusing to delete post` or `Refusing to delete media` in the
+  logs, that is this check firing. It means the bucket credentials or
+  permissions are wrong, not that the user did anything unusual.
+
+- **Uploads that were never posted are not collected by anything.** A `Media`
+  row is created when the file is uploaded, before any post exists, so a user
+  who opens the composer, attaches a photo and then abandons it leaves a row
+  with `postId` null and an object in the bucket. Nothing sweeps those. They
+  are not reachable through the app, but they occupy storage and their keys
+  stay valid.
 
 Provider quirks, since they cost time otherwise:
 

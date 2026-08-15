@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { putObject, deleteObject, publicUrlFor } from "../services/storage";
+import { putObject, deleteObjects, publicUrlFor } from "../services/storage";
 
 const execAsync = promisify(exec);
 
@@ -412,15 +412,39 @@ mediaRouter.delete("/:id", async (c) => {
     return c.json({ error: "Not authorized" }, 403);
   }
 
-  // Remove the stored bytes. Failing here must not block the row deletion —
-  // an orphaned object costs storage, an undeletable post costs trust.
-  try {
-    await deleteObject(media.url);
-    if (media.thumbnailUrl) {
-      await deleteObject(media.thumbnailUrl);
-    }
-  } catch (error) {
-    console.error("Failed to delete stored media objects:", error);
+  // Bytes first, row second, and abort if the bytes will not go.
+  //
+  // This used to swallow the storage error and delete the row anyway, on the
+  // reasoning that an orphaned object costs storage while an undeletable post
+  // costs trust. That trade was wrong on both halves.
+  //
+  // The object is not merely orphaned — it is unfindable. The key exists in
+  // exactly one place, this row, so deleting the row means nothing can ever
+  // locate the object again short of listing the bucket and diffing it against
+  // the database.
+  //
+  // And it does not cost storage, it costs privacy. The bucket is public and
+  // unsigned (see services/storage.ts), so the key IS the access control: an
+  // object that survives its row is still fetchable by anyone holding the URL,
+  // while the app reports the media as deleted. Answering "success" there is a
+  // lie about something the user cared enough to delete.
+  //
+  // Failing the other way is recoverable and honest: the row survives, the user
+  // sees an error, and a retry converges because deleteObject treats a missing
+  // object as success.
+  const keys = [media.url, media.thumbnailUrl].filter((key): key is string => Boolean(key));
+  const { failed } = await deleteObjects(keys);
+
+  if (failed.length > 0) {
+    console.error(
+      `[Media] Refusing to delete media ${id}: ${failed.length} of ${keys.length} ` +
+        `stored objects could not be removed. ` +
+        failed.map((f) => `${f.key}: ${f.error}`).join("; "),
+    );
+    return c.json(
+      { error: "Could not remove the stored file. Nothing was deleted; please try again." },
+      500,
+    );
   }
 
   // Delete database record

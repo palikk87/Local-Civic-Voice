@@ -169,12 +169,29 @@ export async function putObject(
   return { key: clean, url: publicUrlFor(clean) };
 }
 
-/** Delete a stored object. Missing objects are not an error. */
+/**
+ * Delete a stored object. Missing objects are not an error.
+ *
+ * "Missing is not an error" is deliberate and load-bearing: callers delete the
+ * object before the database row that names it, so a retry after a partial
+ * failure must be able to succeed. If a second attempt at an already-deleted
+ * object threw, a delete that failed halfway could never be completed.
+ *
+ * Everything else IS an error. The local branch used to `.catch(() => undefined)`
+ * every failure, which made a read-only directory or a permissions problem
+ * indistinguishable from success — so a caller could never tell whether the
+ * bytes were actually gone. Only ENOENT is swallowed now.
+ */
 export async function deleteObject(key: string): Promise<void> {
   const clean = key.replace(/^\/+/, "");
 
   if (storageDriver === "local") {
-    await unlink(join(UPLOADS_DIR, clean)).catch(() => undefined);
+    try {
+      await unlink(join(UPLOADS_DIR, clean));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return;
+      throw error;
+    }
     return;
   }
 
@@ -183,6 +200,36 @@ export async function deleteObject(key: string): Promise<void> {
   if (!response.ok && response.status !== 404) {
     throw new Error(`S3 DELETE ${clean} failed: ${response.status} ${response.statusText}`);
   }
+}
+
+/**
+ * Delete many objects, reporting what failed instead of stopping at the first.
+ *
+ * Reports rather than decides. A caller that is about to destroy the only
+ * record of these keys — the database row — needs to know whether the bytes
+ * are really gone before it does that, and needs the full list rather than
+ * whichever one happened to fail first.
+ *
+ * Sequential on purpose. These are batches of one to a few keys (a post's media
+ * plus their thumbnails), so there is nothing to win by parallelising, and a
+ * serial loop keeps the failure list in a stable order for the log line.
+ */
+export async function deleteObjects(
+  keys: string[],
+): Promise<{ deleted: string[]; failed: Array<{ key: string; error: string }> }> {
+  const deleted: string[] = [];
+  const failed: Array<{ key: string; error: string }> = [];
+
+  for (const key of keys) {
+    try {
+      await deleteObject(key);
+      deleted.push(key);
+    } catch (error) {
+      failed.push({ key, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return { deleted, failed };
 }
 
 /**

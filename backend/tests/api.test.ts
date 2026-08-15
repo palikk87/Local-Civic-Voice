@@ -29,7 +29,7 @@ import {
   stopServer,
 } from "./helpers/server";
 import { generateAdminToken, generateB2BToken } from "../src/session-token";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 beforeAll(async () => {
@@ -602,5 +602,212 @@ describe("media keys", () => {
     // Under the old format these would share a timestamp and differ only in the
     // Math.random() half. Now they share nothing.
     expect(keys.size).toBe(3);
+  });
+});
+
+describe("deleting a post deletes its media", () => {
+  const ONE_PIXEL_PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  /** Whether a path exists, without caring why not. */
+  async function exists(path: string): Promise<boolean> {
+    return stat(path).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  async function newUser(): Promise<{ cookie: string; userId: string }> {
+    return signUp({
+      email: `del-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Delete Tester",
+    });
+  }
+
+  /** Upload through the real endpoint and return the row's storage key. */
+  async function upload(cookie: string): Promise<{ id: string; key: string }> {
+    const form = new FormData();
+    form.append("file", new File([ONE_PIXEL_PNG], "attach.png", { type: "image/png" }));
+
+    const response = await fetch(`${BASE_URL}/api/media/upload`, {
+      method: "POST",
+      headers: { cookie },
+      body: form,
+    });
+    expect(response.status).toBe(201);
+
+    const { media } = (await response.json()) as { media: { id: string } };
+    const row = await prisma.media.findUniqueOrThrow({ where: { id: media.id } });
+    return { id: media.id, key: row.url };
+  }
+
+  test("upload, attach, delete — and the object is really gone", async () => {
+    // The whole point is the last step. Asserting the handler returned 200
+    // would prove nothing: that is exactly what it did before, while leaving
+    // the bytes in place.
+    const { cookie, userId } = await newUser();
+    const media = await upload(cookie);
+    const path = join(TEST_UPLOADS_PATH, media.key);
+
+    // It is on disk before we start, and reachable over HTTP.
+    expect(await exists(path)).toBe(true);
+    expect((await fetch(`${BASE_URL}/uploads/${media.key}`)).status).toBe(200);
+
+    const post = await prisma.post.create({
+      data: { content: "post with an attachment", authorId: userId },
+    });
+    await prisma.media.update({ where: { id: media.id }, data: { postId: post.id } });
+
+    const deleted = await fetch(`${BASE_URL}/api/posts/${post.id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(deleted.status).toBe(200);
+
+    // Row gone (it always was — Media.postId cascades), object gone (it never
+    // was), and the URL that used to serve it no longer does.
+    expect(await prisma.post.findUnique({ where: { id: post.id } })).toBeNull();
+    expect(await prisma.media.findUnique({ where: { id: media.id } })).toBeNull();
+    expect(await exists(path)).toBe(false);
+    expect((await fetch(`${BASE_URL}/uploads/${media.key}`)).status).toBe(404);
+  });
+
+  test("a post with several attachments loses all of them", async () => {
+    const { cookie, userId } = await newUser();
+    const uploads = [await upload(cookie), await upload(cookie), await upload(cookie)];
+
+    const post = await prisma.post.create({
+      data: { content: "three attachments", authorId: userId },
+    });
+    await prisma.media.updateMany({
+      where: { id: { in: uploads.map((u) => u.id) } },
+      data: { postId: post.id },
+    });
+
+    const deleted = await fetch(`${BASE_URL}/api/posts/${post.id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(deleted.status).toBe(200);
+
+    for (const upload of uploads) {
+      expect({ key: upload.key, onDisk: await exists(join(TEST_UPLOADS_PATH, upload.key)) }).toEqual({
+        key: upload.key,
+        onDisk: false,
+      });
+    }
+  });
+
+  test("a storage failure keeps the post rather than losing it silently", async () => {
+    // The failure direction is the decision this change rests on. A post that
+    // survives is visible and retryable; a post that vanishes while its objects
+    // stay readable is neither — and is what happened before.
+    //
+    // The failure is provoked with a directory where the object should be, so
+    // unlink raises EISDIR. Not ENOENT, which is deliberately tolerated: a
+    // retry after a partial failure has to be able to finish.
+    const { cookie, userId } = await newUser();
+    const media = await upload(cookie);
+    const path = join(TEST_UPLOADS_PATH, media.key);
+
+    await rm(path);
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, "blocker"), "not a media object");
+
+    const post = await prisma.post.create({
+      data: { content: "undeletable attachment", authorId: userId },
+    });
+    await prisma.media.update({ where: { id: media.id }, data: { postId: post.id } });
+
+    const logFrom = serverLog().length;
+    const response = await fetch(`${BASE_URL}/api/posts/${post.id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(500);
+
+    // Still there, both of them. Nothing was half-done.
+    expect(await prisma.post.findUnique({ where: { id: post.id } })).not.toBeNull();
+    expect(await prisma.media.findUnique({ where: { id: media.id } })).not.toBeNull();
+
+    // And it is visible, not swallowed. The log names the key, because a
+    // storage failure is diagnosed from the log or not at all.
+    expect(await waitForLog("Refusing to delete post", logFrom)).toBe(true);
+    expect(serverLog().slice(logFrom)).toContain(media.key);
+
+    // Clearing the obstruction lets the same request succeed — the failure was
+    // recoverable, which is the property that makes failing this way safe.
+    await rm(path, { recursive: true });
+    const retry = await fetch(`${BASE_URL}/api/posts/${post.id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(retry.status).toBe(200);
+    expect(await prisma.post.findUnique({ where: { id: post.id } })).toBeNull();
+  });
+
+  test("DELETE /api/media/:id also removes the object", async () => {
+    const { cookie } = await newUser();
+    const media = await upload(cookie);
+    const path = join(TEST_UPLOADS_PATH, media.key);
+    expect(await exists(path)).toBe(true);
+
+    const response = await fetch(`${BASE_URL}/api/media/${media.id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(response.status).toBe(200);
+    expect(await exists(path)).toBe(false);
+  });
+
+  test("DELETE /api/media/:id keeps the row when the object will not go", async () => {
+    // Same policy as the post path, and it needs its own test because this
+    // handler used to catch the storage error and delete the row anyway — which
+    // left an unfindable, still-readable object behind and reported success.
+    const { cookie } = await newUser();
+    const media = await upload(cookie);
+    const path = join(TEST_UPLOADS_PATH, media.key);
+
+    await rm(path);
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, "blocker"), "not a media object");
+
+    const logFrom = serverLog().length;
+    const response = await fetch(`${BASE_URL}/api/media/${media.id}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(500);
+    expect(await prisma.media.findUnique({ where: { id: media.id } })).not.toBeNull();
+    expect(await waitForLog("Refusing to delete media", logFrom)).toBe(true);
+
+    await rm(path, { recursive: true });
+  });
+
+  test("the s3 driver deletes, tolerates missing, and reports refusals", async () => {
+    // storageDriver is fixed at import, so the s3 branch cannot be reached in
+    // this process. tests/helpers/s3-driver-check.ts runs it in a fresh one
+    // against a stub bucket: real HTTP, real SigV4 signing, real code in
+    // services/storage.ts, with only the bucket's responses under test control.
+    const proc = Bun.spawn({
+      cmd: ["bun", "tests/helpers/s3-driver-check.ts"],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+
+    const report = JSON.parse(stdout.trim()) as { ok: boolean; failures: string[] };
+    expect(report).toEqual({ ...report, ok: true, failures: [] });
   });
 });
