@@ -12,6 +12,8 @@ CREATE TABLE "User" (
     "banned" BOOLEAN NOT NULL DEFAULT false,
     "banReason" TEXT,
     "banExpiresAt" TIMESTAMP(3),
+    "bannedAt" TIMESTAMP(3),
+    "bannedBy" TEXT,
     "displayUsername" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -29,6 +31,34 @@ CREATE TABLE "AdminSession" (
     "expiresAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "AdminSession_pkey" PRIMARY KEY ("token")
+);
+
+-- CreateTable
+CREATE TABLE "Announcement" (
+    "id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "content" TEXT NOT NULL,
+    "priority" TEXT NOT NULL DEFAULT 'medium',
+    "createdBy" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expiresAt" TIMESTAMP(3),
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "Announcement_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "AdminActivityLog" (
+    "id" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "adminId" TEXT NOT NULL,
+    "adminUsername" TEXT NOT NULL,
+    "targetType" TEXT NOT NULL,
+    "targetId" TEXT,
+    "details" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "AdminActivityLog_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -451,6 +481,21 @@ CREATE INDEX "AdminSession_adminId_idx" ON "AdminSession"("adminId");
 
 -- CreateIndex
 CREATE INDEX "AdminSession_expiresAt_idx" ON "AdminSession"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "Announcement_isActive_createdAt_idx" ON "Announcement"("isActive", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "Announcement_expiresAt_idx" ON "Announcement"("expiresAt");
+
+-- CreateIndex
+CREATE INDEX "AdminActivityLog_createdAt_idx" ON "AdminActivityLog"("createdAt");
+
+-- CreateIndex
+CREATE INDEX "AdminActivityLog_adminId_idx" ON "AdminActivityLog"("adminId");
+
+-- CreateIndex
+CREATE INDEX "AdminActivityLog_targetType_targetId_idx" ON "AdminActivityLog"("targetType", "targetId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Session_token_key" ON "Session"("token");

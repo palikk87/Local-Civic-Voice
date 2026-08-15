@@ -29,27 +29,24 @@ model User {
   bio                     String?
   location                String?
 
-  // DO NOT REMOVE — this column is not read by this backend, it belongs to the
-  // Civic Voice mobile project, which shares this same Supabase database.
+  // Moderation state. Read and written by the admin console (routes/admin.ts).
   //
-  // It is declared here purely so `prisma db push` cannot delete it. This
-  // project and the mobile project BOTH run `prisma db push --accept-data-loss`
-  // on boot, and that command deletes anything missing from the schema it is
-  // pushing. On 2026-08-08 our boot dropped this column while it still held 423
-  // non-null values (see the "about to drop the column `banned`" warning in
-  // backend/server.log), which is what kept banning/unbanning breaking on
-  // mobile.
+  // These columns previously existed only to stop a boot-time
+  // `prisma db push --accept-data-loss` from dropping them: two projects shared
+  // one database and each push deleted whatever was missing from its own
+  // schema. That is how 423 rows of `banned` were destroyed on 2026-08-08.
+  // Neither the shared database nor the push survives, so these are now
+  // ordinary columns that ordinary code uses.
   //
-  // Keeping our schema a strict SUPERSET of the live database is the defence:
-  // our boot push can then only ADD objects, never destroy them. That holds
-  // even when a template sync re-adds the push line to scripts/start.
-  //
-  // It looks unused. It is not. Leave it. Same goes for the three below, which
-  // are the rest of the mobile side's ban/username state (verified present in
-  // the live database on 2026-08-08).
+  // `banExpiresAt` null means permanent. Expiry is evaluated on read rather
+  // than swept by a job — see isCurrentlyBanned() in routes/admin.ts.
   banned                  Boolean                 @default(false)
   banReason               String?
   banExpiresAt            DateTime?
+  bannedAt                DateTime?
+  /// Username of the admin who applied the ban, copied in rather than joined so
+  /// the record survives that admin being renamed or removed.
+  bannedBy                String?
   displayUsername         String?
 
   createdAt               DateTime                @default(now())
@@ -79,6 +76,49 @@ model AdminSession {
 
   @@index([adminId])
   @@index([expiresAt])
+}
+
+/// Site-wide notices written by an admin and read by both clients.
+///
+/// This was a module-level array. Every restart silently emptied it while the
+/// admin console went on presenting announcements as published — the same class
+/// of bug as admin sessions living in a Map, which is why that moved to
+/// AdminSession above.
+model Announcement {
+  id        String    @id @default(cuid())
+  title     String
+  content   String
+  /// low | medium | high | critical
+  priority  String    @default("medium")
+  createdBy String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+
+  @@index([isActive, createdAt])
+  @@index([expiresAt])
+}
+
+/// Audit trail of admin actions.
+///
+/// An audit log that does not survive a restart is worse than none: it reads as
+/// a complete record of who did what, and is not one. Kept deliberately denormalised
+/// — adminUsername is copied in rather than joined, so the log still reads correctly
+/// after an admin account is renamed or deleted.
+model AdminActivityLog {
+  id            String   @id @default(cuid())
+  action        String
+  adminId       String
+  adminUsername String
+  /// user | post | comment | system
+  targetType    String
+  targetId      String?
+  details       String
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([adminId])
+  @@index([targetType, targetId])
 }
 
 model Session {

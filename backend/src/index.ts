@@ -3,7 +3,6 @@ import { cors } from "hono/cors";
 import "./env";
 import { corsOriginPatterns } from "./env";
 import { auth } from "./auth";
-import { sampleRouter } from "./routes/sample";
 import { governmentRouter } from "./routes/government";
 import { usersRouter } from "./routes/users";
 import { timelineRouter } from "./routes/timeline";
@@ -151,7 +150,6 @@ app.use("/api/feed/interaction*", async (c, next) => {
 });
 
 // Routes
-app.route("/api/sample", sampleRouter);
 app.route("/api/government", governmentRouter);
 app.route("/api/users", usersRouter);
 app.route("/api/timeline", timelineRouter);

@@ -59,28 +59,22 @@ interface Announcement {
 }
 
 // ==========================================
-// In-Memory Stores (for admin meta only)
+// State
 // ==========================================
 //
-// Admin accounts and admin sessions are NOT here — accounts live in the User table
-// (role = admin | moderator | superadmin) and sessions live in the AdminSession
-// table, so both survive a restart and there is one source of truth.
-
-// Banned users (stored in memory, could be moved to DB)
-const bannedUsers: Map<string, BannedUser> = new Map();
-
-// Activity logs
-const activityLogs: ActivityLog[] = [];
-
-// System announcements
-const announcements: Announcement[] = [];
+// There is none in this module. Everything an admin does is persisted:
+// accounts in User (role = admin | moderator | superadmin), sessions in
+// AdminSession, bans in User.banned / banReason / banExpiresAt, announcements
+// in Announcement, and the audit trail in AdminActivityLog.
+//
+// All five used to be module-level Maps and arrays. That meant a restart —
+// a deploy, a crash, a host moving the container — silently emptied the ban
+// list and the audit log while the console went on displaying them as real.
+// It also meant the API could never run more than one instance without bans
+// appearing and disappearing depending on which copy answered.
 
 /** How long an admin console session stays valid. */
 const ADMIN_SESSION_MS = 24 * 60 * 60 * 1000;
-
-// ID generators
-let nextLogId = 1;
-let nextAnnouncementId = 1;
 
 // ==========================================
 // Helper Functions
@@ -90,6 +84,13 @@ function generateToken(): string {
   return `admin_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
 }
 
+/**
+ * Record an admin action in the audit trail.
+ *
+ * Deliberately fire-and-forget: a failure to write the log must not turn a
+ * successful ban into a 500. The error is surfaced in the server log instead,
+ * where it is a monitoring problem rather than a user-facing one.
+ */
 function createActivityLog(
   action: string,
   adminId: string,
@@ -98,17 +99,71 @@ function createActivityLog(
   targetId: string | undefined,
   details: string
 ): void {
-  const log: ActivityLog = {
-    id: `log-${nextLogId++}`,
-    action,
-    adminId,
-    adminUsername,
-    targetType,
-    targetId,
-    details,
-    createdAt: new Date().toISOString(),
+  void prisma.adminActivityLog
+    .create({
+      data: { action, adminId, adminUsername, targetType, targetId, details },
+    })
+    .catch((error) => {
+      console.error("[admin] failed to write activity log:", error);
+    });
+}
+
+/** Announcement row → the JSON shape both admin clients already render. */
+function toAnnouncement(row: {
+  id: string;
+  title: string;
+  content: string;
+  priority: string;
+  createdAt: Date;
+  createdBy: string;
+  expiresAt: Date | null;
+  isActive: boolean;
+}): Announcement {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    priority: row.priority as Announcement["priority"],
+    createdAt: row.createdAt.toISOString(),
+    createdBy: row.createdBy,
+    expiresAt: row.expiresAt?.toISOString(),
+    isActive: row.isActive,
   };
-  activityLogs.unshift(log);
+}
+
+/**
+ * Whether a user counts as banned right now.
+ *
+ * A ban with a past `banExpiresAt` has served its term. Rather than run a
+ * sweeper job to clear them, expiry is evaluated on read — one less moving
+ * part, and it cannot drift out of sync with the column.
+ */
+function isCurrentlyBanned(user: { banned: boolean; banExpiresAt: Date | null }): boolean {
+  if (!user.banned) return false;
+  if (user.banExpiresAt && user.banExpiresAt.getTime() <= Date.now()) return false;
+  return true;
+}
+
+/** Ban details in the shape the admin clients already render. */
+function banInfoFor(user: {
+  id: string;
+  username: string | null;
+  email: string;
+  banned: boolean;
+  banReason: string | null;
+  banExpiresAt: Date | null;
+  bannedAt: Date | null;
+  bannedBy: string | null;
+}): BannedUser | null {
+  if (!isCurrentlyBanned(user)) return null;
+  return {
+    userId: user.id,
+    username: user.username || user.email.split("@")[0] || "unknown",
+    reason: user.banReason || "",
+    bannedAt: (user.bannedAt ?? new Date(0)).toISOString(),
+    bannedBy: user.bannedBy || "",
+    expiresAt: user.banExpiresAt?.toISOString(),
+  };
 }
 
 /**
@@ -339,15 +394,35 @@ adminRouter.get("/users", zValidator("query", userSearchQuerySchema), async (c) 
   try {
     // The live user store is the Prisma User table (Better Auth) — the same
     // accounts both faucets sign in with.
-    const where = search
-      ? {
-          OR: [
-            { username: { contains: search } },
-            { name: { contains: search } },
-            { email: { contains: search } },
-          ],
-        }
-      : {};
+    // Ban state is filtered in SQL, not after the fact.
+    //
+    // It used to be applied to the already-paginated page, which meant asking
+    // for banned users returned whichever of *that page's* twenty rows happened
+    // to be banned — an empty first page while banned accounts sat on page
+    // three — and the reported total counted every user regardless of filter.
+    const now = new Date();
+    const activeBan = {
+      banned: true,
+      OR: [{ banExpiresAt: null }, { banExpiresAt: { gt: now } }],
+    };
+    const noActiveBan = {
+      OR: [{ banned: false }, { banExpiresAt: { lte: now } }],
+    };
+
+    const conditions: object[] = [];
+    if (search) {
+      conditions.push({
+        OR: [
+          { username: { contains: search } },
+          { name: { contains: search } },
+          { email: { contains: search } },
+        ],
+      });
+    }
+    if (status === "banned") conditions.push(activeBan);
+    else if (status === "active") conditions.push(noActiveBan);
+
+    const where = conditions.length > 0 ? { AND: conditions } : {};
 
     const orderBy =
       sortBy === "username"
@@ -367,16 +442,8 @@ adminRouter.get("/users", zValidator("query", userSearchQuerySchema), async (c) 
       prisma.user.count({ where }),
     ]);
 
-    // Filter by ban status if needed
-    let filteredUsers = users;
-    if (status === "banned") {
-      filteredUsers = filteredUsers.filter((u) => bannedUsers.has(u.id));
-    } else if (status === "active") {
-      filteredUsers = filteredUsers.filter((u) => !bannedUsers.has(u.id));
-    }
-
     // Map to response format
-    const mappedUsers = filteredUsers.map((u) => ({
+    const mappedUsers = users.map((u) => ({
       id: u.id,
       username: u.username || u.email.split("@")[0] || "unknown",
       displayName: u.name || u.username || u.email.split("@")[0],
@@ -390,9 +457,9 @@ adminRouter.get("/users", zValidator("query", userSearchQuerySchema), async (c) 
       votesCount: u._count.votes,
       postsCount: u._count.posts,
       role: u.role || "user",
-      status: bannedUsers.has(u.id) ? "banned" : "active",
-      isBanned: bannedUsers.has(u.id),
-      banInfo: bannedUsers.get(u.id) || null,
+      status: isCurrentlyBanned(u) ? "banned" : "active",
+      isBanned: isCurrentlyBanned(u),
+      banInfo: banInfoFor(u),
     }));
 
     return c.json({
@@ -446,9 +513,9 @@ adminRouter.get("/users/:id", zValidator("param", idParamSchema), async (c) => {
       following: user._count.following,
       votesCount: user._count.votes,
       role: user.role || "user",
-      status: bannedUsers.has(id) ? "banned" : "active",
-      isBanned: bannedUsers.has(id),
-      banInfo: bannedUsers.get(id) || null,
+      status: isCurrentlyBanned(user) ? "banned" : "active",
+      isBanned: isCurrentlyBanned(user),
+      banInfo: banInfoFor(user),
       stats: {
         postsCount: user._count.posts,
         commentsCount: user._count.comments,
@@ -480,9 +547,8 @@ adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) =
       return c.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Ban state lives on the row, so deleting the user takes it with them.
     await prisma.user.delete({ where: { id } });
-
-    bannedUsers.delete(id);
 
     createActivityLog(
       "delete_user",
@@ -524,21 +590,27 @@ adminRouter.post(
         return c.json({ error: "User not found" }, { status: 404 });
       }
 
-      if (bannedUsers.has(id)) {
+      if (isCurrentlyBanned(user)) {
         return c.json({ error: "User is already banned" }, { status: 400 });
       }
 
       const now = new Date();
-      const banInfo: BannedUser = {
-        userId: id,
-        username: user.name || user.username || user.email,
-        reason,
-        bannedAt: now.toISOString(),
-        bannedBy: session.username,
-        expiresAt: duration ? new Date(now.getTime() + duration * 24 * 60 * 60 * 1000).toISOString() : undefined,
-      };
+      const expiresAt = duration
+        ? new Date(now.getTime() + duration * 24 * 60 * 60 * 1000)
+        : null;
 
-      bannedUsers.set(id, banInfo);
+      const banned = await prisma.user.update({
+        where: { id },
+        data: {
+          banned: true,
+          banReason: reason,
+          banExpiresAt: expiresAt,
+          bannedAt: now,
+          bannedBy: session.username,
+        },
+      });
+
+      const banInfo = banInfoFor(banned);
 
       createActivityLog(
         "ban_user",
@@ -577,11 +649,22 @@ adminRouter.delete("/users/:id/ban", zValidator("param", idParamSchema), async (
       return c.json({ error: "User not found" }, { status: 404 });
     }
 
-    if (!bannedUsers.has(id)) {
+    if (!isCurrentlyBanned(user)) {
       return c.json({ error: "User is not banned" }, { status: 400 });
     }
 
-    bannedUsers.delete(id);
+    // Clear the whole ban, not just the flag — leaving a stale reason and
+    // banned-by behind makes a later ban look like it has history it does not.
+    await prisma.user.update({
+      where: { id },
+      data: {
+        banned: false,
+        banReason: null,
+        banExpiresAt: null,
+        bannedAt: null,
+        bannedBy: null,
+      },
+    });
 
     createActivityLog(
       "unban_user",
@@ -839,10 +922,15 @@ adminRouter.get("/stats", async (c) => {
       ...votesToday.map((v) => v.userId),
     ]);
 
-    const bannedUsersCount = bannedUsers.size;
-
-    // Admin counts come from the database now, not from in-memory lists.
-    const [adminAccountCount, activeAdminSessions] = await Promise.all([
+    // Every count below comes from the database. None of it is held in memory,
+    // so these numbers are the same on any instance and survive a restart.
+    const [bannedUsersCount, adminAccountCount, activeAdminSessions] = await Promise.all([
+      prisma.user.count({
+        where: {
+          banned: true,
+          OR: [{ banExpiresAt: null }, { banExpiresAt: { gt: new Date() } }],
+        },
+      }),
       prisma.user.count({ where: { role: { in: ["admin", "moderator", "superadmin"] } } }),
       prisma.adminSession.count({ where: { expiresAt: { gt: new Date() } } }),
     ]);
@@ -1043,22 +1131,34 @@ adminRouter.get("/logs", zValidator("query", logsQuerySchema), async (c) => {
 
   const { limit, offset, action, adminId, targetType } = c.req.valid("query");
 
-  let logs = [...activityLogs];
+  const where = {
+    ...(action ? { action } : {}),
+    ...(adminId ? { adminId } : {}),
+    ...(targetType !== "all" ? { targetType } : {}),
+  };
 
-  if (action) {
-    logs = logs.filter((l) => l.action === action);
-  }
+  const [rows, total] = await Promise.all([
+    prisma.adminActivityLog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: offset,
+      take: limit,
+    }),
+    prisma.adminActivityLog.count({ where }),
+  ]);
 
-  if (adminId) {
-    logs = logs.filter((l) => l.adminId === adminId);
-  }
-
-  if (targetType !== "all") {
-    logs = logs.filter((l) => l.targetType === targetType);
-  }
-
-  const total = logs.length;
-  const paginatedLogs = logs.slice(offset, offset + limit);
+  // The clients render createdAt as a string, and did so when this was an
+  // in-memory array of ISO strings. Prisma returns Date objects.
+  const paginatedLogs: ActivityLog[] = rows.map((l) => ({
+    id: l.id,
+    action: l.action,
+    adminId: l.adminId,
+    adminUsername: l.adminUsername,
+    targetType: l.targetType as ActivityLog["targetType"],
+    targetId: l.targetId ?? undefined,
+    details: l.details,
+    createdAt: l.createdAt.toISOString(),
+  }));
 
   return c.json({
     results: paginatedLogs,
@@ -1084,18 +1184,18 @@ adminRouter.post("/announce", zValidator("json", announceSchema), async (c) => {
 
   const { title, content, priority, expiresAt } = c.req.valid("json");
 
-  const announcement: Announcement = {
-    id: `announce-${nextAnnouncementId++}`,
-    title,
-    content,
-    priority,
-    createdAt: new Date().toISOString(),
-    createdBy: session.username,
-    expiresAt,
-    isActive: true,
-  };
+  const row = await prisma.announcement.create({
+    data: {
+      title,
+      content,
+      priority,
+      createdBy: session.username,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      isActive: true,
+    },
+  });
 
-  announcements.unshift(announcement);
+  const announcement = toAnnouncement(row);
 
   createActivityLog(
     "create_announcement",
@@ -1122,8 +1222,16 @@ adminRouter.get("/announcements", zValidator("query", paginationQuerySchema), as
 
   const { limit, offset } = c.req.valid("query");
 
-  const total = announcements.length;
-  const paginatedAnnouncements = announcements.slice(offset, offset + limit);
+  const [rows, total] = await Promise.all([
+    prisma.announcement.findMany({
+      orderBy: { createdAt: "desc" },
+      skip: offset,
+      take: limit,
+    }),
+    prisma.announcement.count(),
+  ]);
+
+  const paginatedAnnouncements = rows.map(toAnnouncement);
 
   return c.json({
     results: paginatedAnnouncements,
