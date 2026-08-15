@@ -210,12 +210,19 @@ Two consequences worth being deliberate about:
   logs, that is this check firing. It means the bucket credentials or
   permissions are wrong, not that the user did anything unusual.
 
-- **Uploads that were never posted are not collected by anything.** A `Media`
-  row is created when the file is uploaded, before any post exists, so a user
-  who opens the composer, attaches a photo and then abandons it leaves a row
-  with `postId` null and an object in the bucket. Nothing sweeps those. They
-  are not reachable through the app, but they occupy storage and their keys
-  stay valid.
+- **Deleting a user removes everything they uploaded**, including files they
+  attached to the composer and never posted. `Media.userId` has no foreign key
+  and no cascade, so those rows are found by an explicit query rather than by
+  the database — worth knowing if you ever delete a user with raw SQL, because
+  a plain `DELETE FROM "User"` will not reach them and will leave the objects
+  behind.
+
+- **Uploads that were never posted are not collected while the user exists.**
+  A `Media` row is created when the file is uploaded, before any post exists, so
+  a user who attaches a photo and abandons the composer leaves a row with
+  `postId` null and an object in the bucket. Deleting the user clears them;
+  nothing else does. They are not reachable through the app, but they occupy
+  storage and their keys stay valid.
 
 Provider quirks, since they cost time otherwise:
 

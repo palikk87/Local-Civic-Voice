@@ -6,6 +6,7 @@ import { prisma } from "../prisma";
 import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
+import { purgeMediaObjects } from "../services/media-objects";
 
 // ==========================================
 // Type Definitions
@@ -544,8 +545,37 @@ adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) =
       return c.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Everything this user ever uploaded, not just what they posted.
+    //
+    // Media.userId is a bare column with NO relation and NO cascade — the only
+    // FK on Media is postId. So deleting a user cascades User -> Post -> Media
+    // for attached media and leaves the objects behind, while media that was
+    // uploaded and never posted is not reached at all: those rows survive the
+    // user entirely, pointing at objects that also survive. Someone who deletes
+    // their account was keeping every photo they ever uploaded, still publicly
+    // fetchable.
+    //
+    // Querying by userId catches both, which is why this is a findMany rather
+    // than a walk of the user's posts.
+    const media = await prisma.media.findMany({
+      where: { userId: id },
+      select: { id: true, url: true, thumbnailUrl: true },
+    });
+
+    const purge = await purgeMediaObjects(media, `user ${id}`);
+    if (!purge.ok) {
+      return c.json({ error: purge.message }, { status: 500 });
+    }
+
     // Ban state lives on the row, so deleting the user takes it with them.
     await prisma.user.delete({ where: { id } });
+
+    // The cascade removed the media rows attached to posts. The unattached ones
+    // have no relation to User, so nothing removed them — they would be left
+    // pointing at objects this request just deleted.
+    if (media.length > 0) {
+      await prisma.media.deleteMany({ where: { userId: id } });
+    }
 
     createActivityLog(
       "delete_user",
@@ -789,11 +819,18 @@ adminRouter.delete("/posts/:id", zValidator("param", idParamSchema), async (c) =
   try {
     const post = await prisma.post.findUnique({
       where: { id },
-      include: { author: true },
+      include: { author: true, media: true },
     });
 
     if (!post) {
       return c.json({ error: "Post not found" }, { status: 404 });
+    }
+
+    // Same policy the author's own delete uses. Two different behaviours for
+    // one operation, depending on who pressed the button, is worse than either.
+    const purge = await purgeMediaObjects(post.media, `post ${id}`);
+    if (!purge.ok) {
+      return c.json({ error: purge.message }, { status: 500 });
     }
 
     await prisma.post.delete({ where: { id } });

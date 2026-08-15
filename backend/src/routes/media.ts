@@ -9,7 +9,8 @@ import { randomBytes } from "node:crypto";
 import { tmpdir } from "os";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { putObject, deleteObjects, publicUrlFor } from "../services/storage";
+import { putObject, publicUrlFor } from "../services/storage";
+import { purgeMediaObjects } from "../services/media-objects";
 
 const execAsync = promisify(exec);
 
@@ -412,39 +413,15 @@ mediaRouter.delete("/:id", async (c) => {
     return c.json({ error: "Not authorized" }, 403);
   }
 
-  // Bytes first, row second, and abort if the bytes will not go.
+  // Bytes before row; see services/media-objects.ts for the policy.
   //
-  // This used to swallow the storage error and delete the row anyway, on the
-  // reasoning that an orphaned object costs storage while an undeletable post
-  // costs trust. That trade was wrong on both halves.
-  //
-  // The object is not merely orphaned — it is unfindable. The key exists in
-  // exactly one place, this row, so deleting the row means nothing can ever
-  // locate the object again short of listing the bucket and diffing it against
-  // the database.
-  //
-  // And it does not cost storage, it costs privacy. The bucket is public and
-  // unsigned (see services/storage.ts), so the key IS the access control: an
-  // object that survives its row is still fetchable by anyone holding the URL,
-  // while the app reports the media as deleted. Answering "success" there is a
-  // lie about something the user cared enough to delete.
-  //
-  // Failing the other way is recoverable and honest: the row survives, the user
-  // sees an error, and a retry converges because deleteObject treats a missing
-  // object as success.
-  const keys = [media.url, media.thumbnailUrl].filter((key): key is string => Boolean(key));
-  const { failed } = await deleteObjects(keys);
-
-  if (failed.length > 0) {
-    console.error(
-      `[Media] Refusing to delete media ${id}: ${failed.length} of ${keys.length} ` +
-        `stored objects could not be removed. ` +
-        failed.map((f) => `${f.key}: ${f.error}`).join("; "),
-    );
-    return c.json(
-      { error: "Could not remove the stored file. Nothing was deleted; please try again." },
-      500,
-    );
+  // This used to swallow the storage error and delete the row anyway, arguing
+  // that an orphaned object costs storage while an undeletable item costs
+  // trust. For a public unsigned bucket the first half is wrong: it costs
+  // privacy, not storage, and the object becomes unfindable as well.
+  const purge = await purgeMediaObjects([media], `media ${id}`);
+  if (!purge.ok) {
+    return c.json({ error: purge.message }, 500);
   }
 
   // Delete database record

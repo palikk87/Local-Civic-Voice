@@ -811,3 +811,137 @@ describe("deleting a post deletes its media", () => {
     expect(report).toEqual({ ...report, ok: true, failures: [] });
   });
 });
+
+describe("admin deletion removes stored objects", () => {
+  const ONE_PIXEL_PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  async function exists(path: string): Promise<boolean> {
+    return stat(path).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  /** A superadmin bearer token, written straight to the table the route reads. */
+  async function superadminHeaders(): Promise<Record<string, string>> {
+    const token = `admin_test_${Math.random().toString(36).slice(2)}`;
+    await prisma.adminSession.create({
+      data: {
+        token,
+        adminId: "test-superadmin",
+        username: "test-superadmin",
+        role: "superadmin",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    return { Authorization: `Bearer ${token}` };
+  }
+
+  async function upload(cookie: string): Promise<{ id: string; key: string }> {
+    const form = new FormData();
+    form.append("file", new File([ONE_PIXEL_PNG], "admin.png", { type: "image/png" }));
+    const response = await fetch(`${BASE_URL}/api/media/upload`, {
+      method: "POST",
+      headers: { cookie },
+      body: form,
+    });
+    expect(response.status).toBe(201);
+    const { media } = (await response.json()) as { media: { id: string } };
+    const row = await prisma.media.findUniqueOrThrow({ where: { id: media.id } });
+    return { id: media.id, key: row.url };
+  }
+
+  test("deleting a user removes everything they uploaded, posted or not", async () => {
+    // The unattached upload is the half nothing reached before. Media.userId has
+    // no relation and no cascade, so a row that was never attached to a post
+    // survived the user's deletion entirely — row and object both.
+    const { cookie, userId } = await signUp({
+      email: "admin-del-user@example.com",
+      password: "correct horse battery staple",
+      name: "Doomed User",
+    });
+
+    const attached = await upload(cookie);
+    const unattached = await upload(cookie);
+
+    const post = await prisma.post.create({
+      data: { content: "a post that is about to go", authorId: userId },
+    });
+    await prisma.media.update({ where: { id: attached.id }, data: { postId: post.id } });
+
+    for (const m of [attached, unattached]) {
+      expect(await exists(join(TEST_UPLOADS_PATH, m.key))).toBe(true);
+    }
+
+    const response = await fetch(`${BASE_URL}/api/admin/users/${userId}`, {
+      method: "DELETE",
+      headers: await superadminHeaders(),
+    });
+    expect(response.status).toBe(200);
+
+    expect(await prisma.user.findUnique({ where: { id: userId } })).toBeNull();
+    expect(await prisma.media.count({ where: { userId } })).toBe(0);
+
+    for (const m of [attached, unattached]) {
+      expect({ key: m.key, onDisk: await exists(join(TEST_UPLOADS_PATH, m.key)) }).toEqual({
+        key: m.key,
+        onDisk: false,
+      });
+    }
+  });
+
+  test("a storage failure keeps the user rather than deleting them anyway", async () => {
+    const { cookie, userId } = await signUp({
+      email: "admin-del-fails@example.com",
+      password: "correct horse battery staple",
+      name: "Survivor",
+    });
+    const media = await upload(cookie);
+    const path = join(TEST_UPLOADS_PATH, media.key);
+
+    await rm(path);
+    await mkdir(path, { recursive: true });
+    await writeFile(join(path, "blocker"), "not a media object");
+
+    const logFrom = serverLog().length;
+    const response = await fetch(`${BASE_URL}/api/admin/users/${userId}`, {
+      method: "DELETE",
+      headers: await superadminHeaders(),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await prisma.user.findUnique({ where: { id: userId } })).not.toBeNull();
+    expect(await waitForLog("Refusing to delete user", logFrom)).toBe(true);
+    expect(serverLog().slice(logFrom)).toContain(media.key);
+
+    await rm(path, { recursive: true });
+  });
+
+  test("admin post deletion removes objects, like the author's own delete", async () => {
+    const { cookie, userId } = await signUp({
+      email: "admin-del-post@example.com",
+      password: "correct horse battery staple",
+      name: "Post Owner",
+    });
+    const media = await upload(cookie);
+    const path = join(TEST_UPLOADS_PATH, media.key);
+
+    const post = await prisma.post.create({
+      data: { content: "moderated away", authorId: userId },
+    });
+    await prisma.media.update({ where: { id: media.id }, data: { postId: post.id } });
+    expect(await exists(path)).toBe(true);
+
+    const response = await fetch(`${BASE_URL}/api/admin/posts/${post.id}`, {
+      method: "DELETE",
+      headers: await superadminHeaders(),
+    });
+    expect(response.status).toBe(200);
+
+    expect(await prisma.post.findUnique({ where: { id: post.id } })).toBeNull();
+    expect(await exists(path)).toBe(false);
+  });
+});

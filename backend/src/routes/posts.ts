@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
-import { deleteObjects } from "../services/storage";
+import { purgeMediaObjects } from "../services/media-objects";
 import type { auth } from "../auth";
 import {
   notifyPostLike,
@@ -424,45 +424,16 @@ postsRouter.delete("/:id", async (c) => {
     return c.json({ error: "Not authorized" }, 403);
   }
 
-  // Delete the stored bytes BEFORE the row, and refuse to delete the row if the
-  // bytes will not go.
+  // Bytes before row; see services/media-objects.ts for why that order and why
+  // a storage failure has to stop this rather than be logged and ignored.
   //
   // This used to be `prisma.post.delete` alone. Media.postId is `onDelete:
-  // Cascade`, so the Media rows went with the post — and the objects stayed in
-  // the bucket forever, with the only record of their keys destroyed in the same
-  // statement. The bucket is public and unsigned, so those objects also stayed
-  // *readable* by anyone holding the URL, while the app had reported the post
-  // deleted. Delete has to mean delete.
-  //
-  // Order is what makes this recoverable. The key lives only in the row, so the
-  // row cannot be destroyed until the object is; and deleteObject treats a
-  // missing object as success, so a retry after a partial failure converges
-  // rather than deadlocking on the objects that already went.
-  //
-  // A post's media is one row per attachment, plus a thumbnail for videos.
-  // Media is never shared: Media.postId is a single nullable FK, so a row
-  // belongs to at most one post and there is nothing to reference-count.
-  const keys = post.media.flatMap((m) =>
-    m.thumbnailUrl ? [m.url, m.thumbnailUrl] : [m.url],
-  );
-
-  if (keys.length > 0) {
-    const { failed } = await deleteObjects(keys);
-
-    if (failed.length > 0) {
-      // Loud, and naming every key. A storage failure here is an operator
-      // problem — credentials, permissions, a bucket that moved — and the log
-      // is the only place it can be diagnosed from.
-      console.error(
-        `[Posts] Refusing to delete post ${id}: ${failed.length} of ${keys.length} ` +
-          `media objects could not be removed. ` +
-          failed.map((f) => `${f.key}: ${f.error}`).join("; "),
-      );
-      return c.json(
-        { error: "Could not remove the post's media from storage. Nothing was deleted; please try again." },
-        500,
-      );
-    }
+  // Cascade`, so the Media rows went with the post while the objects stayed in
+  // the bucket — still readable, and with the only record of their keys
+  // destroyed in the same statement.
+  const purge = await purgeMediaObjects(post.media, `post ${id}`);
+  if (!purge.ok) {
+    return c.json({ error: purge.message }, 500);
   }
 
   await prisma.post.delete({ where: { id } });
