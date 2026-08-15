@@ -97,10 +97,14 @@ Once, after the first successful deploy, from the host's shell (Railway:
 
 ```bash
 cd backend
-ADMIN_USERNAME=yourname ADMIN_PASSWORD='a real password' bun scripts/seed-admin.ts
+ADMIN_EMAIL=you@example.com \
+ADMIN_USERNAME=yourname \
+ADMIN_PASSWORD='a real password' \
+bun scripts/seed-admin.ts
 ```
 
-Set those two variables for that command only. The server never reads them.
+All three are required. `ADMIN_NAME` is optional and defaults to the username.
+Set them for that command only — the server never reads them.
 
 ---
 
