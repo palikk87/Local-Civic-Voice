@@ -45,12 +45,35 @@ From your provider you need two connection strings:
 - a **pooled** one → `DATABASE_URL`
 - a **direct / unpooled** one → `DIRECT_URL`
 
-On Supabase both are under Project Settings → Database: "Transaction pooler"
-(port 6543) and "Direct connection" (port 5432). On Neon, the pooled endpoint has
-`-pooler` in the hostname. On a plain Postgres server, use the same URL twice.
+On Supabase both are under **Project Settings → Database → Connection string**.
+On Neon the pooled endpoint has `-pooler` in the hostname. On a plain Postgres
+server, use the same URL twice.
 
-Both are needed. Migrations issue statements a transaction pooler rejects, so
-they run over the direct connection while the server uses the pooled one.
+Both are needed, and they must not be the same mode. Migrations take an advisory
+lock and issue session-level statements, which a *transaction* pooler drops on
+the floor. So:
+
+| Variable | Supabase option | Port | Why |
+|---|---|---|---|
+| `DATABASE_URL` | Transaction pooler | 6543 | many short-lived queries, one process |
+| `DIRECT_URL` | Session pooler *or* Direct connection | 5432 | migrations need a connection they keep |
+
+Append `?pgbouncer=true` to `DATABASE_URL` only. It tells Prisma to stop using
+prepared statements, which a transaction pooler cannot support.
+
+Using the **session pooler** for `DIRECT_URL` rather than the true direct
+connection is fine, and is the right call on any host without IPv6 — session
+mode holds a dedicated connection, so the advisory lock works.
+
+### The password
+
+**Save the database password when you create the project.** Supabase shows it
+once and it cannot be retrieved afterwards — the dashboard prints
+`[YOUR-PASSWORD]` as a placeholder in the connection strings, not the real value.
+
+If it is already lost, that is not a problem: **Project Settings → Database →
+Reset database password**, then paste the new one into both connection strings.
+Nothing else depends on it, and on an empty database there is nothing to break.
 
 **You do not run any SQL.** The API applies the schema itself on first boot.
 
