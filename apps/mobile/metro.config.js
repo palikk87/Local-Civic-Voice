@@ -95,13 +95,6 @@ config.resolver = {
       }
     }
 
-    // Fix better-auth ESM resolution: Metro resolves to .cjs but package only ships .mjs
-    // Intercept .cjs paths and redirect to .mjs
-    if (moduleName.includes("better-auth") && moduleName.endsWith(".cjs")) {
-      const mjsPath = moduleName.replace(/\.cjs$/, ".mjs");
-      return context.resolveRequest(context, mjsPath, platform);
-    }
-
     // Fix @better-auth/expo incorrectly importing metro-config (dev-time only)
     // This import shouldn't exist in client code - mock it
     if (moduleName.includes("@expo/metro-config") || moduleName.includes("async-require")) {

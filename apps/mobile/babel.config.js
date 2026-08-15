@@ -9,13 +9,17 @@ module.exports = function (api) {
       [
         "module-resolver",
         {
+          // Only "@". The three better-auth aliases that used to live here
+          // pointed at .cjs files none of those packages ship, and were
+          // rescued by a .cjs->.mjs rewrite in metro.config.js — which then
+          // failed for @better-auth/expo, whose dist is client.js. Both halves
+          // are gone; the packages' own "exports" maps resolve correctly.
+          //
+          // "@/shared" was also declared here, before "@" could never match it:
+          // module-resolver tries "@" first, so "@/shared/x" became
+          // "./src/shared/x" and metro's handler never ran. Nothing imports it.
           alias: {
             "@": "./src",
-            "@/shared": "./shared",
-            "better-auth/react": "./node_modules/better-auth/dist/client/react/index.cjs",
-            "better-auth/client/plugins":
-              "./node_modules/better-auth/dist/client/plugins/index.cjs",
-            "@better-auth/expo/client": "./node_modules/@better-auth/expo/dist/client.cjs",
           },
         },
       ],

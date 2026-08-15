@@ -8,6 +8,18 @@ Everything below runs against **Khalid's own Expo account**. Nothing here is tie
 to any other account, and `eas.json` contains no project id, no bundle
 credentials, and no hostnames.
 
+## Verified
+
+Both platforms bundle from this repo:
+
+```
+bunx expo export --platform ios       → 3,561 modules, 9.14 MB, exit 0
+bunx expo export --platform android   → exit 0
+```
+
+That is worth stating because until now they did not — see the note at the
+bottom of this file.
+
 ## One-time setup
 
 1. Create an Expo account at [expo.dev](https://expo.dev) — free.
@@ -85,3 +97,30 @@ never completes the callback, and nothing logs an error:
 | `app.json` → `expo.scheme` | `civicvoice` |
 | `src/lib/auth/auth-client.ts` → `expoClient({ scheme })` | `civicvoice` |
 | Backend env → `APP_SCHEMES` | `civicvoice` |
+
+---
+
+## Why this could not build before
+
+Bundling failed outright with:
+
+```
+Unable to resolve module ../../../node_modules/@better-auth/expo/dist/client.cjs
+```
+
+Two configs were fighting. `babel.config.js` aliased three better-auth imports
+to explicit `.cjs` paths inside `node_modules`; `metro.config.js` then
+intercepted anything containing "better-auth" that ended in `.cjs` and rewrote
+it to `.mjs`.
+
+Neither file existed for any of the three packages. It survived because
+`better-auth` happens to ship `.mjs`, so the rewrite accidentally landed on a
+real file. `@better-auth/expo` ships plain `client.js` — the alias pointed at a
+file that does not exist, and the rewrite pointed at a different file that also
+does not exist.
+
+Both halves are deleted. Every one of those packages declares an `exports` map,
+and Metro in SDK 54 honours it, so the plain specifier resolves correctly with
+no help. If a future dependency bump appears to need an alias here, that is
+almost always a stale lockfile rather than a genuine resolution problem —
+check what the package actually ships in `dist/` before adding one back.
