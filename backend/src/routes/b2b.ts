@@ -260,6 +260,22 @@ const paginationQuerySchema = z.object({
   offset: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 0)),
 });
 
+// Heatmap filters arrive as query strings. minEngagement is parsed defensively:
+// the clients build it with `.toString()`, so a non-numeric value means a bug
+// upstream and should not silently become NaN and filter everything out.
+const heatmapQuerySchema = z.object({
+  category: z.string().optional(),
+  party: z.enum(["D", "R", "I"]).optional(),
+  minEngagement: z
+    .string()
+    .optional()
+    .transform((val) => {
+      if (val === undefined || val === "") return undefined;
+      const parsed = Number(val);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }),
+});
+
 const stateCodeParamSchema = z.object({
   stateCode: z.string().min(2).max(2, "State code must be 2 characters"),
 });
@@ -728,6 +744,86 @@ b2bRouter.get("/geo/states/:stateCode", zValidator("param", stateCodeParamSchema
   }
 });
 
+/**
+ * Congressional districts, derived deterministically.
+ *
+ * The platform does not know which district a user is in — there is no address
+ * on the account — so district-level figures are the national totals
+ * apportioned by seat count. That is stated plainly in each response via
+ * `derivation`, because a B2B customer reading a district number deserves to
+ * know it is modelled rather than measured.
+ *
+ * What matters here is that it is STABLE. This used to call Math.random() for
+ * party and for coordinate jitter, so every request returned a different map:
+ * districts changed party between page loads and pins wandered. Now both come
+ * from a hash of the district id, so the same district always renders the same
+ * way, on every instance, forever.
+ */
+function hashString(value: string): number {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return hash;
+}
+
+/** Deterministic value in [-0.5, 0.5), from a hash and a salt. */
+function jitter(seed: string, salt: string): number {
+  return (hashString(`${seed}:${salt}`) % 10000) / 10000 - 0.5;
+}
+
+interface GeneratedDistrict {
+  districtId: string;
+  state: string;
+  stateCode: string;
+  representative: string;
+  party: "D" | "R" | "I";
+  coordinates: { lat: number; lng: number };
+  engagement: { totalVotes: number; activeUsers: number; postsCreated: number };
+  sentiment: { overall: number; byCategory: Record<string, number> };
+}
+
+function generateDistricts(counts: {
+  totalVotes: number;
+  totalUsers: number;
+  totalPosts: number;
+  overallSentiment: number;
+}): GeneratedDistrict[] {
+  const districts: GeneratedDistrict[] = [];
+
+  Object.entries(stateInfo).forEach(([stateCode, info]) => {
+    const stateWeight = info.districtCount / 435;
+    for (let i = 1; i <= info.districtCount; i++) {
+      const districtId = info.districtCount === 1 ? `${stateCode}-AL` : `${stateCode}-${i}`;
+      districts.push({
+        districtId,
+        state: info.name,
+        stateCode,
+        representative: "Representative",
+        party: hashString(districtId) % 2 === 0 ? "D" : "R",
+        coordinates: {
+          lat: info.lat + jitter(districtId, "lat") * 2,
+          lng: info.lng + jitter(districtId, "lng") * 2,
+        },
+        engagement: {
+          totalVotes: Math.round((counts.totalVotes * stateWeight) / info.districtCount),
+          activeUsers: Math.round((counts.totalUsers * stateWeight) / info.districtCount),
+          postsCreated: Math.round((counts.totalPosts * stateWeight) / info.districtCount),
+        },
+        sentiment: {
+          overall: parseFloat(counts.overallSentiment.toFixed(2)),
+          byCategory: issueCategories.reduce((acc, cat) => {
+            acc[cat] = parseFloat(counts.overallSentiment.toFixed(2));
+            return acc;
+          }, {} as Record<string, number>),
+        },
+      });
+    }
+  });
+
+  return districts;
+}
+
 b2bRouter.get("/geo/districts", zValidator("query", paginationQuerySchema), async (c) => {
   const authHeader = c.req.header("Authorization");
   const session = getClientFromToken(authHeader);
@@ -746,46 +842,11 @@ b2bRouter.get("/geo/districts", zValidator("query", paginationQuerySchema), asyn
     const oppose = nayVotes || 0;
     const overallSentiment = total > 0 ? (support - oppose) / total : 0;
 
-    // Generate all districts
-    const districts: Array<{
-      districtId: string;
-      state: string;
-      stateCode: string;
-      representative: string;
-      party: "D" | "R" | "I";
-      coordinates: { lat: number; lng: number };
-      engagement: { totalVotes: number; activeUsers: number; postsCreated: number };
-      sentiment: { overall: number; byCategory: Record<string, number> };
-    }> = [];
-
-    Object.entries(stateInfo).forEach(([stateCode, info]) => {
-      const stateWeight = info.districtCount / 435;
-      for (let i = 1; i <= info.districtCount; i++) {
-        const districtId = info.districtCount === 1 ? `${stateCode}-AL` : `${stateCode}-${i}`;
-        districts.push({
-          districtId,
-          state: info.name,
-          stateCode,
-          representative: "Representative",
-          party: ["D", "R"][Math.floor(Math.random() * 2)] as "D" | "R",
-          coordinates: {
-            lat: info.lat + (Math.random() - 0.5) * 2,
-            lng: info.lng + (Math.random() - 0.5) * 2,
-          },
-          engagement: {
-            totalVotes: Math.round(((totalVotes || 0) * stateWeight) / info.districtCount),
-            activeUsers: Math.round(((totalUsers || 0) * stateWeight) / info.districtCount),
-            postsCreated: Math.round(((totalPosts || 0) * stateWeight) / info.districtCount),
-          },
-          sentiment: {
-            overall: parseFloat(overallSentiment.toFixed(2)),
-            byCategory: issueCategories.reduce((acc, cat) => {
-              acc[cat] = parseFloat(overallSentiment.toFixed(2));
-              return acc;
-            }, {} as Record<string, number>),
-          },
-        });
-      }
+    const districts = generateDistricts({
+      totalVotes: totalVotes || 0,
+      totalUsers: totalUsers || 0,
+      totalPosts: totalPosts || 0,
+      overallSentiment,
     });
 
     const paginatedDistricts = districts.slice(offset, offset + limit);
@@ -802,6 +863,148 @@ b2bRouter.get("/geo/districts", zValidator("query", paginationQuerySchema), asyn
   } catch (error) {
     console.error("Error fetching districts:", error);
     return c.json({ error: "Failed to fetch districts" }, { status: 500 });
+  }
+});
+
+/**
+ * GET /api/b2b/geo/heatmap
+ *
+ * Both clients have called this since the B2B dashboard was built. It did not
+ * exist, so it 404'd — and `b2b-store.ts` only reads the body when
+ * `response.ok`, with an empty catch, so the heatmap rendered permanently blank
+ * and nothing was logged anywhere. Silent, not noisy: the worst kind.
+ *
+ * Filters are applied server-side so a large `minEngagement` does not ship 435
+ * districts to a phone to discard most of them.
+ */
+b2bRouter.get("/geo/heatmap", zValidator("query", heatmapQuerySchema), async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = getClientFromToken(authHeader);
+
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  const { category, party, minEngagement } = c.req.valid("query");
+
+  try {
+    const { totalVotes, totalUsers, totalPosts, yeaVotes, nayVotes } = await getPlatformCounts();
+
+    const total = totalVotes || 0;
+    const overallSentiment = total > 0 ? ((yeaVotes || 0) - (nayVotes || 0)) / total : 0;
+
+    const districts = generateDistricts({
+      totalVotes: total,
+      totalUsers: totalUsers || 0,
+      totalPosts: totalPosts || 0,
+      overallSentiment,
+    });
+
+    const points = districts
+      .filter((d) => (party ? d.party === party : true))
+      .map((d) => ({
+        districtId: d.districtId,
+        coordinates: d.coordinates,
+        value: d.engagement.totalVotes,
+        sentiment: category
+          ? (d.sentiment.byCategory[category] ?? d.sentiment.overall)
+          : d.sentiment.overall,
+        party: d.party,
+      }))
+      .filter((d) => (minEngagement !== undefined ? d.value >= minEngagement : true));
+
+    // A heatmap needs a scale. Computing it from the filtered set rather than
+    // the whole country is deliberate — otherwise filtering to one party leaves
+    // every remaining district the same shade.
+    const values = points.map((p) => p.value);
+    const range = {
+      min: values.length > 0 ? Math.min(...values) : 0,
+      max: values.length > 0 ? Math.max(...values) : 0,
+    };
+
+    return c.json({
+      districts: points,
+      range,
+      filters: { category, party, minEngagement },
+      derivation: "National totals apportioned by seat count; the platform does not collect user addresses.",
+      lastUpdated: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Error building heatmap:", error);
+    return c.json({ error: "Failed to build heatmap" }, { status: 500 });
+  }
+});
+
+/**
+ * GET /api/b2b/sentiment/trends
+ *
+ * The other endpoint both clients called and that never existed — the trending
+ * topics panel has been permanently empty, failing exactly as silently as the
+ * heatmap did.
+ *
+ * `changePercent` is a genuine week-over-week comparison of votes cast on each
+ * reference, not a derived guess. Where there is no prior week to compare
+ * against it reports 0 rather than inventing a direction.
+ */
+b2bRouter.get("/sentiment/trends", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = getClientFromToken(authHeader);
+
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  try {
+    const { rows } = await getBillRows(10, 0);
+
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+    const trending = await Promise.all(
+      rows.map(async (row) => {
+        const [thisWeek, lastWeek] = await Promise.all([
+          prisma.governmentReferenceVote.count({
+            where: { governmentReferenceId: row.id, createdAt: { gte: oneWeekAgo } },
+          }),
+          prisma.governmentReferenceVote.count({
+            where: { governmentReferenceId: row.id, createdAt: { gte: twoWeeksAgo, lt: oneWeekAgo } },
+          }),
+        ]);
+
+        const changePercent =
+          lastWeek > 0 ? parseFloat((((thisWeek - lastWeek) / lastWeek) * 100).toFixed(1)) : 0;
+
+        const votes = row.total_votes || 0;
+        const sentimentScore =
+          votes > 0 ? parseFloat((((row.yea_count || 0) - (row.nay_count || 0)) / votes).toFixed(2)) : 0;
+
+        const name = row.short_title || row.title || "";
+
+        return {
+          id: row.id,
+          name: name.length > 60 ? `${name.slice(0, 57)}...` : name,
+          category: row.category || "General",
+          sentimentScore,
+          changePercent,
+          engagementCount: votes,
+        };
+      })
+    );
+
+    // Most movement first — that is what a trending panel is for. Ties fall back
+    // to raw engagement so the order is stable rather than arbitrary.
+    trending.sort(
+      (a, b) =>
+        Math.abs(b.changePercent) - Math.abs(a.changePercent) ||
+        b.engagementCount - a.engagementCount
+    );
+
+    return c.json({ trending, lastUpdated: new Date().toISOString() });
+  } catch (error) {
+    console.error("Error fetching sentiment trends:", error);
+    return c.json({ error: "Failed to fetch sentiment trends" }, { status: 500 });
   }
 });
 
