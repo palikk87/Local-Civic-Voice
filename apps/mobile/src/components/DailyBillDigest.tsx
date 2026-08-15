@@ -23,7 +23,7 @@ import {
   useLatestReferences,
   referenceToBill,
 } from '@/lib/api/references';
-import { mockBills, categoryColors, categoryLabels } from '@/lib/mock-data';
+import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import {
   calculateVoiceWeight,
   getWeightTier,
@@ -288,14 +288,10 @@ export function DailyBillDigest({
       }));
     }
 
-    // Fallback when the backend is unreachable
-    const mockDigest = mockBills
-      .filter((bill) => !category || bill.category === category)
-      .map(convertToDigestBill)
-      .sort((a, b) => b.weight_score - a.weight_score)
-      .slice(0, limit);
-
-    return mockDigest;
+    // Nothing from the API means nothing to show. A hardcoded array used to
+    // stand in here, so an unreachable backend produced a full digest of
+    // invented bills.
+    return [];
   }, [latestRefs, trendingRefs, useSupabase, supabaseBills, category, limit]);
 
   if (digestBills.length === 0 && isLoading) {
@@ -397,10 +393,7 @@ export function CompactDailyDigest({ limit = 5 }: { limit?: number }) {
       }));
     }
 
-    return mockBills
-      .map(convertToDigestBill)
-      .sort((a, b) => b.weight_score - a.weight_score)
-      .slice(0, limit);
+    return [];
   }, [latestRefs, useSupabase, supabaseBills, limit]);
 
   if (digestBills.length === 0 && isLoading) {

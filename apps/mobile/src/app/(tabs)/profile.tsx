@@ -30,7 +30,7 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { mockBills, categoryColors, categoryLabels } from '@/lib/mock-data';
+import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore } from '@/lib/voting-store';
 import { useAuthStore } from '@/lib/auth-store';
 import { useDelegationStore, selectActiveDelegationsCount } from '@/lib/delegation-store';
@@ -96,7 +96,9 @@ function VoteHistoryCard({
   const router = useRouter();
 
   // Fall back to mock bill if not provided
-  const displayBill = bill ?? mockBills.find((b) => b.id === billId);
+  // No bill, no card. This used to fall back to a hardcoded array, so a vote on
+  // a bill the API could not return rendered as a vote on an invented one.
+  const displayBill = bill;
 
   if (!displayBill) return null;
 

@@ -9,7 +9,6 @@
 
 import type { CongressBill, Bill, Representative } from './types';
 import { representatives } from './mock-data';
-import { supabase, isSupabaseConfigured } from './supabase';
 
 const CONGRESS_API_BASE = 'https://api.congress.gov/v3';
 
@@ -33,25 +32,10 @@ export async function getCurrentCongress(): Promise<number> {
     return cachedCurrentCongress;
   }
 
-  // Try to fetch from database
-  if (isSupabaseConfigured()) {
-    try {
-      const { data, error } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'current_congress')
-        .single();
-
-      if (!error && data) {
-        const result = data as { value: string };
-        cachedCurrentCongress = parseInt(result.value, 10);
-        cacheTimestamp = now;
-        return cachedCurrentCongress;
-      }
-    } catch (err) {
-      console.warn('Failed to fetch current congress from database:', err);
-    }
-  }
+  // The Supabase `system_settings` lookup that used to run here went with the
+  // Supabase SDK. It was gated behind isSupabaseConfigured(), which has always
+  // been false, so DEFAULT_CONGRESS was the only path that ever executed — and
+  // it is the path that remains. Mirrors apps/mobile/src/lib/congress-api.ts.
 
   // Fallback to default
   cachedCurrentCongress = DEFAULT_CONGRESS;

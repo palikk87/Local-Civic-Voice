@@ -45,8 +45,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { mockBills, categoryColors, categoryLabels, representatives } from '@/lib/mock-data';
-import { additionalBills } from '@/lib/government-data';
+import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
   castReferenceVote,
@@ -66,7 +65,7 @@ import { PulseGap } from '@/components/PulseGap';
 import { CitizensBrief } from '@/components/CitizensBrief';
 import { NewsReelCarousel } from '@/components/NewsReelCarousel';
 import { TransparencyIndicator, ArticleBadge } from '@/components/BillOfRightsBadge';
-import type { Bill } from '@/lib/types';
+import type { Bill, Representative } from '@/lib/types';
 import { useTimelineStore } from '@/lib/timeline-store';
 import { fetchBillSponsor } from '@/lib/government-api';
 import { useBill } from '@/lib/hooks';
@@ -81,6 +80,25 @@ import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 type ViewMode = 'simplified' | 'full' | 'impact' | 'related';
+
+/**
+ * Stand-in when a bill's sponsor cannot be resolved.
+ *
+ * The fallbacks this replaces printed a REAL member of Congress — `representatives[0]`,
+ * or a random pick — as the sponsor of a bill they may have nothing to do with.
+ * Naming the wrong legislator is worse than admitting we do not know.
+ */
+const UNKNOWN_SPONSOR: Representative = {
+  id: 'unknown',
+  name: 'Sponsor unknown',
+  party: 'I',
+  state: '',
+  district: undefined,
+  chamber: 'house',
+  imageUrl: '',
+  contactPhone: '',
+  website: '',
+};
 
 function mapSupabaseBillToBill(
   bill: SupabaseBill,
@@ -105,7 +123,7 @@ function mapSupabaseBillToBill(
             }
           : undefined,
       }
-    : representatives[0];
+    : UNKNOWN_SPONSOR;
 
   const hasOfficialVotes = [
     bill.official_yea,
@@ -357,13 +375,7 @@ export default function BillDetailScreen() {
     representatives?: SupabaseRepresentative | null;
   }) | null;
 
-  // First try to find in mockBills
-  let bill = mockBills.find((b) => b.id === id);
-
-  // Check additional government bills (used in feed)
-  if (!bill) {
-    bill = additionalBills.find((b) => b.id === id);
-  }
+  let bill: Bill | undefined;
 
   // If Supabase has this bill, map it to the app Bill shape
   if (!bill && supabaseBillData) {
@@ -373,8 +385,18 @@ export default function BillDetailScreen() {
     );
   }
 
-  // Daily-synced government reference (Discover pulls these from congress.gov)
-  const { data: billRefData, isLoading: billRefLoading } = useGovernmentReference(id, !bill);
+  // Every bill comes from GET /api/government-references/:id.
+  //
+  // Two hardcoded arrays used to be searched first, and the winner was passed
+  // as `enabled: !bill` into this query — so for any id in either array the
+  // real fetch never ran. Deleting the imports alone would not have fixed that;
+  // the gate had to go with them.
+  const {
+    data: billRefData,
+    isLoading: billRefLoading,
+    isError: billRefError,
+    refetch: refetchBill,
+  } = useGovernmentReference(id);
   // Brief stored on the master reference — written once, read by everyone after.
   const briefProps = useReferenceBriefProps(id, billRefData?.reference);
   if (!bill && billRefData?.reference?.referenceType === 'bill') {
@@ -397,11 +419,6 @@ export default function BillDetailScreen() {
 
   // If we have a library post but no bill, create a virtual bill from the post data
   if (!bill && libraryPost) {
-    // Generate mock voting data
-    const mockYea = Math.floor(Math.random() * 50000) + 10000;
-    const mockNay = Math.floor(Math.random() * 30000) + 5000;
-
-    // Create sponsor from API data or fallback to random representative
     const sponsor = sponsorInfo
       ? {
           id: sponsorInfo.bioguideId ?? 'unknown',
@@ -410,11 +427,11 @@ export default function BillDetailScreen() {
           state: sponsorInfo.state,
           district: sponsorInfo.district,
           chamber: 'house' as const,
-          imageUrl: sponsorInfo.imageUrl ?? representatives[0].imageUrl,
+          imageUrl: sponsorInfo.imageUrl ?? '',
           contactPhone: '',
           website: '',
         }
-      : representatives[Math.floor(Math.random() * representatives.length)];
+      : UNKNOWN_SPONSOR;
 
     // Extract text content for fullText and simplifiedText
     // The aiBrief is a simplified summary, so use it for simplifiedText
@@ -447,11 +464,15 @@ export default function BillDetailScreen() {
       realWorldImpact: libraryPost.opinion ?? 'This legislation could have significant impact on citizens.',
       relatedLaws: [],
       communityVotes: {
-        yea: mockYea,
-        nay: mockNay,
-        totalVoters: mockYea + mockNay,
+        // A library item is a document someone saved, not a reference the
+        // platform tracks, so it has no tallies. These used to be
+        // Math.random() — invented numbers rendered as real citizen votes, and
+        // different on every open.
+        yea: 0,
+        nay: 0,
+        totalVoters: 0,
       },
-      projectedOutcome: mockYea > mockNay ? 'likely_pass' : 'likely_fail',
+      projectedOutcome: 'uncertain',
       branch: 'legislative',
       // Don't set citizensBrief - let the CitizensBrief component generate it if needed
     };

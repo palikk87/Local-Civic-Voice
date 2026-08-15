@@ -45,7 +45,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { useVotingStore, selectIsLiked, selectUserVote } from '@/lib/voting-store';
 import { castReferenceVote, yeaNayToPosition } from '@/lib/reference-votes';
-import { mockFeedItems, categoryColors, categoryLabels, bills, branchLabels, branchColors, governmentFeedItems } from '@/lib/mock-data';
+import { categoryColors, categoryLabels, branchLabels, branchColors } from '@/lib/mock-data';
 import type { FeedItem, Bill, BillCategory, GovernmentBranch } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -898,7 +898,12 @@ export default function HomeScreen() {
 
   // Live public feed — every user's timeline posts, cycled through the
   // backend feed algorithm (GET /api/feed). Refetches so the feed stays fresh.
-  const { data: algorithmicFeed, refetch: refetchAlgorithmicFeed } = useAlgorithmicFeed(30);
+  const {
+    data: algorithmicFeed,
+    isLoading: feedLoading,
+    isError: feedError,
+    refetch: refetchAlgorithmicFeed,
+  } = useAlgorithmicFeed(30);
 
   // Supabase data
   const { data: supabaseFeed, isLoading, refetch } = useFeed(20);
@@ -917,18 +922,13 @@ export default function HomeScreen() {
 
   // Convert and rank feed items with session exclusion
   const feedData = useMemo(() => {
-    // Real user posts from the backend feed algorithm come first — the mock and
-    // government items below are filler until the community produces volume.
-    const algorithmicItems: FeedItem[] = (algorithmicFeed?.posts ?? []).map(
-      algorithmicPostToFeedItem
-    );
-    const algorithmicIds = new Set(algorithmicItems.map((i) => i.id));
-
-    let rawItems: FeedItem[] = [
-      ...algorithmicItems,
-      ...mockFeedItems.filter((i) => !algorithmicIds.has(i.id)),
-      ...governmentFeedItems,
-    ];
+    // The feed is exactly what GET /api/feed returns. Nothing else.
+    //
+    // Two hardcoded arrays used to be concatenated on unconditionally, as
+    // "filler until the community produces volume" — so an empty feed looked
+    // busy and every post a visitor read was invented. An empty feed is now
+    // allowed to be empty, and says so.
+    let rawItems: FeedItem[] = (algorithmicFeed?.posts ?? []).map(algorithmicPostToFeedItem);
 
     // Add Supabase feed items if available (filter out low-quality items)
     if (useSupabase && supabaseFeed && supabaseFeed.length > 0) {
@@ -1016,38 +1016,11 @@ export default function HomeScreen() {
     }
 
 
-    // Weave real community posts (from the backend feed algorithm) into the
-    // ranked list — one real post per three slots — so live user content
-    // cycles through the public feed instead of being drowned out by filler.
-    // The ranker caps its output, so source the real posts from the original
-    // list (in backend-algorithm order) rather than the possibly-trimmed result.
-    if (algorithmicItems.length > 0) {
-      const zeroBreakdown = {
-        engagement: 0,
-        recency: 0,
-        relevance: 0,
-        gapBoost: 0,
-        diversityPenalty: 0,
-      };
-      const scoredById = new Map(scoredItems.map((i) => [i.id, i]));
-      const realItems: ScoredFeedItem[] = algorithmicItems.map(
-        (item, idx) =>
-          scoredById.get(item.id) ?? {
-            ...item,
-            score: 1000 - idx,
-            scoreBreakdown: zeroBreakdown,
-          }
-      );
-      const fillItems = scoredItems.filter((i) => !algorithmicIds.has(i.id));
-      const woven: ScoredFeedItem[] = [];
-      let r = 0;
-      let f = 0;
-      while (r < realItems.length || f < fillItems.length) {
-        if (r < realItems.length) woven.push(realItems[r++]);
-        for (let k = 0; k < 2 && f < fillItems.length; k++) woven.push(fillItems[f++]);
-      }
-      scoredItems = woven;
-    }
+    // The weaving block that used to sit here interleaved real posts with the
+    // hardcoded filler — one real post per three slots. With no filler there is
+    // nothing to weave against: rawItems is already exactly the backend's posts,
+    // so the ranker's output is the answer.
+
 
     return scoredItems;
   }, [algorithmicFeed, useSupabase, supabaseFeed, likedItems, feedType, branchFilter, seenBillIds.size]);
@@ -1067,7 +1040,6 @@ export default function HomeScreen() {
     }
   }, [feedData, feedType]);
 
-  const trendingCount = useSupabase ? (trendingBills?.length ?? 0) : bills.length;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1185,12 +1157,42 @@ export default function HomeScreen() {
             />
           }
           ListEmptyComponent={
-            <View className="items-center justify-center py-20">
-              <Text className="text-slate-400 text-lg">No activity yet</Text>
-              <Text className="text-slate-500 text-sm mt-2">
-                Be the first to vote on a bill!
-              </Text>
-            </View>
+            feedLoading ? (
+              <View className="items-center justify-center py-20">
+                <ActivityIndicator color="#64748B" />
+                <Text className="text-slate-500 text-sm mt-3">Loading the feed…</Text>
+              </View>
+            ) : feedError ? (
+              <View className="items-center justify-center py-20 px-6">
+                <Text className="text-slate-300 text-lg">Couldn&apos;t load the feed</Text>
+                <Text className="text-slate-500 text-sm mt-2 text-center">
+                  Check your connection and try again.
+                </Text>
+                <Pressable
+                  onPress={() => refetchAlgorithmicFeed()}
+                  className="mt-4 bg-slate-800 px-5 py-2.5 rounded-xl"
+                >
+                  <Text className="text-white text-sm">Try again</Text>
+                </Pressable>
+              </View>
+            ) : (
+              /* A genuinely empty feed. The database has no posts yet, which is
+                 correct — this used to be padded with invented posts so it never
+                 looked empty. Point people at Discover, which does have content. */
+              <View className="items-center justify-center py-20 px-6">
+                <Text className="text-slate-300 text-lg">No posts yet</Text>
+                <Text className="text-slate-500 text-sm mt-2 text-center">
+                  Nobody has posted yet. Open a bill in Discover and share where you stand — yours
+                  will be the first.
+                </Text>
+                <Pressable
+                  onPress={() => router.push('/(tabs)/discover')}
+                  className="mt-4 bg-blue-600 px-5 py-2.5 rounded-xl"
+                >
+                  <Text className="text-white text-sm font-medium">Browse Discover</Text>
+                </Pressable>
+              </View>
+            )
           }
         />
       </SafeAreaView>

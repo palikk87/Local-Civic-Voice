@@ -39,8 +39,8 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInRight, FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { mockBills, mockUsers, categoryColors, categoryLabels, branchColors, branchLabels } from '@/lib/mock-data';
-import { executiveOrders, supremeCourtCases } from '@/lib/government-data';
+import { mockUsers, categoryColors, categoryLabels, branchColors, branchLabels } from '@/lib/mock-data';
+import type { ExecutiveOrder, SupremeCourtCase } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import {
   fetchOfficials,
@@ -281,7 +281,49 @@ function TrendingBillCard({ bill, index }: { bill: Bill; index: number }) {
 // EXECUTIVE ORDER CARD
 // ==========================================
 
-function ExecutiveOrderCard({ eo, index }: { eo: typeof executiveOrders[0]; index: number }) {
+
+/**
+ * What a branch section shows when it has nothing to show.
+ *
+ * Each section used to fall back to a hardcoded array whenever the API returned
+ * an empty list, so "the sync has not run yet" and "the backend is unreachable"
+ * both rendered as a full, convincing list of invented laws. Telling those two
+ * apart — and offering a retry instead of a blank panel — is the point.
+ */
+function SectionState({
+  isError,
+  onRetry,
+  emptyLabel,
+}: {
+  isError: boolean;
+  onRetry: () => void;
+  emptyLabel: string;
+}) {
+  return (
+    <View className="mt-4 rounded-xl border border-slate-700/50 bg-slate-800/40 px-4 py-8 items-center">
+      {isError ? (
+        <>
+          <Text className="text-slate-200 text-sm">Couldn&apos;t load this section</Text>
+          <Text className="text-slate-400 text-xs mt-1 text-center">
+            Check your connection and try again.
+          </Text>
+          <Pressable onPress={onRetry} className="mt-3 bg-slate-700 px-4 py-2 rounded-lg">
+            <Text className="text-white text-xs font-medium">Try again</Text>
+          </Pressable>
+        </>
+      ) : (
+        <>
+          <Text className="text-slate-400 text-sm">{emptyLabel}</Text>
+          <Text className="text-slate-500 text-xs mt-1 text-center">
+            New items appear here after the daily government sync runs.
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+function ExecutiveOrderCard({ eo, index }: { eo: ExecutiveOrder; index: number }) {
   const router = useRouter();
   const categoryColor = categoryColors[eo.category] ?? '#64748B';
 
@@ -351,7 +393,7 @@ function ExecutiveOrderCard({ eo, index }: { eo: typeof executiveOrders[0]; inde
 // SUPREME COURT CASE CARD
 // ==========================================
 
-function SupremeCourtCaseCard({ scotusCase, index }: { scotusCase: typeof supremeCourtCases[0]; index: number }) {
+function SupremeCourtCaseCard({ scotusCase, index }: { scotusCase: SupremeCourtCase; index: number }) {
   const router = useRouter();
   const categoryColor = categoryColors[scotusCase.category] ?? '#64748B';
 
@@ -746,16 +788,19 @@ export default function DiscoverScreen() {
   const {
     data: billRefsData,
     isLoading: billRefsLoading,
+    isError: billRefsError,
     refetch: refetchBillRefs,
   } = useTrendingReferences('bill', 10);
   const {
     data: eoRefsData,
     isLoading: eoRefsLoading,
+    isError: eoRefsError,
     refetch: refetchEoRefs,
   } = useTrendingReferences('executive_order', 10);
   const {
     data: scotusRefsData,
     isLoading: scotusRefsLoading,
+    isError: scotusRefsError,
     refetch: refetchScotusRefs,
   } = useTrendingReferences('scotus_case', 10);
   // Newest synced bills — keeps the "All Legislation" list up to date even
@@ -796,10 +841,9 @@ export default function DiscoverScreen() {
       seen.add(bill.id);
       return true;
     });
-    const allBills = liveBills.length > 0 ? liveBills : mockBills;
 
     // Filter by category and search
-    return allBills.filter((bill) => {
+    return liveBills.filter((bill) => {
       if (selectedCategory && bill.category !== selectedCategory) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -817,23 +861,21 @@ export default function DiscoverScreen() {
     const referenceBills = (billRefsData?.references ?? []).map(referenceToBill);
     if (referenceBills.length > 0) return referenceBills.slice(0, 10);
 
-    // Fallback when the backend is unreachable
+    // /api/bills is a second real source, not a fallback to invented content.
     const apiBills = (apiBillsData?.pages?.flatMap(page => page.bills) ?? []).map(convertApiBillToLegacy);
-    return [...apiBills, ...mockBills]
+    return apiBills
       .sort((a, b) => b.communityVotes.totalVoters - a.communityVotes.totalVoters)
       .slice(0, 10);
   }, [billRefsData, apiBillsData]);
 
   // 10 most popular executive orders (live, daily-synced)
   const executiveOrderItems = useMemo(() => {
-    const refs = (eoRefsData?.references ?? []).map(referenceToExecutiveOrder);
-    return refs.length > 0 ? refs.slice(0, 10) : executiveOrders;
+    return (eoRefsData?.references ?? []).map(referenceToExecutiveOrder).slice(0, 10);
   }, [eoRefsData]);
 
   // 10 most popular Supreme Court cases (live, daily-synced)
   const scotusItems = useMemo(() => {
-    const refs = (scotusRefsData?.references ?? []).map(referenceToScotusCase);
-    return refs.length > 0 ? refs.slice(0, 10) : supremeCourtCases;
+    return (scotusRefsData?.references ?? []).map(referenceToScotusCase).slice(0, 10);
   }, [scotusRefsData]);
 
   // Live government data — the SAME endpoint and query cache the Government tab
@@ -1024,6 +1066,12 @@ export default function DiscoverScreen() {
 
               {billRefsLoading && trendingBills.length === 0 ? (
                 <ActivityIndicator size="large" color="#3B82F6" className="mt-8" />
+              ) : trendingBills.length === 0 ? (
+                <SectionState
+                  isError={billRefsError}
+                  onRetry={() => refetchBillRefs()}
+                  emptyLabel="No bills yet"
+                />
               ) : (
                 trendingBills.map((bill, index) => (
                   <Animated.View
@@ -1120,6 +1168,12 @@ export default function DiscoverScreen() {
 
               {eoRefsLoading && executiveOrderItems.length === 0 ? (
                 <ActivityIndicator size="large" color="#F59E0B" className="mt-8" />
+              ) : executiveOrderItems.length === 0 ? (
+                <SectionState
+                  isError={eoRefsError}
+                  onRetry={() => refetchEoRefs()}
+                  emptyLabel="No executive orders yet"
+                />
               ) : (
                 executiveOrderItems.map((eo, index) => (
                   <ExecutiveOrderCard key={eo.id} eo={eo} index={index} />
@@ -1145,6 +1199,12 @@ export default function DiscoverScreen() {
 
               {scotusRefsLoading && scotusItems.length === 0 ? (
                 <ActivityIndicator size="large" color="#8B5CF6" className="mt-8" />
+              ) : scotusItems.length === 0 ? (
+                <SectionState
+                  isError={scotusRefsError}
+                  onRetry={() => refetchScotusRefs()}
+                  emptyLabel="No Supreme Court cases yet"
+                />
               ) : (
                 scotusItems.map((scotusCase, index) => (
                   <SupremeCourtCaseCard key={scotusCase.id} scotusCase={scotusCase} index={index} />

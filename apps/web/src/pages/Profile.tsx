@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import { AppShell } from "@/components/layout/AppShell";
-import { mockBills, categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
+import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore } from "@/lib/mobile/voting-store";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
 import {
@@ -80,10 +80,10 @@ function VoteHistoryCard({
 }) {
   const navigate = useNavigate();
 
-  // Fall back to mock bill if not provided
-  const displayBill = bill ?? mockBills.find((b) => b.id === billId);
-
-  if (!displayBill) return null;
+  // No bill, no card. This used to fall back to a hardcoded array, so a vote on
+  // a bill the API could not return rendered as a vote on an invented one.
+  if (!bill) return null;
+  const displayBill = bill;
 
   const categoryColor = categoryColors[displayBill.category] ?? "#64748B";
 

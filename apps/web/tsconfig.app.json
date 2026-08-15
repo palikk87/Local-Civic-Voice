@@ -23,7 +23,8 @@
 
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@civic/core/*": ["../../packages/civic-core/src/*"]
     }
   },
   "include": ["src"]

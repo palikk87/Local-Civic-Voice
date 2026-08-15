@@ -24,7 +24,6 @@ import {
   Calendar,
   Sparkles,
 } from "lucide-react";
-import { executiveOrders } from "@/lib/mobile/government-data";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import { useRequireAuth } from "@/hooks/use-civic-auth";
@@ -103,14 +102,17 @@ export default function ExecutiveOrderDetail() {
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>("brief");
 
-  // Static orders resolve locally; daily-synced orders come from the backend.
-  const staticEo = executiveOrders.find((e) => e.id === id);
-  const { data: refData, isLoading: refLoading } = useGovernmentReference(id, !staticEo);
+  // Every order comes from GET /api/government-references/:id.
+  //
+  // This used to check a hardcoded array first and pass `enabled: !staticEo`
+  // into the query — so for any id that appeared in that array the real fetch
+  // never ran at all, and the page rendered invented content. Removing the
+  // import alone would not have fixed it; the gate had to go too.
+  const { data: refData, isLoading: refLoading, isError, refetch } = useGovernmentReference(id);
   const eo =
-    staticEo ??
-    (refData?.reference?.referenceType === "executive_order"
+    refData?.reference?.referenceType === "executive_order"
       ? referenceToExecutiveOrder(refData.reference)
-      : undefined);
+      : undefined;
   const userVote = useVotingStore(selectUserVote(id ?? ""));
   const requireAuth = useRequireAuth();
 
@@ -125,10 +127,25 @@ export default function ExecutiveOrderDetail() {
     }
   }, [id, serverUserVote]);
 
-  if (!eo && refLoading) {
+  if (refLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Loading executive order...</p>
+      </div>
+    );
+  }
+
+  // A failed request is not a missing order. Saying "not found" for a network
+  // error sends people looking for the wrong problem, and offers nothing to do.
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-6 text-center">
+        <AlertCircle size={48} color="#EF4444" />
+        <p className="text-white text-lg mt-4">Couldn&apos;t load this executive order</p>
+        <p className="text-slate-400 text-sm mt-2">Check your connection and try again.</p>
+        <button onClick={() => refetch()} className="mt-4 bg-slate-800 px-6 py-3 rounded-xl text-white">
+          Try again
+        </button>
       </div>
     );
   }

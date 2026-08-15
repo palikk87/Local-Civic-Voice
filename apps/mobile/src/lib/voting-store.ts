@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FeedItem } from './types';
-import { mockFeedItems } from './mock-data';
 
 /**
  * Local mirror of "my vote" per government reference (master reference system).
@@ -28,12 +27,11 @@ export const useVotingStore = create<VotingState>()(
   persist(
     (set, get) => ({
       userVotes: {},
-      likedItems: {
-        'feed-1': true,
-        'feed-3': true,
-        'feed-5': true,
-      },
-      feedItems: mockFeedItems,
+      // Both of these used to be seeded: three hardcoded post ids pre-marked as
+      // liked, and the full array of invented feed posts. A brand new visitor
+      // arrived with likes they had never given, on posts that did not exist.
+      likedItems: {},
+      feedItems: [],
 
       setLocalVote: (referenceId, vote) => {
         set((state) => {

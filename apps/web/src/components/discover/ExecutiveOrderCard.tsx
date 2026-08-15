@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ThumbsUp, ChevronRight } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
-import { executiveOrders } from "@/lib/mobile/government-data";
+import type { ExecutiveOrder } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
 
 const statusColors: Record<string, { bg: string; text: string }> = {
@@ -16,7 +16,7 @@ export function ExecutiveOrderCard({
   eo,
   index,
 }: {
-  eo: (typeof executiveOrders)[0];
+  eo: ExecutiveOrder;
   index: number;
 }) {
   const navigate = useNavigate();

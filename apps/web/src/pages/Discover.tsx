@@ -15,8 +15,7 @@ import {
   SupremeCourtJusticesSection,
   DataFreshnessIndicator,
 } from "@/components/discover/GovernmentOverview";
-import { mockBills, categoryLabels } from "@/lib/mobile/mock-data";
-import { executiveOrders, supremeCourtCases } from "@/lib/mobile/government-data";
+import { categoryLabels } from "@/lib/mobile/mock-data";
 import { fetchOfficials } from "@/lib/government-service";
 import { useQuery } from "@tanstack/react-query";
 import type { Bill, BillCategory, GovernmentBranch } from "@/lib/mobile/types";
@@ -72,6 +71,51 @@ function convertApiBillToLegacy(bill: ApiBill): Bill {
   };
 }
 
+
+/**
+ * What a branch section shows when it has nothing to show.
+ *
+ * Each section used to fall back to a hardcoded array whenever the API returned
+ * an empty list, so "the sync has not run yet" and "the backend is unreachable"
+ * both rendered as a full, convincing list of invented laws. Telling those two
+ * apart — and offering a retry instead of a blank panel — is the point.
+ */
+function SectionState({
+  isError,
+  onRetry,
+  emptyLabel,
+}: {
+  isError: boolean;
+  onRetry: () => void;
+  emptyLabel: string;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card/40 px-4 py-8 text-center">
+      {isError ? (
+        <>
+          <p className="text-sm text-foreground">Couldn&apos;t load this section</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Check your connection and try again.
+          </p>
+          <button
+            onClick={onRetry}
+            className="mt-3 rounded-lg bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground"
+          >
+            Try again
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">{emptyLabel}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            New items appear here after the daily government sync runs.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Discover() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -87,9 +131,18 @@ export default function Discover() {
   const { data: apiBillsData, isLoading } = useApiBills();
 
   // Live daily-synced data: 10 most popular per branch of government
-  const { data: billRefsData, isLoading: billRefsLoading } = useTrendingReferences("bill", 10);
-  const { data: eoRefsData, isLoading: eoRefsLoading } = useTrendingReferences("executive_order", 10);
-  const { data: scotusRefsData, isLoading: scotusRefsLoading } = useTrendingReferences("scotus_case", 10);
+  const {
+    data: billRefsData, isLoading: billRefsLoading,
+    isError: billRefsError, refetch: refetchBillRefs,
+  } = useTrendingReferences("bill", 10);
+  const {
+    data: eoRefsData, isLoading: eoRefsLoading,
+    isError: eoRefsError, refetch: refetchEoRefs,
+  } = useTrendingReferences("executive_order", 10);
+  const {
+    data: scotusRefsData, isLoading: scotusRefsLoading,
+    isError: scotusRefsError, refetch: refetchScotusRefs,
+  } = useTrendingReferences("scotus_case", 10);
   // Newest synced bills — keeps the "All Legislation" list up to date even
   // before the community has voted on them.
   const { data: latestBillsData } = useLatestReferences("bill", 30);
@@ -102,8 +155,12 @@ export default function Discover() {
     }));
   }, []);
 
-  // Filterable bill list: newest synced bills first, then popular ones and any
-  // DB bills. Static mock bills are only a fallback when the backend is unreachable.
+  // Filterable bill list: newest synced bills first, then popular ones, then any
+  // DB bills — all from the API.
+  //
+  // A hardcoded array used to stand in whenever this came back empty, which
+  // meant an unreachable backend looked identical to a healthy one. Empty is
+  // now allowed to be empty; the section below says so and offers a retry.
   const filteredBills = useMemo(() => {
     const latestBills = (latestBillsData?.references ?? []).map(referenceToBill);
     const trendingRefBills = (billRefsData?.references ?? []).map(referenceToBill);
@@ -114,10 +171,9 @@ export default function Discover() {
       seen.add(bill.id);
       return true;
     });
-    const allBills = liveBills.length > 0 ? liveBills : mockBills;
 
     // Filter by category and search
-    return allBills.filter((bill) => {
+    return liveBills.filter((bill) => {
       if (selectedCategory && bill.category !== selectedCategory) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -135,23 +191,21 @@ export default function Discover() {
     const referenceBills = (billRefsData?.references ?? []).map(referenceToBill);
     if (referenceBills.length > 0) return referenceBills.slice(0, 10);
 
-    // Fallback when the backend is unreachable
+    // /api/bills is a second real source, not a fallback to invented content.
     const apiBills = (apiBillsData?.pages?.flatMap((page) => page.bills) ?? []).map(convertApiBillToLegacy);
-    return [...apiBills, ...mockBills]
+    return apiBills
       .sort((a, b) => b.communityVotes.totalVoters - a.communityVotes.totalVoters)
       .slice(0, 10);
   }, [billRefsData, apiBillsData]);
 
   // 10 most popular executive orders (live, daily-synced)
   const executiveOrderItems = useMemo(() => {
-    const refs = (eoRefsData?.references ?? []).map(referenceToExecutiveOrder);
-    return refs.length > 0 ? refs.slice(0, 10) : executiveOrders;
+    return (eoRefsData?.references ?? []).map(referenceToExecutiveOrder).slice(0, 10);
   }, [eoRefsData]);
 
   // 10 most popular Supreme Court cases (live, daily-synced)
   const scotusItems = useMemo(() => {
-    const refs = (scotusRefsData?.references ?? []).map(referenceToScotusCase);
-    return refs.length > 0 ? refs.slice(0, 10) : supremeCourtCases;
+    return (scotusRefsData?.references ?? []).map(referenceToScotusCase).slice(0, 10);
   }, [scotusRefsData]);
 
   // Live government data — the SAME endpoint and query cache the Government tab
@@ -311,6 +365,12 @@ export default function Discover() {
                 <div className="flex justify-center py-10">
                   <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
                 </div>
+              ) : trendingBills.length === 0 ? (
+                <SectionState
+                  isError={billRefsError}
+                  onRetry={() => refetchBillRefs()}
+                  emptyLabel="No bills yet"
+                />
               ) : (
                 trendingBills.map((bill, index) => (
                   <MotionDiv
@@ -414,6 +474,12 @@ export default function Discover() {
                 <div className="flex justify-center py-10">
                   <Loader2 className="h-6 w-6 animate-spin text-amber-500" />
                 </div>
+              ) : executiveOrderItems.length === 0 ? (
+                <SectionState
+                  isError={eoRefsError}
+                  onRetry={() => refetchEoRefs()}
+                  emptyLabel="No executive orders yet"
+                />
               ) : (
                 executiveOrderItems.map((eo, index) => (
                   <ExecutiveOrderCard key={eo.id} eo={eo} index={index} />
@@ -441,6 +507,12 @@ export default function Discover() {
                 <div className="flex justify-center py-10">
                   <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
                 </div>
+              ) : scotusItems.length === 0 ? (
+                <SectionState
+                  isError={scotusRefsError}
+                  onRetry={() => refetchScotusRefs()}
+                  emptyLabel="No Supreme Court cases yet"
+                />
               ) : (
                 scotusItems.map((scotusCase, index) => (
                   <SupremeCourtCaseCard key={scotusCase.id} scotusCase={scotusCase} index={index} />

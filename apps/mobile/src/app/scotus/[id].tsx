@@ -39,7 +39,7 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { supremeCourtCases, justices } from '@/lib/government-data';
+import { justices } from '@/lib/government-data';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
@@ -202,13 +202,14 @@ export default function SupremeCourtDetailScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('brief');
 
   // Static landmark cases resolve locally; daily-synced cases come from the backend.
-  const staticCase = supremeCourtCases.find((c) => c.id === id);
-  const { data: refData, isLoading: refLoading } = useGovernmentReference(id, !staticCase);
+  // Every case comes from GET /api/government-references/:id. The hardcoded
+  // array that used to be checked first also gated this query via
+  // `enabled: !staticCase`, so for those ids the real fetch never ran.
+  const { data: refData, isLoading: refLoading, isError, refetch } = useGovernmentReference(id);
   const scotusCase =
-    staticCase ??
-    (refData?.reference?.referenceType === 'scotus_case'
+    refData?.reference?.referenceType === 'scotus_case'
       ? referenceToScotusCase(refData.reference)
-      : undefined);
+      : undefined;
   const userVote = useVotingStore(selectUserVote(id ?? ''));
   // Brief stored on the master reference — written once, read by everyone after.
   const briefProps = useReferenceBriefProps(id, refData?.reference);
@@ -232,10 +233,26 @@ export default function SupremeCourtDetailScreen() {
     transform: [{ scale: nayScale.value }],
   }));
 
-  if (!scotusCase && refLoading) {
+  if (refLoading) {
     return (
       <View className="flex-1 bg-slate-900 items-center justify-center">
         <Text className="text-slate-400 text-base">Loading case...</Text>
+      </View>
+    );
+  }
+
+  // A failed request is not a missing case.
+  if (isError) {
+    return (
+      <View className="flex-1 bg-slate-900 items-center justify-center px-6">
+        <AlertCircle size={48} color="#EF4444" />
+        <Text className="text-white text-lg mt-4 text-center">Couldn&apos;t load this case</Text>
+        <Text className="text-slate-400 text-sm mt-2 text-center">
+          Check your connection and try again.
+        </Text>
+        <Pressable onPress={() => refetch()} className="mt-4 bg-slate-800 px-6 py-3 rounded-xl">
+          <Text className="text-white">Try again</Text>
+        </Pressable>
       </View>
     );
   }

@@ -6,7 +6,7 @@ import { MotionDiv } from "@/components/civic/Motion";
 import { useDailyBillDigest, type DailyDigestBill } from "@/lib/mobile/hooks";
 import { useTrendingReferences, useLatestReferences } from "@/hooks/use-government-references";
 import { referenceToBill } from "@/lib/mobile/reference-mappers";
-import { mockBills, categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
+import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import type { Bill as AppBill } from "@/lib/mobile/types";
 import {
   calculateVoiceWeight,
@@ -265,14 +265,10 @@ export function DailyBillDigest({
       }));
     }
 
-    // Fallback when the backend is unreachable
-    const mockDigest = mockBills
-      .filter((bill) => !category || bill.category === category)
-      .map(convertToDigestBill)
-      .sort((a, b) => b.weight_score - a.weight_score)
-      .slice(0, limit);
-
-    return mockDigest;
+    // Nothing from the API means nothing to show. A hardcoded array used to
+    // stand in here, so an unreachable backend produced a full digest of
+    // invented bills.
+    return [];
   }, [latestRefs, trendingRefs, useSupabase, supabaseBills, category, limit]);
 
   if (digestBills.length === 0 && isLoading) {
@@ -361,10 +357,7 @@ export function CompactDailyDigest({ limit = 5 }: { limit?: number }) {
       }));
     }
 
-    return mockBills
-      .map(convertToDigestBill)
-      .sort((a, b) => b.weight_score - a.weight_score)
-      .slice(0, limit);
+    return [];
   }, [latestRefs, useSupabase, supabaseBills, limit]);
 
   if (digestBills.length === 0 && isLoading) {

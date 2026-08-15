@@ -22,8 +22,7 @@ import {
   ChevronUp,
   Loader2,
 } from "lucide-react";
-import { mockBills, categoryColors, categoryLabels, representatives } from "@/lib/mobile/mock-data";
-import { additionalBills } from "@/lib/mobile/government-data";
+import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import {
   castReferenceVote,
@@ -43,7 +42,7 @@ import { PulseGap } from "@/components/mobile/PulseGap";
 import { CitizensBrief } from "@/components/mobile/CitizensBrief";
 import { NewsReelCarousel } from "@/components/mobile/NewsReelCarousel";
 import { TransparencyIndicator, ArticleBadge } from "@/components/mobile/BillOfRightsBadge";
-import type { Bill } from "@/lib/mobile/types";
+import type { Bill, Representative } from "@/lib/mobile/types";
 import { useTimelineStore } from "@/lib/mobile/timeline-store";
 import { fetchBillSponsor } from "@/lib/mobile/government-api";
 import {
@@ -216,22 +215,46 @@ function ViewModeButton({
   );
 }
 
+/**
+ * Stand-in when a bill"s sponsor cannot be resolved.
+ *
+ * The fallbacks this replaces printed a REAL member of Congress — `representatives[0]`,
+ * or a random pick — as the sponsor of a bill they may have nothing to do with.
+ * Naming the wrong legislator is worse than admitting we do not know.
+ */
+const UNKNOWN_SPONSOR: Representative = {
+  id: "unknown",
+  name: "Sponsor unknown",
+  party: "I",
+  state: "",
+  district: undefined,
+  chamber: "house",
+  imageUrl: "",
+  contactPhone: "",
+  website: "",
+};
+
 export default function BillDetail() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const [viewMode, setViewMode] = useState<ViewMode>("simplified");
 
-  let bill = mockBills.find((b) => b.id === id);
-
-  if (!bill) {
-    bill = additionalBills.find((b) => b.id === id);
-  }
-
-  // Daily-synced government reference (Discover pulls these from congress.gov)
-  const { data: billRefData, isLoading: billRefLoading } = useGovernmentReference(id, !bill);
+  // Every bill comes from GET /api/government-references/:id.
+  //
+  // Two hardcoded arrays used to be searched first, and the winner was passed
+  // as `enabled: !bill` into this query — so for any id in either array the
+  // real fetch never ran. Deleting the imports alone would not have fixed that;
+  // the gate had to go with them.
+  const {
+    data: billRefData,
+    isLoading: billRefLoading,
+    isError: billRefError,
+    refetch: refetchBill,
+  } = useGovernmentReference(id);
+  let bill: Bill | undefined;
   // Brief stored on the master reference — written once, read by everyone after.
   const briefProps = useReferenceBriefProps(id, billRefData?.reference);
-  if (!bill && billRefData?.reference?.referenceType === "bill") {
+  if (billRefData?.reference?.referenceType === "bill") {
     bill = referenceToBill(billRefData.reference);
   }
 
@@ -248,9 +271,6 @@ export default function BillDetail() {
   });
 
   if (!bill && libraryPost) {
-    const mockYea = Math.floor(Math.random() * 50000) + 10000;
-    const mockNay = Math.floor(Math.random() * 30000) + 5000;
-
     const sponsor = sponsorInfo
       ? {
           id: sponsorInfo.bioguideId ?? "unknown",
@@ -259,11 +279,11 @@ export default function BillDetail() {
           state: sponsorInfo.state,
           district: sponsorInfo.district,
           chamber: "house" as const,
-          imageUrl: sponsorInfo.imageUrl ?? representatives[0].imageUrl,
+          imageUrl: sponsorInfo.imageUrl ?? "",
           contactPhone: "",
           website: "",
         }
-      : representatives[Math.floor(Math.random() * representatives.length)];
+      : UNKNOWN_SPONSOR;
 
     const titleText = libraryPost.sharedContent?.title ?? "Unknown Bill";
     const aiBriefText = libraryPost.aiBrief ?? "";
@@ -293,12 +313,12 @@ export default function BillDetail() {
       simplifiedText: simplifiedTextValue,
       realWorldImpact: libraryPost.opinion ?? "This legislation could have significant impact on citizens.",
       relatedLaws: [],
-      communityVotes: {
-        yea: mockYea,
-        nay: mockNay,
-        totalVoters: mockYea + mockNay,
-      },
-      projectedOutcome: mockYea > mockNay ? "likely_pass" : "likely_fail",
+      // A library item is a document someone saved, not a reference the
+      // platform tracks, so it has no tallies. These used to be
+      // Math.random() — invented numbers rendered as real citizen votes, and
+      // different on every page load.
+      communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
+      projectedOutcome: "uncertain",
       branch: "legislative",
     };
   }
@@ -315,10 +335,24 @@ export default function BillDetail() {
     }
   }, [id, serverUserVote]);
 
-  if (!bill && billRefLoading) {
+  if (billRefLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Loading bill...</p>
+      </div>
+    );
+  }
+
+  // A failed request is not a missing bill.
+  if (!bill && billRefError) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-6 text-center">
+        <AlertCircle size={48} color="#EF4444" />
+        <p className="text-white text-lg mt-4">Couldn&apos;t load this bill</p>
+        <p className="text-slate-400 text-sm mt-2">Check your connection and try again.</p>
+        <button onClick={() => refetchBill()} className="mt-4 bg-slate-800 px-6 py-3 rounded-xl text-white">
+          Try again
+        </button>
       </div>
     );
   }

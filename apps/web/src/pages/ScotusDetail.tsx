@@ -25,7 +25,7 @@ import {
   HelpCircle,
   Sparkles,
 } from "lucide-react";
-import { supremeCourtCases, justices } from "@/lib/mobile/government-data";
+import { justices } from "@/lib/mobile/government-data";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import { useRequireAuth } from "@/hooks/use-civic-auth";
@@ -173,13 +173,15 @@ export default function ScotusDetail() {
   const [viewMode, setViewMode] = useState<ViewMode>("brief");
 
   // Static landmark cases resolve locally; daily-synced cases come from the backend.
-  const staticCase = supremeCourtCases.find((c) => c.id === id);
-  const { data: refData, isLoading: refLoading } = useGovernmentReference(id, !staticCase);
+  // Every case comes from GET /api/government-references/:id.
+  //
+  // The hardcoded array that used to be checked first also gated this query
+  // via `enabled: !staticCase`, so for those ids the real fetch never ran.
+  const { data: refData, isLoading: refLoading, isError, refetch } = useGovernmentReference(id);
   const scotusCase =
-    staticCase ??
-    (refData?.reference?.referenceType === "scotus_case"
+    refData?.reference?.referenceType === "scotus_case"
       ? referenceToScotusCase(refData.reference)
-      : undefined);
+      : undefined;
   const userVote = useVotingStore(selectUserVote(id ?? ""));
   const requireAuth = useRequireAuth();
 
@@ -194,10 +196,24 @@ export default function ScotusDetail() {
     }
   }, [id, serverUserVote]);
 
-  if (!scotusCase && refLoading) {
+  if (refLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <p className="text-slate-400">Loading case...</p>
+      </div>
+    );
+  }
+
+  // A failed request is not a missing case.
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-6 text-center">
+        <AlertCircle size={48} color="#EF4444" />
+        <p className="text-white text-lg mt-4">Couldn&apos;t load this case</p>
+        <p className="text-slate-400 text-sm mt-2">Check your connection and try again.</p>
+        <button onClick={() => refetch()} className="mt-4 bg-slate-800 px-6 py-3 rounded-xl text-white">
+          Try again
+        </button>
       </div>
     );
   }

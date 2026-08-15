@@ -31,14 +31,11 @@ import { useVotingStore, selectIsLiked, selectUserVote } from "@/lib/mobile/voti
 import { castReferenceVote, yeaNayToPosition } from "@/lib/mobile/reference-votes";
 import { toast } from "sonner";
 import {
-  mockFeedItems,
   categoryColors,
   categoryLabels,
-  bills,
   branchLabels,
   branchColors,
 } from "@/lib/mobile/mock-data";
-import { governmentFeedItems } from "@/lib/mobile/government-data";
 import type { FeedItem, Bill, BillCategory, GovernmentBranch } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/mobile/supabase";
@@ -832,7 +829,12 @@ export default function HomeScreen() {
 
   // Live public feed — every user's timeline posts, cycled through the
   // backend feed algorithm (GET /api/feed). Refetches so the feed stays fresh.
-  const { data: algorithmicFeed, refetch: refetchAlgorithmicFeed } = useAlgorithmicFeed(30);
+  const {
+    data: algorithmicFeed,
+    isLoading: feedLoading,
+    isError: feedError,
+    refetch: refetchAlgorithmicFeed,
+  } = useAlgorithmicFeed(30);
 
   // Supabase data
   const { data: supabaseFeed, isLoading, refetch } = useFeed(20);
@@ -852,18 +854,13 @@ export default function HomeScreen() {
 
   // Convert and rank feed items with session exclusion
   const feedData = useMemo(() => {
-    // Real user posts from the backend feed algorithm come first — the mock and
-    // government items below are filler until the community produces volume.
-    const algorithmicItems: FeedItem[] = (algorithmicFeed?.posts ?? []).map(
-      algorithmicPostToFeedItem,
-    );
-    const algorithmicIds = new Set(algorithmicItems.map((i) => i.id));
-
-    let rawItems: FeedItem[] = [
-      ...algorithmicItems,
-      ...mockFeedItems.filter((i) => !algorithmicIds.has(i.id)),
-      ...governmentFeedItems,
-    ];
+    // The feed is exactly what GET /api/feed returns. Nothing else.
+    //
+    // Two hardcoded arrays used to be concatenated on unconditionally, as
+    // "filler until the community produces volume" — so an empty feed looked
+    // busy and every post a visitor read was invented. An empty feed is now
+    // allowed to be empty, and says so.
+    let rawItems: FeedItem[] = (algorithmicFeed?.posts ?? []).map(algorithmicPostToFeedItem);
 
     // Add Supabase feed items if available (filter out low-quality items)
     if (useSupabase && supabaseFeed && supabaseFeed.length > 0) {
@@ -955,38 +952,11 @@ export default function HomeScreen() {
     }
 
 
-    // Weave real community posts (from the backend feed algorithm) into the
-    // ranked list — one real post per three slots — so live user content
-    // cycles through the public feed instead of being drowned out by filler.
-    // The ranker caps its output, so source the real posts from the original
-    // list (in backend-algorithm order) rather than the possibly-trimmed result.
-    if (algorithmicItems.length > 0) {
-      const zeroBreakdown = {
-        engagement: 0,
-        recency: 0,
-        relevance: 0,
-        gapBoost: 0,
-        diversityPenalty: 0,
-      };
-      const scoredById = new Map(scoredItems.map((i) => [i.id, i]));
-      const realItems: ScoredFeedItem[] = algorithmicItems.map(
-        (item, idx) =>
-          scoredById.get(item.id) ?? {
-            ...item,
-            score: 1000 - idx,
-            scoreBreakdown: zeroBreakdown,
-          }
-      );
-      const fillItems = scoredItems.filter((i) => !algorithmicIds.has(i.id));
-      const woven: ScoredFeedItem[] = [];
-      let r = 0;
-      let f = 0;
-      while (r < realItems.length || f < fillItems.length) {
-        if (r < realItems.length) woven.push(realItems[r++]);
-        for (let k = 0; k < 2 && f < fillItems.length; k++) woven.push(fillItems[f++]);
-      }
-      scoredItems = woven;
-    }
+    // The weaving block that used to sit here interleaved real posts with the
+    // hardcoded filler — one real post per three slots. With no filler there is
+    // nothing to weave against: rawItems is already exactly the backend's posts,
+    // so the ranker's output is the answer.
+
 
     return scoredItems;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1007,9 +977,6 @@ export default function HomeScreen() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [feedData, feedType]);
-
-  const trendingCount = useSupabase ? trendingBills?.length ?? 0 : bills.length;
-  void trendingCount;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1108,10 +1075,38 @@ export default function HomeScreen() {
           {/* List Header */}
           <DailyBillDigest limit={8} title="Daily Bill Digest" showHeader={true} />
 
-          {feedData.length === 0 ? (
+          {feedLoading ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <p className="text-slate-400 text-lg">No activity yet</p>
-              <p className="text-slate-500 text-sm mt-2">Be the first to vote on a bill!</p>
+              <Loader2 className="h-6 w-6 animate-spin text-slate-500" />
+              <p className="text-slate-500 text-sm mt-3">Loading the feed…</p>
+            </div>
+          ) : feedError ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <p className="text-slate-300 text-lg">Couldn&apos;t load the feed</p>
+              <p className="text-slate-500 text-sm mt-2">Check your connection and try again.</p>
+              <button
+                onClick={() => refetchAlgorithmicFeed()}
+                className="mt-4 bg-slate-800 px-5 py-2.5 rounded-xl text-white text-sm"
+              >
+                Try again
+              </button>
+            </div>
+          ) : feedData.length === 0 ? (
+            /* A genuinely empty feed. The database has no posts yet, which is
+               correct — this used to be padded with invented posts so it never
+               looked empty. Point people at Discover, which does have content. */
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <p className="text-slate-300 text-lg">No posts yet</p>
+              <p className="text-slate-500 text-sm mt-2 max-w-xs">
+                Nobody has posted yet. Open a bill in Discover and share where you stand — yours
+                will be the first.
+              </p>
+              <button
+                onClick={() => navigate("/discover")}
+                className="mt-4 bg-blue-600 px-5 py-2.5 rounded-xl text-white text-sm font-medium"
+              >
+                Browse Discover
+              </button>
             </div>
           ) : (
             feedData.map((item, index) => (

@@ -111,7 +111,11 @@ jobs:
           bun-version: "1.3.11"
       - run: bun install --frozen-lockfile
         working-directory: apps/web
-      - run: bunx tsc --noEmit
+      # NOT `tsc --noEmit`. apps/web/tsconfig.json is `files: []` plus project
+      # references, so that command compiles nothing and exits 0 no matter what
+      # is broken — it passed for months while real type errors accumulated,
+      # including unresolved imports. Point it at the project with the sources.
+      - run: bun run typecheck
         working-directory: apps/web
       - run: bun run lint
         working-directory: apps/web

@@ -37,7 +37,6 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { executiveOrders } from '@/lib/government-data';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
@@ -132,14 +131,17 @@ export default function ExecutiveOrderDetailScreen() {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>('brief');
 
-  // Static orders resolve locally; daily-synced orders come from the backend.
-  const staticEo = executiveOrders.find((e) => e.id === id);
-  const { data: refData, isLoading: refLoading } = useGovernmentReference(id, !staticEo);
+  // Every order comes from GET /api/government-references/:id.
+  //
+  // This used to check a hardcoded array first and pass `enabled: !staticEo`
+  // into the query — so for any id in that array the real fetch never ran and
+  // the screen rendered invented content. Removing the import alone would not
+  // have fixed it; the gate had to go too.
+  const { data: refData, isLoading: refLoading, isError, refetch } = useGovernmentReference(id);
   const eo =
-    staticEo ??
-    (refData?.reference?.referenceType === 'executive_order'
+    refData?.reference?.referenceType === 'executive_order'
       ? referenceToExecutiveOrder(refData.reference)
-      : undefined);
+      : undefined;
   const userVote = useVotingStore(selectUserVote(id ?? ''));
   // Brief stored on the master reference — written once, read by everyone after.
   const briefProps = useReferenceBriefProps(id, refData?.reference);
@@ -163,10 +165,28 @@ export default function ExecutiveOrderDetailScreen() {
     transform: [{ scale: nayScale.value }],
   }));
 
-  if (!eo && refLoading) {
+  if (refLoading) {
     return (
       <View className="flex-1 bg-slate-900 items-center justify-center">
         <Text className="text-slate-400 text-base">Loading executive order...</Text>
+      </View>
+    );
+  }
+
+  // A failed request is not a missing order.
+  if (isError) {
+    return (
+      <View className="flex-1 bg-slate-900 items-center justify-center px-6">
+        <AlertCircle size={48} color="#EF4444" />
+        <Text className="text-white text-lg mt-4 text-center">
+          Couldn&apos;t load this executive order
+        </Text>
+        <Text className="text-slate-400 text-sm mt-2 text-center">
+          Check your connection and try again.
+        </Text>
+        <Pressable onPress={() => refetch()} className="mt-4 bg-slate-800 px-6 py-3 rounded-xl">
+          <Text className="text-white">Try again</Text>
+        </Pressable>
       </View>
     );
   }
