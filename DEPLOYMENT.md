@@ -167,11 +167,40 @@ Provider quirks, since they cost time otherwise:
 2. Sign in at [vercel.com](https://vercel.com), **Add New → Project**, pick the
    repo.
 3. Set **root directory** to `apps/web`.
-4. Leave `VITE_BACKEND_URL` unset. The rewrite above sends `/api/*` to the API,
-   so the browser talks to one address and the session cookie stays first-party.
+4. **Delete every environment variable Vercel created for you.** Its importer
+   scans the repository, finds `.env.example`, and silently creates all ~24
+   variables on the project — including `DATABASE_URL` and
+   `BETTER_AUTH_SECRET`, on a static frontend that has no server to read them.
+   They arrive empty, so nothing breaks immediately, but a database URL and an
+   auth secret sitting on the wrong project is a footgun waiting for someone to
+   helpfully fill them in.
+
+   This project needs **zero** environment variables. In particular
+   `VITE_BACKEND_URL` must stay unset: the rewrite below sends `/api/*` to the
+   API, so the browser talks to one address and the session cookie stays
+   first-party. Setting it would send data requests somewhere else while auth
+   stayed here.
+
 5. Deploy.
 6. Go back to the API host, set `APP_ORIGINS` to the real web URL, and redeploy.
    **Login will not work until you do** — see [Why login breaks](#why-login-breaks).
+
+### What a correct deploy looks like before the API exists
+
+If you deploy the web app first — which is reasonable, since the API needs the
+web address for `APP_ORIGINS` — expect this and do not chase it:
+
+```
+GET /            200   pages render
+GET /api/bills   502   DNS_HOSTNAME_NOT_FOUND
+```
+
+That is the `REPLACE_WITH_API_HOST` placeholder, resolving to nothing. The site
+is a shell: static pages load, no data, no login. It is not a broken build, and
+the fix is step 1 of this section once the API host exists.
+
+Rewrites are applied per request, not compiled, so Vercel never validates the
+destination — the placeholder builds green every time.
 
 On Netlify or Cloudflare Pages the build is identical (`bun run build`, output
 `dist`); only the rewrite syntax differs — `_redirects` on Netlify, a redirect
