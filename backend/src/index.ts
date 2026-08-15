@@ -5,7 +5,6 @@ import { corsOriginPatterns } from "./env";
 import { auth } from "./auth";
 import { governmentRouter } from "./routes/government";
 import { usersRouter } from "./routes/users";
-import { timelineRouter } from "./routes/timeline";
 import { messagesRouter } from "./routes/messages";
 import { adminRouter } from "./routes/admin";
 import { b2bRouter } from "./routes/b2b";
@@ -152,7 +151,6 @@ app.use("/api/feed/interaction*", async (c, next) => {
 // Routes
 app.route("/api/government", governmentRouter);
 app.route("/api/users", usersRouter);
-app.route("/api/timeline", timelineRouter);
 app.route("/api/messages", messagesRouter);
 app.route("/api/admin", adminRouter);
 app.route("/api/b2b", b2bRouter);
