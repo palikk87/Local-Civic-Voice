@@ -23,7 +23,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useTimelineStore, type TimelinePost } from '@/lib/timeline-store';
-import { sampleUsers, currentUser } from '@/lib/mock-data';
+import { useAuthStore } from '@/lib/auth-store';
+import { useDiscoverUsers } from '@/lib/api/hooks';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { useRequireAuth } from '@/lib/auth/use-civic-auth';
@@ -51,6 +52,13 @@ export default function ShareModal({
   const [shareTarget, setShareTarget] = useState<ShareTarget>('timeline');
   const [opinion, setOpinion] = useState('');
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Real people, from /api/users/discover. This list used to be `sampleUsers`
+  // from mock-data — a fixed cast of invented accounts — so "share to message"
+  // offered strangers who do not exist and sent nowhere.
+  const me = useAuthStore((s) => s.user);
+  const { data: people } = useDiscoverUsers();
+  const shareTargets = (people?.results ?? []).filter((u) => u.id !== me?.id);
   const [copied, setCopied] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -232,15 +240,15 @@ export default function ShareModal({
               <View className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
                 <View className="flex-row mb-3">
                   <Image
-                    source={{ uri: currentUser.avatar }}
+                    source={{ uri: me?.avatar }}
                     className="w-10 h-10 rounded-full"
                   />
                   <View className="ml-3">
                     <Text className="text-white font-semibold">
-                      {currentUser.displayName}
+                      {me?.displayName ?? ""}
                     </Text>
                     <Text className="text-slate-400 text-sm">
-                      @{currentUser.username}
+                      @{me?.username ?? ""}
                     </Text>
                   </View>
                 </View>
@@ -296,7 +304,7 @@ export default function ShareModal({
               </Text>
 
               <FlatList
-                data={sampleUsers.filter((u) => u.id !== currentUser.id)}
+                data={shareTargets}
                 keyExtractor={(item) => item.id}
                 className="flex-1"
                 renderItem={({ item, index }) => (
@@ -304,7 +312,16 @@ export default function ShareModal({
                     <Pressable
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedUser(item);
+                        // /api/users/discover returns ApiUser, which omits the
+                        // local counts. Zero rather than invented — they are
+                        // display-only here and the real values come with the
+                        // profile.
+                        setSelectedUser({
+                          ...item,
+                          followers: 0,
+                          following: 0,
+                          votesCount: 0,
+                        } as User);
                       }}
                       className={cn(
                         'flex-row items-center p-3 rounded-xl mb-2 border',
