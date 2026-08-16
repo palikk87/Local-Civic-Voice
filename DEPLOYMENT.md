@@ -142,6 +142,15 @@ bun scripts/seed-admin.ts
 All three are required. `ADMIN_NAME` is optional and defaults to the username.
 Set them for that command only — the server never reads them.
 
+**This script also needs the API's own variables**, unlike the B2B one below.
+It creates the account by calling Better Auth rather than writing rows by hand,
+so that the password hash and the credential record come out exactly as a real
+signup would — and Better Auth validates the full environment when it loads. On
+Railway, `railway run` supplies them and there is nothing to do. Running it from
+a laptop means having `BETTER_AUTH_SECRET`, `BACKEND_URL`, `APP_ORIGINS`,
+`APP_SCHEMES` and `MEDIA_STORAGE` set as well. It fails loudly and names the
+missing one, so you will not be guessing.
+
 ### Seed the B2B portal accounts
 
 Same idea, same moment, different script. The two business-dashboard logins are
@@ -167,6 +176,15 @@ and cannot be read back out. Losing one means running this again with a new one.
 All six are required and the script names every one it is missing. It is safe to
 re-run: on an account that already exists it overwrites the password and the API
 key, which is also how you rotate either of them.
+
+Unlike the admin seed, this one needs only `DATABASE_URL` and `DIRECT_URL` — it
+writes rows directly and never loads the auth stack.
+
+**After the first deploy you will not need this script again.** The admin
+console has a B2B clients tab (web) / screen (mobile) that creates accounts,
+rotates passwords and API keys, changes tiers and revokes access, all without
+shell access. This script exists for the cold start, when there is no admin
+account yet to log in with.
 
 The two keys must differ from each other. Generate them with `openssl rand
 -base64 48` rather than typing something: an API key is stored as a plain
