@@ -3,7 +3,8 @@ import { useState } from "react";
 import { X, Share2, MessageCircle, Send, Copy, FileText, Check } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTimelineStore, type TimelinePost } from "@/lib/mobile/timeline-store";
-import { sampleUsers, currentUser } from "@/lib/mobile/mock-data";
+import { useSignedInIdentity } from "@/lib/mobile/signed-in-identity";
+import { useDiscoverUsers } from "@/lib/mobile/api-hooks";
 import type { User } from "@/lib/mobile/types";
 import { useRequireAuth } from "@/hooks/use-civic-auth";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,13 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
   const [shareTarget, setShareTarget] = useState<ShareTarget>("timeline");
   const [opinion, setOpinion] = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  // Real people, from /api/users/discover. This list used to be `sampleUsers`
+  // from mock-data — a fixed cast of invented accounts — so "share to message"
+  // offered you strangers who do not exist and sent nowhere.
+  const me = useSignedInIdentity();
+  const { data: people, isLoading: peopleLoading } = useDiscoverUsers(20);
+  const shareTargets = (people?.results ?? []).filter((u) => u.id !== me?.id);
   const [copied, setCopied] = useState(false);
 
   const sharePost = useTimelineStore((s) => s.sharePost);
@@ -158,17 +166,15 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
             <div className="px-4 mt-4">
               <p className="text-slate-400 text-sm mb-2">Add your opinion (optional)</p>
               <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50">
-                <div className="flex mb-3">
-                  <img
-                    src={currentUser.avatar}
-                    alt={currentUser.displayName}
-                    className="w-10 h-10 rounded-full"
-                  />
-                  <div className="ml-3">
-                    <p className="text-white font-semibold">{currentUser.displayName}</p>
-                    <p className="text-slate-400 text-sm">@{currentUser.username}</p>
+                {me ? (
+                  <div className="flex mb-3">
+                    <img src={me.avatar} alt={me.displayName} className="w-10 h-10 rounded-full" />
+                    <div className="ml-3">
+                      <p className="text-white font-semibold">{me.displayName}</p>
+                      <p className="text-slate-400 text-sm">@{me.username}</p>
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
                 <textarea
                   value={opinion}
@@ -194,9 +200,15 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
               <p className="text-slate-400 text-sm mb-2">Select a person to share with</p>
 
               <div className="max-h-64 overflow-y-auto">
-                {sampleUsers
-                  .filter((u) => u.id !== currentUser.id)
-                  .map((item) => (
+                {peopleLoading ? (
+                  <p className="text-slate-500 text-sm py-4 text-center">Loading people…</p>
+                ) : shareTargets.length === 0 ? (
+                  <p className="text-slate-500 text-sm py-4 text-center">
+                    Nobody to share with yet. Follow some people first.
+                  </p>
+                ) : null}
+
+                {shareTargets.map((item) => (
                     <button
                       key={item.id}
                       onClick={() => setSelectedUser(item)}

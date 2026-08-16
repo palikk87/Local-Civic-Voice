@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import { useTimelineStore, type TaggedUser } from "@/lib/mobile/timeline-store";
-import { currentUser } from "@/lib/mobile/mock-data";
+import { useSignedInIdentity } from "@/lib/mobile/signed-in-identity";
 import type { User } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
 import ReferenceSearchModal, {
@@ -56,6 +56,11 @@ export default function CreatePostModal({
   initialContent = "",
   shareMode,
 }: CreatePostModalProps) {
+  // The real signed-in person. This modal used to show `currentUser` from
+  // mock-data — a fixed fictional identity — as the author of whatever you were
+  // about to post.
+  const me = useSignedInIdentity();
+
   // Step state - if shareMode is provided, skip reference selection
   const [currentStep, setCurrentStep] = useState<CreatePostStep>(
     shareMode ? "compose" : "reference"
@@ -402,14 +407,18 @@ export default function CreatePostModal({
           </button>
         ) : null}
 
-        {/* Author */}
-        <div className="flex px-4 pt-4 shrink-0">
-          <img src={currentUser.avatar} alt={currentUser.displayName} className="w-12 h-12 rounded-full" />
-          <div className="flex-1 ml-3">
-            <p className="text-white font-semibold">{currentUser.displayName}</p>
-            <p className="text-slate-400 text-sm">@{currentUser.username}</p>
+        {/* Author. Nothing rather than a stand-in when signed out — the composer
+            is not reachable without a session, and inventing an author here is
+            what this replaced. */}
+        {me ? (
+          <div className="flex px-4 pt-4 shrink-0">
+            <img src={me.avatar} alt={me.displayName} className="w-12 h-12 rounded-full" />
+            <div className="flex-1 ml-3">
+              <p className="text-white font-semibold">{me.displayName}</p>
+              <p className="text-slate-400 text-sm">@{me.username}</p>
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {/* Input */}
         <div className="flex-1 px-4 pt-4 relative overflow-y-auto min-h-0">

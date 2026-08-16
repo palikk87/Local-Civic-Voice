@@ -7,7 +7,7 @@ import {
   type TimelineComment,
   type TaggedUser,
 } from "@/lib/mobile/timeline-store";
-import { currentUser } from "@/lib/mobile/mock-data";
+import { useSignedInIdentity } from "@/lib/mobile/signed-in-identity";
 import type { User } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
 
@@ -182,6 +182,10 @@ function CommentInput({
   replyTo?: { commentId: string; username: string };
   onCancelReply: () => void;
 }) {
+  // The real signed-in person, not the fictional `currentUser` this was ported
+  // against. Null while signed out, and the avatar slot renders empty rather
+  // than borrowing somebody else's face.
+  const me = useSignedInIdentity();
   const [content, setContent] = useState(replyTo ? `@${replyTo.username} ` : "");
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
   const [userQuery, setUserQuery] = useState("");
@@ -335,7 +339,11 @@ function CommentInput({
 
       {/* Input */}
       <div className="flex items-end px-4 py-3 bg-slate-900 border-t border-slate-800">
-        <img src={currentUser.avatar} alt={currentUser.displayName} className="w-8 h-8 rounded-full mr-3" />
+        {me ? (
+          <img src={me.avatar} alt={me.displayName} className="w-8 h-8 rounded-full mr-3" />
+        ) : (
+          <div className="w-8 h-8 rounded-full mr-3 bg-slate-700" aria-hidden />
+        )}
 
         <div className="flex-1 flex items-end bg-slate-800 rounded-2xl px-4 py-2">
           <textarea
