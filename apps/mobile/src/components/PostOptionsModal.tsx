@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/lib/auth-store';
 import React from 'react';
 import {
   View,
@@ -22,7 +23,6 @@ import {
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { type TimelinePost } from '@/lib/timeline-store';
-import { currentUser } from '@/lib/mock-data';
 
 interface PostOptionsModalProps {
   visible: boolean;
@@ -56,9 +56,17 @@ export default function PostOptionsModal({
   onBlock,
   onMute,
 }: PostOptionsModalProps) {
+  // The real signed-in account, not the fictional `currentUser` from
+  // mock-data. This decides whether "delete post" is offered, so reading a
+  // fixed id meant the check was answering about somebody else.
+  //
+  // Above the early return: hooks must run in the same order on every render,
+  // and `post` is null while the sheet is closed.
+  const me = useAuthStore((s) => s.user);
+
   if (!post) return null;
 
-  const isOwner = post.author.id === currentUser.id;
+  const isOwner = !!me && post.author.id === me.id;
 
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);

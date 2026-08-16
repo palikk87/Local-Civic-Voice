@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/lib/auth-store';
 import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
@@ -13,7 +14,6 @@ import { Heart, Reply, Send, AtSign, ChevronDown, ChevronUp } from 'lucide-react
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, SlideInDown, FadeOut, Layout } from 'react-native-reanimated';
 import { useTimelineStore, type TimelineComment, type TaggedUser } from '@/lib/timeline-store';
-import { currentUser } from '@/lib/mock-data';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
 
@@ -195,6 +195,8 @@ function CommentInput({
   replyTo?: { commentId: string; username: string };
   onCancelReply: () => void;
 }) {
+  // The real signed-in account, not the fictional `currentUser`.
+  const me = useAuthStore((s) => s.user);
   const [content, setContent] = useState(replyTo ? `@${replyTo.username} ` : '');
   const [showUserSuggestions, setShowUserSuggestions] = useState(false);
   const [userQuery, setUserQuery] = useState('');
@@ -358,7 +360,7 @@ function CommentInput({
       {/* Input */}
       <View className="flex-row items-end px-4 py-3 bg-slate-900 border-t border-slate-800">
         <Image
-          source={{ uri: currentUser.avatar }}
+          source={{ uri: me?.avatar }}
           className="w-8 h-8 rounded-full mr-3"
         />
 

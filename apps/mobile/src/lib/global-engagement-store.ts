@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { fallbackAvatarFor } from './signed-in-identity';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { currentUser, sampleUsers } from './mock-data';
 
 /**
  * Global Engagement Store
@@ -110,124 +110,16 @@ function calculateTrendingScore(record: GlobalEngagementRecord): number {
   return totalEngagement * decayFactor * (1 + record.recentEngagement * 0.5);
 }
 
-// Generate mock initial data for trending references
-function generateMockEngagementRecords(): Record<string, GlobalEngagementRecord> {
-  const records: Record<string, GlobalEngagementRecord> = {};
 
-  // High-engagement controversial bills
-  const mockData: Array<{
-    referenceId: string;
-    referenceType: ReferenceType;
-    title: string;
-    support: number;
-    oppose: number;
-    comments: number;
-    shares: number;
-  }> = [
-    {
-      referenceId: 'hr-1049',
-      referenceType: 'bill',
-      title: 'Epstein Client List Transparency and Accountability Act',
-      support: 45230,
-      oppose: 4120,
-      comments: 8934,
-      shares: 12456,
-    },
-    {
-      referenceId: 'hr-2847',
-      referenceType: 'bill',
-      title: 'Ban Congressional Stock Trading',
-      support: 56780,
-      oppose: 1890,
-      comments: 7234,
-      shares: 15678,
-    },
-    {
-      referenceId: 'hr-3391',
-      referenceType: 'bill',
-      title: 'End Pharma Price Gouging',
-      support: 38920,
-      oppose: 5670,
-      comments: 5432,
-      shares: 9876,
-    },
-    {
-      referenceId: 'hr-5892',
-      referenceType: 'bill',
-      title: 'Term Limits for Congress',
-      support: 41230,
-      oppose: 8760,
-      comments: 6543,
-      shares: 11234,
-    },
-    {
-      referenceId: 'eo-14147',
-      referenceType: 'executive_order',
-      title: 'Border Emergency Declaration',
-      support: 28450,
-      oppose: 31200,
-      comments: 12345,
-      shares: 8765,
-    },
-    {
-      referenceId: '22-451',
-      referenceType: 'scotus_case',
-      title: 'Trump v. United States (Presidential Immunity)',
-      support: 18760,
-      oppose: 42340,
-      comments: 9876,
-      shares: 7654,
-    },
-  ];
-
-  mockData.forEach((item) => {
-    const record: GlobalEngagementRecord = {
-      referenceId: item.referenceId,
-      referenceType: item.referenceType,
-      title: item.title,
-      supportVotes: item.support,
-      opposeVotes: item.oppose,
-      totalComments: item.comments,
-      totalShares: item.shares,
-      recentEngagement: Math.floor(Math.random() * 1000) + 500,
-      trendingScore: 0,
-      lastUpdated: new Date(Date.now() - Math.random() * 86400000).toISOString(),
-      topContributors: sampleUsers.slice(0, 3).map((user, idx) => ({
-        userId: user.id,
-        username: user.username,
-        displayName: user.displayName,
-        avatar: user.avatar,
-        engagementDriven: Math.floor(Math.random() * 5000) + 1000 - idx * 500,
-        postCount: Math.floor(Math.random() * 10) + 1,
-      })),
-    };
-    record.trendingScore = calculateTrendingScore(record);
-    records[item.referenceId] = record;
-  });
-
-  return records;
-}
-
-// Generate mock civil leaders
-function generateMockCivilLeaders(): CivilLeader[] {
-  return sampleUsers.map((user, idx) => ({
-    userId: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    avatar: user.avatar,
-    totalEngagementDriven: Math.floor(Math.random() * 50000) + 10000 - idx * 5000,
-    postCount: Math.floor(Math.random() * 50) + 10,
-    followerCount: user.followers,
-    rank: idx + 1,
-  })).sort((a, b) => b.totalEngagementDriven - a.totalEngagementDriven);
-}
 
 export const useGlobalEngagementStore = create<GlobalEngagementState>()(
   persist(
     (set, get) => ({
-      engagementRecords: generateMockEngagementRecords(),
+      // Empty, not fabricated. These used to be seeded with invented
+      // engagement numbers and a leaderboard of people who do not exist.
+      engagementRecords: {},
       userVotes: {},
-      civilLeaders: generateMockCivilLeaders(),
+      civilLeaders: [],
 
       getOrCreateRecord: (referenceId, referenceType, title) => {
         const existing = get().engagementRecords[referenceId];
@@ -305,11 +197,10 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
             };
           } else {
             // Find author info
-            const author = sampleUsers.find((u) => u.id === sourceAuthorId) ?? {
-              id: sourceAuthorId,
+            const author = {
               username: 'user',
               displayName: 'User',
-              avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100',
+              avatar: fallbackAvatarFor(sourceAuthorId),
             };
 
             updatedContributors.push({
@@ -389,7 +280,11 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
               postCount: updatedContributors[contributorIdx].postCount + 1,
             };
           } else {
-            const author = sampleUsers.find((u) => u.id === authorId) ?? currentUser;
+            const author = {
+              username: 'user',
+              displayName: 'User',
+              avatar: fallbackAvatarFor(authorId),
+            };
             updatedContributors.push({
               userId: authorId,
               username: author.username,
@@ -496,13 +391,13 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
             avatar: user.avatar,
             totalEngagementDriven: user.totalEngagement,
             postCount: user.postCount,
-            followerCount: sampleUsers.find((u) => u.id === user.userId)?.followers ?? 0,
+            followerCount: 0,
             rank: 0,
           }))
           .sort((a, b) => b.totalEngagementDriven - a.totalEngagementDriven)
           .map((leader, idx) => ({ ...leader, rank: idx + 1 }));
 
-        set({ civilLeaders: leaders.length > 0 ? leaders : get().civilLeaders });
+        set({ civilLeaders: leaders });
       },
     }),
     {

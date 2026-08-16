@@ -1,3 +1,4 @@
+import { useAuthStore } from '@/lib/auth-store';
 import React, { useState, useRef, useCallback } from 'react';
 import {
   View,
@@ -32,7 +33,6 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideInUp } from 'react-native-reanimated';
 import { useTimelineStore, type TaggedUser } from '@/lib/timeline-store';
-import { currentUser } from '@/lib/mock-data';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import ReferenceSearchModal, {
@@ -74,6 +74,11 @@ export default function CreatePostModal({
   initialContent = '',
   shareMode,
 }: CreatePostModalProps) {
+  // The real signed-in account. This modal used to show `currentUser` from
+  // mock-data — a fixed fictional identity — as the author of whatever you
+  // were about to post.
+  const me = useAuthStore((s) => s.user);
+
   // Step state - if shareMode is provided, skip reference selection
   const [currentStep, setCurrentStep] = useState<CreatePostStep>(
     shareMode ? 'compose' : 'reference'
@@ -506,12 +511,12 @@ export default function CreatePostModal({
           {/* Author */}
           <View className="flex-row px-4 pt-4">
             <Image
-              source={{ uri: currentUser.avatar }}
+              source={{ uri: me?.avatar }}
               className="w-12 h-12 rounded-full"
             />
             <View className="flex-1 ml-3">
-              <Text className="text-white font-semibold">{currentUser.displayName}</Text>
-              <Text className="text-slate-400 text-sm">@{currentUser.username}</Text>
+              <Text className="text-white font-semibold">{me?.displayName ?? ""}</Text>
+              <Text className="text-slate-400 text-sm">@{me?.username ?? ""}</Text>
             </View>
           </View>
 
