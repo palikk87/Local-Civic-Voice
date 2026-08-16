@@ -1006,3 +1006,88 @@ describe("serving local uploads", () => {
     await rm(sibling, { recursive: true, force: true });
   });
 });
+
+describe("login timing does not reveal which accounts exist", () => {
+  /**
+   * A behavioural test for a timing oracle, with a deliberately wide margin.
+   *
+   * The defect this guards is not subtle — an unknown username returned in
+   * microseconds while a real one paid for a full scrypt verification. That is
+   * three orders of magnitude, so a threshold anywhere near 1.0 would be
+   * flaky while a threshold near 0 would prove nothing. 0.4 sits in the empty
+   * space between "skipped the KDF entirely" (~0.01) and "ran it" (~1.0).
+   *
+   * Medians, not means: the suite shares a machine with a database and a
+   * server, and one scheduling hiccup should not decide the result.
+   */
+  async function medianMs(request: () => Promise<unknown>, samples = 5): Promise<number> {
+    const timings: number[] = [];
+    for (let i = 0; i < samples; i += 1) {
+      const started = performance.now();
+      await request();
+      timings.push(performance.now() - started);
+    }
+    timings.sort((a, b) => a - b);
+    return timings[Math.floor(timings.length / 2)]!;
+  }
+
+  test("an unknown admin username costs the same as a wrong password", async () => {
+    const { userId } = await signUp({
+      email: "timing-admin@example.com",
+      password: "correct horse battery staple",
+      name: "Timing Admin",
+    });
+    await prisma.user.update({ where: { id: userId }, data: { role: "admin" } });
+
+    const post = (username: string) =>
+      fetch(`${BASE_URL}/api/admin/login`, {
+        method: "POST",
+        headers: freshClientHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ username, password: "not the right password" }),
+      }).then((r) => {
+        expect(r.status).toBe(401);
+        return r.json();
+      });
+
+    const known = await medianMs(() => post("timing-admin@example.com"));
+    const unknown = await medianMs(() => post("no-such-admin-anywhere@example.com"));
+
+    // Before the fix this ratio was around 0.01: the unknown-user path returned
+    // without ever running the key-derivation function.
+    const ratio = unknown / known;
+    expect({ ratio: ratio > 0.4, known, unknown }).toEqual({ ratio: true, known, unknown });
+  });
+
+  test("an unknown B2B username costs the same as a wrong password", async () => {
+    const post = (username: string) =>
+      fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password: "not the right password" }),
+      }).then((r) => {
+        expect(r.status).toBe(401);
+        return r.json();
+      });
+
+    const known = await medianMs(() => post(B2B_TEST.demoUsername));
+    const unknown = await medianMs(() => post("no_such_b2b_client_anywhere"));
+
+    const ratio = unknown / known;
+    expect({ ratio: ratio > 0.4, known, unknown }).toEqual({ ratio: true, known, unknown });
+  });
+
+  test("both answers are byte-identical", async () => {
+    // Timing is the subtle channel; the response body is the obvious one. They
+    // must not differ either.
+    const bodies = await Promise.all(
+      [B2B_TEST.demoUsername, "no_such_b2b_client_anywhere"].map((username) =>
+        fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password: "wrong" }),
+        }).then((r) => r.text()),
+      ),
+    );
+    expect(bodies[0]).toBe(bodies[1]);
+  });
+});

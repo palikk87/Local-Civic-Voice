@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { createHash, randomBytes } from "node:crypto";
-import { hashPassword, verifyPassword } from "better-auth/crypto";
+import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
+import { verifyPasswordOrDummy } from "../password-check";
 import { generateB2BToken } from "../session-token";
 
 /** Live platform counts from the shared Prisma database (votes use position support/oppose). */
@@ -175,27 +175,6 @@ interface SentimentData {
  */
 function hashApiKey(apiKey: string): string {
   return createHash("sha256").update(apiKey).digest("hex");
-}
-
-/**
- * A real hash of a value nobody has, verified against when the username does
- * not exist.
- *
- * Without it, an unknown username returns in microseconds while a known one
- * pays for a scrypt verification — so response time answers "does this account
- * exist?" for anyone who asks. There are two B2B accounts and their usernames
- * are chosen by the operator, so this is a small oracle, but it costs one
- * function to close.
- *
- * Built once, lazily: at import it would add a scrypt run to every boot,
- * including the boots that never see a failed login. The first bad username
- * after a restart pays for it, and every one after that does not.
- */
-let dummyPasswordHash: Promise<string> | null = null;
-
-function getDummyPasswordHash(): Promise<string> {
-  dummyPasswordHash ??= hashPassword(randomBytes(32).toString("hex"));
-  return dummyPasswordHash;
 }
 
 /** Stored account, exactly as Prisma returns it. Carries both hashes. */
@@ -484,18 +463,9 @@ b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchem
 
   // Same 401 whether the account is missing or the password is wrong, and the
   // password is verified either way — otherwise the response time says which of
-  // the two happened, and that is an account-enumeration oracle.
-  let passwordOk = false;
-  try {
-    passwordOk = await verifyPassword({
-      hash: client?.passwordHash ?? (await getDummyPasswordHash()),
-      password,
-    });
-  } catch (error) {
-    // A stored hash that scrypt cannot parse is an operator problem, not a
-    // caller problem. Log it rather than letting it 500 as an opaque failure.
-    console.error("[B2B] Password verification failed:", error);
-  }
+  // the two happened, and that is an account-enumeration oracle. Shared with
+  // the admin console; see src/password-check.ts.
+  const passwordOk = await verifyPasswordOrDummy(client?.passwordHash, password, "B2B");
 
   if (!client || !passwordOk) {
     return c.json({ error: "Invalid credentials" }, { status: 401 });

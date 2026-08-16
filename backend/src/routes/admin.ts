@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { verifyPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
+import { verifyPasswordOrDummy } from "../password-check";
 import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
@@ -296,25 +296,26 @@ adminRouter.post("/login", zValidator("json", loginSchema), async (c) => {
     },
   });
 
-  if (!dbUser) {
-    return c.json({ error: "Invalid credentials" }, { status: 401 });
-  }
+  // Verify against the stored Better Auth hash — same check the citizen sign-in
+  // does. NOTE THE ORDER: the verification runs before any of the three reasons
+  // to reject are acted on, and it runs even when there is nothing to verify
+  // against.
+  //
+  // This used to return 401 immediately for an unknown username, and again for
+  // an admin with no password on file. Both returned in microseconds while a
+  // real account cost a full scrypt run, so response time answered "is this an
+  // admin account?" for anyone who asked — which is a list of exactly the
+  // accounts worth attacking. See src/password-check.ts.
+  const hash = dbUser?.accounts.find((a) => a.password)?.password;
+  const passwordOk = await verifyPasswordOrDummy(hash, password, "Admin");
 
-  // Verify against the stored Better Auth hash — same check the citizen sign-in does.
-  const hash = dbUser.accounts.find((a) => a.password)?.password;
-  if (!hash) {
+  if (dbUser && !hash) {
+    // Worth an operator log: a privileged account that cannot be signed into is
+    // a misconfiguration, not an attack.
     console.error(`[Admin] ${dbUser.email} has role ${dbUser.role} but no password on file`);
-    return c.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  let passwordOk = false;
-  try {
-    passwordOk = await verifyPassword({ hash, password });
-  } catch (error) {
-    console.error("[Admin] Password verification failed:", error);
-  }
-
-  if (!passwordOk) {
+  if (!dbUser || !hash || !passwordOk) {
     return c.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
