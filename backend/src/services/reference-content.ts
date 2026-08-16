@@ -124,7 +124,21 @@ async function fetchDocumentText(url: string, deadlineAt: number): Promise<strin
   }
 }
 
-function hashText(text: string): string {
+/**
+ * The fingerprint of a piece of official text.
+ *
+ * Exported because the daily sync needs the SAME answer. Two hash functions
+ * over one column is not a style problem: each writer would see the other's
+ * value as different, report the law as changed every night, and pay to rewrite
+ * every brief on the platform.
+ *
+ * Known limitation, left alone deliberately: this hashes raw bytes, so a source
+ * that re-wraps or re-indents identical text reads as a new version. Making it
+ * whitespace-insensitive would be better, but it would also invalidate every
+ * hash already stored and regenerate every brief once — a real cost to pay on a
+ * guess about behaviour nobody has measured here.
+ */
+export function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 32);
 }
 
@@ -867,6 +881,11 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
       textChanged = hash !== ref.fullTextHash;
 
       if (textChanged) {
+        // A first pull is not a change. The law did not move; we simply did not
+        // have it yet, and badging every post on a record whose text we just
+        // fetched for the first time would be a lie told at scale.
+        const lawMoved = ref.fullTextHash !== null;
+
         // Stored copy is outdated (or absent) — the master reference takes the new text.
         await prisma.governmentReference.update({
           where: { id: ref.id },
@@ -877,6 +896,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
             fullTextUrl: fetched.url,
             fullTextAt: now,
             sourceCheckedAt: now,
+            ...(lawMoved ? { lawChangedAt: now, lawVersion: { increment: 1 } } : {}),
           },
         });
         current = { ...ref, fullText: fetched.text, fullTextHash: hash, fullTextUrl: fetched.url };

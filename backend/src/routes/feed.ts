@@ -81,7 +81,12 @@ feedRouter.get("/", zValidator("query", feedQuerySchema), async (c) => {
         governmentReferenceId: post.governmentReferenceId,
         referenceType: post.referenceType,
         referenceId: post.referenceId,
-        referenceTitle: post.referenceTitle,
+        // The law as it stands, not the copy frozen when the post was written.
+        // The record is shared; the post frames it to one person's timeline.
+        referenceTitle:
+          (post.governmentReferenceId
+            ? referenceViews.get(post.governmentReferenceId)?.title
+            : null) ?? post.referenceTitle,
         reference: post.governmentReferenceId
           ? referenceViews.get(post.governmentReferenceId) ?? null
           : null,
@@ -134,7 +139,12 @@ feedRouter.get("/discover", zValidator("query", z.object({
         governmentReferenceId: post.governmentReferenceId,
         referenceType: post.referenceType,
         referenceId: post.referenceId,
-        referenceTitle: post.referenceTitle,
+        // The law as it stands, not the copy frozen when the post was written.
+        // The record is shared; the post frames it to one person's timeline.
+        referenceTitle:
+          (post.governmentReferenceId
+            ? referenceViews.get(post.governmentReferenceId)?.title
+            : null) ?? post.referenceTitle,
         reference: post.governmentReferenceId
           ? referenceViews.get(post.governmentReferenceId) ?? null
           : null,

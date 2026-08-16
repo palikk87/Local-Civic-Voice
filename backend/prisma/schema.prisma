@@ -587,6 +587,18 @@ model GovernmentReference {
   fullTextHash      String?
   fullTextAt        DateTime?
   sourceCheckedAt   DateTime?
+  // When the LAW changed, as opposed to when the row was written.
+  //
+  // `updatedAt` moves every time somebody votes, so it cannot answer "has this
+  // law moved since I shared it" — which is the question a badge on a post and
+  // a notification to its author both depend on. This is set only when the
+  // official source reports something genuinely different: a new title, a new
+  // status, or text that no longer hashes the same.
+  lawChangedAt      DateTime?
+  // Increments alongside lawChangedAt. The citizen brief is written for one
+  // version of a law and reused until this number moves, which is what makes
+  // "one brief per version" a fact rather than an intention.
+  lawVersion        Int       @default(1)
   contentStatus     String?
   signedDate        DateTime?
   decidedDate       DateTime?

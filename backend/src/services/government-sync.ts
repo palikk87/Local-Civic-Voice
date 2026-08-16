@@ -15,6 +15,9 @@ import { prisma } from "../prisma";
 import { ReferenceType, normalizeReferenceId, seedTallyFor } from "./deduplication-service";
 import { billReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName as claimedBy } from "./reference-names";
+// The one fingerprint for official text. A second implementation here would
+// disagree with that one on every row and report the law as changed nightly.
+import { hashText } from "./reference-content";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -133,12 +136,33 @@ async function upsertReference(data: UpsertData): Promise<void> {
     // where creating a second row named after it would be a split vote pool.
     const held = await claimedBy(masterReferenceId, tx);
 
+    // Did the LAW change, or just the row?
+    //
+    // `updatedAt` moves every time somebody votes, so it cannot answer that.
+    // Only three things count as the law itself moving: a new title, a new
+    // status, or official text that no longer hashes the same. A refreshed
+    // description or a re-fetched source URL is bookkeeping, and treating it as
+    // a change would badge every post on the platform every night and pay to
+    // rewrite every brief.
+    const before = await tx.governmentReference.findUnique({
+      where: held ? { id: held.referenceId } : { masterReferenceId },
+      select: { id: true, title: true, status: true, fullTextHash: true, lawVersion: true },
+    });
+
+    const nextTextHash = fields.fullText ? hashText(fields.fullText) : null;
+    const lawMoved =
+      before !== null &&
+      (before.title !== fields.title ||
+        before.status !== fields.status ||
+        (nextTextHash !== null && before.fullTextHash !== null && before.fullTextHash !== nextTextHash));
+
     const row = await tx.governmentReference.upsert({
       where: held ? { id: held.referenceId } : { masterReferenceId },
       create: {
         masterReferenceId,
         ...fields,
         ...seed,
+        ...(nextTextHash ? { fullTextHash: nextTextHash } : {}),
         // Public tally starts as the seed layer; real votes add on top of it.
         supportVotes: seed.seedSupport,
         opposeVotes: seed.seedOppose,
@@ -150,11 +174,30 @@ async function upsertReference(data: UpsertData): Promise<void> {
         ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
         ...(fields.description ? { description: fields.description } : {}),
         ...(fields.fullText ? { fullText: fields.fullText } : {}),
+        ...(nextTextHash ? { fullTextHash: nextTextHash } : {}),
         ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
         ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
+        ...(lawMoved
+          ? { lawChangedAt: new Date(), lawVersion: { increment: 1 } }
+          : {}),
       },
       select: { id: true },
     });
+
+    if (lawMoved && before) {
+      console.log(
+        `[GovSync] ${masterReferenceId} moved to version ${before.lawVersion + 1}: ` +
+          [
+            before.title !== fields.title ? "title" : null,
+            before.status !== fields.status ? `status ${before.status} -> ${fields.status}` : null,
+            nextTextHash && before.fullTextHash && before.fullTextHash !== nextTextHash
+              ? "official text"
+              : null,
+          ]
+            .filter(Boolean)
+            .join(", "),
+      );
+    }
 
     const claimed = await claimName(tx, row.id, masterReferenceId, NameSource.CREATED, {
       current: true,

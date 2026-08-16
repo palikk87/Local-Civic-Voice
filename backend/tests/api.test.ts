@@ -2243,3 +2243,127 @@ describe("what the matchmaker refuses to do", () => {
     expect(reopened.identifiedBy).toBe("House");
   });
 });
+
+describe("a post shows the law as it stands", () => {
+  /**
+   * The rule Khalid set: the law is shared and tied to the master reference; the
+   * post frames it to that person's timeline. So when the government updates the
+   * law, updating the record updates every post showing it. Nobody walks the
+   * posts, and no post is ever edited.
+   *
+   * Post rows still carry a frozen copy of the title from the moment they were
+   * written. These tests are that the copy never wins.
+   */
+
+  async function author(): Promise<{ cookie: string; userId: string }> {
+    return signUp({
+      email: `fresh-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Freshness Tester",
+    });
+  }
+
+  let counter = 0;
+  async function record(title: string) {
+    counter += 1;
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${4000 + counter}-119`,
+        referenceType: "bill",
+        title,
+        status: "proposed",
+      },
+    });
+    await prisma.referenceName.create({
+      data: { name: row.masterReferenceId, referenceId: row.id, isCurrent: true, learnedFrom: "created" },
+    });
+    return row;
+  }
+
+  test("renaming the law changes every post about it, and edits none of them", async () => {
+    const { cookie } = await author();
+    const law = await record("A bill to do the original thing");
+
+    const created = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ content: "I have views on this", governmentReferenceId: law.id }),
+    });
+    expect(created.status).toBe(201);
+    const { post } = (await created.json()) as { post: { id: string } };
+
+    // The government renames it. One row changes.
+    await prisma.governmentReference.update({
+      where: { id: law.id },
+      data: { title: "A bill to do the amended thing" },
+    });
+
+    const fetched = await fetch(`${BASE_URL}/api/posts/${post.id}`, {
+      headers: freshClientHeaders({ cookie }),
+    });
+    const body = (await fetched.json()) as {
+      post: { content: string; referenceTitle: string; reference: { title: string } };
+    };
+
+    // Both the law card and the legacy field older clients read.
+    expect(body.post.reference.title).toBe("A bill to do the amended thing");
+    expect(body.post.referenceTitle).toBe("A bill to do the amended thing");
+    // And the post itself was never touched — not its words, and not its own
+    // frozen copy of the title.
+    expect(body.post.content).toBe("I have views on this");
+    const row = await prisma.post.findUniqueOrThrow({ where: { id: post.id } });
+    expect(row.referenceTitle).toBe("A bill to do the original thing");
+    expect(row.content).toBe("I have views on this");
+  });
+
+  test("voting does not make the law look like it changed", async () => {
+    // The reason lawChangedAt exists at all. `updatedAt` on the record moves
+    // every time somebody votes, because a vote writes the tally back to the
+    // row — so using it to decide "has this law moved since I shared it" would
+    // badge every post on the platform the moment anyone voted.
+    const { cookie } = await author();
+    const law = await record("A bill nobody has amended");
+
+    const before = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(before.lawChangedAt).toBeNull();
+    expect(before.lawVersion).toBe(1);
+
+    const voted = await fetch(`${BASE_URL}/api/government-references/${law.id}/vote`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ position: "support" }),
+    });
+    expect(voted.status).toBe(200);
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(after.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime());
+    expect(after.lawChangedAt).toBeNull();
+    expect(after.lawVersion).toBe(1);
+  });
+
+  test("the law card carries when the law last moved", async () => {
+    const { cookie } = await author();
+    const law = await record("A bill that has since been amended");
+    const movedAt = new Date("2026-06-01T00:00:00Z");
+    await prisma.governmentReference.update({
+      where: { id: law.id },
+      data: { lawChangedAt: movedAt, lawVersion: 3 },
+    });
+
+    const created = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ content: "written after the change", governmentReferenceId: law.id }),
+    });
+    const { post } = (await created.json()) as { post: { id: string } };
+
+    const fetched = await fetch(`${BASE_URL}/api/posts/${post.id}`, {
+      headers: freshClientHeaders({ cookie }),
+    });
+    const body = (await fetched.json()) as {
+      post: { reference: { lawChangedAt: string; lawVersion: number } };
+    };
+    expect(body.post.reference.lawChangedAt).toBe(movedAt.toISOString());
+    expect(body.post.reference.lawVersion).toBe(3);
+  });
+});
