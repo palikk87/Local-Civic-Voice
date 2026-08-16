@@ -14,9 +14,11 @@ import {
   type UpdateTrendingData,
   type SyncGovernmentDataData,
   type GenerateReferenceBriefData,
+  type SyncReferenceLineageData,
 } from "./job-queue";
 import { syncGovernmentData } from "./government-sync";
 import { processReferenceBrief } from "./reference-content";
+import { retireStaleCandidates, syncAllLineage, syncLineageFor } from "./reference-lineage";
 import { metricsCache, trendingCache, cacheKey } from "./cache";
 
 /**
@@ -402,6 +404,22 @@ async function processGenerateReferenceBrief(data: GenerateReferenceBriefData): 
 }
 
 /**
+ * Ask congress.gov which stored records are really the same law.
+ *
+ * Only "Identical bill" — a Library of Congress analyst's confirmation that two
+ * texts match — is acted on here. Everything else lands in the review queue for
+ * a person to answer once.
+ */
+async function processSyncReferenceLineage(data: SyncReferenceLineageData): Promise<void> {
+  await retireStaleCandidates();
+  if (data.referenceId) {
+    await syncLineageFor(data.referenceId);
+    return;
+  }
+  await syncAllLineage();
+}
+
+/**
  * Initialize all job processors with the job queue
  * Call this function when the server starts
  */
@@ -413,6 +431,7 @@ export function initializeProcessors(): void {
   jobQueue.registerProcessor(JobType.UPDATE_TRENDING, processUpdateTrending);
   jobQueue.registerProcessor(JobType.SYNC_GOVERNMENT_DATA, processSyncGovernmentData);
   jobQueue.registerProcessor(JobType.GENERATE_REFERENCE_BRIEF, processGenerateReferenceBrief);
+  jobQueue.registerProcessor(JobType.SYNC_REFERENCE_LINEAGE, processSyncReferenceLineage);
 
   console.log("[JobProcessor] All processors registered successfully");
 }

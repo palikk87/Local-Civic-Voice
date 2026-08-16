@@ -1925,3 +1925,321 @@ describe("the name registry", () => {
     ).toBeNull();
   });
 });
+
+describe("the merge review queue", () => {
+  /**
+   * The matchmaker's whole value is what it refuses to do on its own.
+   *
+   * Congress.gov's "Identical bill" means a Library of Congress analyst read
+   * both texts and confirmed they match — that, and only that, is good enough
+   * to join two records without a person. Everything else is a question with the
+   * government's page attached. "Related bill" is never even asked, because
+   * related means a different law on the same subject.
+   */
+
+  async function adminHeaders(
+    role: "admin" | "superadmin" = "superadmin",
+  ): Promise<Record<string, string>> {
+    const token = `merge_queue_${Math.random().toString(36).slice(2)}`;
+    await prisma.adminSession.create({
+      data: {
+        token,
+        adminId: `test-${role}`,
+        username: `test-${role}`,
+        role,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    return freshClientHeaders({
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    });
+  }
+
+  let counter = 0;
+  async function record(title: string, overrides: Record<string, unknown> = {}) {
+    counter += 1;
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${6000 + counter}-119`,
+        referenceType: "bill",
+        title,
+        status: "proposed",
+        ...overrides,
+      },
+    });
+    await prisma.referenceName.create({
+      data: {
+        name: row.masterReferenceId,
+        referenceId: row.id,
+        isCurrent: true,
+        learnedFrom: "created",
+      },
+    });
+    return row;
+  }
+
+  async function candidate(
+    aId: string,
+    bId: string,
+    fields: Record<string, unknown> = {},
+  ) {
+    const [leftId, rightId] = aId < bId ? [aId, bId] : [bId, aId];
+    return prisma.referenceMergeCandidate.create({
+      data: {
+        leftId,
+        rightId,
+        relationship: "Companion measure",
+        identifiedBy: "CRS",
+        evidenceUrl: "https://www.congress.gov/bill/119th-congress/house-bill/1/related-bills",
+        ...fields,
+      },
+    });
+  }
+
+  test("the queue shows the evidence and who assigned it", async () => {
+    const headers = await adminHeaders("admin");
+    const a = await record("A bill about the Colorado River");
+    const b = await record("A bill about Colorado River allocations");
+    await candidate(a.id, b.id);
+
+    const response = await fetch(`${BASE_URL}/api/admin/reference-merges`, { headers });
+    expect(response.status).toBe(200);
+
+    const { candidates } = (await response.json()) as {
+      candidates: Array<Record<string, unknown>>;
+    };
+    const row = candidates.find((c) => c.status === "pending");
+    expect(row).toBeDefined();
+    // Every one of these is what makes the question answerable rather than a
+    // coin flip: what the government called it, who called it that, and the
+    // page the reviewer can open to check.
+    expect(row!.relationship).toBe("Companion measure");
+    expect(row!.identifiedBy).toBe("CRS");
+    expect(row!.evidenceUrl).toContain("congress.gov");
+    expect(row!.isSuggestion).toBe(false);
+  });
+
+  test("a look-alike is marked as carrying no authority", async () => {
+    const headers = await adminHeaders("admin");
+    const a = await record("Concerning sanctions on Venezuela");
+    const b = await record("Concerning Venezuela sanctions relief");
+    await candidate(a.id, b.id, {
+      relationship: "look_alike",
+      identifiedBy: null,
+      evidenceUrl: null,
+      similarity: 0.92,
+    });
+
+    const response = await fetch(`${BASE_URL}/api/admin/reference-merges`, { headers });
+    const { candidates } = (await response.json()) as {
+      candidates: Array<Record<string, unknown>>;
+    };
+    const row = candidates.find((c) => c.relationship === "look_alike");
+    expect(row).toBeDefined();
+    expect(row!.isSuggestion).toBe(true);
+    // The absence is the point. Nobody official stands behind this.
+    expect(row!.identifiedBy).toBeNull();
+    expect(row!.evidenceUrl).toBeNull();
+    expect(row!.similarity).toBe(0.92);
+  });
+
+  test("approving merges, and the reviewer chooses which record survives", async () => {
+    const headers = await adminHeaders();
+    const keep = await record("A bill with the readers");
+    const fold = await record("The same bill, filed twice");
+    const pair = await candidate(keep.id, fold.id);
+
+    const response = await fetch(
+      `${BASE_URL}/api/admin/reference-merges/${pair.id}/approve`,
+      { method: "POST", headers, body: JSON.stringify({ keepId: keep.id }) },
+    );
+    expect(response.status).toBe(200);
+
+    const tombstone = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: fold.id },
+    });
+    expect(tombstone.mergedIntoId).toBe(keep.id);
+
+    const decided = await prisma.referenceMergeCandidate.findUniqueOrThrow({
+      where: { id: pair.id },
+    });
+    expect(decided.status).toBe("approved");
+    expect(decided.decidedById).toBe("test-superadmin");
+    expect(decided.decidedAt).not.toBeNull();
+  });
+
+  test("rejecting is recorded so the same pair is not asked again", async () => {
+    // A reviewer's "no" is a decision, not a temporary state. A queue that
+    // re-asks every night is a queue people stop reading.
+    const headers = await adminHeaders();
+    const a = await record("A bill about wildfire response");
+    const b = await record("A bill about hurricane response");
+    const pair = await candidate(a.id, b.id);
+
+    const rejected = await fetch(
+      `${BASE_URL}/api/admin/reference-merges/${pair.id}/reject`,
+      { method: "POST", headers, body: JSON.stringify({ note: "Different disasters." }) },
+    );
+    expect(rejected.status).toBe(200);
+
+    const decided = await prisma.referenceMergeCandidate.findUniqueOrThrow({
+      where: { id: pair.id },
+    });
+    expect(decided.status).toBe("rejected");
+    expect(decided.note).toBe("Different disasters.");
+
+    // And it cannot be approved afterwards by anyone who missed the decision.
+    const again = await fetch(
+      `${BASE_URL}/api/admin/reference-merges/${pair.id}/approve`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+    expect(again.status).toBe(409);
+  });
+
+  test("a pair that stopped being two records cannot be approved", async () => {
+    const headers = await adminHeaders();
+    const a = await record("A bill on port infrastructure");
+    const b = await record("A bill on inland waterways");
+    const c = await record("A third, unrelated bill");
+    const pair = await candidate(a.id, b.id);
+
+    // b gets merged somewhere else first.
+    await fetch(`${BASE_URL}/api/admin/reference-merges/${(await candidate(b.id, c.id)).id}/approve`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ keepId: c.id }),
+    });
+
+    const response = await fetch(
+      `${BASE_URL}/api/admin/reference-merges/${pair.id}/approve`,
+      { method: "POST", headers, body: JSON.stringify({}) },
+    );
+    expect(response.status).toBe(409);
+
+    const closed = await prisma.referenceMergeCandidate.findUniqueOrThrow({ where: { id: pair.id } });
+    expect(closed.status).toBe("superseded");
+  });
+
+  test("a read-only admin can look but not decide", async () => {
+    // Approving rewrites which record every affected post and vote belongs to.
+    // Same bar as merging by hand.
+    const readOnly = await adminHeaders("admin");
+    const a = await record("A bill on rural broadband");
+    const b = await record("A bill on satellite spectrum");
+    const pair = await candidate(a.id, b.id);
+
+    expect((await fetch(`${BASE_URL}/api/admin/reference-merges`, { headers: readOnly })).status).toBe(200);
+
+    for (const action of ["approve", "reject"]) {
+      const response = await fetch(
+        `${BASE_URL}/api/admin/reference-merges/${pair.id}/${action}`,
+        { method: "POST", headers: readOnly, body: JSON.stringify({}) },
+      );
+      expect({ action, status: response.status }).toEqual({ action, status: 403 });
+    }
+  });
+
+  test("every queue endpoint rejects a request with no admin token", async () => {
+    const paths: Array<[string, string]> = [
+      ["GET", "/api/admin/reference-merges"],
+      ["POST", "/api/admin/reference-merges/some-id/approve"],
+      ["POST", "/api/admin/reference-merges/some-id/reject"],
+      ["POST", "/api/admin/reference-merges/refresh"],
+    ];
+
+    for (const [method, path] of paths) {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers: freshClientHeaders({ "Content-Type": "application/json" }),
+        body: method === "GET" ? undefined : "{}",
+      });
+      expect({ method, path, status: response.status }).toEqual({ method, path, status: 401 });
+    }
+  });
+});
+
+describe("what the matchmaker refuses to do", () => {
+  /**
+   * These are pure decision rules, tested without going near congress.gov —
+   * the network is not what is under test here, the judgement is.
+   */
+
+  test("title similarity separates two Venezuela bills from two veterans bills", async () => {
+    const { titleSimilarity } = await import("../src/services/reference-lineage");
+
+    // The real pair from the load test: no published lineage, nearly the same
+    // subject. This is why the suggestion list exists at all.
+    expect(
+      titleSimilarity(
+        "A bill to impose sanctions with respect to Venezuela",
+        "A bill to impose additional sanctions with respect to Venezuela",
+      ),
+    ).toBeGreaterThan(0.7);
+
+    // Congressional titles are long and formulaic, so an edit-distance measure
+    // scores nearly every pair as similar on boilerplate alone. These two share
+    // every stock phrase and nothing that matters.
+    expect(
+      titleSimilarity(
+        "A bill to amend title 38, United States Code, to improve health care for veterans",
+        "A bill to amend title 38, United States Code, to improve burial benefits",
+      ),
+    ).toBeLessThan(0.7);
+  });
+
+  test("a pair a reviewer already answered is not put back in the queue", async () => {
+    const { fileCandidate } = await import("../src/services/reference-lineage");
+    // Runs against the same database the server uses, through the harness client.
+    const a = await prisma.governmentReference.create({
+      data: { masterReferenceId: "hr-8801-119", referenceType: "bill", title: "One", status: "proposed" },
+    });
+    const b = await prisma.governmentReference.create({
+      data: { masterReferenceId: "hr-8802-119", referenceType: "bill", title: "Two", status: "proposed" },
+    });
+    const [leftId, rightId] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+    await prisma.referenceMergeCandidate.create({
+      data: { leftId, rightId, relationship: "Companion measure", status: "rejected" },
+    });
+
+    const refiled = await fileCandidate(
+      { aId: a.id, bId: b.id, relationship: "Companion measure", identifiedBy: "CRS" },
+      prisma,
+    );
+    expect(refiled).toEqual({ filed: false, reason: "already rejected" });
+  });
+
+  test("a rejected guess is asked again when the government publishes real lineage", async () => {
+    // The one exception, and it is not the same question: a reviewer declining
+    // this platform's title guess said nothing about what congress.gov would
+    // later confirm.
+    const { fileCandidate } = await import("../src/services/reference-lineage");
+    const a = await prisma.governmentReference.create({
+      data: { masterReferenceId: "hr-8803-119", referenceType: "bill", title: "Three", status: "proposed" },
+    });
+    const b = await prisma.governmentReference.create({
+      data: { masterReferenceId: "hr-8804-119", referenceType: "bill", title: "Four", status: "proposed" },
+    });
+    const [leftId, rightId] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+    const pair = await prisma.referenceMergeCandidate.create({
+      data: { leftId, rightId, relationship: "look_alike", similarity: 0.91, status: "rejected" },
+    });
+
+    const refiled = await fileCandidate(
+      {
+        aId: a.id,
+        bId: b.id,
+        relationship: "Companion measure",
+        identifiedBy: "House",
+        evidenceUrl: "https://www.congress.gov/bill/119th-congress/house-bill/8803/related-bills",
+      },
+      prisma,
+    );
+    expect(refiled.filed).toBe(true);
+
+    const reopened = await prisma.referenceMergeCandidate.findUniqueOrThrow({ where: { id: pair.id } });
+    expect(reopened.status).toBe("pending");
+    expect(reopened.relationship).toBe("Companion measure");
+    expect(reopened.identifiedBy).toBe("House");
+  });
+});

@@ -12,6 +12,7 @@ export enum JobType {
   UPDATE_TRENDING = "UPDATE_TRENDING",
   SYNC_GOVERNMENT_DATA = "SYNC_GOVERNMENT_DATA",
   GENERATE_REFERENCE_BRIEF = "GENERATE_REFERENCE_BRIEF",
+  SYNC_REFERENCE_LINEAGE = "SYNC_REFERENCE_LINEAGE",
 }
 
 // Priority levels
@@ -98,6 +99,12 @@ export interface GenerateReferenceBriefData {
   force?: boolean;
 }
 
+export interface SyncReferenceLineageData {
+  /** One record, or the whole sweep when absent. */
+  referenceId?: string;
+  trigger: string;
+}
+
 export interface BatchInteraction {
   userId: string;
   interactionType: string;
@@ -116,6 +123,7 @@ export type JobDataMap = {
   [JobType.UPDATE_TRENDING]: UpdateTrendingData;
   [JobType.SYNC_GOVERNMENT_DATA]: SyncGovernmentDataData;
   [JobType.GENERATE_REFERENCE_BRIEF]: GenerateReferenceBriefData;
+  [JobType.SYNC_REFERENCE_LINEAGE]: SyncReferenceLineageData;
 };
 
 /**
@@ -373,6 +381,7 @@ export class JobQueue {
       [JobType.TRACK_INTERACTION]: 0,
       [JobType.UPDATE_TRENDING]: 0,
       [JobType.SYNC_GOVERNMENT_DATA]: 0,
+    [JobType.SYNC_REFERENCE_LINEAGE]: 0,
       [JobType.GENERATE_REFERENCE_BRIEF]: 0,
     };
 
@@ -537,6 +546,19 @@ export function enqueueGovernmentSync(
   priority: JobPriority = JobPriority.LOW
 ): string {
   return jobQueue.enqueue(JobType.SYNC_GOVERNMENT_DATA, { trigger }, priority);
+}
+
+/**
+ * Enqueue a lineage check: ask congress.gov which stored records are really the
+ * same law. Low priority by design — it is one request per record against a key
+ * the search shares, and nothing a reader is waiting for depends on it.
+ */
+export function enqueueLineageSync(
+  trigger: string,
+  referenceId?: string,
+  priority: JobPriority = JobPriority.LOW
+): string {
+  return jobQueue.enqueue(JobType.SYNC_REFERENCE_LINEAGE, { trigger, referenceId }, priority);
 }
 
 /**

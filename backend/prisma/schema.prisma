@@ -600,11 +600,13 @@ model GovernmentReference {
   updatedAt         DateTime  @updatedAt
 
   // Relations
-  mergedInto GovernmentReference?      @relation("MergedReferences", fields: [mergedIntoId], references: [id])
-  mergedFrom GovernmentReference[]     @relation("MergedReferences")
-  posts      Post[]                    @relation("GovernmentReferencePosts")
-  votes      GovernmentReferenceVote[]
-  names      ReferenceName[]
+  mergedInto        GovernmentReference?      @relation("MergedReferences", fields: [mergedIntoId], references: [id])
+  mergedFrom        GovernmentReference[]     @relation("MergedReferences")
+  posts             Post[]                    @relation("GovernmentReferencePosts")
+  votes             GovernmentReferenceVote[]
+  names             ReferenceName[]
+  candidatesAsLeft  ReferenceMergeCandidate[] @relation("MergeCandidateLeft")
+  candidatesAsRight ReferenceMergeCandidate[] @relation("MergeCandidateRight")
 
   @@index([referenceType])
   @@index([status])
@@ -651,6 +653,67 @@ model ReferenceName {
 
   @@index([referenceId])
   @@index([referenceId, isCurrent])
+}
+
+// ---------------------------------------------------------------------------
+// Two records that might be one law.
+//
+// Congress.gov publishes, for every bill, which other bills it is related to
+// and how — "Identical bill", "Companion measure", "Related bill",
+// "Procedurally-related" — along with who made that call: the House, the
+// Senate, or the Congressional Research Service. That is the government's own
+// lineage data, and it is the only evidence good enough to join two records
+// without a person looking.
+//
+// Only "Identical bill" is acted on automatically. That label means a Library
+// of Congress analyst read both texts and confirmed they match. Every other
+// relationship lands here as a question for a human, with the government's page
+// attached and the name of whoever made the call.
+//
+// "Related bill" never becomes a candidate at all. Related means a different
+// law on the same subject, which is the opposite of a duplicate.
+//
+// Look-alike title suggestions also land here, clearly marked as carrying no
+// authority — they exist because a load test found 7 of 13 stored bills have no
+// published lineage whatsoever.
+// ---------------------------------------------------------------------------
+
+model ReferenceMergeCandidate {
+  id String @id @default(cuid())
+
+  // Ordered so the same pair is always the same row: leftId sorts before
+  // rightId. Without that, A-B and B-A are two rows and the unique constraint
+  // stops meaning anything.
+  leftId  String
+  rightId String
+
+  // The government's own label, or "look_alike" for a title suggestion this
+  // platform generated and nobody official stands behind.
+  relationship String
+  // House, Senate, or CRS. Null for a look-alike, which is the point.
+  identifiedBy String?
+  // The congress.gov page a reviewer can open to check the claim.
+  evidenceUrl  String?
+  // Title similarity, 0 to 1. Only set on look-alikes.
+  similarity   Float?
+
+  // pending, approved, rejected, superseded
+  status      String    @default("pending")
+  decidedById String?
+  decidedAt   DateTime?
+  // Why a reviewer rejected it, so the same pair is not re-litigated monthly.
+  note        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  left  GovernmentReference @relation("MergeCandidateLeft", fields: [leftId], references: [id], onDelete: Cascade)
+  right GovernmentReference @relation("MergeCandidateRight", fields: [rightId], references: [id], onDelete: Cascade)
+
+  @@unique([leftId, rightId])
+  @@index([status])
+  @@index([leftId])
+  @@index([rightId])
 }
 
 // Votes on government references (separate from bill votes)

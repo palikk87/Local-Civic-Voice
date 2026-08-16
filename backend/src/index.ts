@@ -32,7 +32,7 @@ import {
 } from "./middleware/rate-limit";
 
 // Import job queue and processors
-import { jobQueue, enqueueGovernmentSync } from "./services/job-queue";
+import { jobQueue, enqueueGovernmentSync, enqueueLineageSync } from "./services/job-queue";
 import { initializeProcessors } from "./services/job-processors";
 
 // Import cache stats
@@ -228,6 +228,13 @@ console.log(`[Server] Job queue started`);
 const GOVERNMENT_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 enqueueGovernmentSync("startup");
 setInterval(() => enqueueGovernmentSync("daily"), GOVERNMENT_SYNC_INTERVAL_MS);
+
+// Lineage: ask congress.gov which stored records are really the same law, so
+// two filings of one bill stop splitting the vote count. Daily, and not at
+// boot — the sweep is one request per record against the same key search uses,
+// and a restart loop would spend the hourly budget on nothing.
+const LINEAGE_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
+setInterval(() => enqueueLineageSync("daily"), LINEAGE_SYNC_INTERVAL_MS);
 
 // Accounts live in Postgres, external to this container, so they survive
 // restarts without any backup/restore protocol here.
