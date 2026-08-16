@@ -1373,3 +1373,88 @@ describe("admin B2B client management", () => {
     }
   });
 });
+
+describe("a record answers to every name it has had", () => {
+  /**
+   * The master reference id is not immutable. A mangled id gets repaired, a
+   * merge folds two records into one, Congress renumbers a measure. Every one
+   * of those rewrites a name that is already out in the world — in a shared
+   * link, a bookmark, a client that cached it.
+   *
+   * The system's promise is that no link dies. These tests are that promise,
+   * exercised over HTTP through the one endpoint that resolves a
+   * caller-supplied reference name: creating a post against it.
+   */
+
+  async function poster(): Promise<{ cookie: string; userId: string }> {
+    return signUp({
+      email: `alias-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Alias Tester",
+    });
+  }
+
+  /** A reference row with a current name and a list of former ones. */
+  async function reference(masterReferenceId: string, formerNames: string[] = []) {
+    return prisma.governmentReference.create({
+      data: {
+        masterReferenceId,
+        referenceType: "bill",
+        title: `Record ${masterReferenceId}`,
+        status: "proposed",
+        aliases: formerNames.length > 0 ? JSON.stringify(formerNames) : null,
+      },
+    });
+  }
+
+  async function post(cookie: string, governmentReferenceId: string): Promise<Response> {
+    return fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ content: "linking by name", governmentReferenceId }),
+    });
+  }
+
+  test("a link shared under the old, mangled name still resolves", async () => {
+    // Exactly the shape the repair migration produces: the record now carries
+    // its correct name, and the name it was written under before — the one
+    // every existing link uses — is kept as an alias.
+    const { cookie } = await poster();
+    const record = await reference("sres-829-119", ["s-res-829-119"]);
+
+    const response = await post(cookie, "s-res-829-119");
+    expect(response.status).toBe(201);
+
+    const body = (await response.json()) as { post: { id: string } };
+    const written = await prisma.post.findUniqueOrThrow({ where: { id: body.post.id } });
+    expect(written.governmentReferenceId).toBe(record.id);
+  });
+
+  test("the record that currently holds a name always wins over one that used to", async () => {
+    // The dangerous case. If a former name could shadow a current one, a
+    // repaired record would silently steal traffic from the record that now
+    // legitimately owns that id — the exact opposite of the guarantee.
+    const { cookie } = await poster();
+    const formerOwner = await reference("hres-1443-119", ["hr-4836-119"]);
+    const currentOwner = await reference("hr-4836-119");
+
+    const response = await post(cookie, "hr-4836-119");
+    expect(response.status).toBe(201);
+
+    const body = (await response.json()) as { post: { id: string } };
+    const written = await prisma.post.findUniqueOrThrow({ where: { id: body.post.id } });
+    expect(written.governmentReferenceId).toBe(currentOwner.id);
+    expect(written.governmentReferenceId).not.toBe(formerOwner.id);
+  });
+
+  test("a name no record has ever held is still a 404", async () => {
+    // The alias lookup must not turn "not found" into a guess. A substring of
+    // a real alias is the way a sloppy match would leak: "hr-82" is inside
+    // "hr-820-119", and matching on the quoted form is what stops it.
+    const { cookie } = await poster();
+    await reference("hr-820-119", ["hr-8200-118"]);
+
+    const response = await post(cookie, "hr-82");
+    expect(response.status).toBe(404);
+  });
+});

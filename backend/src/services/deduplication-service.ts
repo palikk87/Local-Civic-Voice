@@ -1,5 +1,6 @@
 import { prisma } from "../prisma";
 import { computeWeightedTally } from "./delegation-service";
+import { canonicalReferenceId } from "./master-reference-id";
 
 /**
  * Deterministic placeholder tally for a brand-new reference so its card never
@@ -34,22 +35,6 @@ export const ReferenceType = {
 export type ReferenceTypeValue = (typeof ReferenceType)[keyof typeof ReferenceType];
 
 /**
- * Data required to generate a master reference ID
- */
-export interface ReferenceData {
-  type: ReferenceTypeValue;
-  // For bills
-  billNumber?: string;
-  congress?: number;
-  chamber?: string; // hr, s, hjres, sjres, hconres, sconres, hres, sres
-  // For executive orders
-  eoNumber?: string;
-  // For SCOTUS cases
-  caseNumber?: string; // e.g., "22-451"
-  title?: string;
-}
-
-/**
  * Result of a duplicate search
  */
 export interface DuplicateSearchResult {
@@ -62,77 +47,17 @@ export interface DuplicateSearchResult {
 }
 
 /**
- * Normalize a reference ID by:
- * - Converting to lowercase
- * - Removing extra whitespace
- * - Standardizing separators (use hyphens)
- * - Removing common prefixes/suffixes
+ * Canonical form of a reference id.
+ *
+ * Kept as a name because a dozen call sites use it, but it holds no opinion of
+ * its own any more — naming lives in master-reference-id.ts, which is the only
+ * module allowed to decide how a law is spelled. The version that used to live
+ * here matched bill prefixes with a leftmost-first alternation and mangled four
+ * of the eight measure types; that is the whole reason the naming rules were
+ * pulled out into one place with a round-trip test around them.
  */
 export function normalizeReferenceId(type: ReferenceTypeValue, id: string): string {
-  let normalized = id.toLowerCase().trim();
-
-  // Replace various separators with hyphens
-  normalized = normalized.replace(/[\s_\.]+/g, "-");
-
-  // Remove duplicate hyphens
-  normalized = normalized.replace(/-+/g, "-");
-
-  // Remove leading/trailing hyphens
-  normalized = normalized.replace(/^-|-$/g, "");
-
-  switch (type) {
-    case ReferenceType.BILL:
-      // Normalize bill IDs: "H.R. 82" -> "hr-82", "S. 1234" -> "s-1234"
-      // Also handle "HR82", "hr 82", etc.
-      normalized = normalized.replace(/^(h\.?r\.?|s\.?|h\.?j\.?res\.?|s\.?j\.?res\.?|h\.?con\.?res\.?|s\.?con\.?res\.?|h\.?res\.?|s\.?res\.?)[\s-]*/, (_, prefix) => {
-        const cleanPrefix = prefix.replace(/\./g, "").replace(/\s+/g, "");
-        return cleanPrefix + "-";
-      });
-      break;
-
-    case ReferenceType.EXECUTIVE_ORDER:
-      // Normalize EO IDs: "E.O. 14147" -> "eo-14147", "Executive Order 14147" -> "eo-14147"
-      normalized = normalized.replace(/^(e\.?o\.?|executive[-\s]?order)[\s-]*/, "eo-");
-      break;
-
-    case ReferenceType.SCOTUS_CASE:
-      // SCOTUS case numbers are already in format like "22-451"
-      // Just ensure consistent formatting
-      normalized = normalized.replace(/^no\.?\s*/, "");
-      break;
-  }
-
-  return normalized;
-}
-
-/**
- * Generate a canonical master reference ID from reference data
- */
-export function generateMasterReferenceId(data: ReferenceData): string {
-  switch (data.type) {
-    case ReferenceType.BILL:
-      if (data.chamber && data.billNumber) {
-        const congress = data.congress ? `-${data.congress}` : "";
-        const chamber = data.chamber.toLowerCase().replace(/\./g, "");
-        return `${chamber}-${data.billNumber}${congress}`;
-      }
-      throw new Error("Bill reference requires chamber and billNumber");
-
-    case ReferenceType.EXECUTIVE_ORDER:
-      if (data.eoNumber) {
-        return `eo-${data.eoNumber.replace(/\D/g, "")}`;
-      }
-      throw new Error("Executive order reference requires eoNumber");
-
-    case ReferenceType.SCOTUS_CASE:
-      if (data.caseNumber) {
-        return normalizeReferenceId(ReferenceType.SCOTUS_CASE, data.caseNumber);
-      }
-      throw new Error("SCOTUS case reference requires caseNumber");
-
-    default:
-      throw new Error(`Unknown reference type: ${data.type}`);
-  }
+  return canonicalReferenceId(type, id);
 }
 
 /**

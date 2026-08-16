@@ -13,6 +13,7 @@
 
 import { prisma } from "../prisma";
 import { ReferenceType, normalizeReferenceId, seedTallyFor } from "./deduplication-service";
+import { billReferenceId } from "./master-reference-id";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -167,10 +168,19 @@ async function syncBills(): Promise<number> {
     if (synced >= SYNC_COUNT) break;
     if (!bill.title || !bill.number || !bill.type) continue;
     const type = bill.type.toLowerCase();
-    const masterReferenceId = normalizeReferenceId(
-      ReferenceType.BILL,
-      `${type}-${bill.number}-${bill.congress ?? congress}`,
-    );
+    // Named from congress.gov's own three fields, which is the only place they
+    // arrive already separated. A type congress.gov has never published yields
+    // null, and the row is skipped rather than written under a guessed name —
+    // an unfindable record is worse than a missing one.
+    const masterReferenceId = billReferenceId({
+      type,
+      number: bill.number,
+      congress: bill.congress ?? congress,
+    });
+    if (!masterReferenceId) {
+      console.warn(`[GovSync] Skipping bill with unrecognised type "${bill.type}" (${bill.number})`);
+      continue;
+    }
     const chamberPath = type.startsWith("h") ? "house-bill" : "senate-bill";
     await upsertReference({
       masterReferenceId,

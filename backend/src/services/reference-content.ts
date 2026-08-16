@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
 import { type BriefJobPlan, classifyBriefJob, generateAI, parseJsonObject } from "./ai-generate";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
+import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 
 const FETCH_TIMEOUT_MS = 15_000;
 /** How long stored text is trusted before we re-compare it against the official source. */
@@ -161,21 +162,20 @@ interface ReferenceRow {
 /**
  * "hr-82-119" → { type: "hr", number: "82", congress: 119 }
  *
- * Resolution ids split the bill type across segments for resolutions — normalizing
- * "hres-1443-119" yields "hr-es-1443-119" — so letter segments are rejoined
- * ("hr" + "es" = "hres", which is what congress.gov expects in the URL path).
+ * `fallbackCongress` is the row's own `congress` column, used when the id
+ * carries no Congress of its own. Ids written before the naming rules were
+ * consolidated split the type across segments — "hres-1443-119" was stored as
+ * "hr-es-1443-119" — and the shared parser rejoins them, so a record still
+ * reaches congress.gov under the name it was filed with.
  */
 function parseBillId(masterReferenceId: string, fallbackCongress: number | null) {
-  const segments = masterReferenceId.split("-").filter(Boolean);
-  const letters = segments.filter((s) => /^[a-z]+$/.test(s));
-  const numbers = segments.filter((s) => /^\d+$/.test(s));
+  const key = parseReferenceId(ReferenceKind.BILL, masterReferenceId);
+  if (key?.kind !== "bill") return null;
 
-  const type = letters.join("");
-  const number = numbers[0];
-  const congress = numbers[1] ? Number(numbers[1]) : fallbackCongress;
+  const congress = key.congress ?? fallbackCongress;
+  if (!congress) return null;
 
-  if (!type || !number || !congress) return null;
-  return { type, number, congress };
+  return { type: key.billType as string, number: key.number, congress };
 }
 
 async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {

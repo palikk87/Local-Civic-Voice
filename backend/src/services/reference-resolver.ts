@@ -32,6 +32,40 @@ export type ResolveResult = { ok: true; reference: ResolvedReference } | Resolve
 const MAX_MERGE_HOPS = 10;
 
 /**
+ * Find a record by a name it used to have.
+ *
+ * A record's master reference id can change — a mangled id gets repaired, a
+ * merge folds one record into another, Congress renumbers a measure. Every name
+ * a record has ever answered to is kept in `aliases`, and a link that was
+ * shared under an old name has to keep working, or the platform quietly breaks
+ * its own history every time it corrects itself.
+ *
+ * `aliases` is a TEXT column holding a JSON array, so the match is on the
+ * quoted form — searching for `"hr-82"` rather than `hr-82` means a record
+ * aliased to `hr-820` is not mistaken for it.
+ *
+ * Deliberately last. An exact id is always preferred, so a former name can
+ * never shadow a record that currently holds that name.
+ */
+async function findByFormerName<S extends object, R>(
+  referenceId: string,
+  db: Pick<typeof prisma, "governmentReference">,
+  select: S,
+): Promise<R | null> {
+  const name = referenceId.trim().toLowerCase();
+  if (!name) return null;
+
+  return (await db.governmentReference.findFirst({
+    where: { aliases: { contains: JSON.stringify(name) } },
+    select: select as never,
+    // Oldest first, so a name that somehow appears on two records resolves to
+    // the one that has held it longest rather than whichever the planner
+    // returned that day.
+    orderBy: { createdAt: "asc" },
+  })) as R | null;
+}
+
+/**
  * Pick the reference ID to use from the new and legacy request fields.
  *
  * `governmentReferenceId` is the current contract. `referenceId` is the legacy
@@ -85,7 +119,8 @@ export async function resolveReferenceId(
     (await db.governmentReference.findUnique({
       where: { masterReferenceId: referenceId.toLowerCase() },
       select,
-    }));
+    })) ??
+    (await findByFormerName(referenceId, db, select));
 
   if (!first) {
     return { ok: false, reason: "not_found", value: referenceId };
