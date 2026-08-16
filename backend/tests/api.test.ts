@@ -30,7 +30,7 @@ import {
 } from "./helpers/server";
 import { generateAdminToken, generateB2BToken } from "../src/session-token";
 import { mkdir, writeFile, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 beforeAll(async () => {
   await startServer();
@@ -943,5 +943,66 @@ describe("admin deletion removes stored objects", () => {
 
     expect(await prisma.post.findUnique({ where: { id: post.id } })).toBeNull();
     expect(await exists(path)).toBe(false);
+  });
+});
+
+describe("serving local uploads", () => {
+  // The whole suite now runs with an ABSOLUTE UPLOADS_DIR, which is the shape
+  // every deployment guide uses and the shape that used to serve nothing. Each
+  // media test above is therefore already a regression test for it. These pin
+  // the parts those do not reach.
+
+  test("an absolute UPLOADS_DIR actually serves bytes", async () => {
+    // hono/bun's serveStatic resolved `root` against process.cwd() and silently
+    // 404'd for an absolute path, so media vanished while the database still
+    // claimed it existed. Verified against the real server before the fix:
+    // relative 200, absolute 404, no error either way.
+    const key = "images/absolute-path-check.txt";
+    const path = join(TEST_UPLOADS_PATH, key);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, "served from an absolute root");
+
+    const response = await fetch(`${BASE_URL}/uploads/${key}`);
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("served from an absolute root");
+  });
+
+  test("a missing object is a clean 404", async () => {
+    const response = await fetch(`${BASE_URL}/uploads/images/definitely-not-here.png`);
+    expect(response.status).toBe(404);
+  });
+
+  test("path traversal cannot escape the uploads directory", async () => {
+    // Serving by hand means owning this check. `resolve` collapses "..", so a
+    // traversal lands outside the root and is rejected — including when it
+    // arrives percent-encoded, which is why containment is checked after
+    // decoding rather than before.
+    const secret = join(TEST_UPLOADS_PATH, "..", "traversal-target.txt");
+    await writeFile(secret, "must not be reachable");
+
+    for (const attempt of [
+      "/uploads/../traversal-target.txt",
+      "/uploads/images/../../traversal-target.txt",
+      "/uploads/%2e%2e/traversal-target.txt",
+      "/uploads/..%2ftraversal-target.txt",
+    ]) {
+      const response = await fetch(`${BASE_URL}${attempt}`, { redirect: "manual" });
+      expect({ attempt, status: response.status }).toEqual({ attempt, status: 404 });
+    }
+
+    await rm(secret, { force: true });
+  });
+
+  test("a sibling directory sharing the prefix is not reachable", async () => {
+    // The trailing-separator half of the containment check: without it,
+    // "<root>-secret" passes a naive startsWith("<root>").
+    const sibling = `${TEST_UPLOADS_PATH}-secret`;
+    await mkdir(sibling, { recursive: true });
+    await writeFile(join(sibling, "leak.txt"), "must not be reachable");
+
+    const response = await fetch(`${BASE_URL}/uploads/../${basename(sibling)}/leak.txt`);
+    expect(response.status).toBe(404);
+
+    await rm(sibling, { recursive: true, force: true });
   });
 });

@@ -33,18 +33,17 @@ let server: Subprocess | null = null;
  * under the old key format still resolves" is checked: write the bytes at a key
  * of the old shape, then fetch it over HTTP the way a browser would.
  *
- * RELATIVE, and it has to be. Hono's bun serveStatic resolves `root` against
- * process.cwd(), so the /uploads/* mount in src/index.ts serves nothing when
- * UPLOADS_DIR is an absolute path — verified by running the server both ways
- * against the same file: relative returned 200 and the bytes, absolute returned
- * 404. That is a real bug in the local driver, and it is not this suite's to
- * fix; but pointing the harness at an absolute path would mean the media tests
- * silently exercised a dead route instead of the one users hit.
+ * ABSOLUTE on purpose. This used to be relative, because hono/bun's serveStatic
+ * resolved `root` against process.cwd() and served nothing for an absolute
+ * path — so the harness had to avoid the shape every deployment guide tells you
+ * to use, which meant the media tests exercised a configuration no operator
+ * runs. /uploads/* is served by hand now and takes a real path, so the suite
+ * uses the same shape production does.
  *
- * TEST_UPLOADS_PATH is the same directory resolved, for tests that write to it.
+ * TEST_UPLOADS_PATH is an alias kept for the tests that write into it.
  */
-export const TEST_UPLOADS_DIR = ".test-uploads";
-export const TEST_UPLOADS_PATH = resolve(process.cwd(), TEST_UPLOADS_DIR);
+export const TEST_UPLOADS_DIR = resolve(process.cwd(), ".test-uploads");
+export const TEST_UPLOADS_PATH = TEST_UPLOADS_DIR;
 
 /**
  * Throwaway B2B credentials for the test server.

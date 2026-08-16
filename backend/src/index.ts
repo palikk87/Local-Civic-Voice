@@ -19,8 +19,7 @@ import { representativesRouter } from "./routes/representatives";
 import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
 import { logger } from "hono/logger";
-import { serveStatic } from "hono/bun";
-import { basename, dirname } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
 
 // Import rate limiters
@@ -172,16 +171,48 @@ app.route("/api/ai", aiRouter);
 // worse than useless: it would answer /uploads/* with 404s from an empty
 // directory instead of letting the absence be obvious.
 if (storageDriver === "local") {
-  const uploadsRoot = dirname(UPLOADS_DIR);
-  const uploadsLeaf = basename(UPLOADS_DIR);
+  // Served by hand rather than with hono/bun's serveStatic.
+  //
+  // serveStatic resolves `root` against process.cwd(), so it silently serves
+  // NOTHING when UPLOADS_DIR is an absolute path — which is the value every
+  // deployment guide tells you to use. Verified by running the server both ways
+  // against the same file: a relative UPLOADS_DIR returned 200 and the bytes, an
+  // absolute one returned 404, with no error in either case. Media simply
+  // vanished, and the database still claimed it was there.
+  //
+  // Bun.file takes a real path, so this works for absolute and relative alike.
+  const uploadsRoot = resolve(UPLOADS_DIR);
 
-  app.use(
-    "/uploads/*",
-    serveStatic({
-      root: uploadsRoot,
-      rewriteRequestPath: (path) => path.replace(/^\/uploads/, `/${uploadsLeaf}`),
-    })
-  );
+  app.get("/uploads/*", async (c) => {
+    // The path as requested, minus the mount prefix. decodeURIComponent because
+    // filenames arrive percent-encoded; it is also the step that turns "%2e%2e"
+    // back into "..", which is exactly why the containment check below happens
+    // AFTER decoding rather than before.
+    const requested = decodeURIComponent(new URL(c.req.url).pathname.replace(/^\/uploads\/?/, ""));
+    const target = resolve(join(uploadsRoot, requested));
+
+    // Refuse anything that escapes the uploads directory. `resolve` collapses
+    // "..", so a traversal attempt lands outside uploadsRoot and is rejected
+    // here. The trailing separator matters: without it, "/uploads-secret" would
+    // pass a naive startsWith("/uploads") check.
+    if (target !== uploadsRoot && !target.startsWith(uploadsRoot + sep)) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    const file = Bun.file(target);
+    if (!(await file.exists())) {
+      return c.json({ error: "Not found" }, 404);
+    }
+
+    return new Response(file, {
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        // Keys are content-addressed random values that are never reused, so a
+        // stored object at a given key never changes. Cache hard.
+        "Cache-Control": "public, max-age=31536000, immutable",
+      },
+    });
+  });
 }
 
 const port = Number(process.env.PORT) || 3000;

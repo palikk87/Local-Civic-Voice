@@ -70,10 +70,21 @@ const MIME_TO_EXTENSION: Record<string, string> = {
   "audio/x-wav": ".wav",
 };
 
-// Scratch space for one upload, so ffmpeg/ffprobe have real files to read.
+/**
+ * Scratch space for one upload, so ffmpeg/ffprobe have real files to read.
+ *
+ * The name is random rather than `Date.now()` + `Math.random()`, which is what
+ * it used to be. tmpdir() is a shared directory, and a predictable path there
+ * is a path another process can create first — as a symlink pointing somewhere
+ * it should not be able to write. `mkdir` with `recursive: true` does not fail
+ * on an existing directory, so the upload would then be written through it.
+ *
+ * `mode: 0o700` for the same reason: nothing else needs to read a half-uploaded
+ * file, and on a shared host the default would let it.
+ */
 async function makeScratchDir(): Promise<string> {
-  const dir = join(tmpdir(), `civicvoice-upload-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
-  await mkdir(dir, { recursive: true });
+  const dir = join(tmpdir(), `civicvoice-upload-${randomBytes(12).toString("base64url")}`);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   return dir;
 }
 
