@@ -2367,3 +2367,140 @@ describe("a post shows the law as it stands", () => {
     expect(body.post.reference.lawVersion).toBe(3);
   });
 });
+
+describe("one brief per version of the law", () => {
+  /**
+   * The citizen brief belongs to the record, not to the click.
+   *
+   * Open one → the record already has a brief for this version of the law →
+   * loads instantly, no model call, no cost. Not there → generated once and
+   * saved to the record, and everybody after that reads the same copy. When the
+   * government changes the law, exactly one new brief is written for the new
+   * version. Not per user, not per click, not per post.
+   */
+
+  let counter = 0;
+  async function record(overrides: Record<string, unknown> = {}) {
+    counter += 1;
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${5000 + counter}-119`,
+        referenceType: "bill",
+        title: `Brief record ${counter}`,
+        status: "proposed",
+        ...overrides,
+      },
+    });
+    await prisma.referenceName.create({
+      data: { name: row.masterReferenceId, referenceId: row.id, isCurrent: true, learnedFrom: "created" },
+    });
+    return row;
+  }
+
+  const STORED_BRIEF = {
+    citizenBrief: "What this law does, in plain language.",
+    citizenBriefJson: '{"theGoal":"g","theWallet":"w","theDebate":"d"}',
+    citizenBriefAt: new Date("2026-04-01T00:00:00Z"),
+    citizenBriefModel: "some-model",
+    fullText: "SECTION 1. SHORT TITLE.",
+    fullTextHash: "deadbeef",
+    contentStatus: "ready",
+    sourceCheckedAt: new Date(),
+  };
+
+  async function detail(id: string) {
+    const response = await fetch(`${BASE_URL}/api/government-references/${id}`, {
+      headers: freshClientHeaders(),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      reference: {
+        citizenBrief: string | null;
+        citizenBriefAt: string | null;
+        citizenBriefVersion: number | null;
+        lawVersion: number;
+        lawChangedAt: string | null;
+      };
+    };
+    return body.reference;
+  }
+
+  test("a brief that describes the current law is never rewritten", async () => {
+    // Two readers, one brief. The second must not cost a model call — and the
+    // way to see that from outside is that nothing about the stored brief moved.
+    const law = await record({ ...STORED_BRIEF, lawVersion: 1, citizenBriefVersion: 1 });
+
+    const first = await detail(law.id);
+    expect(first.citizenBriefVersion).toBe(first.lawVersion);
+    expect(first.citizenBrief).toBe(STORED_BRIEF.citizenBrief);
+
+    const second = await detail(law.id);
+    expect(second.citizenBriefAt).toBe(first.citizenBriefAt);
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(row.citizenBriefAt?.toISOString()).toBe(STORED_BRIEF.citizenBriefAt.toISOString());
+    expect(row.citizenBriefModel).toBe("some-model");
+    // The strongest signal available without an AI key: this test server has
+    // no model provider configured, so anything that DID try to regenerate
+    // would fail and leave the record marked unavailable. Still "ready" means
+    // generation was never attempted.
+    expect(row.contentStatus).toBe("ready");
+  });
+
+  test("when the law moves, the stored brief stops being current", async () => {
+    // The state that used to be unrepresentable. Before the version was
+    // recorded, "is this brief still right" lived in a variable inside one
+    // function call — so a regeneration that failed left a stale brief looking
+    // current forever, and every later reader was served a summary of a law
+    // that no longer existed.
+    const law = await record({ ...STORED_BRIEF, lawVersion: 1, citizenBriefVersion: 1 });
+    expect((await detail(law.id)).citizenBriefVersion).toBe(1);
+
+    const movedAt = new Date("2026-07-04T00:00:00Z");
+    await prisma.governmentReference.update({
+      where: { id: law.id },
+      data: { lawVersion: 2, lawChangedAt: movedAt },
+    });
+
+    const after = await detail(law.id);
+    expect(after.lawVersion).toBe(2);
+    expect(after.citizenBriefVersion).toBe(1);
+    expect(after.lawChangedAt).toBe(movedAt.toISOString());
+    // Still readable. A brief for the previous text beats a blank panel, and
+    // the version numbers say plainly which one it describes.
+    expect(after.citizenBrief).toBe(STORED_BRIEF.citizenBrief);
+  });
+
+  test("a merge adopts a brief and does not make it look stale", async () => {
+    // A merge must never be the reason a brief gets rewritten. Carrying the
+    // source's version number across would leave the survivor looking a version
+    // behind and pay for a regeneration on the very next read.
+    const { cookie, userId } = await signUp({
+      email: `brief-admin-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Brief Admin",
+    });
+    await prisma.user.update({ where: { id: userId }, data: { role: "admin" } });
+
+    const target = await record({ lawVersion: 4 });
+    const source = await record({ ...STORED_BRIEF, lawVersion: 9, citizenBriefVersion: 9 });
+
+    const merged = await fetch(`${BASE_URL}/api/government-references/merge`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ sourceId: source.id, targetId: target.id }),
+    });
+    expect(merged.status).toBe(200);
+    expect(((await merged.json()) as { merge: { brief: string } }).merge.brief).toBe(
+      "adopted from source",
+    );
+
+    const survivor = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect(survivor.citizenBrief).toBe(STORED_BRIEF.citizenBrief);
+    // Pinned to the survivor's own version, so it reads as current.
+    expect(survivor.citizenBriefVersion).toBe(4);
+    expect(survivor.lawVersion).toBe(4);
+    // And the timestamp came across intact rather than being reset.
+    expect(survivor.citizenBriefAt?.toISOString()).toBe(STORED_BRIEF.citizenBriefAt.toISOString());
+  });
+});

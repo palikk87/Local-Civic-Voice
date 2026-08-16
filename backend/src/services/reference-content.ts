@@ -171,6 +171,8 @@ interface ReferenceRow {
   fullTextUrl: string | null;
   citizenBriefJson: string | null;
   sourceCheckedAt: Date | null;
+  lawVersion: number;
+  citizenBriefVersion: number | null;
 }
 
 /**
@@ -788,6 +790,10 @@ async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
       citizenBrief: flattenBrief(ref, brief),
       citizenBriefAt: new Date(),
       citizenBriefModel: generated.provider,
+      // Pin the brief to the version of the law it describes. This is what
+      // makes "one per version" checkable: every later reader compares this to
+      // lawVersion and reuses instead of paying again.
+      citizenBriefVersion: ref.lawVersion,
       contentStatus: "ready",
     },
   });
@@ -821,6 +827,8 @@ const SELECT_FIELDS = {
   fullTextUrl: true,
   citizenBriefJson: true,
   sourceCheckedAt: true,
+  lawVersion: true,
+  citizenBriefVersion: true,
 } as const;
 
 /** One pull per reference at a time, however many readers arrive at once. */
@@ -899,7 +907,17 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
             ...(lawMoved ? { lawChangedAt: now, lawVersion: { increment: 1 } } : {}),
           },
         });
-        current = { ...ref, fullText: fetched.text, fullTextHash: hash, fullTextUrl: fetched.url };
+        // Carry the incremented version forward. The brief written below is
+        // pinned to whatever `current.lawVersion` says, so leaving the stale
+        // number here would pin every new brief to the version before the one
+        // it describes — and every later reader would regenerate it again.
+        current = {
+          ...ref,
+          fullText: fetched.text,
+          fullTextHash: hash,
+          fullTextUrl: fetched.url,
+          lawVersion: lawMoved ? ref.lawVersion + 1 : ref.lawVersion,
+        };
         console.log(
           `[RefContent] Text ${textMissing ? "pulled" : "refreshed"} for ${ref.masterReferenceId} from ${fetched.source}`
         );
@@ -933,7 +951,20 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
     return;
   }
 
-  const briefNeeded = force || !ref.citizenBriefJson || textChanged;
+  // The stored brief still describes this law if it was written for the version
+  // the law is on now.
+  //
+  // `textChanged` alone is not enough and never was: it lives for the length of
+  // this function call, so a regeneration that failed left a brief on the row,
+  // no record of the failure, and every later reader served a summary of a law
+  // that no longer existed. The version comparison outlives the process.
+  //
+  // It also makes the other half true. A brief that IS current is never
+  // rewritten, however many people open it — not per click, not per user, not
+  // per post. Once per version of the law.
+  const briefIsCurrent =
+    Boolean(current.citizenBriefJson) && current.citizenBriefVersion === current.lawVersion;
+  const briefNeeded = force || !briefIsCurrent || textChanged;
   if (!briefNeeded) {
     await prisma.governmentReference.update({
       where: { id: ref.id },

@@ -427,6 +427,15 @@ governmentReferencesRouter.get("/:id", async (c) => {
       citizenBriefSections: parseBriefJson(reference.citizenBriefJson),
       citizenBriefLabels: briefSectionLabels(reference.referenceType, reference.status),
       citizenBriefAt: reference.citizenBriefAt?.toISOString() ?? null,
+      // Which version of the law the stored brief was written for, and which
+      // version the law is on. Equal means the brief describes the law in front
+      // of you; different means it describes an earlier text and a rewrite is
+      // due. Exposed because a reader deserves to know which they are looking
+      // at, and because it is the only way to check "one brief per version"
+      // from outside.
+      citizenBriefVersion: reference.citizenBriefVersion,
+      lawVersion: reference.lawVersion,
+      lawChangedAt: reference.lawChangedAt?.toISOString() ?? null,
       contentStatus: reference.contentStatus ?? (reference.citizenBriefJson ? "ready" : null),
       fullText: reference.fullText,
       fullTextSource: reference.fullTextSource,

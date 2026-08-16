@@ -564,29 +564,37 @@ model NotificationPreference {
 
 // Government Reference System - Canonical reference for bills, executive orders, and SCOTUS cases
 model GovernmentReference {
-  id                String    @id @default(cuid())
-  masterReferenceId String    @unique
-  referenceType     String
-  title             String
-  shortTitle        String?
-  sourceUrl         String?
-  chamber           String?
-  congress          Int?
-  status            String
-  category          String?
-  description       String?
-  citizenBrief      String?
-  seedSupport       Int       @default(0)
-  seedOppose        Int       @default(0)
-  fullText          String?
-  citizenBriefJson  String?
-  citizenBriefAt    DateTime?
-  citizenBriefModel String?
-  fullTextSource    String?
-  fullTextUrl       String?
-  fullTextHash      String?
-  fullTextAt        DateTime?
-  sourceCheckedAt   DateTime?
+  id                  String    @id @default(cuid())
+  masterReferenceId   String    @unique
+  referenceType       String
+  title               String
+  shortTitle          String?
+  sourceUrl           String?
+  chamber             String?
+  congress            Int?
+  status              String
+  category            String?
+  description         String?
+  citizenBrief        String?
+  seedSupport         Int       @default(0)
+  seedOppose          Int       @default(0)
+  fullText            String?
+  citizenBriefJson    String?
+  citizenBriefAt      DateTime?
+  citizenBriefModel   String?
+  // Which version of the law the stored brief was written for.
+  //
+  // A brief is expensive and it is written about one text. Without this, "does
+  // the brief still describe this law" is answered by transient in-process
+  // state, so a regeneration that failed once leaves a stale brief looking
+  // current forever. Comparing this to lawVersion makes "one brief per version"
+  // something the code can check rather than something it intends.
+  citizenBriefVersion Int?
+  fullTextSource      String?
+  fullTextUrl         String?
+  fullTextHash        String?
+  fullTextAt          DateTime?
+  sourceCheckedAt     DateTime?
   // When the LAW changed, as opposed to when the row was written.
   //
   // `updatedAt` moves every time somebody votes, so it cannot answer "has this
@@ -594,22 +602,22 @@ model GovernmentReference {
   // a notification to its author both depend on. This is set only when the
   // official source reports something genuinely different: a new title, a new
   // status, or text that no longer hashes the same.
-  lawChangedAt      DateTime?
+  lawChangedAt        DateTime?
   // Increments alongside lawChangedAt. The citizen brief is written for one
   // version of a law and reused until this number moves, which is what makes
   // "one brief per version" a fact rather than an intention.
-  lawVersion        Int       @default(1)
-  contentStatus     String?
-  signedDate        DateTime?
-  decidedDate       DateTime?
-  aliases           String?
-  mergedIntoId      String?
-  supportVotes      Int       @default(0)
-  opposeVotes       Int       @default(0)
-  totalComments     Int       @default(0)
-  totalShares       Int       @default(0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  lawVersion          Int       @default(1)
+  contentStatus       String?
+  signedDate          DateTime?
+  decidedDate         DateTime?
+  aliases             String?
+  mergedIntoId        String?
+  supportVotes        Int       @default(0)
+  opposeVotes         Int       @default(0)
+  totalComments       Int       @default(0)
+  totalShares         Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // Relations
   mergedInto        GovernmentReference?      @relation("MergedReferences", fields: [mergedIntoId], references: [id])

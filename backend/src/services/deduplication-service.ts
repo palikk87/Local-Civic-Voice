@@ -577,7 +577,9 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // merge neither loses a brief nor triggers a regeneration. If the survivor
     // already has one, nothing is touched: the two records describe the same
     // law, and swapping one good brief for another buys nothing.
-    const adoptBrief = !target.citizenBrief && Boolean(source.citizenBrief);
+      // "Has a usable brief" is the stored JSON, not the flattened text: the JSON
+    // is what the panels render, and a row can carry one without the other.
+    const adoptBrief = !target.citizenBriefJson && Boolean(source.citizenBriefJson);
     const adoptText = !target.fullText && Boolean(source.fullText);
 
     const updated = await tx.governmentReference.update({
@@ -593,6 +595,13 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
               citizenBriefJson: source.citizenBriefJson,
               citizenBriefAt: source.citizenBriefAt,
               citizenBriefModel: source.citizenBriefModel,
+              // Pinned to the SURVIVOR's version, not the source's. The two
+              // records describe one law, so the adopted brief describes the
+              // survivor's current text — and a merge must never be the reason
+              // a brief gets rewritten. Carrying the source's number across
+              // would make the survivor look a version behind and pay for a
+              // regeneration on the next read.
+              citizenBriefVersion: target.lawVersion,
             }
           : {}),
         ...(adoptText
@@ -649,7 +658,7 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
       namesKept,
       brief: adoptBrief
         ? ("adopted from source" as const)
-        : target.citizenBrief
+        : target.citizenBriefJson
           ? ("target kept its own" as const)
           : ("neither had one" as const),
       officialText: adoptText
