@@ -9,6 +9,7 @@ export const NotificationType = {
   FOLLOW: "follow",
   REPOST: "repost",
   NEW_FOLLOWER_POST: "new_follower_post",
+  LAW_UPDATED: "law_updated",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
@@ -21,6 +22,9 @@ export interface NotificationData {
   fromUserName?: string;
   postContent?: string;
   commentContent?: string;
+  /** The master reference whose law moved, for a law_updated notification. */
+  governmentReferenceId?: string;
+  masterReferenceId?: string;
 }
 
 // Preference field mapping for notification types
@@ -32,6 +36,7 @@ const preferenceFieldMap: Record<NotificationTypeValue, string> = {
   [NotificationType.FOLLOW]: "follows",
   [NotificationType.REPOST]: "reposts",
   [NotificationType.NEW_FOLLOWER_POST]: "newFollowerPosts",
+  [NotificationType.LAW_UPDATED]: "lawUpdates",
 };
 
 /**
@@ -475,4 +480,51 @@ export async function updateNotificationPreferences(
   });
 
   return updated;
+}
+
+/**
+ * Tell everyone who shared a law that the law has changed.
+ *
+ * Their post is not edited. Their words stay their words; only the law
+ * underneath moves forward, and the card on the post carries a badge saying so.
+ * This is the other half of that: somebody who put their name to a position on
+ * a bill should not have to re-read it every week to find out it was amended.
+ *
+ * One notification per person, not per post. A prolific poster who wrote about
+ * the same bill six times gets told once, and the notification points at their
+ * most recent post about it.
+ */
+export async function notifyLawUpdate(
+  governmentReferenceId: string,
+  masterReferenceId: string,
+  displayTitle: string
+): Promise<{ notified: number }> {
+  const posts = await prisma.post.findMany({
+    where: { governmentReferenceId },
+    select: { id: true, authorId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  // First post per author wins, and the list is newest-first, so each author's
+  // notification points at what they most recently said about this law.
+  const mostRecentByAuthor = new Map<string, string>();
+  for (const post of posts) {
+    if (!mostRecentByAuthor.has(post.authorId)) {
+      mostRecentByAuthor.set(post.authorId, post.id);
+    }
+  }
+
+  let notified = 0;
+  for (const [authorId, postId] of mostRecentByAuthor) {
+    const result = await createNotification(
+      authorId,
+      NotificationType.LAW_UPDATED,
+      "A law you shared has been updated",
+      `${displayTitle} has changed since you posted about it. Your post is unchanged \u2014 the law it points to has moved.`,
+      { postId, governmentReferenceId, masterReferenceId }
+    );
+    if (result.created) notified += 1;
+  }
+
+  return { notified };
 }

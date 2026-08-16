@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
 import { type BriefJobPlan, classifyBriefJob, generateAI, parseJsonObject } from "./ai-generate";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
+import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -921,6 +922,17 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
         console.log(
           `[RefContent] Text ${textMissing ? "pulled" : "refreshed"} for ${ref.masterReferenceId} from ${fetched.source}`
         );
+
+        if (lawMoved) {
+          // Everyone who shared this law gets told, once. Their posts are not
+          // touched; the card on each one carries the badge.
+          const { notified } = await notifyLawUpdate(ref.id, ref.masterReferenceId, ref.title);
+          if (notified > 0) {
+            console.log(
+              `[RefContent] told ${notified} person(s) that ${ref.masterReferenceId} changed`
+            );
+          }
+        }
       } else {
         await prisma.governmentReference.update({
           where: { id: ref.id },

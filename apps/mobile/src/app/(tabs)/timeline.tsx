@@ -34,6 +34,7 @@ import {
   TrendingUp,
   Globe,
   ChevronRight,
+  History,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, {
@@ -345,6 +346,24 @@ function PostCard({
               <Text className="text-slate-500 text-xs ml-1">Source</Text>
             </Pressable>
           )}
+        </View>
+      )}
+
+      {/*
+        The law under this post has changed since it was written.
+
+        The post itself is untouched — the author's words stay theirs. This says
+        the text being argued about is no longer the text that was argued about,
+        which is the honest thing to tell a reader arriving months later.
+
+        The server decides "since", so web and mobile cannot disagree about it.
+      */}
+      {post.sharedContent?.lawUpdatedSincePosting && (
+        <View className="flex-row items-center px-4 pb-1">
+          <History size={12} color="#F59E0B" />
+          <Text className="text-amber-500 text-xs ml-1.5">
+            This law has been updated since this was posted
+          </Text>
         </View>
       )}
 

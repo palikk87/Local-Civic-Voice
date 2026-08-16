@@ -1633,60 +1633,6 @@ adminRouter.get("/announcements", zValidator("query", paginationQuerySchema), as
 });
 
 // ==========================================
-// Seed Votes (placeholder tally layer)
-// ==========================================
-
-/**
- * POST /api/admin/references/clear-seed-votes
- * Strip the placeholder seed numbers out of the public vote tallies.
- * Body: { referenceId?: string } — omit to clear every reference.
- * Real citizen votes are untouched; tallies are recomputed from them.
- */
-adminRouter.post(
-  "/references/clear-seed-votes",
-  zValidator("json", z.object({ referenceId: z.string().optional() })),
-  async (c) => {
-    const authHeader = c.req.header("Authorization");
-    const session = await getAdminFromToken(authHeader);
-    if (!session) {
-      return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
-    }
-    if (session.role === "moderator") {
-      return c.json({ error: "Moderators cannot modify vote tallies" }, { status: 403 });
-    }
-
-    const { referenceId } = c.req.valid("json");
-
-    const targets = await prisma.governmentReference.findMany({
-      where: {
-        ...(referenceId ? { id: referenceId } : {}),
-        OR: [{ seedSupport: { gt: 0 } }, { seedOppose: { gt: 0 } }],
-      },
-      select: { id: true },
-    });
-
-    for (const ref of targets) {
-      await prisma.governmentReference.update({
-        where: { id: ref.id },
-        data: { seedSupport: 0, seedOppose: 0 },
-      });
-      await applyWeightedTally(ref.id);
-    }
-
-    createActivityLog(
-      "clear_seed_votes",
-      session.adminId,
-      session.username,
-      "system",
-      referenceId ?? "all",
-      `Cleared seed votes on ${targets.length} reference(s)`
-    );
-
-    return c.json({ success: true, cleared: targets.length });
-  }
-);
-
-// ==========================================
 // Merge review queue
 // ==========================================
 

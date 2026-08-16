@@ -328,22 +328,16 @@ export async function computeWeightedTally(
 /**
  * Recompute the weighted tally and persist it on the reference row.
  *
- * supportVotes/opposeVotes hold the PUBLIC tally: real weighted votes plus the
- * reference's seed layer (placeholder numbers that keep cards from looking
- * dead). Everything that displays or sorts by votes reads these columns, so
- * the seed is folded in here — removing it is zeroing the seed and re-running
- * this function.
+ * supportVotes/opposeVotes hold the public tally, and the public tally is now
+ * exactly the real weighted count. It used to have a "seed layer" folded in —
+ * a few thousand invented supporters per record so a new card would not read
+ * 0-0 — which meant every number this platform published was partly fiction.
+ * That layer is gone; see the migration that removed it.
  */
 export async function applyWeightedTally(
   referenceId: string,
 ): Promise<{ support: number; oppose: number }> {
-  const tally = await computeWeightedTally(referenceId);
-  const seed = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
-    select: { seedSupport: true, seedOppose: true },
-  });
-  const support = tally.support + (seed?.seedSupport ?? 0);
-  const oppose = tally.oppose + (seed?.seedOppose ?? 0);
+  const { support, oppose } = await computeWeightedTally(referenceId);
   await prisma.governmentReference.update({
     where: { id: referenceId },
     data: { supportVotes: support, opposeVotes: oppose },

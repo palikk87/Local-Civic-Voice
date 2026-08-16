@@ -85,6 +85,14 @@ export interface TimelinePost {
     displayId?: string;
     /** Where the action stands, e.g. "In Committee" — set on server-backed posts. */
     status?: string;
+    /**
+     * The law under this post has changed since it was written.
+     *
+     * Computed on the server so web and mobile cannot disagree about what
+     * "since" means. The post is never edited — this is the card admitting that
+     * the text being argued about is not the text that was argued about.
+     */
+    lawUpdatedSincePosting?: boolean;
     data?: Bill | Record<string, unknown>;
     originalAuthor?: User;
     originalPostId?: string;

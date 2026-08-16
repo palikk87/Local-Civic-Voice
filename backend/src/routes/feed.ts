@@ -11,7 +11,7 @@ import {
   getTrendingHashtags,
   getDiscoverFeed,
 } from "../services/feed-algorithm";
-import { loadPostReferenceViews } from "../services/post-reference-view";
+import { lawMovedSincePost, loadPostReferenceViews } from "../services/post-reference-view";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -90,6 +90,12 @@ feedRouter.get("/", zValidator("query", feedQuerySchema), async (c) => {
         reference: post.governmentReferenceId
           ? referenceViews.get(post.governmentReferenceId) ?? null
           : null,
+        // The law under this post has moved since it was written. The post is
+        // untouched; the card says so.
+        lawUpdatedSincePosting: lawMovedSincePost(
+          post.createdAt,
+          post.governmentReferenceId ? referenceViews.get(post.governmentReferenceId) : null,
+        ),
         metrics: post.metrics,
         feedReason: post.feedReason,
         isLiked: post.isLiked,
@@ -148,6 +154,12 @@ feedRouter.get("/discover", zValidator("query", z.object({
         reference: post.governmentReferenceId
           ? referenceViews.get(post.governmentReferenceId) ?? null
           : null,
+        // The law under this post has moved since it was written. The post is
+        // untouched; the card says so.
+        lawUpdatedSincePosting: lawMovedSincePost(
+          post.createdAt,
+          post.governmentReferenceId ? referenceViews.get(post.governmentReferenceId) : null,
+        ),
         metrics: post.metrics,
         feedReason: post.feedReason,
         isLiked: post.isLiked,

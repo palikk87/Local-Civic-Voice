@@ -559,6 +559,10 @@ model NotificationPreference {
   follows          Boolean @default(true)
   reposts          Boolean @default(true)
   newFollowerPosts Boolean @default(true)
+  // "A law you shared has been updated." On by default: somebody who put their
+  // name to a position on a bill has a stake in knowing the bill moved, and a
+  // silent change is how a person ends up standing behind text they never read.
+  lawUpdates       Boolean @default(true)
   user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -576,6 +580,11 @@ model GovernmentReference {
   category            String?
   description         String?
   citizenBrief        String?
+  // Retired. These held a fabricated tally — a few thousand invented supporters
+  // per record, derived from a hash of its id, so a new card would not read
+  // 0-0 — and it was added into the public number this platform exists to
+  // report. Zeroed by migration, no longer written by anything, and kept only
+  // because dropping a column is not an additive change.
   seedSupport         Int       @default(0)
   seedOppose          Int       @default(0)
   fullText            String?

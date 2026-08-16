@@ -12,6 +12,7 @@ import {
 } from "../services/notification-service";
 import { resolvePostReference } from "../services/reference-resolver";
 import {
+  lawMovedSincePost,
   loadPostReferenceView,
   loadPostReferenceViews,
 } from "../services/post-reference-view";
@@ -149,6 +150,12 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
       reference: post.governmentReferenceId
         ? referenceViews.get(post.governmentReferenceId) ?? null
         : null,
+      // The law under this post has moved since it was written. The post is
+      // untouched; the card says so.
+      lawUpdatedSincePosting: lawMovedSincePost(
+        post.createdAt,
+        post.governmentReferenceId ? referenceViews.get(post.governmentReferenceId) : null,
+      ),
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
@@ -303,6 +310,9 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
       // The law as it stands, not the copy frozen when the post was written.
       referenceTitle: referenceView?.title ?? post.referenceTitle,
       reference: referenceView,
+      // The law under this post has moved since it was written. The post is
+      // untouched; the card says so.
+      lawUpdatedSincePosting: lawMovedSincePost(post.createdAt, referenceView),
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
@@ -392,6 +402,9 @@ postsRouter.get("/:id", async (c) => {
       // The law as it stands, not the copy frozen when the post was written.
       referenceTitle: referenceView?.title ?? post.referenceTitle,
       reference: referenceView,
+      // The law under this post has moved since it was written. The post is
+      // untouched; the card says so.
+      lawUpdatedSincePosting: lawMovedSincePost(post.createdAt, referenceView),
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,

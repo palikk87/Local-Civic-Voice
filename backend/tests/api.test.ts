@@ -1619,10 +1619,12 @@ describe("merging two records loses nothing", () => {
     });
   });
 
-  test("seed layers are not added together", async () => {
-    // Seed votes are a display placeholder so a new card does not read 0-0.
-    // They are not support anybody expressed, so summing two of them would
-    // manufacture thousands of fake votes out of a bookkeeping event.
+  test("a merge cannot conjure votes that nobody cast", async () => {
+    // Both records once carried a fabricated "seed" tally — thousands of
+    // invented supporters apiece — and a merge added the two together, turning
+    // a bookkeeping event into several thousand new fake votes. The seed layer
+    // is gone now, and this pins the consequence: whatever numbers a row is
+    // carrying, a merge of two records nobody has voted on produces zero.
     const cookie = await staff();
     const target = await record({ seedSupport: 1000, seedOppose: 500, supportVotes: 1000, opposeVotes: 500 });
     const source = await record({ seedSupport: 4000, seedOppose: 3000, supportVotes: 4000, opposeVotes: 3000 });
@@ -1630,13 +1632,9 @@ describe("merging two records loses nothing", () => {
     expect((await merge(cookie, source.id, target.id)).status).toBe(200);
 
     const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
-    expect(merged.seedSupport).toBe(1000);
-    expect(merged.seedOppose).toBe(500);
-    // No real votes exist, so the public tally is the survivor's own seed and
-    // nothing else.
     expect({ support: merged.supportVotes, oppose: merged.opposeVotes }).toEqual({
-      support: 1000,
-      oppose: 500,
+      support: 0,
+      oppose: 0,
     });
   });
 
@@ -2502,5 +2500,226 @@ describe("one brief per version of the law", () => {
     expect(survivor.lawVersion).toBe(4);
     // And the timestamp came across intact rather than being reset.
     expect(survivor.citizenBriefAt?.toISOString()).toBe(STORED_BRIEF.citizenBriefAt.toISOString());
+  });
+});
+
+describe("when a law moves, the people who shared it are told", () => {
+  /**
+   * The rule Khalid set: update the law in the post to keep the master
+   * reference clean, but notify the user. The post is never edited — their
+   * words stay their words — and a post written before the change carries a
+   * badge saying the law beneath it has moved forward.
+   */
+
+  async function poster(): Promise<{ cookie: string; userId: string }> {
+    return signUp({
+      email: `signal-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Signal Tester",
+    });
+  }
+
+  let counter = 0;
+  async function law(overrides: Record<string, unknown> = {}) {
+    counter += 1;
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${3000 + counter}-119`,
+        referenceType: "bill",
+        title: `Signal record ${counter}`,
+        status: "proposed",
+        ...overrides,
+      },
+    });
+    await prisma.referenceName.create({
+      data: { name: row.masterReferenceId, referenceId: row.id, isCurrent: true, learnedFrom: "created" },
+    });
+    return row;
+  }
+
+  async function write(cookie: string, referenceId: string) {
+    const response = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ content: "my position on this", governmentReferenceId: referenceId }),
+    });
+    expect(response.status).toBe(201);
+    return ((await response.json()) as { post: { id: string } }).post.id;
+  }
+
+  async function read(cookie: string, postId: string) {
+    const response = await fetch(`${BASE_URL}/api/posts/${postId}`, {
+      headers: freshClientHeaders({ cookie }),
+    });
+    return ((await response.json()) as { post: { lawUpdatedSincePosting: boolean } }).post;
+  }
+
+  test("a post written before the change is badged; one written after is not", async () => {
+    const { cookie } = await poster();
+    const bill = await law();
+
+    const before = await write(cookie, bill.id);
+    expect((await read(cookie, before)).lawUpdatedSincePosting).toBe(false);
+
+    // The government amends it.
+    await prisma.governmentReference.update({
+      where: { id: bill.id },
+      data: { lawChangedAt: new Date(), lawVersion: 2 },
+    });
+
+    expect((await read(cookie, before)).lawUpdatedSincePosting).toBe(true);
+
+    // Somebody writing about it now is arguing about the current text, so
+    // there is nothing to warn them about.
+    const after = await write(cookie, bill.id);
+    expect((await read(cookie, after)).lawUpdatedSincePosting).toBe(false);
+  });
+
+  test("a post about a law that has never moved is never badged", async () => {
+    // The failure that would make this feature worthless: badging everything.
+    // `updatedAt` on the record moves on every vote, so anything keyed to it
+    // would light up the whole feed the first time somebody voted.
+    const { cookie } = await poster();
+    const bill = await law();
+    const postId = await write(cookie, bill.id);
+
+    const voted = await fetch(`${BASE_URL}/api/government-references/${bill.id}/vote`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ position: "support" }),
+    });
+    expect(voted.status).toBe(200);
+
+    expect((await read(cookie, postId)).lawUpdatedSincePosting).toBe(false);
+  });
+
+  test("everyone who shared the law is told once, whatever they wrote", async () => {
+    const { notifyLawUpdate } = await import("../src/services/notification-service");
+
+    const bill = await law();
+    const first = await poster();
+    const second = await poster();
+
+    // One person wrote about it three times; the other once.
+    await write(first.cookie, bill.id);
+    await write(first.cookie, bill.id);
+    const firstLatest = await write(first.cookie, bill.id);
+    await write(second.cookie, bill.id);
+
+    const { notified } = await notifyLawUpdate(bill.id, bill.masterReferenceId, bill.title);
+    expect(notified).toBe(2);
+
+    const sent = await prisma.notification.findMany({ where: { type: "law_updated" } });
+    expect(sent.length).toBe(2);
+    // Their words are theirs. The notification says the law moved, not that
+    // anything of theirs was changed.
+    expect(sent[0]!.body).toContain("Your post is unchanged");
+
+    // The prolific poster's notification points at what they said most recently.
+    const toFirst = sent.find((n) => n.userId === first.userId);
+    expect(toFirst).toBeDefined();
+    expect(JSON.parse(toFirst!.data ?? "{}")).toMatchObject({ postId: firstLatest });
+  });
+
+  test("somebody who turned law updates off is not told", async () => {
+    const { notifyLawUpdate } = await import("../src/services/notification-service");
+
+    const bill = await law();
+    const { cookie, userId } = await poster();
+    await write(cookie, bill.id);
+
+    await prisma.notificationPreference.upsert({
+      where: { userId },
+      update: { lawUpdates: false },
+      create: { userId, lawUpdates: false },
+    });
+
+    const { notified } = await notifyLawUpdate(bill.id, bill.masterReferenceId, bill.title);
+    expect(notified).toBe(0);
+    expect(await prisma.notification.count({ where: { type: "law_updated" } })).toBe(0);
+  });
+});
+
+describe("nothing invents a vote", () => {
+  /**
+   * Article III of this platform's Bill of Rights promises the Public Pulse is
+   * "the true will of the people", and Article III Section 3 of its
+   * constitution requires every data point to trace back to an official source
+   * so the digital government cannot drift into fiction.
+   *
+   * Every record used to carry between 400 and 4,999 invented supporters,
+   * derived from a hash of its id, folded straight into that number. A live
+   * check found all 33 stored records carrying them and not one carrying a real
+   * vote: the entire published pulse was fabricated.
+   */
+
+  test("a brand-new record starts at nothing", async () => {
+    // A card that says nobody has voted yet is telling the truth. A card that
+    // says four thousand people support a bill nobody has read is not — and
+    // that number flows into the trending list and the enterprise feed.
+    const response = await fetch(`${BASE_URL}/api/government-references/resolve`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        branch: "legislative",
+        title: "Providing for consideration of the annual maritime survey",
+        billType: "sconres",
+        billNumber: "77",
+        congress: 119,
+      }),
+    });
+    expect(response.status).toBe(200);
+    const { reference } = (await response.json()) as { reference: { id: string } };
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: reference.id },
+    });
+    expect({
+      support: row.supportVotes,
+      oppose: row.opposeVotes,
+      seedSupport: row.seedSupport,
+      seedOppose: row.seedOppose,
+    }).toEqual({ support: 0, oppose: 0, seedSupport: 0, seedOppose: 0 });
+  });
+
+  test("the published tally is exactly the votes that were cast", async () => {
+    const first = await signUp({
+      email: `pulse-a-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Pulse A",
+    });
+    const second = await signUp({
+      email: `pulse-b-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Pulse B",
+    });
+
+    const law = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: "hres-2222-119",
+        referenceType: "bill",
+        title: "A resolution nobody has voted on yet",
+        status: "proposed",
+      },
+    });
+
+    for (const [voter, position] of [
+      [first, "support"],
+      [second, "oppose"],
+    ] as const) {
+      const voted = await fetch(`${BASE_URL}/api/government-references/${law.id}/vote`, {
+        method: "POST",
+        headers: freshClientHeaders({ "Content-Type": "application/json", cookie: voter.cookie }),
+        body: JSON.stringify({ position }),
+      });
+      expect(voted.status).toBe(200);
+    }
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    // Two people voted. The number says two people voted.
+    expect({ support: row.supportVotes, oppose: row.opposeVotes }).toEqual({
+      support: 1,
+      oppose: 1,
+    });
   });
 });

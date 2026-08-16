@@ -20,6 +20,7 @@ import {
   Landmark,
   TrendingUp,
   ChevronRight,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MotionDiv } from "@/components/civic/Motion";
@@ -303,6 +304,24 @@ function PostCard({
               <span className="text-slate-500 text-xs ml-1">Source</span>
             </a>
           ) : null}
+        </div>
+      ) : null}
+
+      {/*
+        The law under this post has changed since it was written.
+
+        The post itself is untouched — the author's words stay theirs. This says
+        the text being argued about is no longer the text that was argued about,
+        which is the honest thing to tell a reader arriving months later.
+
+        The server decides "since", so web and mobile cannot disagree about it.
+      */}
+      {post.sharedContent?.lawUpdatedSincePosting ? (
+        <div className="flex items-center gap-1.5 px-4 pb-1">
+          <History size={12} color="#F59E0B" />
+          <span className="text-amber-500 text-xs">
+            This law has been updated since this was posted
+          </span>
         </div>
       ) : null}
 

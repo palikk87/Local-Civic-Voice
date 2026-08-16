@@ -98,3 +98,23 @@ export async function loadPostReferenceView(
   const views = await loadPostReferenceViews([referenceId], userId);
   return views.get(referenceId) ?? null;
 }
+
+/**
+ * Was this post written before the law it points at last changed?
+ *
+ * The badge on a post card. The post itself is never edited — the author's
+ * words stay theirs — but the law underneath moves forward, and a reader
+ * deserves to know that the text being argued about is not the text that was
+ * argued about.
+ *
+ * Computed here, once, rather than in each client: web and mobile each doing
+ * their own date comparison is two chances to disagree about what "before"
+ * means, on a badge whose entire job is to be trustworthy.
+ */
+export function lawMovedSincePost(
+  postCreatedAt: Date,
+  reference: Pick<PostReference, "lawChangedAt"> | null | undefined
+): boolean {
+  if (!reference?.lawChangedAt) return false;
+  return new Date(reference.lawChangedAt).getTime() > postCreatedAt.getTime();
+}

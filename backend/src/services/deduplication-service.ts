@@ -3,26 +3,6 @@ import { computeWeightedTally } from "./delegation-service";
 import { canonicalReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName, namesFor, transferNames } from "./reference-names";
 
-/**
- * Deterministic placeholder tally for a brand-new reference so its card never
- * shows a dead 0–0. Hash of the master id → stable numbers per reference.
- * Lives in the seed columns, so an admin can strip it later without touching
- * real votes (POST /api/admin/references/clear-seed-votes).
- */
-export function seedTallyFor(masterReferenceId: string): {
-  seedSupport: number;
-  seedOppose: number;
-} {
-  let hash = 0;
-  for (let i = 0; i < masterReferenceId.length; i++) {
-    hash = (hash * 31 + masterReferenceId.charCodeAt(i)) >>> 0;
-  }
-  // NOTE: >>> keeps the shift unsigned — >> flips negative for hashes ≥ 2^31
-  // and produced negative tallies.
-  const seedSupport = 400 + (hash % 4600); // 400–4,999
-  const seedOppose = 300 + ((hash >>> 7) % 3700); // 300–3,999
-  return { seedSupport, seedOppose };
-}
 
 /**
  * Valid reference types for government references
@@ -362,17 +342,8 @@ export async function findOrCreateReference(
         signedDate: data.signedDate,
         decidedDate: data.decidedDate,
         aliases: data.aliases ? JSON.stringify(data.aliases) : null,
-        ...(() => {
-          // Same removable placeholder layer new synced references get — a card
-          // should never appear with a dead 0–0 tally.
-          const seed = seedTallyFor(normalizedId);
-          return {
-            seedSupport: seed.seedSupport,
-            seedOppose: seed.seedOppose,
-            supportVotes: seed.seedSupport,
-            opposeVotes: seed.seedOppose,
-          };
-        })(),
+        // No placeholder tally. A new record starts at nothing, because
+        // nothing is what anybody has said about it yet.
       },
       select: {
         id: true,
@@ -615,13 +586,11 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
             }
           : {}),
       },
-      select: { id: true, masterReferenceId: true, title: true, seedSupport: true, seedOppose: true },
+      select: { id: true, masterReferenceId: true, title: true },
     });
 
     // --- The survivor's real tally ----------------------------------------
-    const weighted = await computeWeightedTally(targetId, tx);
-    const support = weighted.support + updated.seedSupport;
-    const oppose = weighted.oppose + updated.seedOppose;
+    const { support, oppose } = await computeWeightedTally(targetId, tx);
 
     await tx.governmentReference.update({
       where: { id: targetId },
@@ -641,8 +610,6 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
         mergedIntoId: targetId,
         supportVotes: 0,
         opposeVotes: 0,
-        seedSupport: 0,
-        seedOppose: 0,
         totalComments: 0,
         totalShares: 0,
       },
@@ -734,15 +701,9 @@ export async function recalculateReferenceStats(referenceId: string): Promise<{
   totalComments: number;
   totalShares: number;
 }> {
-  // Recompute the public tally the same way voting does: weighted real votes
-  // (delegations included) plus the reference's seed layer.
-  const tally = await computeWeightedTally(referenceId);
-  const seed = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
-    select: { seedSupport: true, seedOppose: true },
-  });
-  const supportVotes = tally.support + (seed?.seedSupport ?? 0);
-  const opposeVotes = tally.oppose + (seed?.seedOppose ?? 0);
+  // The same way voting does: weighted real votes, delegations included, and
+  // nothing else.
+  const { support: supportVotes, oppose: opposeVotes } = await computeWeightedTally(referenceId);
 
   // Count comments on related posts
   const posts = await prisma.post.findMany({

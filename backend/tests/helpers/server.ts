@@ -103,6 +103,22 @@ export async function waitForLog(needle: string, from = 0, timeoutMs = 5000): Pr
 
 export const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL } } });
 
+/**
+ * The same database, visible to code imported directly into the test process.
+ *
+ * Almost everything here is exercised over HTTP against the real server, which
+ * is where its own DATABASE_URL comes from. A few things have no endpoint —
+ * "tell everyone who shared this law that it changed" is triggered by the daily
+ * sync, not by a request — and testing those means importing the service. Those
+ * imports build their own Prisma client from the environment, so it has to name
+ * the same throwaway database the server is using, or they fail on a missing
+ * variable and the guarantee goes untested.
+ *
+ * Set before any service import is evaluated.
+ */
+process.env.DATABASE_URL ??= DATABASE_URL;
+process.env.DIRECT_URL ??= DATABASE_URL;
+
 function env(): Record<string, string> {
   return {
     ...process.env,

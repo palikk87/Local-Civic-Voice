@@ -12,12 +12,13 @@
  */
 
 import { prisma } from "../prisma";
-import { ReferenceType, normalizeReferenceId, seedTallyFor } from "./deduplication-service";
+import { ReferenceType, normalizeReferenceId } from "./deduplication-service";
 import { billReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName as claimedBy } from "./reference-names";
 // The one fingerprint for official text. A second implementation here would
 // disagree with that one on every row and report the law as changed nightly.
 import { hashText } from "./reference-content";
+import { notifyLawUpdate } from "./notification-service";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -128,7 +129,8 @@ interface UpsertData {
  */
 async function upsertReference(data: UpsertData): Promise<void> {
   const { masterReferenceId, ...fields } = data;
-  const seed = seedTallyFor(masterReferenceId);
+  const notifyAfterCommit: Array<{ id: string; masterReferenceId: string; title: string }> = [];
+
   await prisma.$transaction(async (tx) => {
     // Which record does this name belong to? Usually the one called that, but a
     // name can also be one a record used to be called — after a repair, or a
@@ -161,11 +163,9 @@ async function upsertReference(data: UpsertData): Promise<void> {
       create: {
         masterReferenceId,
         ...fields,
-        ...seed,
         ...(nextTextHash ? { fullTextHash: nextTextHash } : {}),
-        // Public tally starts as the seed layer; real votes add on top of it.
-        supportVotes: seed.seedSupport,
-        opposeVotes: seed.seedOppose,
+        // The tally starts at nothing, because nothing is what anybody has
+        // said about it yet.
       },
       update: {
         title: fields.title,
@@ -185,6 +185,15 @@ async function upsertReference(data: UpsertData): Promise<void> {
     });
 
     if (lawMoved && before) {
+      // Outside the transaction on purpose. Notifying is not part of writing the
+      // record, and a notification failure must never roll back a law update —
+      // the record being right matters more than the telling.
+      notifyAfterCommit.push({
+        id: row.id,
+        masterReferenceId,
+        title: fields.title,
+      });
+
       console.log(
         `[GovSync] ${masterReferenceId} moved to version ${before.lawVersion + 1}: ` +
           [
@@ -209,6 +218,13 @@ async function upsertReference(data: UpsertData): Promise<void> {
       );
     }
   });
+
+  for (const moved of notifyAfterCommit) {
+    const { notified } = await notifyLawUpdate(moved.id, moved.masterReferenceId, moved.title);
+    if (notified > 0) {
+      console.log(`[GovSync] told ${notified} person(s) that ${moved.masterReferenceId} changed`);
+    }
+  }
 }
 
 // ---------- Bills (congress.gov) ----------
