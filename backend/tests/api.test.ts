@@ -1458,3 +1458,254 @@ describe("a record answers to every name it has had", () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe("merging two records loses nothing", () => {
+  /**
+   * Congress files the same law twice — a House bill and its identical Senate
+   * companion — and until the two records are joined, the country's opinion on
+   * that law is split across two counts and neither one is true. Joining them
+   * is how the Public Pulse becomes a single number.
+   *
+   * It is also the single most destructive operation in the system: it rewrites
+   * which record every affected post and vote belongs to. These tests are the
+   * guarantee that it never costs anybody their vote, their words, or a brief
+   * somebody already paid to generate.
+   */
+
+  async function staff(): Promise<string> {
+    const { cookie, userId } = await signUp({
+      email: `merge-admin-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Merge Admin",
+    });
+    await prisma.user.update({ where: { id: userId }, data: { role: "admin" } });
+    return cookie;
+  }
+
+  async function voter(): Promise<string> {
+    const { userId } = await signUp({
+      email: `merge-voter-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Merge Voter",
+    });
+    return userId;
+  }
+
+  let counter = 0;
+  async function record(overrides: Record<string, unknown> = {}) {
+    counter += 1;
+    return prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${9000 + counter}-119`,
+        referenceType: "bill",
+        title: `Record ${counter}`,
+        status: "proposed",
+        ...overrides,
+      },
+    });
+  }
+
+  async function vote(referenceId: string, userId: string, position: string, at: Date) {
+    return prisma.governmentReferenceVote.create({
+      data: { governmentReferenceId: referenceId, userId, position, updatedAt: at },
+    });
+  }
+
+  async function merge(cookie: string, sourceId: string, targetId: string) {
+    const response = await fetch(`${BASE_URL}/api/government-references/merge`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ sourceId, targetId }),
+    });
+    const body = (await response.json()) as Record<string, never>;
+    return { status: response.status, body };
+  }
+
+  test("every vote lands in one pool, and nobody is counted twice", async () => {
+    // The old implementation read both records' counters first and then added
+    // the source's numbers to the survivor's. Every vote it went on to discard
+    // as a duplicate was still counted, so a merge inflated the pulse by exactly
+    // the number of people who cared enough to vote on both records. Asserting
+    // the exact tally is what catches that; asserting "it went up" would not.
+    const cookie = await staff();
+    const target = await record({ seedSupport: 0, seedOppose: 0 });
+    const source = await record({ seedSupport: 0, seedOppose: 0 });
+
+    const [onlyTarget, onlySource, both] = [await voter(), await voter(), await voter()];
+    const early = new Date("2026-03-01T00:00:00Z");
+    const late = new Date("2026-07-01T00:00:00Z");
+
+    await vote(target.id, onlyTarget, "support", early);
+    await vote(target.id, both, "support", early);
+    await vote(source.id, onlySource, "support", early);
+    await vote(source.id, both, "oppose", late); // the same person, later, other way
+
+    const { status, body } = await merge(cookie, source.id, target.id);
+    expect(status).toBe(200);
+
+    const votes = await prisma.governmentReferenceVote.findMany({
+      where: { governmentReferenceId: target.id },
+    });
+    // Three people voted, so there are three votes — not four.
+    expect(votes.length).toBe(3);
+    expect(await prisma.governmentReferenceVote.count({
+      where: { governmentReferenceId: source.id },
+    })).toBe(0);
+
+    // The person who voted on both is a single voice, and the position that
+    // stands is the one they stated last.
+    const theirs = votes.filter((v) => v.userId === both);
+    expect(theirs.length).toBe(1);
+    expect(theirs[0]!.position).toBe("oppose");
+
+    // Two support, one oppose. With the seed layer at zero the stored tally is
+    // exactly the real one.
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect({ support: merged.supportVotes, oppose: merged.opposeVotes }).toEqual({
+      support: 2,
+      oppose: 1,
+    });
+    expect((body as unknown as { merge: { tally: unknown } }).merge.tally).toEqual({
+      support: 2,
+      oppose: 1,
+    });
+  });
+
+  test("seed layers are not added together", async () => {
+    // Seed votes are a display placeholder so a new card does not read 0-0.
+    // They are not support anybody expressed, so summing two of them would
+    // manufacture thousands of fake votes out of a bookkeeping event.
+    const cookie = await staff();
+    const target = await record({ seedSupport: 1000, seedOppose: 500, supportVotes: 1000, opposeVotes: 500 });
+    const source = await record({ seedSupport: 4000, seedOppose: 3000, supportVotes: 4000, opposeVotes: 3000 });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect(merged.seedSupport).toBe(1000);
+    expect(merged.seedOppose).toBe(500);
+    // No real votes exist, so the public tally is the survivor's own seed and
+    // nothing else.
+    expect({ support: merged.supportVotes, oppose: merged.opposeVotes }).toEqual({
+      support: 1000,
+      oppose: 500,
+    });
+  });
+
+  test("posts move to the survivor and are not rewritten", async () => {
+    // Speech does not merge. A post has to keep showing a law that exists, so
+    // it follows the record — but the words, and the title the author saw when
+    // they wrote them, are theirs.
+    const cookie = await staff();
+    const target = await record();
+    const source = await record();
+    const author = await voter();
+
+    const written = await prisma.post.create({
+      data: {
+        content: "what I think about this law",
+        authorId: author,
+        governmentReferenceId: source.id,
+        referenceType: "bill",
+        referenceId: source.id,
+        referenceTitle: source.title,
+      },
+    });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const after = await prisma.post.findUniqueOrThrow({ where: { id: written.id } });
+    expect(after.governmentReferenceId).toBe(target.id);
+    expect(after.referenceId).toBe(target.id); // the legacy copy follows too
+    expect(after.content).toBe("what I think about this law");
+    expect(after.referenceTitle).toBe(source.title); // untouched
+    expect(after.authorId).toBe(author);
+  });
+
+  test("a brief is adopted rather than lost, and never regenerated", async () => {
+    const cookie = await staff();
+    const writtenAt = new Date("2026-05-05T00:00:00Z");
+    const target = await record();
+    const source = await record({
+      citizenBrief: "What this law actually does.",
+      citizenBriefJson: '{"summary":"..."}',
+      citizenBriefAt: writtenAt,
+      citizenBriefModel: "some-model",
+      fullText: "SECTION 1. SHORT TITLE.",
+      fullTextHash: "abc123",
+    });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect(merged.citizenBrief).toBe("What this law actually does.");
+    expect(merged.citizenBriefJson).toBe('{"summary":"..."}');
+    expect(merged.citizenBriefModel).toBe("some-model");
+    expect(merged.fullText).toBe("SECTION 1. SHORT TITLE.");
+    // The timestamp comes across intact. If it were reset, the freshness check
+    // would treat an existing brief as new work and pay to write it again.
+    expect(merged.citizenBriefAt?.toISOString()).toBe(writtenAt.toISOString());
+  });
+
+  test("a brief the survivor already has is left alone", async () => {
+    const cookie = await staff();
+    const target = await record({ citizenBrief: "The survivor's own brief." });
+    const source = await record({ citizenBrief: "The other one's brief." });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect(merged.citizenBrief).toBe("The survivor's own brief.");
+  });
+
+  test("the source's name still reaches the survivor", async () => {
+    // No link dies. Whatever the source was called is now something the
+    // survivor answers to, and the tombstone points the way as well.
+    const cookie = await staff();
+    const target = await record();
+    const source = await record({ aliases: JSON.stringify(["an-even-older-name"]) });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    const names = JSON.parse(merged.aliases ?? "[]") as string[];
+    expect(names).toContain(source.masterReferenceId);
+    expect(names).toContain("an-even-older-name");
+
+    const tombstone = await prisma.governmentReference.findUniqueOrThrow({ where: { id: source.id } });
+    expect(tombstone.mergedIntoId).toBe(target.id);
+    expect(tombstone.supportVotes).toBe(0);
+  });
+
+  test("an earlier merge is flattened rather than chained", async () => {
+    // Resolution follows these pointers, so a chain still works — but every hop
+    // is a query and a chain that only grows eventually trips the cycle guard.
+    const cookie = await staff();
+    const a = await record();
+    const b = await record();
+    const c = await record();
+
+    expect((await merge(cookie, c.id, b.id)).status).toBe(200);
+    expect((await merge(cookie, b.id, a.id)).status).toBe(200);
+
+    const flattened = await prisma.governmentReference.findUniqueOrThrow({ where: { id: c.id } });
+    expect(flattened.mergedIntoId).toBe(a.id);
+  });
+
+  test("merges that would corrupt a record are refused", async () => {
+    const cookie = await staff();
+    const bill = await record();
+    const order = await record({ referenceType: "executive_order", masterReferenceId: "eo-99999" });
+    const merged = await record();
+    const survivor = await record();
+    expect((await merge(cookie, merged.id, survivor.id)).status).toBe(200);
+
+    // A bill is not an executive order.
+    expect((await merge(cookie, order.id, bill.id)).status).toBe(400);
+    // Nothing merges into itself.
+    expect((await merge(cookie, bill.id, bill.id)).status).toBe(400);
+    // A tombstone cannot be merged again, in either direction.
+    expect((await merge(cookie, merged.id, bill.id)).status).toBe(400);
+    expect((await merge(cookie, bill.id, merged.id)).status).toBe(400);
+  });
+});

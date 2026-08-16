@@ -869,9 +869,8 @@ governmentReferencesRouter.post("/merge", zValidator("json", mergeSchema), async
     return c.json({ error: "Authentication required" }, 401);
   }
 
-  // Merging rewrites which reference every affected post and vote belongs to, so
-  // it is restricted to staff. The current implementation is also known to skew
-  // the denormalized counters, which is a further reason not to expose it.
+  // Merging rewrites which reference every affected post and vote belongs to,
+  // so it is restricted to staff.
   const actor = await prisma.user.findUnique({
     where: { id: user.id },
     select: { role: true },
@@ -884,14 +883,16 @@ governmentReferencesRouter.post("/merge", zValidator("json", mergeSchema), async
   const { sourceId, targetId } = c.req.valid("json");
 
   try {
+    // The full report goes back, not a success flag. Whoever approved this
+    // merge has to be able to see what it actually did to the count, and an
+    // audit trail assembled from "success: true" is not an audit trail.
     const result = await mergeReferences(sourceId, targetId);
-    return c.json({
-      success: true,
-      postsUpdated: result.postsUpdated,
-      votesTransferred: result.votesTransferred,
-      aliasesMerged: result.aliasesMerged,
-      message: "References merged successfully",
-    });
+    console.log(
+      `[merge] ${result.source.masterReferenceId} -> ${result.target.masterReferenceId} by ${user.id}: ` +
+        `${result.postsMoved} posts, ${result.votesMoved} votes moved, ` +
+        `${result.votesSuperseded} superseded, tally now ${result.tally.support}-${result.tally.oppose}`,
+    );
+    return c.json({ success: true, merge: result, message: "References merged successfully" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to merge references";
     return c.json({ error: message }, 400);

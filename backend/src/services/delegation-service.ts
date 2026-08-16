@@ -269,13 +269,19 @@ export async function listEligibleDelegates(limit = 50): Promise<DelegateListing
  */
 export async function computeWeightedTally(
   referenceId: string,
+  /**
+   * The client to read through. Defaults to the shared one; a merge passes its
+   * transaction so the tally is computed from the votes as they will be after
+   * the merge commits, not as they were before it started.
+   */
+  db: Pick<typeof prisma, "governmentReference" | "governmentReferenceVote" | "delegation"> = prisma,
 ): Promise<{ support: number; oppose: number }> {
-  const reference = await prisma.governmentReference.findUnique({
+  const reference = await db.governmentReference.findUnique({
     where: { id: referenceId },
     select: { category: true },
   });
 
-  const votes = await prisma.governmentReferenceVote.findMany({
+  const votes = await db.governmentReferenceVote.findMany({
     where: { governmentReferenceId: referenceId },
     select: { userId: true, position: true },
   });
@@ -288,7 +294,7 @@ export async function computeWeightedTally(
 
   if (voterIds.length > 0) {
     const category = reference?.category ?? null;
-    const delegations = await prisma.delegation.findMany({
+    const delegations = await db.delegation.findMany({
       where: {
         toUserId: { in: voterIds },
         isActive: true,
