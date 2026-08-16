@@ -1,6 +1,7 @@
 import { prisma } from "../prisma";
 import { computeWeightedTally } from "./delegation-service";
 import { canonicalReferenceId } from "./master-reference-id";
+import { NameSource, claimName, findByName, namesFor, transferNames } from "./reference-names";
 
 /**
  * Deterministic placeholder tally for a brand-new reference so its card never
@@ -325,40 +326,70 @@ export async function findOrCreateReference(
     };
   }
 
-  // No duplicate found, create new reference
-  const reference = await prisma.governmentReference.create({
-    data: {
-      masterReferenceId: normalizedId,
-      referenceType: data.referenceType,
-      title: data.title,
-      shortTitle: data.shortTitle,
-      sourceUrl: data.sourceUrl,
-      chamber: data.chamber,
-      congress: data.congress,
-      status: data.status,
-      category: data.category,
-      description: data.description,
-      fullText: data.fullText,
-      signedDate: data.signedDate,
-      decidedDate: data.decidedDate,
-      aliases: data.aliases ? JSON.stringify(data.aliases) : null,
-      ...(() => {
-        // Same removable placeholder layer new synced references get — a card
-        // should never appear with a dead 0–0 tally.
-        const seed = seedTallyFor(normalizedId);
-        return {
-          seedSupport: seed.seedSupport,
-          seedOppose: seed.seedOppose,
-          supportVotes: seed.seedSupport,
-          opposeVotes: seed.seedOppose,
-        };
-      })(),
-    },
-    select: {
-      id: true,
-      masterReferenceId: true,
-      title: true,
-    },
+  // One more check before creating anything: does some record already answer to
+  // this name? findDuplicates asks the `aliases` mirror; this asks the registry,
+  // which is the authority and which holds names the mirror never had. A name
+  // held by another record does not mean "close enough to merge" — it means
+  // this IS that record, and creating a second one would be the exact
+  // duplication the master reference system exists to prevent.
+  const held = await findByName(normalizedId);
+  if (held) {
+    const owner = await prisma.governmentReference.findUnique({
+      where: { id: held.referenceId },
+      select: { id: true, masterReferenceId: true, title: true },
+    });
+    if (owner) return { reference: owner, created: false };
+  }
+
+  // Create the record and register its name in the same transaction, so a
+  // record can never exist that the registry does not know about. Anything
+  // created outside that registration is a record no former-name lookup can
+  // ever reach.
+  const reference = await prisma.$transaction(async (tx) => {
+    const created = await tx.governmentReference.create({
+      data: {
+        masterReferenceId: normalizedId,
+        referenceType: data.referenceType,
+        title: data.title,
+        shortTitle: data.shortTitle,
+        sourceUrl: data.sourceUrl,
+        chamber: data.chamber,
+        congress: data.congress,
+        status: data.status,
+        category: data.category,
+        description: data.description,
+        fullText: data.fullText,
+        signedDate: data.signedDate,
+        decidedDate: data.decidedDate,
+        aliases: data.aliases ? JSON.stringify(data.aliases) : null,
+        ...(() => {
+          // Same removable placeholder layer new synced references get — a card
+          // should never appear with a dead 0–0 tally.
+          const seed = seedTallyFor(normalizedId);
+          return {
+            seedSupport: seed.seedSupport,
+            seedOppose: seed.seedOppose,
+            supportVotes: seed.seedSupport,
+            opposeVotes: seed.seedOppose,
+          };
+        })(),
+      },
+      select: {
+        id: true,
+        masterReferenceId: true,
+        title: true,
+      },
+    });
+
+    await claimName(tx, created.id, normalizedId, NameSource.CREATED, { current: true });
+    for (const alias of data.aliases ?? []) {
+      // A name another record already holds is left where it is. Two records
+      // answering to one name is the duplicate this system exists to prevent,
+      // and quietly reassigning it would hide exactly that.
+      await claimName(tx, created.id, normalizeReferenceId(data.referenceType, alias), NameSource.CREATED);
+    }
+
+    return created;
   });
 
   return {
@@ -527,14 +558,16 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // --- Names -------------------------------------------------------------
     //
     // The survivor answers to everything either record ever answered to, so no
-    // link that was shared under the old name dies.
-    const namesKept = [
-      ...new Set([
-        ...parseAliases(target.aliases),
-        source.masterReferenceId,
-        ...parseAliases(source.aliases),
-      ]),
-    ].filter((name) => name !== target.masterReferenceId);
+    // link that was shared under an old name dies. The registry is the
+    // authority; `aliases` on the row is a mirror it rewrites.
+    await transferNames(tx, sourceId, targetId);
+    const namesKept = (
+      await tx.referenceName.findMany({
+        where: { referenceId: targetId, isCurrent: false },
+        select: { name: true },
+        orderBy: { firstSeenAt: "asc" },
+      })
+    ).map((n) => n.name);
 
     // --- Content -----------------------------------------------------------
     //
@@ -550,7 +583,6 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     const updated = await tx.governmentReference.update({
       where: { id: targetId },
       data: {
-        aliases: namesKept.length > 0 ? JSON.stringify(namesKept) : null,
         totalComments: { increment: source.totalComments },
         totalShares: { increment: source.totalShares },
         ...(target.sourceUrl ? {} : { sourceUrl: source.sourceUrl }),
@@ -631,35 +663,39 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
 }
 
 /**
- * Add an alias to an existing reference
+ * Teach a record another name it should answer to.
+ *
+ * Fails rather than steals when the name belongs to somebody else. Two records
+ * answering to one name is the duplicate the master reference system exists to
+ * prevent, so being told which record holds it is more useful than a silent
+ * reassignment — that is a merge candidate, not an alias.
  */
 export async function addAlias(
   referenceId: string,
   alias: string
 ): Promise<{ success: boolean; aliases: string[] }> {
-  const reference = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
+  return prisma.$transaction(async (tx) => {
+    const reference = await tx.governmentReference.findUnique({
+      where: { id: referenceId },
+      select: { referenceType: true },
+    });
+
+    if (!reference) {
+      throw new Error("Reference not found");
+    }
+
+    const name = normalizeReferenceId(reference.referenceType as ReferenceTypeValue, alias);
+    const claim = await claimName(tx, referenceId, name, NameSource.MANUAL);
+
+    if (!claim.ok) {
+      throw new Error(
+        `"${name}" already belongs to another reference — these two are a merge candidate, not an alias`,
+      );
+    }
+
+    const { former } = await namesFor(referenceId, tx);
+    return { success: true, aliases: former };
   });
-
-  if (!reference) {
-    throw new Error("Reference not found");
-  }
-
-  const currentAliases = parseAliases(reference.aliases);
-  const normalizedAlias = normalizeReferenceId(reference.referenceType as ReferenceTypeValue, alias);
-
-  if (currentAliases.includes(normalizedAlias)) {
-    return { success: true, aliases: currentAliases };
-  }
-
-  const newAliases = [...currentAliases, normalizedAlias];
-
-  await prisma.governmentReference.update({
-    where: { id: referenceId },
-    data: { aliases: JSON.stringify(newAliases) },
-  });
-
-  return { success: true, aliases: newAliases };
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   recalculateReferenceStats,
 } from "../services/deduplication-service";
 import { applyWeightedTally } from "../services/delegation-service";
+import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
 import { ensureReferenceContent, parseBriefJson, briefSectionLabels } from "../services/reference-content";
 import { resolveLibraryDocument } from "../services/library-resolve";
@@ -399,15 +400,12 @@ governmentReferencesRouter.get("/:id", async (c) => {
     }, 301);
   }
 
-  // Parse aliases
-  let aliases: string[] = [];
-  if (reference.aliases) {
-    try {
-      aliases = JSON.parse(reference.aliases) as string[];
-    } catch {
-      // Invalid JSON, ignore
-    }
-  }
+  // Every name this record used to answer to, read from the registry rather
+  // than the `aliases` mirror on the row. The mirror is kept in step by the
+  // same writer, but it exists for a search that has not been rebuilt yet —
+  // reading it here would put a derived copy on the screen when the authority
+  // is one indexed query away.
+  const { former: aliases } = await namesFor(reference.id);
 
   return c.json({
     reference: {

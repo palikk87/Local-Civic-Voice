@@ -14,6 +14,7 @@
 import { prisma } from "../prisma";
 import { ReferenceType, normalizeReferenceId, seedTallyFor } from "./deduplication-service";
 import { billReferenceId } from "./master-reference-id";
+import { NameSource, claimName, findByName as claimedBy } from "./reference-names";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -109,30 +110,61 @@ interface UpsertData {
   decidedDate?: Date;
 }
 
-/** Insert new rows or refresh factual fields, never touching votes/briefs. */
+/**
+ * Insert new rows or refresh factual fields, never touching votes/briefs.
+ *
+ * The name goes into the registry in the same transaction as the row. A record
+ * the registry does not know about is one no former-name lookup can ever reach,
+ * and this is the path most records arrive by — so registering names only in
+ * findOrCreateReference would have left the daily sync's records outside the
+ * system that is supposed to guarantee their links never die.
+ *
+ * claimName is idempotent, so the refresh half of an upsert re-registers
+ * nothing; and it never steals a name another record holds, so a sync cannot
+ * quietly reassign one.
+ */
 async function upsertReference(data: UpsertData): Promise<void> {
   const { masterReferenceId, ...fields } = data;
   const seed = seedTallyFor(masterReferenceId);
-  await prisma.governmentReference.upsert({
-    where: { masterReferenceId },
-    create: {
-      masterReferenceId,
-      ...fields,
-      ...seed,
-      // Public tally starts as the seed layer; real votes add on top of it.
-      supportVotes: seed.seedSupport,
-      opposeVotes: seed.seedOppose,
-    },
-    update: {
-      title: fields.title,
-      status: fields.status,
-      ...(fields.shortTitle ? { shortTitle: fields.shortTitle } : {}),
-      ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
-      ...(fields.description ? { description: fields.description } : {}),
-      ...(fields.fullText ? { fullText: fields.fullText } : {}),
-      ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
-      ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
-    },
+  await prisma.$transaction(async (tx) => {
+    // Which record does this name belong to? Usually the one called that, but a
+    // name can also be one a record used to be called — after a repair, or a
+    // merge. Either way that record IS this law, and refreshing it is right
+    // where creating a second row named after it would be a split vote pool.
+    const held = await claimedBy(masterReferenceId, tx);
+
+    const row = await tx.governmentReference.upsert({
+      where: held ? { id: held.referenceId } : { masterReferenceId },
+      create: {
+        masterReferenceId,
+        ...fields,
+        ...seed,
+        // Public tally starts as the seed layer; real votes add on top of it.
+        supportVotes: seed.seedSupport,
+        opposeVotes: seed.seedOppose,
+      },
+      update: {
+        title: fields.title,
+        status: fields.status,
+        ...(fields.shortTitle ? { shortTitle: fields.shortTitle } : {}),
+        ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
+        ...(fields.description ? { description: fields.description } : {}),
+        ...(fields.fullText ? { fullText: fields.fullText } : {}),
+        ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
+        ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
+      },
+      select: { id: true },
+    });
+
+    const claimed = await claimName(tx, row.id, masterReferenceId, NameSource.CREATED, {
+      current: true,
+    });
+    if (!claimed.ok) {
+      console.warn(
+        `[GovSync] "${masterReferenceId}" is already registered to another record — ` +
+          `left alone; these two are a duplicate pair, not a rename`,
+      );
+    }
   });
 }
 

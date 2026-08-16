@@ -50,11 +50,11 @@ describe("boot", () => {
       SELECT count(*) FROM information_schema.tables
       WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
     `;
-    // 33 models plus _prisma_migrations. If this drops, a model was removed
+    // 34 models plus _prisma_migrations. If this drops, a model was removed
     // without anyone meaning to. The number was stale at 30 and therefore no
     // longer a guard against anything — B2BSession and B2BClient had both been
-    // added underneath it.
-    expect(Number(tables[0]!.count)).toBeGreaterThanOrEqual(34);
+    // added underneath it. ReferenceName is the most recent addition.
+    expect(Number(tables[0]!.count)).toBeGreaterThanOrEqual(35);
   });
 
   test("health reports email configuration honestly", async () => {
@@ -1394,9 +1394,15 @@ describe("a record answers to every name it has had", () => {
     });
   }
 
-  /** A reference row with a current name and a list of former ones. */
+  /**
+   * A reference row with a current name and a list of former ones.
+   *
+   * The names go into the registry, because that is where every writer in the
+   * app puts them — a row created without them models a record that cannot
+   * exist, and a test built on one proves nothing about the real system.
+   */
   async function reference(masterReferenceId: string, formerNames: string[] = []) {
-    return prisma.governmentReference.create({
+    const row = await prisma.governmentReference.create({
       data: {
         masterReferenceId,
         referenceType: "bill",
@@ -1405,6 +1411,15 @@ describe("a record answers to every name it has had", () => {
         aliases: formerNames.length > 0 ? JSON.stringify(formerNames) : null,
       },
     });
+    await prisma.referenceName.create({
+      data: { name: masterReferenceId, referenceId: row.id, isCurrent: true, learnedFrom: "created" },
+    });
+    for (const former of formerNames) {
+      await prisma.referenceName.create({
+        data: { name: former, referenceId: row.id, isCurrent: false, learnedFrom: "repaired" },
+      });
+    }
+    return row;
   }
 
   async function post(cookie: string, governmentReferenceId: string): Promise<Response> {
@@ -1430,21 +1445,42 @@ describe("a record answers to every name it has had", () => {
     expect(written.governmentReferenceId).toBe(record.id);
   });
 
-  test("the record that currently holds a name always wins over one that used to", async () => {
-    // The dangerous case. If a former name could shadow a current one, a
-    // repaired record would silently steal traffic from the record that now
-    // legitimately owns that id — the exact opposite of the guarantee.
+  test("a name already answered to never becomes a second record", async () => {
+    // The dangerous case, and the one a tiebreak cannot fix. If a record held
+    // "hr-4836-119" as a former name while a second record was actually called
+    // that, every lookup of that name would have to guess, and the two would
+    // split the vote pool for one law.
+    //
+    // So creation asks the registry first. A name somebody already answers to
+    // does not mean "close enough to merge" — it means this IS that record.
     const { cookie } = await poster();
-    const formerOwner = await reference("hres-1443-119", ["hr-4836-119"]);
-    const currentOwner = await reference("hr-4836-119");
+    const owner = await reference("hres-1443-119", ["hr-4836-119"]);
 
+    const resolved = await fetch(`${BASE_URL}/api/government-references/resolve`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        branch: "legislative",
+        title: "A bill by that number",
+        billType: "hr",
+        billNumber: "4836",
+        congress: 119,
+      }),
+    });
+    expect(resolved.status).toBe(200);
+    const { reference: got } = (await resolved.json()) as {
+      reference: { id: string; created: boolean };
+    };
+    expect(got.id).toBe(owner.id);
+    expect(got.created).toBe(false);
+
+    // Exactly one record answers to the name, and posting to it lands there.
+    expect(await prisma.governmentReference.count({ where: { masterReferenceId: "hr-4836-119" } })).toBe(0);
     const response = await post(cookie, "hr-4836-119");
     expect(response.status).toBe(201);
-
     const body = (await response.json()) as { post: { id: string } };
     const written = await prisma.post.findUniqueOrThrow({ where: { id: body.post.id } });
-    expect(written.governmentReferenceId).toBe(currentOwner.id);
-    expect(written.governmentReferenceId).not.toBe(formerOwner.id);
+    expect(written.governmentReferenceId).toBe(owner.id);
   });
 
   test("a name no record has ever held is still a 404", async () => {
@@ -1494,7 +1530,7 @@ describe("merging two records loses nothing", () => {
   let counter = 0;
   async function record(overrides: Record<string, unknown> = {}) {
     counter += 1;
-    return prisma.governmentReference.create({
+    const row = await prisma.governmentReference.create({
       data: {
         masterReferenceId: `hr-${9000 + counter}-119`,
         referenceType: "bill",
@@ -1503,6 +1539,18 @@ describe("merging two records loses nothing", () => {
         ...overrides,
       },
     });
+    // Registered the way every writer in the app registers a name. A merge
+    // moves rows in this table, so a fixture that skipped it would be testing
+    // a record shape that cannot occur.
+    await prisma.referenceName.create({
+      data: {
+        name: row.masterReferenceId,
+        referenceId: row.id,
+        isCurrent: true,
+        learnedFrom: "created",
+      },
+    });
+    return row;
   }
 
   async function vote(referenceId: string, userId: string, position: string, at: Date) {
@@ -1663,7 +1711,15 @@ describe("merging two records loses nothing", () => {
     // survivor answers to, and the tombstone points the way as well.
     const cookie = await staff();
     const target = await record();
-    const source = await record({ aliases: JSON.stringify(["an-even-older-name"]) });
+    const source = await record();
+    await prisma.referenceName.create({
+      data: {
+        name: "an-even-older-name",
+        referenceId: source.id,
+        isCurrent: false,
+        learnedFrom: "repaired",
+      },
+    });
 
     expect((await merge(cookie, source.id, target.id)).status).toBe(200);
 
@@ -1707,5 +1763,165 @@ describe("merging two records loses nothing", () => {
     // A tombstone cannot be merged again, in either direction.
     expect((await merge(cookie, merged.id, bill.id)).status).toBe(400);
     expect((await merge(cookie, bill.id, merged.id)).status).toBe(400);
+  });
+});
+
+describe("the name registry", () => {
+  /**
+   * The registry is what makes "no link ever dies" true rather than
+   * aspirational, and it is what stops two records claiming one name.
+   */
+
+  async function staff(): Promise<string> {
+    const { cookie, userId } = await signUp({
+      email: `names-admin-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Names Admin",
+    });
+    await prisma.user.update({ where: { id: userId }, data: { role: "admin" } });
+    return cookie;
+  }
+
+  // Titles have to be genuinely unrelated, not "Record 1" and "Record 2":
+  // findOrCreateReference does a fuzzy title match at 0.85 similarity, and two
+  // titles differing by one character are well past that — the second call
+  // would silently return the first record and the test would be comparing a
+  // record to itself.
+  const SUBJECTS = [
+    "Honoring the centennial of the Grand Canyon",
+    "Recognizing the contributions of merchant mariners",
+    "Expressing support for wildfire response funding",
+    "Relating to the reauthorization of coastal surveys",
+    "Commemorating the anniversary of rural electrification",
+    "Concerning the availability of insulin",
+    "Establishing a select committee on water infrastructure",
+    "Designating a national week of civic participation",
+  ];
+
+  let counter = 0;
+  async function reference() {
+    counter += 1;
+    // Through the real creation path — findOrCreateReference — rather than a
+    // direct row insert, because registering the name at creation is the thing
+    // under test and a hand-written row would skip it.
+    const response = await fetch(`${BASE_URL}/api/government-references/resolve`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        branch: "legislative",
+        title: SUBJECTS[counter % SUBJECTS.length]!,
+        billType: "hres",
+        billNumber: String(7000 + counter),
+        congress: 119,
+      }),
+    });
+    expect(response.status).toBe(200);
+    const { reference } = (await response.json()) as {
+      reference: { id: string; masterReferenceId: string };
+    };
+    return reference;
+  }
+
+  test("a record created through the app is registered under its own name", async () => {
+    // A record the registry does not know about is a record no former-name
+    // lookup can ever reach, so registration has to happen at creation and not
+    // as a later sweep.
+    const created = await reference();
+
+    // The name it was created with is the correctly-spelled one — this is also
+    // the round trip the old normalizer broke, exercised end to end.
+    expect(created.masterReferenceId).toMatch(/^hres-\d+-119$/);
+
+    const registered = await prisma.referenceName.findUniqueOrThrow({
+      where: { name: created.masterReferenceId },
+    });
+    expect(registered.referenceId).toBe(created.id);
+    expect(registered.isCurrent).toBe(true);
+    expect(registered.learnedFrom).toBe("created");
+  });
+
+  test("a merged record's names all move to the survivor and none stay current", async () => {
+    const cookie = await staff();
+    const target = await reference();
+    const source = await reference();
+
+    const merged = await fetch(`${BASE_URL}/api/government-references/merge`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ sourceId: source.id, targetId: target.id }),
+    });
+    expect(merged.status).toBe(200);
+
+    const moved = await prisma.referenceName.findUniqueOrThrow({
+      where: { name: source.masterReferenceId },
+    });
+    expect(moved.referenceId).toBe(target.id);
+    expect(moved.isCurrent).toBe(false);
+
+    // Exactly one name is what the survivor is called now.
+    const current = await prisma.referenceName.findMany({
+      where: { referenceId: target.id, isCurrent: true },
+    });
+    expect(current.length).toBe(1);
+    expect(current[0]!.name).toBe(target.masterReferenceId);
+  });
+
+  test("two records cannot claim one name", async () => {
+    // The invariant the whole system rests on. One name means one piece of
+    // government business; a second claim is a duplicate to resolve, not an
+    // alias to accept.
+    const cookie = await staff();
+    const first = await reference();
+    const second = await reference();
+
+    const response = await fetch(
+      `${BASE_URL}/api/government-references/${second.id}/alias`,
+      {
+        method: "POST",
+        headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+        body: JSON.stringify({ alias: first.masterReferenceId }),
+      },
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()) as { error: string }).toEqual({
+      error: expect.stringContaining("already belongs to another reference") as unknown as string,
+    });
+
+    // And nothing moved.
+    const held = await prisma.referenceName.findUniqueOrThrow({
+      where: { name: first.masterReferenceId },
+    });
+    expect(held.referenceId).toBe(first.id);
+  });
+
+  test("the detail response lists former names from the registry", async () => {
+    const cookie = await staff();
+    const record = await reference();
+
+    const added = await fetch(`${BASE_URL}/api/government-references/${record.id}/alias`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ alias: "H.R. 99123" }),
+    });
+    expect(added.status).toBe(200);
+
+    const detail = await fetch(`${BASE_URL}/api/government-references/${record.id}`);
+    const { reference: body } = (await detail.json()) as { reference: { aliases: string[] } };
+    // Normalized on the way in, so the stored name is the canonical spelling
+    // rather than what was typed.
+    expect(body.aliases).toContain("hr-99123");
+    // The record's own name is never in its own alias list — that is how a
+    // lookup ends up matching a record to itself.
+    expect(body.aliases).not.toContain(record.masterReferenceId);
+  });
+
+  test("deleting a record takes its names with it", async () => {
+    // A name left pointing at a deleted record is worse than no name: it holds
+    // the unique claim, so the real owner can never take it.
+    const record = await reference();
+    await prisma.governmentReference.delete({ where: { id: record.id } });
+    expect(
+      await prisma.referenceName.findUnique({ where: { name: record.masterReferenceId } }),
+    ).toBeNull();
   });
 });

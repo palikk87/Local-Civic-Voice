@@ -19,15 +19,15 @@ datasource db {
 }
 
 model User {
-  id                      String                  @id @default(cuid())
-  name                    String
-  username                String?                 @unique
-  email                   String                  @unique
-  emailVerified           Boolean                 @default(false)
-  role                    String                  @default("user")
-  image                   String?
-  bio                     String?
-  location                String?
+  id            String  @id @default(cuid())
+  name          String
+  username      String? @unique
+  email         String  @unique
+  emailVerified Boolean @default(false)
+  role          String  @default("user")
+  image         String?
+  bio           String?
+  location      String?
 
   // Moderation state. Read and written by the admin console (routes/admin.ts).
   //
@@ -40,30 +40,30 @@ model User {
   //
   // `banExpiresAt` null means permanent. Expiry is evaluated on read rather
   // than swept by a job — see isCurrentlyBanned() in routes/admin.ts.
-  banned                  Boolean                 @default(false)
-  banReason               String?
-  banExpiresAt            DateTime?
-  bannedAt                DateTime?
+  banned          Boolean   @default(false)
+  banReason       String?
+  banExpiresAt    DateTime?
+  bannedAt        DateTime?
   /// Username of the admin who applied the ban, copied in rather than joined so
   /// the record survives that admin being renamed or removed.
-  bannedBy                String?
-  displayUsername         String?
+  bannedBy        String?
+  displayUsername String?
 
-  createdAt               DateTime                @default(now())
-  updatedAt               DateTime                @updatedAt
-  accounts                Account[]
-  comments                Comment[]
-  delegationsReceived     Delegation[]            @relation("DelegationTo")
-  delegationsGiven        Delegation[]            @relation("DelegationFrom")
-  followers               Follow[]                @relation("Following")
-  following               Follow[]                @relation("Follower")
-  posts                   Post[]
-  sessions                Session[]
-  votes                   Vote[]
-  notifications           Notification[]
-  notificationPreference  NotificationPreference?
-  conversations           ConversationParticipant[]
-  messagesSent            Message[]
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  accounts               Account[]
+  comments               Comment[]
+  delegationsReceived    Delegation[]              @relation("DelegationTo")
+  delegationsGiven       Delegation[]              @relation("DelegationFrom")
+  followers              Follow[]                  @relation("Following")
+  following              Follow[]                  @relation("Follower")
+  posts                  Post[]
+  sessions               Session[]
+  votes                  Vote[]
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  conversations          ConversationParticipant[]
+  messagesSent           Message[]
 }
 
 model AdminSession {
@@ -218,24 +218,24 @@ model Verification {
 }
 
 model Post {
-  id                      String               @id @default(cuid())
-  content                 String
-  authorId                String
-  billId                  String?
-  governmentReferenceId   String?              // Link to canonical GovernmentReference
-  referenceType           String?              // bill, executive_order, scotus_case (for backwards compat)
-  referenceId             String?              // ID of the referenced law/case/order (for backwards compat)
-  referenceTitle          String?              // Title of the referenced law (for backwards compat)
-  createdAt               DateTime             @default(now())
-  updatedAt               DateTime             @updatedAt
-  comments                Comment[]
-  bill                    Bill?                @relation(fields: [billId], references: [id])
-  governmentReference     GovernmentReference? @relation("GovernmentReferencePosts", fields: [governmentReferenceId], references: [id])
-  author                  User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  likes                   PostLike[]
-  saves                   PostSave[]
-  shares                  PostShare[]
-  media                   Media[]
+  id                    String               @id @default(cuid())
+  content               String
+  authorId              String
+  billId                String?
+  governmentReferenceId String? // Link to canonical GovernmentReference
+  referenceType         String? // bill, executive_order, scotus_case (for backwards compat)
+  referenceId           String? // ID of the referenced law/case/order (for backwards compat)
+  referenceTitle        String? // Title of the referenced law (for backwards compat)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  comments              Comment[]
+  bill                  Bill?                @relation(fields: [billId], references: [id])
+  governmentReference   GovernmentReference? @relation("GovernmentReferencePosts", fields: [governmentReferenceId], references: [id])
+  author                User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  likes                 PostLike[]
+  saves                 PostSave[]
+  shares                PostShare[]
+  media                 Media[]
 
   @@index([authorId])
   @@index([billId])
@@ -249,14 +249,14 @@ model Media {
   id           String   @id @default(cuid())
   postId       String?
   userId       String
-  type         String   // image, video, audio
+  type         String // image, video, audio
   url          String
   thumbnailUrl String?
   mimeType     String
   sizeBytes    Int
-  durationMs   Int?     // For video/audio
-  width        Int?     // For images/video
-  height       Int?     // For images/video
+  durationMs   Int? // For video/audio
+  width        Int? // For images/video
+  height       Int? // For images/video
   createdAt    DateTime @default(now())
   post         Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
 
@@ -368,14 +368,14 @@ model Delegation {
 
 // Tracks all user interactions for feed personalization
 model UserInteraction {
-  id            String   @id @default(cuid())
-  userId        String
-  postId        String?
-  targetUserId  String?  // For follows, profile views
+  id              String   @id @default(cuid())
+  userId          String
+  postId          String?
+  targetUserId    String? // For follows, profile views
   interactionType String // view, like, comment, share, save, follow, mention, dwell
-  dwellTimeMs   Int?     // Time spent viewing (for view interactions)
-  metadata      String?  // JSON string for additional context
-  createdAt     DateTime @default(now())
+  dwellTimeMs     Int? // Time spent viewing (for view interactions)
+  metadata        String? // JSON string for additional context
+  createdAt       DateTime @default(now())
 
   @@index([userId])
   @@index([postId])
@@ -388,24 +388,24 @@ model UserInteraction {
 
 // Aggregated metrics for content creators (updated periodically)
 model CreatorMetrics {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  totalFollowers    Int      @default(0)
-  totalLikes        Int      @default(0)
-  totalComments     Int      @default(0)
-  totalShares       Int      @default(0)
-  totalMentions     Int      @default(0)
-  totalPosts        Int      @default(0)
-  avgEngagementRate Float    @default(0) // (likes + comments + shares) / followers
-  viralPostCount    Int      @default(0) // Posts that exceeded 10x avg engagement
-  influenceScore    Float    @default(0) // Calculated influence score
-  followerGrowthRate Float   @default(0) // 7-day growth rate
-  activeFollowerPct Float    @default(0) // % of followers who engage
-  topCategories     String?  // JSON array of top content categories
-  peakPostingHours  String?  // JSON array of optimal posting times
-  lastCalculated    DateTime @default(now())
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  totalFollowers     Int      @default(0)
+  totalLikes         Int      @default(0)
+  totalComments      Int      @default(0)
+  totalShares        Int      @default(0)
+  totalMentions      Int      @default(0)
+  totalPosts         Int      @default(0)
+  avgEngagementRate  Float    @default(0) // (likes + comments + shares) / followers
+  viralPostCount     Int      @default(0) // Posts that exceeded 10x avg engagement
+  influenceScore     Float    @default(0) // Calculated influence score
+  followerGrowthRate Float    @default(0) // 7-day growth rate
+  activeFollowerPct  Float    @default(0) // % of followers who engage
+  topCategories      String? // JSON array of top content categories
+  peakPostingHours   String? // JSON array of optimal posting times
+  lastCalculated     DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@index([influenceScore])
   @@index([totalFollowers])
@@ -415,23 +415,23 @@ model CreatorMetrics {
 
 // Post engagement metrics (updated in real-time)
 model PostMetrics {
-  id                 String   @id @default(cuid())
-  postId             String   @unique
-  viewCount          Int      @default(0)
-  uniqueViewers      Int      @default(0)
-  likeCount          Int      @default(0)
-  commentCount       Int      @default(0)
-  shareCount         Int      @default(0)
-  saveCount          Int      @default(0)
-  avgDwellTimeMs     Int      @default(0)
-  engagementRate     Float    @default(0)
-  viralityScore      Float    @default(0) // Engagement velocity
-  qualityScore       Float    @default(0) // Based on engagement quality
-  firstHourEngagement Int     @default(0) // Early signal for viral potential
-  peakEngagementHour DateTime?
-  lastEngagementAt   DateTime?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  postId              String    @unique
+  viewCount           Int       @default(0)
+  uniqueViewers       Int       @default(0)
+  likeCount           Int       @default(0)
+  commentCount        Int       @default(0)
+  shareCount          Int       @default(0)
+  saveCount           Int       @default(0)
+  avgDwellTimeMs      Int       @default(0)
+  engagementRate      Float     @default(0)
+  viralityScore       Float     @default(0) // Engagement velocity
+  qualityScore        Float     @default(0) // Based on engagement quality
+  firstHourEngagement Int       @default(0) // Early signal for viral potential
+  peakEngagementHour  DateTime?
+  lastEngagementAt    DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([viralityScore])
   @@index([engagementRate])
@@ -442,22 +442,22 @@ model PostMetrics {
 
 // User feed preferences and behavior patterns
 model UserFeedProfile {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  preferredCategories String?  // JSON array of category weights
-  preferredAuthors    String?  // JSON array of author IDs with weights
-  interactionPatterns String?  // JSON object of behavior patterns
-  avgSessionDuration  Int      @default(0)
-  postsPerSession     Int      @default(0)
-  likeRate            Float    @default(0) // % of viewed posts liked
-  commentRate         Float    @default(0) // % of viewed posts commented
-  shareRate           Float    @default(0) // % of viewed posts shared
-  peakActivityHours   String?  // JSON array of active hours
-  contentPreferences  String?  // JSON: {textLength, hasImage, hasBill, etc}
-  diversityPreference Float    @default(0.5) // 0 = echo chamber, 1 = diverse
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  preferredCategories String? // JSON array of category weights
+  preferredAuthors    String? // JSON array of author IDs with weights
+  interactionPatterns String? // JSON object of behavior patterns
+  avgSessionDuration  Int       @default(0)
+  postsPerSession     Int       @default(0)
+  likeRate            Float     @default(0) // % of viewed posts liked
+  commentRate         Float     @default(0) // % of viewed posts commented
+  shareRate           Float     @default(0) // % of viewed posts shared
+  peakActivityHours   String? // JSON array of active hours
+  contentPreferences  String? // JSON: {textLength, hasImage, hasBill, etc}
+  diversityPreference Float     @default(0.5) // 0 = echo chamber, 1 = diverse
   lastActiveAt        DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([lastActiveAt])
 }
@@ -492,12 +492,12 @@ model PostShare {
 
 // User mentions in posts/comments
 model Mention {
-  id              String   @id @default(cuid())
-  mentionedUserId String
+  id                String   @id @default(cuid())
+  mentionedUserId   String
   mentionedByUserId String
-  postId          String?
-  commentId       String?
-  createdAt       DateTime @default(now())
+  postId            String?
+  commentId         String?
+  createdAt         DateTime @default(now())
 
   @@index([mentionedUserId])
   @@index([mentionedByUserId])
@@ -507,13 +507,13 @@ model Mention {
 
 // Hashtag tracking
 model Hashtag {
-  id        String   @id @default(cuid())
-  tag       String   @unique
-  useCount  Int      @default(0)
-  trendingScore Float @default(0)
-  lastUsedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String    @id @default(cuid())
+  tag           String    @unique
+  useCount      Int       @default(0)
+  trendingScore Float     @default(0)
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([trendingScore])
   @@index([useCount])
@@ -535,10 +535,10 @@ model PostHashtag {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
-  type      String   // like, comment, reply, mention, follow, repost, new_follower_post
+  type      String // like, comment, reply, mention, follow, repost, new_follower_post
   title     String
   body      String
-  data      String?  // JSON string for additional context (postId, commentId, fromUserId, etc.)
+  data      String? // JSON string for additional context (postId, commentId, fromUserId, etc.)
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -550,16 +550,16 @@ model Notification {
 }
 
 model NotificationPreference {
-  id              String  @id @default(cuid())
-  userId          String  @unique
-  likes           Boolean @default(true)
-  comments        Boolean @default(true)
-  replies         Boolean @default(true)
-  mentions        Boolean @default(true)
-  follows         Boolean @default(true)
-  reposts         Boolean @default(true)
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  likes            Boolean @default(true)
+  comments         Boolean @default(true)
+  replies          Boolean @default(true)
+  mentions         Boolean @default(true)
+  follows          Boolean @default(true)
+  reposts          Boolean @default(true)
   newFollowerPosts Boolean @default(true)
-  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // Government Reference System - Canonical reference for bills, executive orders, and SCOTUS cases
@@ -600,10 +600,11 @@ model GovernmentReference {
   updatedAt         DateTime  @updatedAt
 
   // Relations
-  mergedInto        GovernmentReference?  @relation("MergedReferences", fields: [mergedIntoId], references: [id])
-  mergedFrom        GovernmentReference[] @relation("MergedReferences")
-  posts             Post[]                @relation("GovernmentReferencePosts")
-  votes             GovernmentReferenceVote[]
+  mergedInto GovernmentReference?      @relation("MergedReferences", fields: [mergedIntoId], references: [id])
+  mergedFrom GovernmentReference[]     @relation("MergedReferences")
+  posts      Post[]                    @relation("GovernmentReferencePosts")
+  votes      GovernmentReferenceVote[]
+  names      ReferenceName[]
 
   @@index([referenceType])
   @@index([status])
@@ -614,12 +615,50 @@ model GovernmentReference {
   @@index([mergedIntoId])
 }
 
+// ---------------------------------------------------------------------------
+// Every name a record has ever answered to.
+//
+// A master reference id is permanent in intent but not in fact: a mangled id
+// gets repaired, two records merge and one name survives, Congress renumbers a
+// measure. Each of those rewrites a name that is already out in the world — in
+// a shared link, a bookmark, a client that cached it. This table is what makes
+// "no link ever dies" true rather than aspirational.
+//
+// `name` is unique across every record on purpose. One name means one piece of
+// government business; two records claiming the same name is not a state to
+// support, it is a duplicate to resolve, and the constraint is what surfaces it
+// instead of letting lookups silently pick one.
+//
+// The `aliases` JSON column on GovernmentReference is now a derived mirror of
+// the former names here, kept only because the search that has not been rebuilt
+// yet does a LIKE against it. This table is the authority.
+// ---------------------------------------------------------------------------
+
+model ReferenceName {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  referenceId String
+  // Exactly one name per record is the one it is called now; the rest are the
+  // names it used to be called.
+  isCurrent   Boolean  @default(false)
+  // How this name was learned: created, backfilled, repaired, merged,
+  // renumbered, manual. An audit trail for a rename is only useful if it says
+  // what caused it.
+  learnedFrom String
+  firstSeenAt DateTime @default(now())
+
+  reference GovernmentReference @relation(fields: [referenceId], references: [id], onDelete: Cascade)
+
+  @@index([referenceId])
+  @@index([referenceId, isCurrent])
+}
+
 // Votes on government references (separate from bill votes)
 model GovernmentReferenceVote {
   id                    String              @id @default(cuid())
   governmentReferenceId String
   userId                String
-  position              String              // support, oppose
+  position              String // support, oppose
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   governmentReference   GovernmentReference @relation(fields: [governmentReferenceId], references: [id], onDelete: Cascade)
