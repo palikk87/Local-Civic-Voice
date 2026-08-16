@@ -48,10 +48,12 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
   };
   const summary =
     ref.citizenBrief ?? ref.description ?? ("fullText" in ref ? ref.fullText : null) ?? ref.title;
-  const congressNumber = ref.masterReferenceId
-    .replace(/-\d+$/, "")
-    .replace(/^([a-z]+)-/, (_, p: string) => `${p.toUpperCase()}.`)
-    .replace(/\.$/, ". ");
+  // The printed id, straight from the server. The old line here reformatted the
+  // canonical id by hand and got resolutions wrong — "sres-829-119" came out as
+  // "SRES.829" rather than "S.Res. 829" — because each client had its own idea
+  // of how Congress prints a bill number.
+  const congressNumber =
+    ref.displayId ?? ref.masterReferenceId.toUpperCase();
 
   return {
     id: ref.id,
@@ -95,7 +97,9 @@ export function referenceToExecutiveOrder(ref: GovReference | GovReferenceDetail
 
   return {
     id: ref.id,
-    eoNumber: `EO ${ref.masterReferenceId.replace(/^eo-/i, "").toUpperCase()}`,
+    // Server-formatted, same as bills. An unnumbered order carries a Federal
+    // Register document number instead, and the server knows which is which.
+    eoNumber: ref.displayId ?? `EO ${ref.masterReferenceId.replace(/^eo-/i, "").toUpperCase()}`,
     title: ref.title,
     shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
     president: presidentAtDate(ref.signedDate),
@@ -130,7 +134,8 @@ export function referenceToScotusCase(ref: GovReference | GovReferenceDetail): S
 
   return {
     id: ref.id,
-    docketNumber: ref.masterReferenceId.replace(/^scotus-/i, "").toUpperCase(),
+    docketNumber:
+      ref.displayId ?? ref.masterReferenceId.replace(/^scotus-/i, "").toUpperCase(),
     caseName: ref.title,
     shortName: ref.shortTitle ?? ref.title,
     term,

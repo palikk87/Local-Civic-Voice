@@ -308,6 +308,10 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
     references: topReferences.map((ref) => ({
       id: ref.id,
       masterReferenceId: ref.masterReferenceId,
+      // The id as printed ("H.R. 4836", "S.Res. 829"). Sent from here so both
+      // clients render one spelling instead of each deriving its own from the
+      // raw id — which is how "sres-829-119" reached a card as "SRES.829".
+      displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
       referenceType: ref.referenceType,
       title: ref.title,
       shortTitle: ref.shortTitle,
@@ -411,6 +415,7 @@ governmentReferencesRouter.get("/:id", async (c) => {
     reference: {
       id: reference.id,
       masterReferenceId: reference.masterReferenceId,
+      displayId: formatReferenceDisplayId(reference.masterReferenceId, reference.referenceType),
       referenceType: reference.referenceType,
       title: reference.title,
       shortTitle: reference.shortTitle,
