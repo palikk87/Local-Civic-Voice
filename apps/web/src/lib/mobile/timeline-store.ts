@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { currentIdentity, fallbackAvatarFor } from './signed-in-identity';
 // Web port: zustand persist uses localStorage instead of AsyncStorage
 import type { User, Bill } from './types';
-import { sampleUsers, currentUser, mockBills, representatives } from './mock-data';
 import { api } from '@/lib/api';
 import { fetchServerFeed, type ServerPost } from './server-feed';
 import { useUserProfilesStore } from './user-profiles-store';
@@ -148,505 +148,10 @@ export interface Message {
 }
 
 // Generate mock timeline posts
-const generateMockPosts = (): TimelinePost[] => {
-  const now = new Date();
-
-  return [
-    // CONTROVERSIAL POSTS WITH CRITICAL OPINIONS
-    {
-      id: 'post-epstein-1',
-      author: sampleUsers[0],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-1049',
-        title: 'Epstein Client List Transparency and Accountability Act',
-      },
-      opinion: '95% of Americans want the Epstein client list released. Only 47 members of Congress voted yes. 312 voted NO. Who are they protecting? This is why people don\'t trust institutions anymore.',
-      likes: 4523,
-      comments: [
-        {
-          id: 'comment-epstein-1',
-          author: sampleUsers[1],
-          content: 'The gap between public opinion (95% yes) and Congress (11% yes) is the most damning evidence of corruption. They\'re ALL implicated.',
-          taggedUsers: [],
-          likes: 1245,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 45).toISOString(),
-        },
-        {
-          id: 'comment-epstein-2',
-          author: sampleUsers[3],
-          content: 'Why did 76 members ABSTAIN? That\'s not a vote against - that\'s hiding. Name them.',
-          taggedUsers: [],
-          likes: 892,
-          isLiked: false,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 30).toISOString(),
-        },
-      ],
-      shares: 2341,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 1).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 1).toISOString(),
-    },
-    {
-      id: 'post-stock-1',
-      author: sampleUsers[1],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-2847',
-        title: 'Ban Congressional Stock Trading',
-      },
-      opinion: '97% of Americans support banning congressional stock trading. 12 Congress members voted yes. The rest? They ABSTAINED. Not even the courage to vote no. Pelosi made $65M trading stocks. Cruz, Tuberville, all of them. Legal corruption.',
-      likes: 5678,
-      comments: [
-        {
-          id: 'comment-stock-1',
-          author: sampleUsers[2],
-          content: 'Nancy Pelosi\'s husband bought millions in NVIDIA before the CHIPS Act. Ted Cruz sold airlines before COVID lockdowns. This isn\'t coincidence - it\'s insider trading.',
-          taggedUsers: [],
-          likes: 2341,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 20).toISOString(),
-        },
-      ],
-      shares: 3456,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-    },
-    {
-      id: 'post-pharma-1',
-      author: sampleUsers[3],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-3391',
-        title: 'End Pharma Price Gouging',
-      },
-      opinion: 'As a doctor, I watch patients die because they can\'t afford insulin that costs $5 to make and sells for $300. 94% support price caps. 89 Congress members voted yes. 301 voted NO. Pharma spent $350M lobbying last year. This is blood money.',
-      likes: 3892,
-      comments: [
-        {
-          id: 'comment-pharma-1',
-          author: sampleUsers[4],
-          content: 'My student\'s mom rationed insulin and died. The same insulin costs $30 in Canada. Congress doesn\'t work for us.',
-          taggedUsers: [],
-          likes: 1567,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 40).toISOString(),
-        },
-        {
-          id: 'comment-pharma-2',
-          author: sampleUsers[0],
-          content: 'Follow the money: Every Congress member who voted NO received pharma donations. Every. Single. One.',
-          taggedUsers: [],
-          likes: 1234,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 25).toISOString(),
-        },
-      ],
-      shares: 2789,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 3).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 3).toISOString(),
-    },
-    {
-      id: 'post-termlimits-1',
-      author: sampleUsers[2],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-5892',
-        title: 'Term Limits for Congress',
-      },
-      opinion: '82% of Americans want term limits. 78 Congress members voted yes. 357 voted to keep their jobs forever. McConnell: 40 years. Pelosi: 37 years. Grassley: 49 years. They\'ll NEVER vote themselves out. The system is rigged.',
-      likes: 4567,
-      comments: [
-        {
-          id: 'comment-term-1',
-          author: sampleUsers[1],
-          content: 'The same people who voted NO have been in office longer than most Americans have been alive. That tells you everything.',
-          taggedUsers: [],
-          likes: 1890,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 35).toISOString(),
-        },
-      ],
-      shares: 2345,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 4).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 4).toISOString(),
-    },
-    {
-      id: 'post-citizensunited-1',
-      author: sampleUsers[4],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-6234',
-        title: 'Overturn Citizens United',
-      },
-      opinion: '75% of Americans - LEFT AND RIGHT - want Citizens United overturned. 124 voted yes. 311 voted NO. Why? Because the billionaires who fund their campaigns don\'t want it. Dark money won. Democracy lost.',
-      likes: 3456,
-      comments: [
-        {
-          id: 'comment-cu-1',
-          author: sampleUsers[0],
-          content: 'In 2024, 100 billionaires spent more on elections than the bottom 100 million Americans combined. That\'s not democracy - that\'s oligarchy.',
-          taggedUsers: [],
-          likes: 2123,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 50).toISOString(),
-        },
-      ],
-      shares: 1987,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 5).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 5).toISOString(),
-    },
-    {
-      id: 'post-fed-1',
-      author: sampleUsers[1],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-7812',
-        title: 'Audit the Fed',
-      },
-      opinion: 'The Fed gave $16 TRILLION to banks during 2008. We only know this because of a partial audit. 84% want a full audit. 67 voted yes. 368 voted NO. What are they hiding? Who got our money?',
-      likes: 2890,
-      comments: [
-        {
-          id: 'comment-fed-1',
-          author: sampleUsers[2],
-          content: 'They printed trillions for banks at 0% interest, then raised rates on US mortgages and credit cards. We subsidize Wall Street.',
-          taggedUsers: [],
-          likes: 1456,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 55).toISOString(),
-        },
-      ],
-      shares: 1678,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 6).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 6).toISOString(),
-    },
-    {
-      id: 'post-whistleblower-1',
-      author: sampleUsers[0],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-8234',
-        title: 'Protect Government Whistleblowers',
-      },
-      opinion: 'Snowden exposed mass surveillance. Assange exposed war crimes. Reality Winner exposed election interference. All prosecuted. 91% want whistleblower protections. 134 voted yes. 301 voted NO. The government wants to hide, not be accountable.',
-      likes: 3234,
-      comments: [
-        {
-          id: 'comment-whistle-1',
-          author: sampleUsers[3],
-          content: 'They call themselves transparent but prosecute anyone who proves otherwise. That tells you everything about who DC really works for.',
-          taggedUsers: [],
-          likes: 1345,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 45).toISOString(),
-        },
-      ],
-      shares: 1890,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 7).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 7).toISOString(),
-    },
-    {
-      id: 'post-electoral-1',
-      author: sampleUsers[3],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-4521',
-        title: 'Abolish Electoral College',
-      },
-      opinion: 'Wyoming voters have 3.6x the power of California voters. 61% want the popular vote. 148 voted yes. 287 voted NO. Why? Because the system benefits whoever controls small states. Democracy should mean one person = one vote.',
-      likes: 2678,
-      comments: [
-        {
-          id: 'comment-ec-1',
-          author: sampleUsers[4],
-          content: '5 presidents lost the popular vote but won anyway. In what world is that democracy?',
-          taggedUsers: [],
-          likes: 1567,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 40).toISOString(),
-        },
-      ],
-      shares: 1456,
-      isLiked: false,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 8).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 8).toISOString(),
-    },
-    // ORIGINAL POSTS
-    {
-      id: 'post-1',
-      author: sampleUsers[0],
-      type: 'original',
-      content: 'Just finished reading about the Social Security Fairness Act. Finally some recognition for public sector workers! What do you all think?',
-      contentType: 'text',
-      likes: 45,
-      comments: [
-        {
-          id: 'comment-1',
-          author: sampleUsers[1],
-          content: '@democracy_now Totally agree! My mom is a retired teacher and this would make a huge difference for her.',
-          taggedUsers: [{
-            userId: 'user-1',
-            username: 'democracy_now',
-            displayName: 'Alex Rivera',
-            startIndex: 0,
-            endIndex: 13,
-          }],
-          likes: 12,
-          isLiked: false,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 30).toISOString(),
-        },
-      ],
-      shares: 8,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 10).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 10).toISOString(),
-    },
-    {
-      id: 'post-2',
-      author: sampleUsers[1],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 'hr-82',
-        title: 'Social Security Fairness Act',
-        originalAuthor: sampleUsers[0],
-      },
-      opinion: 'This is exactly what we need. Public workers have been penalized for too long. Let\'s make some noise about this! 🗳️',
-      likes: 89,
-      comments: [],
-      shares: 23,
-      isLiked: false,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 4).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 4).toISOString(),
-    },
-    {
-      id: 'post-3',
-      author: sampleUsers[2],
-      type: 'original',
-      content: 'The climate provisions in the recent legislation are a step in the right direction, but we need to push for more. Who else is advocating for stronger environmental protections?',
-      contentType: 'text',
-      likes: 67,
-      comments: [
-        {
-          id: 'comment-2',
-          author: sampleUsers[3],
-          content: '@green_future Count me in! As a physician, I see the health impacts of environmental degradation daily.',
-          taggedUsers: [{
-            userId: 'user-3',
-            username: 'green_future',
-            displayName: 'Sam Chen',
-            startIndex: 0,
-            endIndex: 12,
-          }],
-          likes: 8,
-          isLiked: true,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 5).toISOString(),
-        },
-        {
-          id: 'comment-3',
-          author: sampleUsers[4],
-          content: '@green_future @healthcare_hero We should organize! I can bring this to my students as a civic engagement project.',
-          taggedUsers: [
-            {
-              userId: 'user-3',
-              username: 'green_future',
-              displayName: 'Sam Chen',
-              startIndex: 0,
-              endIndex: 12,
-            },
-            {
-              userId: 'user-4',
-              username: 'healthcare_hero',
-              displayName: 'Dr. Maya Patel',
-              startIndex: 14,
-              endIndex: 29,
-            },
-          ],
-          likes: 15,
-          isLiked: false,
-          createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 4.5).toISOString(),
-        },
-      ],
-      shares: 12,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 6).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 6).toISOString(),
-    },
-    {
-      id: 'post-4',
-      author: sampleUsers[3],
-      type: 'share',
-      content: '',
-      contentType: 'bill',
-      sharedContent: {
-        type: 'bill',
-        id: 's-596',
-        title: 'Treat and Reduce Obesity Act',
-      },
-      opinion: 'As a doctor, this bill could save thousands of lives. Medicare coverage for obesity treatment is long overdue. The evidence is clear - treating obesity prevents diabetes, heart disease, and more.',
-      likes: 156,
-      comments: [],
-      shares: 45,
-      isLiked: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 8).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 8).toISOString(),
-    },
-    {
-      id: 'post-5',
-      author: sampleUsers[4],
-      type: 'original',
-      content: 'Education funding is at a crossroads. We need to invest in our future - that means better teacher pay, updated materials, and modern facilities. Our kids deserve better.',
-      contentType: 'text',
-      likes: 234,
-      comments: [],
-      shares: 67,
-      isLiked: false,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 12).toISOString(),
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 12).toISOString(),
-    },
-  ];
-};
 
 // Generate mock conversations
-const generateMockConversations = (): Conversation[] => {
-  const now = new Date();
-
-  return [
-    {
-      id: 'conv-1',
-      participants: [currentUser, sampleUsers[0]],
-      lastMessage: {
-        id: 'msg-1',
-        conversationId: 'conv-1',
-        sender: sampleUsers[0],
-        content: 'Hey! Did you see the vote on the tax relief bill?',
-        isRead: false,
-        createdAt: new Date(now.getTime() - 1000 * 60 * 15).toISOString(),
-      },
-      unreadCount: 1,
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 15).toISOString(),
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-    },
-    {
-      id: 'conv-2',
-      participants: [currentUser, sampleUsers[1]],
-      lastMessage: {
-        id: 'msg-2',
-        conversationId: 'conv-2',
-        sender: currentUser,
-        content: 'Thanks for the info on the KOSA bill!',
-        isRead: true,
-        createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-      },
-      unreadCount: 0,
-      updatedAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-    },
-  ];
-};
 
 // Generate mock messages for a conversation
-const generateMockMessages = (conversationId: string): Message[] => {
-  const now = new Date();
-
-  if (conversationId === 'conv-1') {
-    return [
-      {
-        id: 'msg-1-1',
-        conversationId: 'conv-1',
-        sender: currentUser,
-        content: 'Hey Alex! Following up on that Social Security discussion.',
-        isRead: true,
-        createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-      },
-      {
-        id: 'msg-1-2',
-        conversationId: 'conv-1',
-        sender: sampleUsers[0],
-        content: 'Absolutely! I think it has a real chance of passing this time.',
-        isRead: true,
-        createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 1.5).toISOString(),
-      },
-      {
-        id: 'msg-1-3',
-        conversationId: 'conv-1',
-        sender: currentUser,
-        content: 'The bipartisan support is encouraging.',
-        isRead: true,
-        createdAt: new Date(now.getTime() - 1000 * 60 * 45).toISOString(),
-      },
-      {
-        id: 'msg-1',
-        conversationId: 'conv-1',
-        sender: sampleUsers[0],
-        content: 'Hey! Did you see the vote on the tax relief bill?',
-        isRead: false,
-        createdAt: new Date(now.getTime() - 1000 * 60 * 15).toISOString(),
-      },
-    ];
-  }
-
-  return [
-    {
-      id: 'msg-2-1',
-      conversationId: 'conv-2',
-      sender: sampleUsers[1],
-      content: 'Hi! I wanted to share some insights about the Kids Online Safety Act.',
-      isRead: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 4).toISOString(),
-    },
-    {
-      id: 'msg-2-2',
-      conversationId: 'conv-2',
-      sender: sampleUsers[1],
-      content: 'There are some concerns about how it might affect LGBTQ+ content, but overall the intent is good.',
-      isRead: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 3.5).toISOString(),
-    },
-    {
-      id: 'msg-2',
-      conversationId: 'conv-2',
-      sender: currentUser,
-      content: 'Thanks for the info on the KOSA bill!',
-      isRead: true,
-      createdAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
-    },
-  ];
-};
 
 interface TimelineState {
   // Posts — served by the backend, not stored locally
@@ -733,7 +238,11 @@ export const useTimelineStore = create<TimelineState>()(
       posts: [],
       isLoading: false,
       feedError: null,
-      conversations: generateMockConversations(),
+      // Empty. This used to call generateMockConversations() at store
+      // creation, so every page load manufactured a set of direct-message
+      // threads with invented people in them. Messages.tsx reads the real
+      // /api/conversations endpoint and has its own empty state.
+      conversations: [],
       activeConversationId: null,
       messages: {},
 
@@ -791,7 +300,7 @@ export const useTimelineStore = create<TimelineState>()(
 
         const newPost: TimelinePost = {
           id: `post-${Date.now()}`,
-          author: currentUser,
+          author: currentIdentity(),
           type: 'share',
           content: originalPost.content,
           contentType: originalPost.contentType,
@@ -861,7 +370,7 @@ export const useTimelineStore = create<TimelineState>()(
 
         const newComment: TimelineComment = {
           id: `comment-${Date.now()}`,
-          author: currentUser,
+          author: currentIdentity(),
           content,
           taggedUsers,
           likes: 0,
@@ -906,7 +415,7 @@ export const useTimelineStore = create<TimelineState>()(
       replyToComment: (postId, parentCommentId, content, taggedUsers = []) => {
         const newReply: TimelineComment = {
           id: `reply-${Date.now()}`,
-          author: currentUser,
+          author: currentIdentity(),
           content,
           taggedUsers,
           likes: 0,
@@ -950,7 +459,7 @@ export const useTimelineStore = create<TimelineState>()(
         // Create new conversation
         const newConversation: Conversation = {
           id: `conv-${Date.now()}`,
-          participants: [currentUser, user],
+          participants: [currentIdentity(), user],
           unreadCount: 0,
           updatedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
@@ -968,7 +477,7 @@ export const useTimelineStore = create<TimelineState>()(
         const newMessage: Message = {
           id: `msg-${Date.now()}`,
           conversationId,
-          sender: currentUser,
+          sender: currentIdentity(),
           content,
           sharedPost,
           isRead: false,
@@ -1013,14 +522,11 @@ export const useTimelineStore = create<TimelineState>()(
         // If messages already loaded, skip
         if (messages[conversationId]?.length) return;
 
-        // Load mock messages
-        const mockMessages = generateMockMessages(conversationId);
-
+        // Nothing to load here. This used to manufacture a thread of invented
+        // messages between invented people. Real direct messages come from
+        // /api/conversations/:id/messages, which Conversation.tsx reads.
         set((state) => ({
-          messages: {
-            ...state.messages,
-            [conversationId]: mockMessages,
-          },
+          messages: { ...state.messages, [conversationId]: [] },
         }));
       },
 
@@ -1033,10 +539,16 @@ export const useTimelineStore = create<TimelineState>()(
       },
 
       shareToMessage: (userId, post) => {
-        const targetUser = sampleUsers.find((u) => u.id === userId);
-        if (!targetUser) return;
-
-        const conversationId = get().startConversation(targetUser);
+        // The target used to be looked up in sampleUsers, so sharing to anyone
+        // real silently did nothing. ShareModal now passes an account from
+        // /api/users/discover; carry the id through rather than resolving it
+        // against a fixed cast.
+        const conversationId = get().startConversation({
+          id: userId,
+          username: 'user',
+          displayName: 'User',
+          avatar: fallbackAvatarFor(userId),
+        } as User);
         get().sendMessage(conversationId, 'Check out this post!', post);
       },
 
@@ -1045,13 +557,12 @@ export const useTimelineStore = create<TimelineState>()(
       },
 
       searchUsers: (query) => {
+        // Mention autocomplete used to search the mock cast, so typing "@" in a
+        // comment offered people who do not exist. Real search is
+        // /api/users/search; until a caller wires it in, offer nobody rather
+        // than offering fiction.
         if (!query.trim()) return [];
-        const lowerQuery = query.toLowerCase().replace('@', '');
-        return sampleUsers.filter(
-          (u) =>
-            u.username.toLowerCase().includes(lowerQuery) ||
-            u.displayName.toLowerCase().includes(lowerQuery)
-        );
+        return [];
       },
 
       createLibraryPost: async (share) => {
@@ -1069,7 +580,7 @@ export const useTimelineStore = create<TimelineState>()(
 
         // Local gamification counter (unchanged behaviour)
         const profilesStore = useUserProfilesStore.getState();
-        profilesStore.incrementLibraryPosts(currentUser.id);
+        profilesStore.incrementLibraryPosts(currentIdentity().id);
 
         await get().loadFeed();
       },

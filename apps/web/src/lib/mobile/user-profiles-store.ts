@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 // Web port: zustand persist uses localStorage instead of AsyncStorage
 import type { CivicEngagementStats } from './types';
-import { currentUser, sampleUsers } from './mock-data';
 
 // Initialize default civic stats
 const defaultCivicStats: CivicEngagementStats = {
@@ -53,22 +52,12 @@ interface UserProfilesState {
 export const useUserProfilesStore = create<UserProfilesState>()(
   persist(
     (set, get) => ({
-      userStats: {
-        // Initialize current user with default stats
-        [currentUser.id]: { ...defaultCivicStats },
-        // Initialize sample users with some mock engagement
-        ...sampleUsers.reduce((acc, user, index) => ({
-          ...acc,
-          [user.id]: {
-            libraryPostsCount: Math.floor(Math.random() * 10) + index,
-            totalSupportVotes: Math.floor(Math.random() * 50) + index * 10,
-            totalOpposeVotes: Math.floor(Math.random() * 30) + index * 5,
-            totalRepGapVotes: Math.floor(Math.random() * 40) + index * 8,
-            totalComments: Math.floor(Math.random() * 20) + index * 3,
-            civilLeaderScore: 0, // Will be calculated
-          },
-        }), {}),
-      },
+      // Empty. Every account's civic stats used to be seeded here — the
+      // fictional `currentUser` with defaults, and each of `sampleUsers` with
+      // Math.random() vote and comment counts. A real person opening a real
+      // profile saw invented numbers, and the civil-leader ranking those feed
+      // was a ranking of nobody.
+      userStats: {},
 
       incrementLibraryPosts: (userId) => {
         set((state) => {

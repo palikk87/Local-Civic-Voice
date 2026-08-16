@@ -9,6 +9,7 @@ import { AuthUIProvider } from "@/hooks/use-civic-auth";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { RouteGuard } from "@/components/auth/RouteGuard";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { SyncSignedInIdentity } from "@/lib/mobile/signed-in-identity";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Feed = lazy(() => import("./pages/Feed"));
@@ -57,6 +58,7 @@ const App = () => (
       <Sonner position="top-center" />
       <BrowserRouter>
         <AuthUIProvider>
+          <SyncSignedInIdentity />
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               {/* ---- Public: anyone can read the civic record ---- */}
