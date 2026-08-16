@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Vote,
   Building2,
+  GitMerge,
 } from 'lucide-react-native';
 import { useAdminStore } from '@/lib/admin-store';
 import { StorageHealthCard } from '@/components/admin/StorageHealthCard';
@@ -303,6 +304,24 @@ export default function AdminDashboardScreen() {
           subtitle="Create system-wide announcements"
           icon={<Bell size={24} color="#8B5CF6" />}
           onPress={() => router.push('/admin/announcements')}
+        />
+
+        <MenuItem
+          title="Merge Review"
+          subtitle="Records that might be one law"
+          icon={<GitMerge size={24} color="#06B6D4" />}
+          onPress={() => router.push('/admin/merge-review')}
+        />
+
+        {/*
+          This screen existed with nothing linking to it — reachable only by
+          typing the path. Same console, same tabs as web, so it belongs here.
+        */}
+        <MenuItem
+          title="B2B Clients"
+          subtitle="Analytics logins for the business dashboard"
+          icon={<Building2 size={24} color="#14B8A6" />}
+          onPress={() => router.push('/admin/b2b-clients')}
         />
 
         <MenuItem

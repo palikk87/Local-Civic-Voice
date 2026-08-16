@@ -23,6 +23,7 @@ import {
   LineChart,
   Megaphone,
   Building2,
+  GitMerge,
   ScrollText,
   Settings,
 } from "lucide-react";
@@ -36,6 +37,7 @@ import { PostsTab } from "@/components/admin/PostsTab";
 import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
 import { AnnouncementsTab } from "@/components/admin/AnnouncementsTab";
 import { B2BClientsTab } from "@/components/admin/B2BClientsTab";
+import { MergeReviewTab } from "@/components/admin/MergeReviewTab";
 import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -47,6 +49,7 @@ const ADMIN_TABS = [
   "posts",
   "analytics",
   "announcements",
+  "merge-review",
   "b2b-clients",
   "logs",
   "settings",
@@ -137,6 +140,10 @@ export default function Admin() {
               <Megaphone className="mr-2 h-4 w-4" />
               Announcements
             </TabsTrigger>
+            <TabsTrigger value="merge-review">
+              <GitMerge className="mr-2 h-4 w-4" />
+              Merge review
+            </TabsTrigger>
             <TabsTrigger value="b2b-clients">
               <Building2 className="mr-2 h-4 w-4" />
               B2B clients
@@ -165,6 +172,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="announcements" className="mt-6">
             <AnnouncementsTab />
+          </TabsContent>
+          <TabsContent value="merge-review" className="mt-6">
+            <MergeReviewTab />
           </TabsContent>
           <TabsContent value="b2b-clients" className="mt-6">
             <B2BClientsTab />
