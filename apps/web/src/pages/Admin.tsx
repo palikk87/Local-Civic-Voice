@@ -22,6 +22,7 @@ import {
   FileText,
   LineChart,
   Megaphone,
+  Building2,
   ScrollText,
   Settings,
 } from "lucide-react";
@@ -34,6 +35,7 @@ import { UsersTab } from "@/components/admin/UsersTab";
 import { PostsTab } from "@/components/admin/PostsTab";
 import { AnalyticsTab } from "@/components/admin/AnalyticsTab";
 import { AnnouncementsTab } from "@/components/admin/AnnouncementsTab";
+import { B2BClientsTab } from "@/components/admin/B2BClientsTab";
 import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -45,6 +47,7 @@ const ADMIN_TABS = [
   "posts",
   "analytics",
   "announcements",
+  "b2b-clients",
   "logs",
   "settings",
 ] as const;
@@ -134,6 +137,10 @@ export default function Admin() {
               <Megaphone className="mr-2 h-4 w-4" />
               Announcements
             </TabsTrigger>
+            <TabsTrigger value="b2b-clients">
+              <Building2 className="mr-2 h-4 w-4" />
+              B2B clients
+            </TabsTrigger>
             <TabsTrigger value="logs">
               <ScrollText className="mr-2 h-4 w-4" />
               Logs
@@ -158,6 +165,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="announcements" className="mt-6">
             <AnnouncementsTab />
+          </TabsContent>
+          <TabsContent value="b2b-clients" className="mt-6">
+            <B2BClientsTab />
           </TabsContent>
           <TabsContent value="logs" className="mt-6">
             <LogsTab />

@@ -1091,3 +1091,285 @@ describe("login timing does not reveal which accounts exist", () => {
     expect(bodies[0]).toBe(bodies[1]);
   });
 });
+
+describe("admin B2B client management", () => {
+  /** An admin session at the given role, written straight to the table. */
+  async function adminHeaders(role: "admin" | "superadmin" = "superadmin"): Promise<Record<string, string>> {
+    const token = `admin_crud_${Math.random().toString(36).slice(2)}`;
+    await prisma.adminSession.create({
+      data: {
+        token,
+        adminId: `test-${role}`,
+        username: `test-${role}`,
+        role,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    // A distinct client address per session. generalRateLimit allows 100
+    // requests a minute keyed by IP, and this block makes far more than that
+    // across its tests — without this they trip the suite's own limiter and
+    // fail as 429s that look like logic errors.
+    return freshClientHeaders({
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    });
+  }
+
+  /**
+   * A username no previous run can have used.
+   *
+   * resetData() deliberately does not truncate B2BClient — it holds the two
+   * seeded accounts every other test logs in with — so a fixed name here would
+   * pass on a clean database and 409 on every run after it. That is exactly the
+   * failure B2BSession had before it was added to the truncate list.
+   */
+  function uniqueUsername(base: string): string {
+    return `${base}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  async function createClient(headers: Record<string, string>, username: string) {
+    const response = await fetch(`${BASE_URL}/api/admin/b2b-clients`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ username, name: "Acme Research", type: "research", tier: "professional" }),
+    });
+    expect(response.status).toBe(201);
+    return (await response.json()) as {
+      client: { id: string; username: string; tier: string };
+      credentials: { username: string; password: string; apiKey: string };
+    };
+  }
+
+  test("a created client can immediately sign in with the credentials returned once", async () => {
+    // The point of the endpoint: it must mint credentials the portal actually
+    // accepts. A create that produced a row nobody could log in to would pass
+    // any test that only checked the status code.
+    const headers = await adminHeaders();
+    const { credentials } = await createClient(headers, uniqueUsername("AcmeResearch"));
+
+    const login = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: credentials.username, password: credentials.password }),
+    });
+    expect(login.status).toBe(200);
+
+    // And the generated API key works on the machine path.
+    const viaKey = await fetch(`${BASE_URL}/api/b2b/geo/heatmap`, {
+      headers: freshClientHeaders({ Authorization: `ApiKey ${credentials.apiKey}` }),
+    });
+    expect(viaKey.status).toBe(200);
+  });
+
+  test("neither secret is stored in recoverable form or ever listed", async () => {
+    const headers = await adminHeaders();
+    const { client, credentials } = await createClient(headers, uniqueUsername("SecretCheck"));
+
+    const row = await prisma.b2BClient.findUniqueOrThrow({ where: { id: client.id } });
+    expect(row.passwordHash).not.toContain(credentials.password);
+    expect(row.apiKeyHash).not.toContain(credentials.apiKey);
+    expect(row.apiKeyHash).toMatch(/^[0-9a-f]{64}$/);
+
+    // The list endpoint must never carry a hash or a secret.
+    const list = await fetch(`${BASE_URL}/api/admin/b2b-clients`, { headers });
+    const body = await list.text();
+    expect(list.status).toBe(200);
+    for (const secret of [credentials.password, credentials.apiKey, row.passwordHash, row.apiKeyHash]) {
+      expect(body).not.toContain(secret);
+    }
+  });
+
+  test("rotating the password revokes the sessions it opened", async () => {
+    // A rotation prompted by a leak that leaves the stolen session alive has
+    // changed nothing for the next 24 hours.
+    const headers = await adminHeaders();
+    const { client, credentials } = await createClient(headers, uniqueUsername("RotateMe"));
+
+    const login = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: credentials.username, password: credentials.password }),
+    });
+    const { token } = (await login.json()) as { token: string };
+    expect((await fetch(`${BASE_URL}/api/b2b/auth/verify`, {
+      headers: freshClientHeaders({ Authorization: `Bearer ${token}` }),
+    })).status).toBe(200);
+
+    const rotate = await fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}/rotate`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ password: true }),
+    });
+    expect(rotate.status).toBe(200);
+    const rotated = (await rotate.json()) as {
+      credentials: { password: string };
+      revokedSessions: number;
+    };
+    expect(rotated.revokedSessions).toBe(1);
+
+    // Old session dead, old password dead, new password works.
+    expect((await fetch(`${BASE_URL}/api/b2b/auth/verify`, {
+      headers: freshClientHeaders({ Authorization: `Bearer ${token}` }),
+    })).status).toBe(401);
+
+    const oldPassword = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: credentials.username, password: credentials.password }),
+    });
+    expect(oldPassword.status).toBe(401);
+
+    const newPassword = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: credentials.username, password: rotated.credentials.password }),
+    });
+    expect(newPassword.status).toBe(200);
+  });
+
+  test("rotating the API key retires the old one", async () => {
+    const headers = await adminHeaders();
+    const { client, credentials } = await createClient(headers, uniqueUsername("RotateKey"));
+
+    const rotate = await fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}/rotate`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ apiKey: true }),
+    });
+    expect(rotate.status).toBe(200);
+    const { credentials: next } = (await rotate.json()) as { credentials: { apiKey: string } };
+
+    expect((await fetch(`${BASE_URL}/api/b2b/geo/heatmap`, {
+      headers: freshClientHeaders({ Authorization: `ApiKey ${credentials.apiKey}` }),
+    })).status).toBe(401);
+    expect((await fetch(`${BASE_URL}/api/b2b/geo/heatmap`, {
+      headers: freshClientHeaders({ Authorization: `ApiKey ${next.apiKey}` }),
+    })).status).toBe(200);
+  });
+
+  test("a tier change applies to sessions that are already open", async () => {
+    // tier is copied onto the session row at login, so a downgrade that only
+    // touched the client row would not take effect until the client signed out.
+    const headers = await adminHeaders();
+    const { client, credentials } = await createClient(headers, uniqueUsername("TierChange"));
+
+    const login = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: credentials.username, password: credentials.password }),
+    });
+    const { token } = (await login.json()) as { token: string };
+
+    const patch = await fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify({ tier: "enterprise" }),
+    });
+    expect(patch.status).toBe(200);
+
+    const verify = await fetch(`${BASE_URL}/api/b2b/auth/verify`, {
+      headers: freshClientHeaders({ Authorization: `Bearer ${token}` }),
+    });
+    const body = (await verify.json()) as { client: { tier: string } };
+    expect(body.client.tier).toBe("enterprise");
+  });
+
+  test("deleting a client revokes its live sessions", async () => {
+    // B2BSession.clientId has no foreign key, so nothing cascades. Without an
+    // explicit delete the account would be gone while its tokens kept reading
+    // citizen sentiment for another 24 hours.
+    const headers = await adminHeaders();
+    const { client, credentials } = await createClient(headers, uniqueUsername("DeleteMe"));
+
+    const login = await fetch(`${BASE_URL}/api/b2b/auth/credential-login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: credentials.username, password: credentials.password }),
+    });
+    const { token } = (await login.json()) as { token: string };
+
+    const deleted = await fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}`, {
+      method: "DELETE",
+      headers,
+    });
+    expect(deleted.status).toBe(200);
+    expect((await deleted.json() as { revokedSessions: number }).revokedSessions).toBe(1);
+
+    expect(await prisma.b2BClient.findUnique({ where: { id: client.id } })).toBeNull();
+    expect((await fetch(`${BASE_URL}/api/b2b/auth/verify`, {
+      headers: freshClientHeaders({ Authorization: `Bearer ${token}` }),
+    })).status).toBe(401);
+  });
+
+  test("a duplicate username is refused rather than silently reassigned", async () => {
+    const headers = await adminHeaders();
+    const username = uniqueUsername("DupeCheck");
+    await createClient(headers, username);
+
+    const again = await fetch(`${BASE_URL}/api/admin/b2b-clients`, {
+      method: "POST",
+      headers,
+      // Upper-cased: usernames are stored and matched lowercased, so this is the
+      // same account and must be refused rather than silently reassigned.
+      body: JSON.stringify({ username: username.toUpperCase(), name: "Other", type: "media", tier: "basic" }),
+    });
+    expect(again.status).toBe(409);
+  });
+
+  test("a plain admin can list but cannot create, modify, rotate or delete", async () => {
+    // Creating one of these grants access to every citizen's aggregated
+    // sentiment. That is closer to granting a role than to adding a record.
+    const superadmin = await adminHeaders("superadmin");
+    const { client } = await createClient(superadmin, uniqueUsername("PermCheck"));
+
+    const admin = await adminHeaders("admin");
+    const sneakyUsername = uniqueUsername("sneaky");
+
+    expect((await fetch(`${BASE_URL}/api/admin/b2b-clients`, { headers: admin })).status).toBe(200);
+
+    const forbidden = [
+      fetch(`${BASE_URL}/api/admin/b2b-clients`, {
+        method: "POST",
+        headers: admin,
+        body: JSON.stringify({ username: sneakyUsername, name: "Sneaky", type: "media", tier: "enterprise" }),
+      }),
+      fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}`, {
+        method: "PATCH",
+        headers: admin,
+        body: JSON.stringify({ tier: "enterprise" }),
+      }),
+      fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}/rotate`, {
+        method: "POST",
+        headers: admin,
+        body: JSON.stringify({ apiKey: true }),
+      }),
+      fetch(`${BASE_URL}/api/admin/b2b-clients/${client.id}`, { method: "DELETE", headers: admin }),
+    ];
+
+    for (const response of await Promise.all(forbidden)) {
+      expect(response.status).toBe(403);
+    }
+
+    // And nothing was created by the attempt.
+    expect(await prisma.b2BClient.findUnique({ where: { username: sneakyUsername.toLowerCase() } })).toBeNull();
+  });
+
+  test("every endpoint rejects a request with no admin token", async () => {
+    const paths: Array<[string, string]> = [
+      ["GET", "/api/admin/b2b-clients"],
+      ["POST", "/api/admin/b2b-clients"],
+      ["PATCH", "/api/admin/b2b-clients/some-id"],
+      ["POST", "/api/admin/b2b-clients/some-id/rotate"],
+      ["DELETE", "/api/admin/b2b-clients/some-id"],
+    ];
+
+    for (const [method, path] of paths) {
+      const response = await fetch(`${BASE_URL}${path}`, {
+        method,
+        headers: freshClientHeaders({ "Content-Type": "application/json" }),
+        body: method === "GET" || method === "DELETE" ? undefined : "{}",
+      });
+      expect({ method, path, status: response.status }).toEqual({ method, path, status: 401 });
+    }
+  });
+});

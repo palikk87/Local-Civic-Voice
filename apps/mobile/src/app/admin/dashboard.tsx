@@ -25,6 +25,7 @@ import {
   ChevronRight,
   MessageSquare,
   Vote,
+  Building2,
 } from 'lucide-react-native';
 import { useAdminStore } from '@/lib/admin-store';
 import { StorageHealthCard } from '@/components/admin/StorageHealthCard';

@@ -1,8 +1,10 @@
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { verifyPasswordOrDummy } from "../password-check";
+import { hashPassword } from "better-auth/crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
@@ -247,6 +249,40 @@ const announceSchema = z.object({
   expiresAt: z.string().optional(),
 });
 
+// B2B client management. `type` and `tier` are validated against the same
+// vocabularies routes/b2b.ts reads, so the console cannot write a tier the
+// portal will not recognise.
+const b2bTypeSchema = z.enum(["lobbyist", "ngo", "corporation", "campaign", "media", "research"]);
+const b2bTierSchema = z.enum(["basic", "professional", "enterprise"]);
+
+const createB2BClientSchema = z.object({
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .max(64, "Username too long")
+    // Stored lowercased and matched lowercased; anything that could be confused
+    // for another account is rejected rather than silently transformed.
+    .regex(/^[A-Za-z0-9_.-]+$/, "Username may contain only letters, digits, and _ . -"),
+  name: z.string().min(1, "Display name is required").max(200, "Display name too long"),
+  type: b2bTypeSchema,
+  tier: b2bTierSchema,
+  // Optional. Omit and one is generated, which is the recommended path.
+  password: z.string().min(12, "Password must be at least 12 characters").optional(),
+});
+
+const updateB2BClientSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  type: b2bTypeSchema.optional(),
+  tier: b2bTierSchema.optional(),
+});
+
+const rotateB2BClientSchema = z.object({
+  password: z.boolean().optional().default(false),
+  apiKey: z.boolean().optional().default(false),
+  // Optional explicit password, same rule as create.
+  newPassword: z.string().min(12, "Password must be at least 12 characters").optional(),
+});
+
 const logsQuerySchema = z.object({
   limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 50)),
   offset: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 0)),
@@ -259,7 +295,12 @@ const logsQuerySchema = z.object({
 // Router
 // ==========================================
 
-const adminRouter = new Hono();
+/**
+ * `adminSession` is set by the b2b-clients auth middleware below. The rest of
+ * this file resolves the session inside each handler, which is fine there; the
+ * B2B routes need it earlier, before zValidator runs. See that middleware.
+ */
+const adminRouter = new Hono<{ Variables: { adminSession: AdminSession } }>();
 
 // ==========================================
 // Admin Authentication Endpoints
@@ -868,6 +909,314 @@ adminRouter.delete("/posts/:id", zValidator("param", idParamSchema), async (c) =
  * only in server logs. The off-container account vault it used to report on is gone,
  * along with the SQLite file it protected.
  */
+// ==========================================
+// B2B portal client management
+// ==========================================
+//
+// These accounts read every citizen's aggregated sentiment, and the enterprise
+// tier reads all of it. Creating one is therefore closer to granting an admin
+// role than to adding a record, which is why every mutation here is superadmin
+// only while listing is open to any admin — an admin who can see that a client
+// exists cannot mint one.
+//
+// SECRETS ARE RETURNED EXACTLY ONCE. The password is stored as a scrypt hash
+// and the API key as a SHA-256 digest, neither of which can be reversed, so
+// there is no "show me the key again" and there deliberately never will be.
+// Losing one means rotating it.
+
+/** SHA-256 hex digest. Must match hashApiKey() in routes/b2b.ts and scripts/seed-b2b.ts. */
+function hashB2BApiKey(apiKey: string): string {
+  return createHash("sha256").update(apiKey).digest("hex");
+}
+
+/** 48 bytes of CSPRNG, base64url. The same strength `openssl rand -base64 48` gives. */
+function generateB2BApiKey(): string {
+  return randomBytes(48).toString("base64url");
+}
+
+/** A generated password, for when the admin does not supply one. */
+function generateB2BPassword(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+/** Public projection of a stored client. Never includes either hash. */
+function toAdminB2BClient(row: {
+  id: string;
+  username: string;
+  name: string;
+  type: string;
+  tier: string;
+  lastAccessAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: row.id,
+    username: row.username,
+    name: row.name,
+    type: row.type,
+    tier: row.tier,
+    lastAccessAt: row.lastAccessAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+const B2B_CLIENT_SELECT = {
+  id: true,
+  username: true,
+  name: true,
+  type: true,
+  tier: true,
+  lastAccessAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+/**
+ * Authenticate before validating.
+ *
+ * These handlers used to call getAdminFromToken() themselves, like the rest of
+ * this file. That works, but zValidator is registered as middleware and
+ * therefore runs FIRST — so an unauthenticated request with a malformed body
+ * got a 400 describing the schema instead of a 401. That lets anyone map the
+ * shape of a privileged endpoint by trial and error, and it reports a
+ * validation problem to a caller who was never entitled to reach the validator.
+ *
+ * Order matters more than consistency here: identity first, then input.
+ */
+adminRouter.use("/b2b-clients", b2bClientAuth);
+adminRouter.use("/b2b-clients/*", b2bClientAuth);
+
+async function b2bClientAuth(c: Context<{ Variables: { adminSession: AdminSession } }>, next: Next) {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  // Everything except listing is superadmin-only. A read-only admin can see
+  // that a client exists; only a superadmin can mint, alter or revoke one.
+  if (c.req.method !== "GET" && session.role !== "superadmin") {
+    return c.json({ error: "Only superadmin can manage B2B clients" }, { status: 403 });
+  }
+
+  c.set("adminSession", session);
+  await next();
+}
+
+adminRouter.get("/b2b-clients", async (c) => {
+  const clients = await prisma.b2BClient.findMany({
+    select: B2B_CLIENT_SELECT,
+    orderBy: { createdAt: "asc" },
+  });
+
+  // Live session counts, so the console can show who is actually signed in
+  // rather than only who has an account.
+  const now = new Date();
+  const sessions = await prisma.b2BSession.groupBy({
+    by: ["clientId"],
+    where: { expiresAt: { gt: now } },
+    _count: { _all: true },
+  });
+  const activeByClient = new Map(sessions.map((s) => [s.clientId, s._count._all]));
+
+  return c.json({
+    clients: clients.map((row) => ({
+      ...toAdminB2BClient(row),
+      activeSessions: activeByClient.get(row.id) ?? 0,
+    })),
+  });
+});
+
+adminRouter.post("/b2b-clients", zValidator("json", createB2BClientSchema), async (c) => {
+  const session = c.get("adminSession");
+  const body = c.req.valid("json");
+  const username = body.username.toLowerCase();
+
+  const existing = await prisma.b2BClient.findUnique({ where: { username } });
+  if (existing) {
+    return c.json({ error: "A B2B client with that username already exists" }, { status: 409 });
+  }
+
+  const password = body.password ?? generateB2BPassword();
+  const apiKey = generateB2BApiKey();
+
+  const created = await prisma.b2BClient.create({
+    data: {
+      username,
+      name: body.name,
+      type: body.type,
+      tier: body.tier,
+      passwordHash: await hashPassword(password),
+      apiKeyHash: hashB2BApiKey(apiKey),
+    },
+    select: B2B_CLIENT_SELECT,
+  });
+
+  createActivityLog(
+    "create_b2b_client",
+    session.adminId,
+    session.username,
+    "system",
+    created.id,
+    `Created B2B client ${created.username} (${created.tier})`
+  );
+
+  return c.json(
+    {
+      success: true,
+      client: toAdminB2BClient(created),
+      // Shown once. Neither value can be recovered from what is stored.
+      credentials: { username: created.username, password, apiKey },
+      warning: "Copy these now. They cannot be shown again — only rotated.",
+    },
+    { status: 201 }
+  );
+});
+
+adminRouter.patch(
+  "/b2b-clients/:id",
+  zValidator("param", idParamSchema),
+  zValidator("json", updateB2BClientSchema),
+  async (c) => {
+    const session = c.get("adminSession");
+
+    const { id } = c.req.valid("param");
+    const body = c.req.valid("json");
+
+    if (Object.keys(body).length === 0) {
+      return c.json({ error: "Nothing to update" }, { status: 400 });
+    }
+
+    const existing = await prisma.b2BClient.findUnique({ where: { id } });
+    if (!existing) {
+      return c.json({ error: "B2B client not found" }, { status: 404 });
+    }
+
+    const updated = await prisma.b2BClient.update({
+      where: { id },
+      data: body,
+      select: B2B_CLIENT_SELECT,
+    });
+
+    // A tier change takes effect on the NEXT request for existing sessions,
+    // because tier is copied onto the session row at login. Rewrite the live
+    // sessions too, or a downgrade would not apply until the client signs out.
+    if (body.tier && body.tier !== existing.tier) {
+      await prisma.b2BSession.updateMany({ where: { clientId: id }, data: { tier: body.tier } });
+    }
+    if (body.name && body.name !== existing.name) {
+      await prisma.b2BSession.updateMany({ where: { clientId: id }, data: { clientName: body.name } });
+    }
+
+    createActivityLog(
+      "update_b2b_client",
+      session.adminId,
+      session.username,
+      "system",
+      id,
+      `Updated B2B client ${updated.username}`
+    );
+
+    return c.json({ success: true, client: toAdminB2BClient(updated) });
+  }
+);
+
+adminRouter.post(
+  "/b2b-clients/:id/rotate",
+  zValidator("param", idParamSchema),
+  zValidator("json", rotateB2BClientSchema),
+  async (c) => {
+    const session = c.get("adminSession");
+
+    const { id } = c.req.valid("param");
+    const body = c.req.valid("json");
+
+    if (!body.password && !body.apiKey) {
+      return c.json({ error: "Specify password, apiKey, or both" }, { status: 400 });
+    }
+
+    const existing = await prisma.b2BClient.findUnique({ where: { id } });
+    if (!existing) {
+      return c.json({ error: "B2B client not found" }, { status: 404 });
+    }
+
+    const data: { passwordHash?: string; apiKeyHash?: string } = {};
+    const credentials: { password?: string; apiKey?: string } = {};
+
+    if (body.password) {
+      const password = body.newPassword ?? generateB2BPassword();
+      data.passwordHash = await hashPassword(password);
+      credentials.password = password;
+    }
+    if (body.apiKey) {
+      const apiKey = generateB2BApiKey();
+      data.apiKeyHash = hashB2BApiKey(apiKey);
+      credentials.apiKey = apiKey;
+    }
+
+    const updated = await prisma.b2BClient.update({
+      where: { id },
+      data,
+      select: B2B_CLIENT_SELECT,
+    });
+
+    // Rotating a password revokes the sessions it opened. Leaving them alive
+    // would mean a rotation prompted by a leak changed nothing for as long as
+    // the stolen session lasted, which is the whole reason to rotate.
+    let revoked = 0;
+    if (body.password) {
+      revoked = (await prisma.b2BSession.deleteMany({ where: { clientId: id } })).count;
+    }
+
+    createActivityLog(
+      "rotate_b2b_client",
+      session.adminId,
+      session.username,
+      "system",
+      id,
+      `Rotated ${[body.password && "password", body.apiKey && "API key"].filter(Boolean).join(" and ")} ` +
+        `for B2B client ${updated.username}`
+    );
+
+    return c.json({
+      success: true,
+      client: toAdminB2BClient(updated),
+      credentials: { username: updated.username, ...credentials },
+      revokedSessions: revoked,
+      warning: "Copy these now. They cannot be shown again — only rotated.",
+    });
+  }
+);
+
+adminRouter.delete("/b2b-clients/:id", zValidator("param", idParamSchema), async (c) => {
+  const session = c.get("adminSession");
+  const { id } = c.req.valid("param");
+
+  const existing = await prisma.b2BClient.findUnique({ where: { id } });
+  if (!existing) {
+    return c.json({ error: "B2B client not found" }, { status: 404 });
+  }
+
+  // B2BSession.clientId is a bare column with no foreign key, so nothing
+  // cascades. Delete the sessions explicitly or the account would be gone while
+  // its live tokens kept working until they expired — a deleted client that can
+  // still read every citizen's sentiment for another 24 hours.
+  const revoked = (await prisma.b2BSession.deleteMany({ where: { clientId: id } })).count;
+  await prisma.b2BClient.delete({ where: { id } });
+
+  createActivityLog(
+    "delete_b2b_client",
+    session.adminId,
+    session.username,
+    "system",
+    id,
+    `Deleted B2B client ${existing.username} and revoked ${revoked} session(s)`
+  );
+
+  return c.json({ success: true, revokedSessions: revoked });
+});
+
 adminRouter.get("/storage-health", async (c) => {
   const authHeader = c.req.header("Authorization");
   const session = await getAdminFromToken(authHeader);
