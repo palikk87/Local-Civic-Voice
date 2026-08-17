@@ -1,6 +1,6 @@
 # ---------------------------------------------------------------------------
 # Secrets. This repository is public. Never commit a real .env.
-# The Vibecode exports shipped backend/.env with live Supabase, OpenAI, Gemini,
+# The original platform exports shipped backend/.env with live Supabase, OpenAI, Gemini,
 # Congress, CourtListener and Tavily credentials in them; those files are
 # deliberately absent here. Use the .env.example files as templates.
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ out/
 .vite/
 
 # Local databases (this project uses Supabase Postgres; SQLite files are
-# leftovers from the Vibecode template's local-SQLite assumption)
+# leftovers from the original template's local-SQLite assumption)
 *.db
 *.db-journal
 *.sqlite

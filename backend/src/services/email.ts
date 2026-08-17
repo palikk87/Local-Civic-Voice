@@ -3,9 +3,10 @@ import { env } from "../env";
 /**
  * Transactional email via Resend.
  *
- * This replaces a hardcoded POST to https://smtp.vibecodeapp.com/v1/send/otp —
- * Vibecode's own relay, which took no API key because it authorised by network
- * position. It stops existing the moment this project leaves that platform.
+ * This replaces a hardcoded POST to the old host platform's own SMTP relay,
+ * which took no API key because it authorised by network position — so it sent
+ * mail only from inside their network, and stopped existing the moment this
+ * project left it.
  *
  * Plain fetch rather than the SDK: one endpoint, one shape, and nothing else in
  * this backend needs an email dependency.

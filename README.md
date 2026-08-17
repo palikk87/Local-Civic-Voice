@@ -12,7 +12,7 @@ apps/mobile/   Expo / React Native client
 apps/web/      Vite + React client (formerly "CivicSpeak")
 backend/       Bun + Hono + Prisma API — serves both clients
 db/            Database docs, legacy schemas, live-object capture
-docs/          Audit and planning documents from the Vibecode era
+docs/          Audit and planning documents from the original build
 archive/       Superseded code kept for reference
 ```
 
@@ -75,9 +75,9 @@ arrays, integer id counters — that the mobile client never even called, readin
 `timeline-store`'s `generateMockConversations()` instead. Messages now persist
 and actually reach the other participant.
 
-## Migration off Vibecode
+## Migration off the original platform
 
-Both apps were built on Vibecode and exported as ZIPs. Each export contained its
+Both apps were built on a hosted app-builder platform and exported as ZIPs. Each export contained its
 own full copy of the backend, and the copies had diverged. What was reconciled:
 
 **Canonical sources.** The newer mobile client turned out to be the copy nested
@@ -94,7 +94,7 @@ flow, which is what the backend actually implements.
 `fetchDocumentDetails` moved server-side to `/api/government/*/search`.
 `useVoteBill` was renamed `useCastVote`. `useRemoveVote` moved to `src/lib/hooks.ts`.
 
-**Removed.** All five `@vibecodeapp/*` packages, the proxy import, the Vite
+**Removed.** All five of the platform's npm packages, the proxy import, the Vite
 plugin, and the Metro wrapper. SVG handling — which the Metro wrapper had
 provided — is now wired explicitly to `react-native-svg-transformer`.
 `EXPO_PUBLIC_BACKEND_URL` is the only backend-address variable, with no fallback:

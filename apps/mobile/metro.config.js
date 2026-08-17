@@ -40,8 +40,8 @@ config.resolver.useWatchman = false;
 // Configure asset and source extensions.
 const { assetExts, sourceExts } = config.resolver;
 
-// SVG transformer was previously configured by withVibecodeMetro. That wrapper is
-// gone with the move off Vibecode, so point Metro at react-native-svg-transformer
+// SVG transformer used to be configured by the host platform's Metro wrapper.
+// That wrapper went with the platform, so point Metro at react-native-svg-transformer
 // directly — it is already a dependency, and the assetExts/sourceExts swap below
 // (which routes .svg from asset to source) only works with it installed.
 config.transformer = {

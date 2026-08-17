@@ -56,15 +56,10 @@
 </typescript>
 
 <environment>
-  You are in Vibecode. The system manages git and the dev server (port 8080).
-  DO NOT: manage git, touch the dev server, or check its state.
-  The user views the app through Vibecode App or their browser.
-  The user cannot see the code or interact with the terminal. Do not tell the user to do anything with the code or terminal.
-  You can see logs in the server.log file or browser console.
-  The Vibecode App has tabs like ENV tab, API tab, LOGS tab. You can ask the user to use these tabs to view the logs, add environment variables, or give instructions for APIs like OpenAI, Nanobanana, Grok, Elevenlabs, etc. but first try to implement the functionality yourself.
-  The user is likely non-technical, communicate with them in an easy to understand manner.
-  If the user's request is vague or ambitious, scope down to specific functionality. Do everything for them.
-  For images, use URLs from unsplash.com. You can also tell the user they can use the IMAGES tab to generate and upload images.
+  Vite dev server on port 8080. Environment variables live in .env — anything
+  prefixed VITE_ is compiled into the shipped bundle, so no secret goes there.
+  The user is not reading the terminal. Do the work; do not hand back instructions.
+  Communicate plainly and briefly.
 </environment>
 
 <bootstrapping>
@@ -120,7 +115,8 @@
 </data>
 
 <index_html>
-  IMPORTANT: If index.html still has defaults ("Vibecode.dev App", "/og-base.png"), update title, og:title, og:description, og:image, and meta description to match the app.
+  Title, description and the og:/twitter: tags describe Civic Voice. If a change
+  makes them wrong, fix them in the same change.
 </index_html>
 
 <design>
@@ -225,7 +221,6 @@
 
 <skills>
 You have access to a few skills in the `.claude/skills` folder. Use them to your advantage.
-- ai-apis-like-chatgpt: Use this skill when the user asks you to make an app that requires an AI API.
 - web-docs: Use this skill when you need documentation for shadcn/ui, React Router, React Query, or other web libraries.
 - frontend-app-design: Use this skill when the user asks you to design a frontend app component or screen.
 </skills>

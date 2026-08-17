@@ -40,7 +40,7 @@ CI now runs that same check on every push, against a real Postgres service.
 Assertions in comments are what let this project believe something untrue for
 months; this one is executed.
 
-### Nothing references Vibecode
+### Nothing references the old platform
 
 `scripts/env.sh` is deleted — it existed to be regenerated from a template that
 injected `DATABASE_URL="file:/data/production.db"` in production, silently

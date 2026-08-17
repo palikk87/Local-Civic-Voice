@@ -732,8 +732,8 @@ The app integrates with both Google Gemini and OpenAI GPT to provide:
 - Question answering about specific bills
 
 API keys are configured via environment variables:
-- `EXPO_PUBLIC_VIBECODE_GOOGLE_API_KEY` - Gemini API
-- `EXPO_PUBLIC_VIBECODE_OPENAI_API_KEY` - OpenAI API
+- Model keys are backend-only (`GEMINI_API_KEY` / `OPENAI_API_KEY`). The app
+  never holds one — anything `EXPO_PUBLIC_` is compiled into the shipped bundle.
 
 ## Legal Compliance
 
@@ -1182,8 +1182,6 @@ EXPO_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 
 # Optional - AI Features
-EXPO_PUBLIC_VIBECODE_OPENAI_API_KEY=sk-your-openai-key
-EXPO_PUBLIC_VIBECODE_GOOGLE_API_KEY=your-gemini-key
 ```
 
 | Variable | Required | Description |
@@ -1191,8 +1189,6 @@ EXPO_PUBLIC_VIBECODE_GOOGLE_API_KEY=your-gemini-key
 | `EXPO_PUBLIC_SUPABASE_URL` | Yes | Your Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anonymous/public API key |
 | `EXPO_PUBLIC_CONGRESS_API_KEY` | Yes* | Congress.gov API key for legislation search (get free key at https://api.congress.gov/sign-up/) |
-| `EXPO_PUBLIC_VIBECODE_OPENAI_API_KEY` | No | OpenAI API key for AI bill analysis and smart search |
-| `EXPO_PUBLIC_VIBECODE_GOOGLE_API_KEY` | No | Google Gemini API key for AI features |
 
 *Note: The Congress.gov API key is required for live legislation search. Without it, search results will be limited.
 

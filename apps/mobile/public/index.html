@@ -39,10 +39,10 @@
               errorCount++;
               if (firstMessage === null) firstMessage = msg;
               if (now - loadedAt > 10000) setTimeout(maybeShowFallback, 0);
-              // Kept on the page. This used to post a 'vibecode:error' payload
-              // to a native bridge and to window.parent with a '*' target
-              // origin — the host platform's telemetry channel, which this app
-              // no longer runs inside, and a wildcard postMessage that any
+              // Kept on the page. This used to post an error payload to a
+              // native bridge and to window.parent with a '*' target origin —
+              // the old host platform's telemetry channel, which this app no
+              // longer runs inside, and a wildcard postMessage that any
               // embedding frame could read. The console is where an error
               // belongs when there is nowhere it is meant to be sent.
               if (window.console && window.console.error) {

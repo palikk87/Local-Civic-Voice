@@ -53,7 +53,7 @@ export const auth = betterAuth({
   },
 
   // Derived from APP_ORIGINS / APP_SCHEMES so this and the CORS allowlist in
-  // index.ts can never drift apart again. The Vibecode wildcards that used to
+  // index.ts can never drift apart again. The host platform's wildcards that
   // live here are gone: they granted login to domains this project does not
   // control, and they were a superset of what CORS actually permitted.
   trustedOrigins,
@@ -79,7 +79,7 @@ export const auth = betterAuth({
        * existed, on both clients, with nothing in the logs.
        *
        * Transport is Resend (services/email.ts). The previous one was a
-       * hardcoded POST to Vibecode's own relay, which does not survive the
+       * hardcoded POST to the old host platform's own relay, which does not
        * move off that platform.
        */
       async sendVerificationOTP({ email, otp, type }) {

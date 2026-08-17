@@ -1,6 +1,6 @@
-# Vibecode Workspace
+# Civic Voice workspace
 
-This workspace contains a mobile app and backend server.
+A mobile app, a web app, and the backend both of them read from.
 
 <APPROVAL_REQUIRED_BEFORE_ANY_CHANGE>
   HARD RULE — no exceptions, never ask the user to repeat this:
@@ -136,17 +136,13 @@ This workspace contains a mobile app and backend server.
 <skills>
   Shared skills in .claude/skills/:
   - database-auth: Set up Prisma + Better Auth for user accounts and data persistence
-  - ai-apis-like-chatgpt: Use this skill when the user asks you to make an app that requires an AI API.
 
   Frontend only skills:
   - frontend-app-design: Create distinctive, production-grade web interfaces using React, Tailwind, and shadcn/ui. Use when building pages, components, or styling any web UI.
 </skills>
 
 <environment>
-  System manages git and dev servers. DO NOT manage these.
-  The user views the app through Vibecode Mobile App with a webview preview or Vibecode Web App with an iframe preview.
-  The user cannot see code or terminal. Do everything for them.
-  Write one-off scripts to achieve tasks the user asks for.
-  Communicate in an easy to understand manner for non-technical users.
-  Be concise and don't talk too much.
+  This repository is the whole product. `main` is what deploys — see SHIPPING.md.
+  The user is not reading the terminal. Do the work; do not hand back instructions.
+  Communicate plainly, without jargon, and briefly.
 </environment>
