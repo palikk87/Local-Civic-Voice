@@ -840,9 +840,26 @@ function TimelineFeed() {
         {
           text: 'Delete',
           style: 'destructive',
+          // Awaited, and the post leaves the screen only once the server says
+          // it is gone. This used to remove it locally without calling the
+          // server at all, so a "deleted" post stayed public and reappeared on
+          // the next load — with the user believing they had taken it down.
           onPress: () => {
-            deletePost(postId);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            void (async () => {
+              try {
+                await deletePost(postId);
+                setShowOptionsModal(false);
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              } catch (error) {
+                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                Alert.alert(
+                  'Not deleted',
+                  error instanceof Error
+                    ? error.message
+                    : 'Could not delete the post. It is still up.',
+                );
+              }
+            })();
           },
         },
       ]

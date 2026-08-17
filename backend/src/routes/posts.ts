@@ -17,6 +17,7 @@ import {
   loadPostReferenceViews,
 } from "../services/post-reference-view";
 import { JobPriority, JobType, jobQueue } from "../services/job-queue";
+import { invalidatePostCache } from "../services/cache";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -457,6 +458,11 @@ postsRouter.delete("/:id", async (c) => {
   }
 
   await prisma.post.delete({ where: { id } });
+
+  // The feed serves from a cache. Without this the row is gone and /api/feed
+  // still hands the post out for up to two minutes, which is indistinguishable
+  // from the delete not having worked.
+  invalidatePostCache(id, post.authorId);
 
   return c.json({ success: true });
 });

@@ -2723,3 +2723,138 @@ describe("nothing invents a vote", () => {
     });
   });
 });
+
+describe("a deleted post is deleted", () => {
+  /**
+   * The defect this pins: the timeline removed the post from local state and
+   * never called the server. It vanished from the screen, the author believed
+   * it was gone, and it was still public — still returned by /api/posts and
+   * /api/feed, still listed in the admin console, and back on screen after a
+   * reload.
+   *
+   * The endpoint itself was always correct. What was missing was anybody
+   * calling it, so what these check is the acceptance criterion rather than the
+   * handler: after a delete, the post is not returned by anything.
+   */
+
+  async function author(): Promise<{ cookie: string; userId: string }> {
+    return signUp({
+      email: `del-persist-${Math.random().toString(36).slice(2)}@example.com`,
+      password: "correct horse battery staple",
+      name: "Delete Persist",
+    });
+  }
+
+  let counter = 0;
+  async function law() {
+    counter += 1;
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${2000 + counter}-119`,
+        referenceType: "bill",
+        title: `Delete-path record ${counter}`,
+        status: "proposed",
+      },
+    });
+    await prisma.referenceName.create({
+      data: { name: row.masterReferenceId, referenceId: row.id, isCurrent: true, learnedFrom: "created" },
+    });
+    return row;
+  }
+
+  async function write(cookie: string, referenceId: string, content: string): Promise<string> {
+    const response = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie }),
+      body: JSON.stringify({ content, governmentReferenceId: referenceId }),
+    });
+    expect(response.status).toBe(201);
+    return ((await response.json()) as { post: { id: string } }).post.id;
+  }
+
+  async function listedBy(path: string, cookie: string): Promise<string[]> {
+    const response = await fetch(`${BASE_URL}${path}`, { headers: freshClientHeaders({ cookie }) });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { posts: Array<{ id: string }> };
+    return body.posts.map((p) => p.id);
+  }
+
+  test("after a delete, no endpoint still returns the post", async () => {
+    const { cookie } = await author();
+    const bill = await law();
+    const doomed = await write(cookie, bill.id, "this one goes");
+    const kept = await write(cookie, bill.id, "this one stays");
+
+    expect(await listedBy("/api/posts", cookie)).toContain(doomed);
+    expect(await listedBy("/api/feed", cookie)).toContain(doomed);
+
+    const deleted = await fetch(`${BASE_URL}/api/posts/${doomed}`, {
+      method: "DELETE",
+      headers: freshClientHeaders({ cookie }),
+    });
+    expect(deleted.status).toBe(200);
+
+    // The three places the audit found it still alive.
+    expect(await listedBy("/api/posts", cookie)).not.toContain(doomed);
+    expect(await listedBy("/api/feed", cookie)).not.toContain(doomed);
+    expect(await prisma.post.findUnique({ where: { id: doomed } })).toBeNull();
+
+    // And only that one. A delete that took the neighbours with it would be a
+    // different disaster passing the same assertions.
+    expect(await listedBy("/api/posts", cookie)).toContain(kept);
+  });
+
+  test("somebody else's post cannot be deleted", async () => {
+    const owner = await author();
+    const stranger = await author();
+    const bill = await law();
+    const post = await write(owner.cookie, bill.id, "mine");
+
+    const attempt = await fetch(`${BASE_URL}/api/posts/${post}`, {
+      method: "DELETE",
+      headers: freshClientHeaders({ cookie: stranger.cookie }),
+    });
+    expect(attempt.status).toBe(403);
+    expect(await prisma.post.findUnique({ where: { id: post } })).not.toBeNull();
+  });
+
+  test("a page of posts carries the cursor for the next one", async () => {
+    // The audit could not settle this because there were no posts: with a
+    // single page, `nextCursor` is undefined and JSON drops the key entirely,
+    // so the response looks like it has no cursor at all. With two posts and a
+    // limit of one it either comes back or it does not.
+    const { cookie } = await author();
+    const bill = await law();
+    await write(cookie, bill.id, "first");
+    await write(cookie, bill.id, "second");
+
+    const first = await fetch(`${BASE_URL}/api/posts?limit=1`, {
+      headers: freshClientHeaders({ cookie }),
+    });
+    const page = (await first.json()) as {
+      posts: Array<{ id: string }>;
+      nextCursor?: string;
+      hasMore: boolean;
+    };
+
+    expect(page.posts.length).toBe(1);
+    expect(page.hasMore).toBe(true);
+    expect(page.nextCursor).toBe(page.posts[0]!.id);
+
+    // And the cursor actually advances, which is the thing infinite scroll
+    // depends on — a cursor that returns the same page forever would satisfy
+    // every assertion above.
+    const second = await fetch(`${BASE_URL}/api/posts?limit=1&cursor=${page.nextCursor}`, {
+      headers: freshClientHeaders({ cookie }),
+    });
+    const nextPage = (await second.json()) as {
+      posts: Array<{ id: string }>;
+      nextCursor?: string;
+      hasMore: boolean;
+    };
+    expect(nextPage.posts.length).toBe(1);
+    expect(nextPage.posts[0]!.id).not.toBe(page.posts[0]!.id);
+    expect(nextPage.hasMore).toBe(false);
+    expect(nextPage.nextCursor).toBeUndefined();
+  });
+});

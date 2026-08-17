@@ -348,10 +348,24 @@ export function invalidateUserCache(userId: string): void {
  * Call this when post is created, updated, or deleted
  */
 export function invalidatePostCache(postId: string, authorId?: string): void {
-  // Clear feed caches that might contain this post
-  feedCache.deletePattern(`feed:*:for_you`);
-  feedCache.deletePattern(`feed:*:trending`);
-  feedCache.deletePattern(`feed:*:discover`);
+  // Every cached feed, and the base query underneath them.
+  //
+  // getPersonalizedFeed caches two things: the assembled response for 30
+  // seconds under `feed:<user>:<type>:<cursor>:<limit>`, and the raw rows it
+  // was built from for two minutes under `posts:<type>:<cursor>:<limit>`.
+  //
+  // The patterns here used to be `feed:*:for_you` and friends, which are
+  // anchored at both ends and so matched nothing at all — a real key has the
+  // cursor and the limit after the feed type. And nothing cleared the row cache
+  // in any case, so rebuilding the response just reassembled the same stale
+  // rows. A deleted post therefore kept coming back from /api/feed for up to
+  // two minutes after it was gone from the database, which from outside is
+  // indistinguishable from the delete not having worked.
+  //
+  // A post can appear in any user's feed and in any feed type, so the whole
+  // cache goes. It rebuilds on the next request.
+  feedCache.deletePattern(`feed:*`);
+  feedCache.deletePattern(`posts:*`);
 
   // Clear trending cache
   trendingCache.clear();

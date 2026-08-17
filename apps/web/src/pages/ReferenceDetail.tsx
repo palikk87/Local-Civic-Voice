@@ -64,7 +64,7 @@ export default function ReferenceDetail() {
         </Button>
 
         {isLoading ? (
-          <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr]">
+          <div className="grid gap-8 xl:grid-cols-[1.6fr_1fr]">
             <div className="space-y-4">
               <Skeleton className="h-8 w-40" />
               <Skeleton className="h-12 w-full" />
@@ -82,7 +82,15 @@ export default function ReferenceDetail() {
             </Button>
           </div>
         ) : (
-          <div className="grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+          // Three columns only from xl.
+          //
+          // Between lg and xl the sidebar, the article and this aside stopped
+          // fitting: measured at 1097px the document was 1109px wide, the
+          // aside's right edge sat past the viewport, and the Support and
+          // Oppose buttons overlapped by 13px with Oppose clipped off the
+          // screen. Below xl the aside now stacks under the article, which is
+          // the same thing it already did below lg.
+          <div className="grid gap-8 xl:grid-cols-[1.6fr_1fr] xl:items-start">
             {/* Main column */}
             <article>
               <div className="flex flex-wrap items-center gap-3">
@@ -195,7 +203,7 @@ export default function ReferenceDetail() {
             </article>
 
             {/* Vote sidebar */}
-            <aside className="lg:sticky lg:top-20">
+            <aside className="xl:sticky xl:top-20">
               <VotePanel reference={reference} />
             </aside>
           </div>

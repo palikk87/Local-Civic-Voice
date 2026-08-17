@@ -743,10 +743,24 @@ export default function TimelineScreen() {
     setShowOptionsModal(true);
   }, []);
 
-  const handleDeletePost = (postId: string) => {
+  const handleDeletePost = async (postId: string) => {
     if (!requireAuth("Sign in to manage your posts.")) return;
-    if (window.confirm("Are you sure you want to delete this post? This action cannot be undone.")) {
-      deletePost(postId);
+    if (!window.confirm("Are you sure you want to delete this post? This action cannot be undone.")) {
+      return;
+    }
+
+    // Awaited, and the post leaves the screen only once the server says it is
+    // gone. The previous version removed it locally and never called the
+    // server at all, so a "deleted" post stayed public and came back on the
+    // next reload — with the user believing they had taken it down.
+    try {
+      await deletePost(postId);
+      setShowOptionsModal(false);
+      toast.success("Post deleted.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not delete the post. It is still up.",
+      );
     }
   };
 

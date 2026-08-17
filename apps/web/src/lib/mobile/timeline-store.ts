@@ -190,7 +190,7 @@ interface TimelineState {
     referenceTitle?: string,
     mediaIds?: string[]
   ) => Promise<void>;
-  deletePost: (postId: string) => void;
+  deletePost: (postId: string) => Promise<void>;
   editPost: (postId: string, content: string) => void;
   sharePost: (postId: string, opinion?: string) => void;
   shareContent: (contentType: ContentType, contentId: string, title: string, opinion?: string, mediaIds?: string[]) => Promise<void>;
@@ -285,7 +285,21 @@ export const useTimelineStore = create<TimelineState>()(
         await get().loadFeed();
       },
 
-      deletePost: (postId) => {
+      /**
+       * Delete a post — on the server first, then locally.
+       *
+       * This used to filter the local array and stop there. The post vanished
+       * from the timeline, the user believed it was gone, and it was still
+       * public: still returned by /api/posts and /api/feed, still listed in the
+       * admin console, and back on screen after a reload. A delete that only
+       * removes the evidence of itself is worse than one that fails loudly.
+       *
+       * Async and throwing on purpose. The caller awaits it and reports the
+       * failure, because "your post was not deleted" is something the person
+       * who asked for it has to be told.
+       */
+      deletePost: async (postId) => {
+        await api.delete(`/api/posts/${postId}`);
         set((state) => ({
           posts: state.posts.filter((p) => p.id !== postId),
         }));
