@@ -26,7 +26,7 @@ const BRANCH_LABELS: Record<SearchBranch, string> = {
 
 export interface LibraryShareTarget {
   referenceId: string;
-  brief: { theGoal: string; theWallet: string; theDebate: string };
+  brief: { summary: string; argumentFor: string; argumentAgainst: string };
 }
 
 interface CitizensBriefPanelProps {
@@ -45,7 +45,6 @@ export function CitizensBriefPanel({
   const {
     referenceId,
     brief,
-    labels,
     reason,
     state,
     isRequesting,
@@ -65,13 +64,6 @@ export function CitizensBriefPanel({
   const congressNumber =
     typeof result.metadata?.congressNumber === "string" ? result.metadata.congressNumber : null;
 
-  const sections = brief
-    ? [
-        { label: labels?.goal ?? "The Goal", body: brief.theGoal },
-        { label: labels?.wallet ?? "Your Wallet", body: brief.theWallet },
-        { label: labels?.debate ?? "The Debate", body: brief.theDebate },
-      ].filter((s) => s.body?.trim())
-    : [];
 
   return (
     <>
@@ -158,7 +150,6 @@ export function CitizensBriefPanel({
               className="mb-4"
               state={state}
               brief={brief}
-              labels={labels}
               reason={reason}
               // Resolving is a step the reader did not ask for and cannot act
               // on, so the button stays busy through it rather than appearing

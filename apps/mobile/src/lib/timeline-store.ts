@@ -21,7 +21,7 @@ export type PostSource = 'user' | 'library' | 'official';
 export interface LibrarySharePayload {
   /** GovernmentReference.id returned by POST /api/government-references/resolve. */
   referenceId: string;
-  brief: { theGoal: string; theWallet: string; theDebate: string };
+  brief: { summary: string; argumentFor: string; argumentAgainst: string };
 }
 
 /**
@@ -586,9 +586,11 @@ export const useTimelineStore = create<TimelineState>()(
         // The reference already exists — POST /api/government-references/resolve
         // created it and the server wrote the brief onto it from the full official
         // text. Sharing publishes a post pointing at that record.
-        const body = [share.brief.theGoal, share.brief.theWallet]
-          .filter((part) => part?.trim())
-          .join('\n\n');
+        // The neutral paragraph is what a post carries. The two arguments stay
+        // on the law's own card: a post is somebody choosing to say something,
+        // and leading it with a pre-written case for and against would put
+        // words in their mouth.
+        const body = share.brief.summary.trim();
 
         await api.post<{ post: ServerPost }>('/api/posts', {
           content: `${body}\n\n${SHARE_DISCUSSION_PROMPT}`,

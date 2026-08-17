@@ -23,6 +23,7 @@ import { BASE_URL, prisma, resetData, startServer, stopServer } from "./helpers/
 import { ensureReferenceContent, processReferenceBrief } from "../src/services/reference-content";
 import { briefState, releaseAbandonedWork, WORK_TIMEOUT_MS } from "../src/services/brief-state";
 import { mergeReferences } from "../src/services/deduplication-service";
+import { safeInputChars } from "../src/services/ai-generate";
 
 /**
  * A short bill, long enough to clear the 200-character floor the source chain
@@ -48,9 +49,16 @@ SEC. 4. SUNSET.
 The authority under section 3 expires on September 30, 2030.`;
 
 const BRIEF = {
-  theGoal: "Modernize the rail network and fund grade-crossing safety work.",
-  theWallet: "$250 million a year for five years, through fiscal year 2030.",
-  theDebate: "Supporters point to preventable deaths; opponents question the cost.",
+  summary:
+    "This law puts money into upgrading the rail network and making level crossings safer, " +
+    "and sets out how much is available each year through 2030.",
+  argumentFor:
+    "The text funds safety work at crossings, which is where the law itself says preventable " +
+    "deaths happen. It also replaces an authority that expires at the end of the fiscal year, " +
+    "so without it the existing work stops.",
+  argumentAgainst:
+    "The text commits $250 million a year for five years without tying the money to any " +
+    "measured result. It also leaves the choice of which crossings get work unspecified.",
 };
 
 /** Every model call this pipeline makes, in the order it makes them. */
@@ -158,7 +166,9 @@ describe("writing a brief", () => {
 
     const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
     expect(row.citizenBriefJson).not.toBeNull();
-    expect(JSON.parse(row.citizenBriefJson!)).toEqual(BRIEF);
+    // Stored with the format stamp, so a brief written to an earlier definition
+    // of what a Citizen's Brief IS is recognisable and simply rewritten.
+    expect(JSON.parse(row.citizenBriefJson!)).toEqual({ format: 2, ...BRIEF });
     expect(row.contentStatus).toBe("ready");
     // Which model wrote it is recorded, and it is the one that was actually
     // called. The light lane asks for Gemini first; no Gemini key is set here,
@@ -443,17 +453,14 @@ describe("the Get Citizen Brief button", () => {
     });
     const body = (await response.json()) as {
       state: string;
-      brief: { theGoal: string };
-      labels: { goal: string };
+      brief: { summary: string };
       lawVersion: number;
       briefVersion: number;
     };
 
     expect(response.status).toBe(200);
     expect(body.state).toBe("ready");
-    expect(body.brief.theGoal).toBe(BRIEF.theGoal);
-    // The panel headings come from the server because they differ by branch.
-    expect(body.labels.goal).toBeTruthy();
+    expect(body.brief.summary).toBe(BRIEF.summary);
     expect(body.briefVersion).toBe(body.lawVersion);
 
     // Not rewritten: same brief, same timestamp. Once per version of the law,
@@ -514,14 +521,14 @@ describe("the Get Citizen Brief button", () => {
     });
     const body = (await response.json()) as {
       state: string;
-      brief: { theGoal: string };
+      brief: { summary: string };
       referenceId: string;
       masterReferenceId: string;
     };
 
     expect(response.status).toBe(200);
     expect(body.state).toBe("ready");
-    expect(body.brief.theGoal).toBe(BRIEF.theGoal);
+    expect(body.brief.summary).toBe(BRIEF.summary);
 
     // It says which record answered, so a client holding the old link can
     // follow along instead of guessing.
@@ -551,5 +558,134 @@ describe("the Get Citizen Brief button", () => {
     expect(row.contentStatus).toBe("ready");
     expect(row.contentStartedAt).toBeNull();
     expect(briefState(row)).toBe("ready");
+  });
+});
+
+/**
+ * A law too long to read in one go.
+ *
+ * The rule: read EVERY section first, then write once from all of it. A brief
+ * written from the first section that fit is a confident account of a document
+ * nobody finished, and a reader has no way to tell — so if any section cannot
+ * be read, there is no brief at all.
+ */
+describe("a law too long for one pass", () => {
+  /**
+   * Long enough to force sectioning, sized from the real budget rather than a
+   * magic number — so this keeps testing the multi-section path if the model or
+   * its context window changes.
+   */
+  const BUDGET = safeInputChars("gpt-5.4-mini");
+  const PARAGRAPH =
+    "The Secretary shall carry out the activity described in this section using amounts made " +
+    "available under section 3, subject to the limitations in this Act, and shall report " +
+    "annually on the results of that activity to the appropriate committees of Congress.\n\n";
+  const LONG_TEXT = PARAGRAPH.repeat(Math.ceil((BUDGET * 2.2) / PARAGRAPH.length));
+
+  /** Every prompt the model was sent, so the ORDER of the passes is checkable. */
+  let prompts: string[] = [];
+
+  const isRead = (prompt: string) => /section \d+ of \d+ of one law/i.test(prompt);
+  const isWrite = (prompt: string) => /Return exactly this JSON/i.test(prompt) && !isRead(prompt);
+
+  /**
+   * `failSection` fails EVERY attempt at that section, including the retry on
+   * the other provider. Failing one call only proves the fallback works, which
+   * is a different test.
+   */
+  function stubLongLaw(options: { failSection?: number } = {}): void {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
+      if (url.includes("api.congress.gov") && url.includes("/text")) {
+        return Response.json({
+          textVersions: [{ formats: [{ type: "Formatted Text", url: "https://congress.gov/full" }] }],
+        });
+      }
+      if (url.includes("congress.gov/full")) {
+        return new Response(LONG_TEXT, { headers: { "content-type": "text/plain" } });
+      }
+
+      if (url.includes("api.openai.com") || url.includes("generativelanguage.googleapis.com")) {
+        const body = JSON.parse((init?.body as string) ?? "{}") as {
+          messages?: Array<{ content?: string }>;
+        };
+        const prompt = body.messages?.map((m) => m.content ?? "").join("\n") ?? "";
+        prompts.push(prompt);
+
+        const reading = /section (\d+) of \d+ of one law/i.exec(prompt);
+        if (reading) {
+          const section = Number(reading[1]);
+          if (options.failSection === section) {
+            return new Response("upstream unavailable", { status: 503 });
+          }
+          return Response.json({
+            choices: [
+              { message: { content: JSON.stringify({ notes: `notes for section ${section}` }) } },
+            ],
+          });
+        }
+
+        if (/unsupported/i.test(prompt)) {
+          return Response.json({
+            choices: [{ message: { content: JSON.stringify({ unsupported: [] }) } }],
+          });
+        }
+
+        return Response.json({ choices: [{ message: { content: JSON.stringify(BRIEF) } }] });
+      }
+
+      return realFetch(input, init);
+    }) as typeof fetch;
+  }
+
+  beforeEach(() => {
+    prompts = [];
+  });
+
+  test("every section is read before a single word is written", async () => {
+    stubLongLaw();
+    const law = await record();
+    await processReferenceBrief(law.id, false);
+
+    const reads = prompts.filter(isRead);
+    const sectionsRead = new Set(
+      reads.map((p) => /section (\d+) of (\d+) of one law/i.exec(p)![1])
+    );
+
+    // It genuinely had to be split.
+    expect(sectionsRead.size).toBeGreaterThan(1);
+
+    // THE RULE: the first write comes after the last read. Not interleaved, not
+    // a draft revised as it goes — read it all, then write.
+    const lastRead = prompts.findLastIndex(isRead);
+    const firstWrite = prompts.findIndex(isWrite);
+    expect(firstWrite).toBeGreaterThan(-1);
+    expect(firstWrite).toBeGreaterThan(lastRead);
+
+    // And the write saw every section's notes, not just the last one.
+    const writePrompt = prompts[firstWrite]!;
+    for (const section of sectionsRead) {
+      expect(writePrompt).toContain(`notes for section ${section}`);
+    }
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(JSON.parse(row.citizenBriefJson!)).toEqual({ format: 2, ...BRIEF });
+  });
+
+  test("a section that cannot be read means no brief at all", async () => {
+    // Not a brief about the parts that happened to load. The whole point of
+    // reading first is that a partial read is not a smaller brief, it is a
+    // wrong one — and the reader cannot tell.
+    stubLongLaw({ failSection: 2 });
+    const law = await record();
+    await processReferenceBrief(law.id, false);
+
+    expect(prompts.filter(isWrite).length).toBe(0);
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(row.citizenBriefJson).toBeNull();
+    expect(row.contentStatus).toBe("unavailable");
+    expect(row.contentStartedAt).toBeNull();
   });
 });

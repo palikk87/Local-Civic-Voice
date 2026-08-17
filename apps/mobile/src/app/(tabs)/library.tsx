@@ -50,6 +50,7 @@ import {
   type SearchBranch,
 } from '@/lib/government-api';
 import { useLibraryBrief } from '@/lib/use-library-brief';
+import { CitizensBriefCard } from '@/components/CitizensBrief';
 import { useTimelineStore, type LibrarySharePayload } from '@/lib/timeline-store';
 import { useResponsive } from '@/lib/useResponsive';
 
@@ -338,23 +339,19 @@ function SlideOverPreview({
   const {
     referenceId,
     brief,
-    labels,
     reason,
     state: briefState,
     isRequesting,
     isResolving,
     isUnidentifiable,
     request: requestBrief,
+    rewrite: rewriteBrief,
   } = useLibraryBrief(result);
   const canShare = !!referenceId && !!brief;
+  // Resolving is a step the reader did not ask for and cannot act on, so the
+  // button stays busy through it rather than looking ready to press before
+  // there is anything to press it against.
   const briefBusy = isRequesting || isResolving;
-  const sections = brief
-    ? [
-        { label: labels?.goal ?? 'The Goal', body: brief.theGoal },
-        { label: labels?.wallet ?? 'Your Wallet', body: brief.theWallet },
-        { label: labels?.debate ?? 'The Debate', body: brief.theDebate },
-      ].filter((section) => section.body?.trim())
-    : [];
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {
@@ -459,55 +456,8 @@ function SlideOverPreview({
               </View>
 
               {/* Citizen's Brief */}
-              {briefState === 'working' ? (
-                <View className="bg-amber-500/10 rounded-lg p-4 mb-4 flex-1 border border-amber-500/20">
-                  <View className="flex-row items-center mb-3">
-                    <Sparkles size={16} color="#F59E0B" />
-                    <Text className="text-amber-500 font-semibold text-sm ml-2">
-                      CITIZEN'S BRIEF
-                    </Text>
-                  </View>
-                  <View className="items-center justify-center py-6">
-                    <ActivityIndicator size="small" color="#F59E0B" />
-                    <Text className="text-slate-400 text-sm mt-2">
-                      Reading the full official text...
-                    </Text>
-                    <Text className="text-slate-500 text-xs mt-1 text-center">
-                      Pulling the complete official text and writing the brief. This is saved for
-                      everyone, so it only happens once.
-                    </Text>
-                  </View>
-                </View>
-              ) : sections.length > 0 ? (
-                <View className="bg-amber-500/10 rounded-lg p-4 mb-4 flex-1 border border-amber-500/20">
-                  <View className="flex-row items-center mb-3">
-                    <Sparkles size={16} color="#F59E0B" />
-                    <Text className="text-amber-500 font-semibold text-sm ml-2">
-                      CITIZEN'S BRIEF
-                    </Text>
-                  </View>
-                  <ScrollView
-                    style={{ maxHeight: 260 }}
-                    showsVerticalScrollIndicator={true}
-                    nestedScrollEnabled={true}
-                  >
-                    {sections.map((section) => (
-                      <View key={section.label} className="mb-4">
-                        <Text className="text-amber-400 text-xs font-medium mb-1 uppercase">
-                          {section.label}
-                        </Text>
-                        <Text className="text-slate-200 text-sm leading-6">{section.body}</Text>
-                      </View>
-                    ))}
-                  </ScrollView>
-                  <View className="mt-1 pt-3 border-t border-amber-500/20">
-                    <Text className="text-slate-500 text-xs">
-                      Written from the complete official text of this document.
-                    </Text>
-                  </View>
-                </View>
-              ) : isUnidentifiable ? (
-                <View className="bg-slate-800/50 rounded-lg p-4 mb-4 flex-1 border border-slate-700">
+              {isUnidentifiable ? (
+                <View className="bg-slate-800/50 rounded-lg p-4 mb-4 border border-slate-700">
                   <View className="flex-row items-center mb-2">
                     <FileWarning size={16} color="#94A3B8" />
                     <Text className="text-slate-400 font-semibold text-sm ml-2">
@@ -515,56 +465,20 @@ function SlideOverPreview({
                     </Text>
                   </View>
                   <Text className="text-slate-300 text-sm leading-6">
-                    This record can't be matched to an official document yet, so there's nothing to
-                    summarize from.
-                  </Text>
-                  <Text className="text-slate-500 text-xs mt-2">
-                    Read it at the official source below.
+                    This record can't be matched to an official document yet, so there's nothing
+                    to read the law from.
                   </Text>
                 </View>
               ) : (
-                /* Nothing written yet, or nothing that still describes this law.
-                   Either way it is an offer, not something already running — the
-                   old screen started the work by itself and could never stop. */
-                <View className="bg-amber-500/10 rounded-lg p-4 mb-4 flex-1 border border-amber-500/20">
-                  <View className="items-center">
-                    <View className="w-16 h-16 rounded-full bg-amber-500/20 items-center justify-center mb-3">
-                      <Sparkles size={30} color="#F59E0B" />
-                    </View>
-                    <Text className="text-white text-lg font-bold text-center mb-1">
-                      Citizen's Brief
-                    </Text>
-                    <Text className="text-slate-400 text-sm text-center mb-4 px-2">
-                      A plain-English summary, written from the complete official text
-                    </Text>
-                    {briefState === 'unavailable' ? (
-                      <Text className="text-slate-400 text-sm text-center mb-4 px-2">
-                        {reason ??
-                          "The official text for this document isn't published anywhere we can read yet. Rather than guess at what it says, we're not showing one."}
-                      </Text>
-                    ) : null}
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        requestBrief();
-                      }}
-                      disabled={briefBusy}
-                      className={`w-full rounded-xl py-3.5 px-6 flex-row items-center justify-center ${
-                        briefBusy ? 'bg-amber-500/50' : 'bg-amber-500'
-                      }`}
-                    >
-                      {briefBusy ? (
-                        <ActivityIndicator size="small" color="#0F172A" />
-                      ) : briefState === 'unavailable' ? (
-                        <RefreshCw size={18} color="#0F172A" />
-                      ) : (
-                        <Sparkles size={18} color="#0F172A" />
-                      )}
-                      <Text className="text-slate-900 font-bold text-base ml-2">
-                        {briefState === 'unavailable' ? 'Check the source again' : 'Get Citizen Brief'}
-                      </Text>
-                    </Pressable>
-                  </View>
+                <View className="mb-4">
+                  <CitizensBriefCard
+                    state={briefState}
+                    brief={brief}
+                    reason={reason}
+                    isRequesting={briefBusy}
+                    onRequest={requestBrief}
+                    onRewrite={brief ? rewriteBrief : undefined}
+                  />
                 </View>
               )}
 

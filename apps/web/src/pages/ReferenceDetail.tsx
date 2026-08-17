@@ -61,7 +61,6 @@ export default function ReferenceDetail() {
   // about shows its brief immediately and costs nothing.
   const citizenBrief = useCitizenBrief(reference?.id, {
     initialBrief: reference?.citizenBriefSections ?? null,
-    initialLabels: reference?.citizenBriefLabels ?? null,
     initialState: reference?.briefState ?? "idle",
   });
 
@@ -141,7 +140,6 @@ export default function ReferenceDetail() {
               <CitizensBriefCard
                 state={citizenBrief.state}
                 brief={citizenBrief.brief}
-                labels={citizenBrief.labels}
                 reason={citizenBrief.reason}
                 isRequesting={citizenBrief.isRequesting}
                 onRequest={citizenBrief.request}

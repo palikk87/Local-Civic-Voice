@@ -62,16 +62,16 @@ import {
 } from '@/lib/ai-service';
 import { calculateRepresentationGap } from '@/lib/representation-gap';
 import { PulseGap } from '@/components/PulseGap';
-import { CitizensBrief } from '@/components/CitizensBrief';
+import { CitizensBriefCard } from '@/components/CitizensBrief';
 import { NewsReelCarousel } from '@/components/NewsReelCarousel';
 import { TransparencyIndicator, ArticleBadge } from '@/components/BillOfRightsBadge';
 import type { Bill, Representative } from '@/lib/types';
 import { useTimelineStore } from '@/lib/timeline-store';
+import { useCitizenBrief } from '@/lib/use-citizen-brief';
 import { fetchBillSponsor } from '@/lib/government-api';
 import { useBill } from '@/lib/hooks';
 import {
   useGovernmentReference,
-  useReferenceBriefProps,
   referenceToBill,
 } from '@/lib/api/references';
 import type { Bill as SupabaseBill, Representative as SupabaseRepresentative } from '@/lib/database.types';
@@ -398,7 +398,13 @@ export default function BillDetailScreen() {
     refetch: refetchBill,
   } = useGovernmentReference(id);
   // Brief stored on the master reference — written once, read by everyone after.
-  const briefProps = useReferenceBriefProps(id, billRefData?.reference);
+  // Asked for, never automatic. Writing a brief means reading the whole
+  // document, so it is a choice the reader makes rather than a cost of
+  // opening the screen.
+  const citizenBrief = useCitizenBrief(billRefData?.reference?.id, {
+    initialBrief: billRefData?.reference?.citizenBriefSections ?? null,
+    initialState: billRefData?.reference?.briefState ?? 'idle',
+  });
   if (!bill && billRefData?.reference?.referenceType === 'bill') {
     bill = referenceToBill(billRefData.reference);
   }
@@ -934,7 +940,17 @@ export default function BillDetailScreen() {
               {viewMode === 'simplified' && (
                 <View>
                   {/* Citizen's Brief */}
-                  <CitizensBrief bill={bill} server={briefProps} />
+                  <CitizensBriefCard
+                  state={citizenBrief.state}
+                  brief={citizenBrief.brief}
+                  reason={citizenBrief.reason}
+                  isRequesting={citizenBrief.isRequesting}
+                  onRequest={citizenBrief.request}
+                  onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
+                  emptyDescription={"A plain-English summary of this bill, written only from its complete official text — plus the case for it and the case against it"}
+                  sourceUrl={bill.congressUrl}
+                  sourceLabel={'Read the full text on Congress.gov'}
+                />
                 </View>
               )}
 

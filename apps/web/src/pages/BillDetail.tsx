@@ -39,7 +39,8 @@ import {
 } from "@/lib/mobile/ai-service";
 import { calculateRepresentationGap } from "@/lib/mobile/representation-gap";
 import { PulseGap } from "@/components/mobile/PulseGap";
-import { CitizensBrief } from "@/components/mobile/CitizensBrief";
+import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
+import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import { NewsReelCarousel } from "@/components/mobile/NewsReelCarousel";
 import { TransparencyIndicator, ArticleBadge } from "@/components/mobile/BillOfRightsBadge";
 import type { Bill, Representative } from "@/lib/mobile/types";
@@ -48,7 +49,6 @@ import { bills } from "@/lib/mobile/mock-data";
 import { fetchBillSponsor } from "@/lib/mobile/government-api";
 import {
   useGovernmentReference,
-  useReferenceBriefProps,
 } from "@/hooks/use-government-references";
 import { referenceToBill } from "@/lib/mobile/reference-mappers";
 
@@ -254,7 +254,12 @@ export default function BillDetail() {
   } = useGovernmentReference(id);
   let bill: Bill | undefined;
   // Brief stored on the master reference — written once, read by everyone after.
-  const briefProps = useReferenceBriefProps(id, billRefData?.reference);
+  // Asked for, never automatic. Writing a brief means reading the whole bill,
+  // so it is a choice the reader makes rather than a cost of opening the page.
+  const citizenBrief = useCitizenBrief(billRefData?.reference?.id, {
+    initialBrief: billRefData?.reference?.citizenBriefSections ?? null,
+    initialState: billRefData?.reference?.briefState ?? "idle",
+  });
   if (billRefData?.reference?.referenceType === "bill") {
     bill = referenceToBill(billRefData.reference);
   }
@@ -638,7 +643,17 @@ export default function BillDetail() {
           {/* Content */}
           <div className="px-4">
             {viewMode === "simplified" ? (
-              <CitizensBrief bill={bill} server={briefProps} />
+              <CitizensBriefCard
+                state={citizenBrief.state}
+                brief={citizenBrief.brief}
+                reason={citizenBrief.reason}
+                isRequesting={citizenBrief.isRequesting}
+                onRequest={citizenBrief.request}
+                onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
+                emptyDescription="A plain-English summary of this bill, written only from its complete official text — plus the case for it and the case against it"
+                sourceUrl={bill.congressUrl}
+                sourceLabel="Read the full text on Congress.gov"
+              />
             ) : null}
 
             {viewMode === "full" ? (

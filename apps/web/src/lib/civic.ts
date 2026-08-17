@@ -46,18 +46,20 @@ export interface GovReference {
   createdAt: string;
 }
 
-/** Three-panel brief stored on the master reference — same object both faucets render. */
+/**
+ * The Citizen's Brief: one neutral paragraph, then both sides.
+ *
+ * Written on the server from the full official text of the law and nothing
+ * else — no title, no status, no summary by anybody else — because every other
+ * input is a route to a confident claim the law does not make.
+ */
 export interface CitizenBriefSections {
-  theGoal: string;
-  theWallet: string;
-  theDebate: string;
-}
-
-/** Panel headings vary by branch (a court case has a Question and a Ruling, not a Wallet). */
-export interface CitizenBriefLabels {
-  goal: string;
-  wallet: string;
-  debate: string;
+  /** One paragraph, plain English, neutral: what the law does. */
+  summary: string;
+  /** Two to three sentences: the case for it, from the text. */
+  argumentFor: string;
+  /** Two to three sentences: the case against it, from the text. */
+  argumentAgainst: string;
 }
 
 /**
@@ -88,9 +90,11 @@ export type BriefResponse =
   | {
       state: "ready";
       brief: CitizenBriefSections;
-      labels: CitizenBriefLabels;
       lawVersion: number;
       briefVersion: number | null;
+      /** Which record answered — differs from the id asked for after a merge. */
+      referenceId?: string;
+      masterReferenceId?: string;
     }
   | { state: "working"; startedAt: string | null }
   | { state: "unavailable"; reason: string; sourceUrl?: string | null };
@@ -102,7 +106,6 @@ export interface GovReferenceDetail extends GovReference {
   updatedAt: string;
   /** Cached brief from the master reference. Null until the first reader triggers the pull. */
   citizenBriefSections: CitizenBriefSections | null;
-  citizenBriefLabels: CitizenBriefLabels;
   citizenBriefAt: string | null;
   contentStatus: ReferenceContentStatus | null;
   /** The collapsed state — what the brief card should render. */

@@ -25,6 +25,7 @@
  */
 
 import { prisma } from "../prisma";
+import { parseBrief } from "./citizen-brief";
 
 export type BriefState = "ready" | "working" | "unavailable" | "idle";
 
@@ -73,8 +74,12 @@ export function isWorking(status: string | null): status is WorkingStatus {
  * work reported as idle so the button comes back.
  */
 export function briefState(row: BriefStateRow): BriefState {
+  // Parsed, not merely present. A brief stored to an earlier definition of what
+  // a Citizen's Brief IS cannot be rendered by the card that exists now, so it
+  // is not a brief this reader can have — and calling it ready would leave them
+  // looking at an empty card with no way to ask for a real one.
   const hasCurrentBrief =
-    Boolean(row.citizenBriefJson) && row.citizenBriefVersion === row.lawVersion;
+    parseBrief(row.citizenBriefJson) !== null && row.citizenBriefVersion === row.lawVersion;
   if (hasCurrentBrief) return "ready";
 
   if (isWorking(row.contentStatus)) return isAbandoned(row) ? "idle" : "working";

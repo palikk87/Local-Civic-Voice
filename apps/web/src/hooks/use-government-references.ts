@@ -73,36 +73,6 @@ export function useRefreshReferenceContent(id: string | undefined) {
   });
 }
 
-/** What the Citizen's Brief card needs when the brief lives on the master reference. */
-export interface ReferenceBriefProps {
-  initialBrief: CitizenBriefSections | null;
-  labels?: { goal?: string; wallet?: string; debate?: string };
-  serverPending: boolean;
-  onRefresh?: () => Promise<void>;
-}
-
-/**
- * Brief card props sourced from the master reference. Everything is null/false for
- * documents that have no reference row (static library items), so those callers
- * keep their existing client-side generation path.
- */
-export function useReferenceBriefProps(
-  id: string | undefined,
-  reference: GovReferenceDetail | undefined | null,
-): ReferenceBriefProps {
-  const refresh = useRefreshReferenceContent(id);
-  const status = reference?.contentStatus ?? null;
-  const stored = reference?.citizenBriefSections ?? null;
-
-  return {
-    initialBrief: stored,
-    labels: reference?.citizenBriefLabels,
-    serverPending:
-      !stored && (refresh.isPending || status === "brief_pending" || status === "fetching"),
-    onRefresh: reference
-      ? async () => {
-          await refresh.mutateAsync().catch(() => undefined);
-        }
-      : undefined,
-  };
-}
+// useReferenceBriefProps lived here. It existed to feed a card that polled a
+// server status, and both that card and that status are gone: the brief is
+// asked for through useCitizenBrief, which owns the request and its end.

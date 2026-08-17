@@ -33,9 +33,15 @@ const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/htm
                 ".ico": "image/x-icon", ".webp": "image/webp" };
 
 const BRIEF = {
-  theGoal: "Modernize the rail network and fund grade-crossing safety work.",
-  theWallet: "Two hundred and fifty million dollars a year through 2030.",
-  theDebate: "Supporters point to preventable deaths; opponents question the cost.",
+  summary:
+    "This law puts money into upgrading the rail network and making level crossings safer, " +
+    "and sets out how much is available each year through 2030.",
+  argumentFor:
+    "The text funds safety work at the crossings where the law itself says preventable deaths " +
+    "happen, and replaces an authority that would otherwise expire.",
+  argumentAgainst:
+    "The text commits money for five years without tying it to any measured result, and leaves " +
+    "the choice of which crossings get work unspecified.",
 };
 
 /**
@@ -67,7 +73,6 @@ function reference(id, record) {
     description: "Reported out of committee with amendments.",
     citizenBrief: null,
     citizenBriefSections: null,
-    citizenBriefLabels: { goal: "The Goal", wallet: "The Wallet", debate: "The Debate" },
     citizenBriefAt: null,
     citizenBriefVersion: null,
     lawVersion: 1,
@@ -105,7 +110,10 @@ const server = createServer(async (req, res) => {
       return res.end(
         JSON.stringify({
           state: "unavailable",
-          reason: "The official text for this document isn't published anywhere we can read yet.",
+          reason:
+            "The full text of this law isn't published anywhere we can read yet. A brief is " +
+            "written only from the law itself, so rather than guess at what it says, we're " +
+            "not showing one.",
         }),
       );
     }
@@ -113,7 +121,6 @@ const server = createServer(async (req, res) => {
       JSON.stringify({
         state: "ready",
         brief: BRIEF,
-        labels: { goal: "The Goal", wallet: "The Wallet", debate: "The Debate" },
         lawVersion: 1,
         briefVersion: 1,
       }),
@@ -172,7 +179,9 @@ async function read(page) {
     return {
       buttonLabel: button?.textContent?.trim() ?? null,
       spinning: !!document.querySelector(".animate-spin"),
-      hasBriefBody: text.includes("Modernize the rail network"),
+      hasSummary: text.includes("upgrading the rail network"),
+      hasCaseFor: text.includes("THE CASE FOR") || text.includes("The Case For"),
+      hasCaseAgainst: text.includes("THE CASE AGAINST") || text.includes("The Case Against"),
       saysUnavailable: text.includes("isn't published anywhere"),
     };
   });
@@ -196,11 +205,15 @@ function check(label, condition, detail) {
 
   // 2. Pressing it asks once and renders the result.
   await page.getByRole("button", { name: "Get Citizen Brief" }).click();
-  await page.waitForSelector("text=Modernize the rail network", { timeout: 15_000 });
+  await page.waitForSelector("text=upgrading the rail network", { timeout: 15_000 });
   const after = await read(page);
   check("pressing it makes exactly one request", briefRequests.length === 1,
     `requests=${briefRequests.length}`);
-  check("the brief renders", after.hasBriefBody);
+  // All three parts, because the product is the paragraph AND both sides. A
+  // card that renders the summary alone is a different, worse thing.
+  check("the neutral paragraph renders", after.hasSummary);
+  check("the case for renders", after.hasCaseFor);
+  check("the case against renders", after.hasCaseAgainst);
   check("the spinner is gone", !after.spinning);
   await page.close();
 }

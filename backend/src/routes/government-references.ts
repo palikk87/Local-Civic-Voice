@@ -16,7 +16,8 @@ import {
 import { applyWeightedTally } from "../services/delegation-service";
 import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
-import { ensureReferenceContent, parseBriefJson, briefSectionLabels } from "../services/reference-content";
+import { ensureReferenceContent } from "../services/reference-content";
+import { parseBrief } from "../services/citizen-brief";
 import { resolveLibraryDocument } from "../services/library-resolve";
 import { libraryResolveRequestSchema } from "../types";
 import { JobPriority, JobType, jobQueue } from "../services/job-queue";
@@ -440,8 +441,7 @@ governmentReferencesRouter.get("/:id", async (c) => {
       // faucets render. Returned even when it describes an earlier version of
       // the law, because the reader deserves to see what exists and that it is
       // behind; citizenBriefVersion and lawVersion below say which.
-      citizenBriefSections: parseBriefJson(reference.citizenBriefJson),
-      citizenBriefLabels: briefSectionLabels(reference.referenceType, reference.status),
+      citizenBriefSections: parseBrief(reference.citizenBriefJson),
       citizenBriefAt: reference.citizenBriefAt?.toISOString() ?? null,
       // Which version of the law the stored brief was written for, and which
       // version the law is on. Equal means the brief describes the law in front
@@ -1053,8 +1053,7 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
   if (state === "ready" && !force) {
     return c.json({
       state: "ready",
-      brief: parseBriefJson(row.citizenBriefJson),
-      labels: briefSectionLabels(row.referenceType, row.status),
+      brief: parseBrief(row.citizenBriefJson),
       lawVersion: row.lawVersion,
       briefVersion: row.citizenBriefVersion,
       // Which record answered. Differs from the id asked for when that one has
@@ -1118,8 +1117,7 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
   if (settled === "ready") {
     return c.json({
       state: "ready",
-      brief: parseBriefJson(after.citizenBriefJson),
-      labels: briefSectionLabels(after.referenceType, after.status),
+      brief: parseBrief(after.citizenBriefJson),
       lawVersion: after.lawVersion,
       briefVersion: after.citizenBriefVersion,
       referenceId,

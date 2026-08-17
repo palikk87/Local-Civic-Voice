@@ -24,7 +24,6 @@ import {
   referenceKeys,
   requestCitizenBrief,
   type BriefResponse,
-  type CitizenBriefLabels,
   type CitizenBriefSections,
 } from "@/lib/api/references";
 
@@ -45,7 +44,6 @@ export type BriefUiState = "idle" | "working" | "ready" | "unavailable";
 export interface CitizenBrief {
   state: BriefUiState;
   brief: CitizenBriefSections | null;
-  labels: CitizenBriefLabels | null;
   /** Why there is no brief, in the server's words. Only set when unavailable. */
   reason: string | null;
   /** True while a request is in the air, so the button can say so. */
@@ -59,7 +57,6 @@ export interface CitizenBrief {
 export interface UseCitizenBriefOptions {
   /** A brief already on the reference, so a stored one shows without a request. */
   initialBrief?: CitizenBriefSections | null;
-  initialLabels?: CitizenBriefLabels | null;
   /** The server's collapsed state for this reference, from the detail response. */
   initialState?: BriefUiState;
 }
@@ -68,11 +65,10 @@ export function useCitizenBrief(
   referenceId: string | null | undefined,
   options: UseCitizenBriefOptions = {},
 ): CitizenBrief {
-  const { initialBrief = null, initialLabels = null, initialState } = options;
+  const { initialBrief = null, initialState } = options;
   const queryClient = useQueryClient();
 
   const [brief, setBrief] = useState<CitizenBriefSections | null>(initialBrief);
-  const [labels, setLabels] = useState<CitizenBriefLabels | null>(initialLabels);
   const [state, setState] = useState<BriefUiState>(initialState ?? (initialBrief ? "ready" : "idle"));
   const [reason, setReason] = useState<string | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
@@ -96,18 +92,16 @@ export function useCitizenBrief(
   useEffect(() => {
     clearPoll();
     setBrief(initialBrief);
-    setLabels(initialLabels);
     setState(initialState ?? (initialBrief ? "ready" : "idle"));
     setReason(null);
     setIsRequesting(false);
-  }, [referenceId, initialBrief, initialLabels, initialState, clearPoll]);
+  }, [referenceId, initialBrief, initialState, clearPoll]);
 
   const apply = useCallback(
     (response: BriefResponse, id: string) => {
       if (response.state === "ready") {
         clearPoll();
         setBrief(response.brief);
-        setLabels(response.labels);
         setState("ready");
         setReason(null);
         // The detail response carries the brief too, so anything else on the
@@ -183,7 +177,6 @@ export function useCitizenBrief(
   return {
     state,
     brief,
-    labels,
     reason,
     isRequesting,
     request: useCallback(() => start(false), [start]),

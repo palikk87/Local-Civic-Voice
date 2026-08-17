@@ -53,9 +53,9 @@ import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 import { CitizensBriefCard } from '@/components/CitizensBrief';
 import {
   useGovernmentReference,
-  useReferenceBriefProps,
   referenceToScotusCase,
 } from '@/lib/api/references';
+import { useCitizenBrief } from '@/lib/use-citizen-brief';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -212,7 +212,13 @@ export default function SupremeCourtDetailScreen() {
       : undefined;
   const userVote = useVotingStore(selectUserVote(id ?? ''));
   // Brief stored on the master reference — written once, read by everyone after.
-  const briefProps = useReferenceBriefProps(id, refData?.reference);
+  // Asked for, never automatic. Writing a brief means reading the whole
+  // document, so it is a choice the reader makes rather than a cost of
+  // opening the screen.
+  const citizenBrief = useCitizenBrief(refData?.reference?.id, {
+    initialBrief: refData?.reference?.citizenBriefSections ?? null,
+    initialState: refData?.reference?.briefState ?? 'idle',
+  });
 
   // Mirror the server's record of my vote so every card for this law agrees.
   const serverUserVote = refData?.reference?.userVote;
@@ -584,21 +590,15 @@ export default function SupremeCourtDetailScreen() {
             >
               {viewMode === 'brief' && (
                 <CitizensBriefCard
-                  initialBrief={briefProps.initialBrief}
-                  serverPending={briefProps.serverPending}
-                  onRefresh={briefProps.onRefresh}
-                  labels={
-                    briefProps.labels ?? {
-                      goal: 'The Question',
-                      wallet: scotusCase.status === 'decided' ? 'The Ruling' : "What's At Stake",
-                    }
-                  }
-                  emptyDescription="A plain-English summary of this case, written from its complete official opinion"
-                  loadingLabel="Reading the full opinion..."
-                  sourceLabel={
-                    scotusCase.courtListenerUrl ? 'View full opinion on CourtListener' : undefined
-                  }
-                  onOpenSource={handleOpenCourtListener}
+                  state={citizenBrief.state}
+                  brief={citizenBrief.brief}
+                  reason={citizenBrief.reason}
+                  isRequesting={citizenBrief.isRequesting}
+                  onRequest={citizenBrief.request}
+                  onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
+                  emptyDescription={"A plain-English summary of this opinion, written only from its complete official text — plus the case for it and the case against it"}
+                  sourceUrl={scotusCase.courtListenerUrl}
+                  sourceLabel={'Read the full opinion on CourtListener'}
                 />
               )}
 

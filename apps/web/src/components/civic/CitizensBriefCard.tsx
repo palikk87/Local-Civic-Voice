@@ -1,30 +1,36 @@
 /**
- * The Citizen's Brief, in four states and one button.
+ * The Citizen's Brief card.
  *
- * The shape is the reference app's: an empty card that invites, a working card
- * that explains the wait, and a three-section card — The Goal, The Wallet, The
- * Debate — when there is something to read. The difference is that every state
- * here is somewhere the reader can stand. The old one had a fourth state it
- * could enter and never leave, which is what "stuck in a load loop" was.
+ * Three parts, always in this order and always with these headings, because
+ * the headings are the product:
  *
- * The section labels come from the server, because they are not the same for
- * every branch: a court case has a Question and a Ruling, not a Wallet.
+ *   THE BRIEF        one neutral paragraph — what this law does
+ *   THE CASE FOR     two to three sentences
+ *   THE CASE AGAINST two to three sentences
+ *
+ * Both sides are shown together and given equal weight on the page. A reader
+ * who only sees the summary learns what the law says; a reader who sees both
+ * arguments can decide what they think about it, which is the point.
+ *
+ * Four states, and every one of them is somewhere a reader can stand: the offer
+ * (a button), the wait, the brief, and an honest "no text to read from". There
+ * is deliberately no fifth state where something is happening that the reader
+ * cannot see the end of.
  */
-import { ExternalLink, Loader2, RefreshCw, Scale, Sparkles, Target, Wallet } from "lucide-react";
+import { ExternalLink, Loader2, RefreshCw, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
-import type { CitizenBriefLabels, CitizenBriefSections } from "@/lib/civic";
+import type { CitizenBriefSections } from "@/lib/civic";
 import { cn } from "@/lib/utils";
 
 export interface CitizensBriefCardProps {
   state: "idle" | "working" | "ready" | "unavailable";
   brief: CitizenBriefSections | null;
-  labels: CitizenBriefLabels | null;
   /** The server's words for why there is no brief. */
   reason?: string | null;
   isRequesting?: boolean;
   onRequest: () => void;
   onRewrite?: () => void;
-  /** Link to the official document, always offered — it is the primary source. */
+  /** Link to the official document — the source everything here came from. */
   sourceUrl?: string | null;
   sourceLabel?: string;
   /** What the brief would summarize, for the empty state's one-liner. */
@@ -38,41 +44,31 @@ export interface CitizensBriefCardProps {
   className?: string;
 }
 
-const SECTION_STYLE = [
-  { Icon: Target, color: "#10B981", iconBg: "bg-emerald-500/20", text: "text-emerald-400" },
-  { Icon: Wallet, color: "#F59E0B", iconBg: "bg-amber-500/20", text: "text-amber-400" },
-  { Icon: Scale, color: "#A78BFA", iconBg: "bg-purple-500/20", text: "text-purple-400" },
-] as const;
-
 export function CitizensBriefCard({
   state,
   brief,
-  labels,
   reason,
   isRequesting = false,
   onRequest,
   onRewrite,
   sourceUrl,
-  sourceLabel = "View the official text",
-  emptyDescription = "A plain-English summary, written from the complete official text",
+  sourceLabel = "Read the full official text",
+  emptyDescription = "A plain-English summary of this law, written only from its full official text — plus the case for it and the case against it",
   isStale = false,
   className,
 }: CitizensBriefCardProps) {
-  const sourceLink =
-    sourceUrl ? (
-      <a
-        href={sourceUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-muted py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/70"
-      >
-        <ExternalLink className="h-4 w-4" />
-        {sourceLabel}
-      </a>
-    ) : null;
+  const sourceLink = sourceUrl ? (
+    <a
+      href={sourceUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-muted py-3 text-sm text-muted-foreground transition-colors hover:bg-muted/70"
+    >
+      <ExternalLink className="h-4 w-4" />
+      {sourceLabel}
+    </a>
+  ) : null;
 
-  // Being written right now. The subtext is the honest one: the wait buys
-  // something permanent, because the result is stored for everyone after.
   if (state === "working") {
     return (
       <MotionDiv
@@ -84,20 +80,17 @@ export function CitizensBriefCard({
         <div className="flex flex-col items-center">
           <Loader2 className="h-8 w-8 animate-spin text-accent" />
           <p className="mt-4 text-base font-semibold text-foreground">
-            Reading the official text…
+            Reading the full text of the law…
           </p>
-          <p className="mt-2 text-center text-sm text-muted-foreground">
-            Pulling the complete official text and writing the brief. This is saved for everyone,
-            so it only happens once.
+          <p className="mt-2 max-w-sm text-center text-sm text-muted-foreground">
+            The whole document is read before a word is written, and the brief is saved for
+            everyone — so this happens once, not once per reader.
           </p>
         </div>
       </MotionDiv>
     );
   }
 
-  // Nothing written yet, or nothing that still describes this law. Either way
-  // the offer is the same, and it is an offer rather than something already
-  // happening.
   if (state === "idle" || !brief) {
     const unavailable = state === "unavailable";
     return (
@@ -112,12 +105,13 @@ export function CitizensBriefCard({
             <Sparkles className="h-8 w-8 text-accent" />
           </div>
           <p className="mb-2 text-center text-lg font-bold text-foreground">Citizen's Brief</p>
-          <p className="mb-4 px-4 text-center text-sm text-muted-foreground">{emptyDescription}</p>
+          <p className="mb-4 max-w-sm px-2 text-center text-sm text-muted-foreground">
+            {emptyDescription}
+          </p>
 
           {unavailable ? (
-            <p className="mb-6 px-4 text-center text-sm text-muted-foreground">
-              {reason ??
-                "The official text for this document isn't published anywhere we can read yet, so there's no brief to show. Rather than guess at what it says, we're not showing one."}
+            <p className="mb-6 max-w-sm px-2 text-center text-sm text-muted-foreground">
+              {reason}
             </p>
           ) : null}
 
@@ -148,13 +142,6 @@ export function CitizensBriefCard({
     );
   }
 
-  const bodies = [brief.theGoal, brief.theWallet, brief.theDebate];
-  const headings = [
-    labels?.goal ?? "The Goal",
-    labels?.wallet ?? "The Wallet",
-    labels?.debate ?? "The Debate",
-  ];
-
   return (
     <MotionDiv
       initial={{ opacity: 0 }}
@@ -170,7 +157,7 @@ export function CitizensBriefCard({
           <div>
             <p className="text-lg font-bold text-foreground">Citizen's Brief</p>
             <p className="text-xs text-muted-foreground">
-              Written from the complete official text
+              Written only from the full official text
             </p>
           </div>
         </div>
@@ -195,31 +182,40 @@ export function CitizensBriefCard({
         </div>
       ) : null}
 
-      {SECTION_STYLE.map((style, index) => {
-        const body = bodies[index];
-        if (!body?.trim()) return null;
-        const { Icon } = style;
-        return (
-          <div key={headings[index]} className={index === SECTION_STYLE.length - 1 ? "mb-4" : "mb-5"}>
-            <div className="mb-3 flex items-center gap-2">
-              <div
-                className={cn("flex h-8 w-8 items-center justify-center rounded-lg", style.iconBg)}
-              >
-                <Icon className="h-[18px] w-[18px]" style={{ color: style.color }} />
-              </div>
-              <span className={cn("text-sm font-bold uppercase tracking-wider", style.text)}>
-                {headings[index]}
-              </span>
-            </div>
-            <p className="pl-10 text-base leading-relaxed text-foreground/90">{body}</p>
+      {/* The neutral paragraph. No icon, no colour, no framing — it is the
+          plain account of the law, and dressing it up would editorialize it. */}
+      <p className="text-base leading-relaxed text-foreground/90">{brief.summary}</p>
+
+      {/* Both sides, side by side and identically weighted. Different colours
+          so they are distinguishable at a glance; the same size, the same
+          border, the same everything else, so neither reads as the answer. */}
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <ThumbsUp className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+              The Case For
+            </span>
           </div>
-        );
-      })}
+          <p className="text-sm leading-relaxed text-foreground/90">{brief.argumentFor}</p>
+        </div>
+
+        <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <ThumbsDown className="h-4 w-4 text-rose-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-400">
+              The Case Against
+            </span>
+          </div>
+          <p className="text-sm leading-relaxed text-foreground/90">{brief.argumentAgainst}</p>
+        </div>
+      </div>
 
       {sourceLink}
 
       <p className="mt-4 text-center text-xs text-muted-foreground">
-        AI summary of the complete official text. Read the official text for full details.
+        Written from the complete official text of this law and nothing else. Read the text
+        itself for the full detail.
       </p>
     </MotionDiv>
   );

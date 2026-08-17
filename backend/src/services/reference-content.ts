@@ -19,7 +19,7 @@
 
 import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
-import { type BriefJobPlan, classifyBriefJob, generateAI, parseJsonObject } from "./ai-generate";
+import { composeBrief, flattenBrief, serializeBrief } from "./citizen-brief";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
@@ -28,12 +28,6 @@ import { markSettled, markWorking } from "./brief-state";
 const FETCH_TIMEOUT_MS = 15_000;
 /** How long stored text is trusted before we re-compare it against the official source. */
 const SOURCE_RECHECK_MS = 24 * 60 * 60 * 1000;
-
-export interface CitizenBriefSections {
-  theGoal: string;
-  theWallet: string;
-  theDebate: string;
-}
 
 export interface EnsureContentOptions {
   /** Ignore the cache: re-pull text and regenerate the brief. */
@@ -358,436 +352,43 @@ async function fetchOfficialText(ref: ReferenceRow, deadlineAt: number): Promise
 }
 
 // ---------------------------------------------------------------------------
-// Citizen brief generation
+// Citizen brief
 // ---------------------------------------------------------------------------
+//
+// The brief itself lives in citizen-brief.ts, which knows one thing: how to turn
+// the official text of a law into a plain-English paragraph plus the case for
+// and the case against. It is given the text and nothing else — no title, no
+// status, no summary written by somebody else — because every other input is a
+// route to a confident claim the law does not make.
+//
+// This file's job is the text: fetching it, noticing when it changes, and
+// storing what comes back.
 
 /**
- * Section headings per type. Legislation and executive orders use Goal/Wallet/Debate;
- * a court case asks a question and hands down a ruling instead — same three slots,
- * matching the labels the mobile detail screens already pass to CitizensBriefCard.
+ * Write the brief for a record whose text we already hold, and store it.
+ *
+ * NO TEXT, NO BRIEF, and that decision is made here rather than deep in a
+ * prompt: a summary written from a title and a status is a guess, and a guess
+ * rendered in the brief card is indistinguishable from a real one.
  */
-export function briefSectionLabels(
-  referenceType: string,
-  status: string
-): { goal: string; wallet: string; debate: string } {
-  if (referenceType === "scotus_case") {
-    return {
-      goal: "The Question",
-      wallet: status === "decided" ? "The Ruling" : "What's At Stake",
-      debate: "The Debate",
-    };
-  }
-  return { goal: "The Goal", wallet: "The Wallet", debate: "The Debate" };
-}
-
-/**
- * Split the official text into rolling-draft chunks sized for the model that
- * will read them, breaking on a line boundary near the target size so sections
- * aren't cut mid-sentence. The ENTIRE text is always covered — chunking changes
- * how many reads it takes, never how much is read.
- */
-function splitTextForModel(text: string, chunkChars: number): string[] {
-  if (text.length <= chunkChars) return [text];
-  const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    let end = Math.min(start + chunkChars, text.length);
-    if (end < text.length) {
-      const lastBreak = text.lastIndexOf("\n", end);
-      if (lastBreak > start + chunkChars / 2) end = lastBreak;
-    }
-    chunks.push(text.slice(start, end));
-    start = end;
-  }
-  return chunks;
-}
-
-function objectionsBlock(objections?: string[]): string {
-  if (!objections?.length) return "";
-  return `\nA fact-check flagged these claims from a previous draft as NOT supported by the official text. Correct or drop them — do not repeat a claim the text does not support:\n${objections
-    .map((o) => `- ${o}`)
-    .join("\n")}\n`;
-}
-
-function briefPrompt(
-  ref: ReferenceRow,
-  officialText: string,
-  totalParts: number,
-  objections?: string[]
-): { system: string; prompt: string } {
-  const text = officialText;
-  const textLabel =
-    totalParts > 1
-      ? `Official text (part 1 of ${totalParts} — the remaining parts will follow in revision passes):`
-      : "Official text:";
-  const context = [
-    `Title: ${ref.title}`,
-    ref.shortTitle ? `Short title: ${ref.shortTitle}` : null,
-    `Status: ${ref.status}`,
-    ref.category ? `Category: ${ref.category}` : null,
-    ref.description ? `Official summary: ${ref.description.slice(0, 1_000)}` : null,
-    objectionsBlock(objections) || null,
-    text ? `${textLabel}\n${text}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  if (ref.referenceType === "scotus_case") {
-    const isDecided = ref.status === "decided";
-    return {
-      system:
-        "You are a non-partisan civic education expert who explains Supreme Court cases to everyday citizens. Be balanced, factual, and accessible. Never take a side. Always return valid JSON.",
-      prompt: `Analyze this Supreme Court case and create a "Citizen's Brief" - a non-partisan, accessible summary for everyday Americans.
-
-Docket: ${ref.masterReferenceId}
-${context}
-
-Create a Citizen's Brief with EXACTLY these three sections:
-
-1. THE QUESTION: What legal question is the Court deciding, and why does it matter to ordinary people? (2-3 sentences, plain English, no legalese)
-2. ${isDecided ? "THE RULING: What did the Court decide and what changes in practice for everyday Americans? Be concrete." : "WHAT'S AT STAKE: The case has not been decided yet. Explain what changes for everyday Americans depending on which way the Court rules. Be concrete about both outcomes."}
-3. THE DEBATE: What are the strongest arguments on each side? Present both fairly in 2-3 sentences each.
-
-Ground every claim in the material above. Do not repeat the section name inside the text.
-
-Return as JSON:
-{ "theGoal": "...", "theWallet": "...", "theDebate": "..." }`,
-    };
-  }
-
-  if (ref.referenceType === "executive_order") {
-    return {
-      system:
-        "You are a non-partisan civic education expert who explains executive actions to everyday citizens. Be balanced, factual, and accessible. Never take a side. Always return valid JSON.",
-      prompt: `Analyze this presidential executive order and create a "Citizen's Brief" - a non-partisan, accessible summary for everyday Americans.
-
-Order: ${ref.masterReferenceId.toUpperCase()}
-${context}
-
-Create a Citizen's Brief with EXACTLY these three sections:
-
-1. THE GOAL: What does this executive order direct the government to do, and who does it affect? (2-3 sentences, plain English)
-2. THE WALLET: What does it cost or save taxpayers, and who pays? Be specific with numbers if available. If unknown, explain what financial impact is expected.
-3. THE DEBATE: What are the strongest arguments FOR and AGAINST this order, including any dispute over presidential authority? Present both sides fairly in 2-3 sentences each.
-
-Ground every claim in the material above. Do not repeat the section name inside the text.
-
-Return as JSON:
-{ "theGoal": "...", "theWallet": "...", "theDebate": "..." }`,
-    };
-  }
-
-  return {
-    system:
-      "You are a non-partisan civic education expert who explains legislation to everyday citizens. Be balanced, factual, and accessible. Always return valid JSON.",
-    prompt: `Analyze this congressional bill and create a "Citizen's Brief" - a non-partisan, accessible summary for everyday Americans.
-
-Bill: ${ref.masterReferenceId.toUpperCase()}
-${ref.chamber ? `Chamber: ${ref.chamber}` : ""}
-${context}
-
-Create a Citizen's Brief with EXACTLY these three sections:
-
-1. THE GOAL: What is this bill trying to do? (2-3 sentences, plain English)
-2. THE WALLET: How much taxpayer money does this cost or save? Be specific with numbers if available. If unknown, explain what financial impact is expected.
-3. THE DEBATE: What are the strongest arguments FOR and AGAINST this bill? Present both sides fairly in 2-3 sentences each.
-
-Ground every claim in the material above. Do not repeat the section name inside the text.
-
-Return as JSON:
-{ "theGoal": "...", "theWallet": "...", "theDebate": "..." }`,
-  };
-}
-
-/**
- * Rolling-draft revision pass: the model reads the NEXT part of the original
- * text alongside the current draft and revises the draft. The only source
- * material is ever the original text — never another summary.
- */
-function rollingRevisePrompt(
-  ref: ReferenceRow,
-  draft: CitizenBriefSections,
-  chunk: string,
-  part: number,
-  totalParts: number,
-  objections?: string[]
-): { system: string; prompt: string } {
-  return {
-    system:
-      "You are a non-partisan civic education expert revising a draft Citizen's Brief against the original official text. Be balanced, factual, and accessible. Never invent facts — every statement must be grounded in the official text or metadata provided. Always return valid JSON.",
-    prompt: `Below is the current draft of a "Citizen's Brief" for "${ref.title}", written from parts 1–${part - 1} of the official text. Now read part ${part} of ${totalParts} of the ORIGINAL official text and revise the draft so it accurately reflects everything read so far.
-
-Rules:
-- Only add or change statements grounded in the official text you have been given.
-- Keep the same three sections and plain-English style (2-3 sentences each).
-- If this part changes nothing material, return the draft unchanged.
-${objectionsBlock(objections)}
-Current draft (JSON):
-${JSON.stringify(draft)}
-
-Official text (part ${part} of ${totalParts}):
-${chunk}
-
-Return the full revised brief as JSON:
-{ "theGoal": "...", "theWallet": "...", "theDebate": "..." }`,
-  };
-}
-
-function factCheckPrompt(
-  ref: ReferenceRow,
-  sections: CitizenBriefSections,
-  chunk: string,
-  part: number,
-  totalParts: number
-): { system: string; prompt: string } {
-  const partNote =
-    totalParts > 1
-      ? `\nYou are seeing part ${part} of ${totalParts} of the official text. Flag any claim THIS part does not support; claims supported by other parts are filtered out later.`
-      : "";
-  return {
-    system:
-      "You are a meticulous, non-partisan fact-checker. You compare a summary against official source text and flag unsupported claims. Always return valid JSON.",
-    prompt: `Fact-check this "Citizen's Brief" against the official text and metadata below.
-
-Flag a sentence ONLY if it misstates what the document does, or asserts specific facts, numbers, or provisions about the document's contents that appear nowhere in the material. Do NOT flag: general characterizations of the public debate or supporter/critic arguments, cost language clearly framed as an expectation or as unknown, or plain-language rephrasing of what the text says.${partNote}
-
-Brief:
-${flattenBrief(ref, sections)}
-
-Metadata:
-Title: ${ref.title}
-${ref.description ? `Official summary: ${ref.description.slice(0, 1_000)}` : ""}
-
-Official text:
-${chunk}
-
-Return as JSON (empty array if everything is supported):
-{ "unsupported": ["exact sentence from the brief", ...] }`,
-  };
-}
-
-/**
- * Generate the brief from the original text: one pass when it fits, otherwise
- * a rolling draft carried across sequential passes over the original text.
- */
-async function generateBriefFromChunks(
-  ref: ReferenceRow,
-  chunks: string[],
-  plan: BriefJobPlan,
-  objections?: string[]
-): Promise<{ sections: CitizenBriefSections | null; provider: string }> {
-  const totalParts = chunks.length;
-  // The pass that produces the text the user reads gets the write model; the
-  // earlier passes are mechanical fact-pulling and stay on the cheap reader.
-  const modelForPass = (index: number) => (index === totalParts - 1 ? plan.writeModel : plan.readModel);
-
-  const first = briefPrompt(ref, chunks[0] ?? "", totalParts, objections);
-  const result = await generateAI({
-    system: first.system,
-    prompt: first.prompt,
-    model: modelForPass(0),
-    maxCompletionTokens: 4_000,
-    temperature: 0.7,
-    jsonMode: true,
-  });
-
-  const parsed = result.ok ? parseJsonObject<Partial<CitizenBriefSections>>(result.content) : null;
-  if (!result.ok || !isUsable(parsed)) {
-    console.warn(
-      `[RefContent] First pass failed for ${ref.masterReferenceId}: ${
-        result.ok ? `unusable content (${result.content.length} chars)` : result.error.slice(0, 300)
-      }`
-    );
-    return { sections: null, provider: "fallback" };
-  }
-
-  let sections: CitizenBriefSections = parsed;
-  let provider: string = result.model;
-
-  for (let i = 1; i < totalParts; i++) {
-    // Every part of the original text must be read into the draft — retry a
-    // failed pass before giving up on that part.
-    let incorporated = false;
-    for (let attempt = 0; attempt < 3 && !incorporated; attempt++) {
-      const revise = rollingRevisePrompt(ref, sections, chunks[i] ?? "", i + 1, totalParts, objections);
-      const pass = await generateAI({
-        system: revise.system,
-        prompt: revise.prompt,
-        model: modelForPass(i),
-        maxCompletionTokens: 4_000,
-        temperature: 0.7,
-        jsonMode: true,
-      });
-      const revised = pass.ok ? parseJsonObject<Partial<CitizenBriefSections>>(pass.content) : null;
-      if (pass.ok && isUsable(revised)) {
-        sections = revised;
-        provider = pass.model;
-        incorporated = true;
-      } else {
-        console.warn(
-          `[RefContent] Rolling pass ${i + 1}/${totalParts} attempt ${attempt + 1} failed for ${ref.masterReferenceId}`
-        );
-      }
-    }
-    if (!incorporated) {
-      console.warn(
-        `[RefContent] Rolling pass ${i + 1}/${totalParts} exhausted retries for ${ref.masterReferenceId} — draft may not reflect that part`
-      );
-    }
-  }
-
-  return { sections, provider };
-}
-
-/**
- * Verify every sentence of the brief against the original text. Returns the
- * list of unsupported claims ([] = clean), or null if verification couldn't run.
- * With multiple parts, a claim counts as unsupported only if NO part supports it.
- */
-async function factCheckBrief(
-  ref: ReferenceRow,
-  sections: CitizenBriefSections,
-  chunks: string[],
-  plan: BriefJobPlan
-): Promise<string[] | null> {
-  if (!chunks[0]) return []; // no official text — brief is metadata-only, nothing to check against
-  const normalize = (s: string) => s.trim().toLowerCase();
-  let unsupported: Map<string, string> | null = null;
-
-  for (let i = 0; i < chunks.length; i++) {
-    const { system, prompt } = factCheckPrompt(ref, sections, chunks[i] ?? "", i + 1, chunks.length);
-    const result = await generateAI({
-      system,
-      prompt,
-      model: plan.factCheckModel,
-      maxCompletionTokens: 2_000,
-      temperature: 0.2,
-      jsonMode: true,
-    });
-    if (!result.ok) return null;
-    const parsed = parseJsonObject<{ unsupported?: unknown }>(result.content);
-    if (!parsed || !Array.isArray(parsed.unsupported)) return null;
-
-    const flagged = new Map<string, string>();
-    for (const claim of parsed.unsupported) {
-      if (typeof claim === "string" && claim.trim()) flagged.set(normalize(claim), claim.trim());
-    }
-    if (flagged.size === 0) return []; // this part supports everything — brief is clean
-
-    if (unsupported === null) {
-      unsupported = flagged;
-    } else {
-      for (const key of [...unsupported.keys()]) {
-        if (!flagged.has(key)) unsupported.delete(key);
-      }
-      if (unsupported.size === 0) return [];
-    }
-  }
-
-  return [...(unsupported?.values() ?? [])];
-}
-
-
-/** Flat, labelled rendering stored in citizenBrief for cards, posts, and B2B consumers. */
-function flattenBrief(ref: ReferenceRow, brief: CitizenBriefSections): string {
-  const labels = briefSectionLabels(ref.referenceType, ref.status);
-  return [
-    `${labels.goal}: ${brief.theGoal}`,
-    `${labels.wallet}: ${brief.theWallet}`,
-    `${labels.debate}: ${brief.theDebate}`,
-  ].join("\n\n");
-}
-
-function isUsable(sections: Partial<CitizenBriefSections> | null): sections is CitizenBriefSections {
-  return !!sections?.theGoal?.trim() && !!sections.theWallet?.trim() && !!sections.theDebate?.trim();
-}
-
-export function parseBriefJson(json: string | null | undefined): CitizenBriefSections | null {
-  if (!json) return null;
-  try {
-    const parsed = JSON.parse(json) as Partial<CitizenBriefSections>;
-    return isUsable(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
 async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
-  // NO OFFICIAL TEXT, NO BRIEF. A summary written from a title and a one-line
-  // blurb is a guess, and a guess rendered in the brief panel is indistinguishable
-  // from a grounded brief — which is exactly how inaccurate briefs reached readers.
-  // The document says "official text unavailable" instead, and the next reader
-  // retries the source chain.
-  if (!ref.fullText) {
+  const outcome = await composeBrief(ref.fullText);
+
+  if (outcome.state === "unavailable") {
     await markSettled(ref.id, "unavailable");
-    console.warn(
-      `[RefContent] No brief for ${ref.masterReferenceId} — official text unavailable, refusing to summarize metadata`
-    );
+    console.warn(`[Brief] no brief for ${ref.masterReferenceId}: ${outcome.reason}`);
     return;
   }
 
-  // Pick the model BEFORE any call, from the document's size and type. No AI
-  // call is spent deciding, and no job walks a ladder of models to find one.
-  const text = ref.fullText ?? "";
-  const plan = classifyBriefJob({ referenceType: ref.referenceType, textChars: text.length });
-
-  // The ENTIRE official text goes to the model — one read when it fits,
-  // otherwise a rolling draft over sequential parts of the original text.
-  const chunks = splitTextForModel(text, plan.chunkChars);
-
-  console.log(
-    `[RefContent] ${ref.masterReferenceId}: ${text.length} chars → ${plan.lane} lane, ` +
-      `${chunks.length} pass${chunks.length === 1 ? "" : "es"} (read: ${plan.readModel}, write: ${plan.writeModel})`
-  );
-
-  let generated = await generateBriefFromChunks(ref, chunks, plan);
-  let factCheck = "skipped (no draft)";
-
-  if (generated.sections) {
-    const issues = await factCheckBrief(ref, generated.sections, chunks, plan);
-    if (issues === null) {
-      factCheck = "unavailable";
-    } else if (issues.length === 0) {
-      factCheck = "clean";
-    } else {
-      // Regenerate once with the objections attached, then re-verify.
-      console.warn(
-        `[RefContent] Fact-check flagged ${issues.length} claim(s) for ${ref.masterReferenceId}; regenerating`
-      );
-      const retry = await generateBriefFromChunks(ref, chunks, plan, issues);
-      if (retry.sections) generated = retry;
-      const retryIssues = generated.sections
-        ? await factCheckBrief(ref, generated.sections, chunks, plan)
-        : null;
-      factCheck =
-        retryIssues === null
-          ? "retry unverified"
-          : retryIssues.length === 0
-            ? "clean after retry"
-            : `${retryIssues.length} claim(s) still flagged: ${retryIssues.join(" | ")}`;
-    }
-  }
-
-  // Every provider failed on text we DO have. Leave the brief empty and let the
-  // reader retry rather than storing boilerplate that reads like a real summary.
-  if (!generated.sections) {
-    await markSettled(ref.id, "unavailable");
-    console.warn(
-      `[RefContent] Brief generation failed for ${ref.masterReferenceId} (${plan.lane} lane, ${chunks.length} pass${chunks.length === 1 ? "" : "es"}) — nothing stored`
-    );
-    return;
-  }
-
-  const brief = generated.sections;
   await prisma.governmentReference.update({
     where: { id: ref.id },
     data: {
-      citizenBriefJson: JSON.stringify(brief),
-      citizenBrief: flattenBrief(ref, brief),
+      citizenBriefJson: serializeBrief(outcome.brief),
+      citizenBrief: flattenBrief(outcome.brief),
       citizenBriefAt: new Date(),
-      citizenBriefModel: generated.provider,
-      // Pin the brief to the version of the law it describes. This is what
-      // makes "one per version" checkable: every later reader compares this to
+      citizenBriefModel: outcome.model,
+      // Pinned to the version of the law it describes. This is what makes "one
+      // brief per version" checkable: every later reader compares this against
       // lawVersion and reuses instead of paying again.
       citizenBriefVersion: ref.lawVersion,
       contentStatus: "ready",
@@ -796,10 +397,10 @@ async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
   });
 
   console.log(
-    `[RefContent] Brief stored for ${ref.masterReferenceId} (${plan.lane} lane, model: ${generated.provider}, ` +
-      `${text.length} chars, ${chunks.length} pass${chunks.length === 1 ? "" : "es"}, fact-check: ${factCheck})`
+    `[Brief] stored for ${ref.masterReferenceId} (${outcome.model}, ${ref.fullText?.length ?? 0} chars)`
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Entry point
