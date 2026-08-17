@@ -3,6 +3,10 @@
 Civics app for the USA: a mobile app and a web app sharing one backend and one
 Supabase Postgres database.
 
+> **[SHIPPING.md](SHIPPING.md) — how work reaches users.** `main` is the
+> product; nothing deploys from a branch. `bun run verify` before pushing,
+> `bun run deploy-check` after, `bun run branches` to see what is stranded.
+
 ```
 apps/mobile/   Expo / React Native client
 apps/web/      Vite + React client (formerly "CivicSpeak")
