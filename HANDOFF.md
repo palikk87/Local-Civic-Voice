@@ -73,6 +73,14 @@ clients** tab that creates accounts, rotates credentials, changes tiers and
 revokes access without shell access. The script exists for the cold start, when
 there is no admin account to log in with yet.
 
+**Do not skip the B2B half.** A parity audit found `/b2b/login` rejecting every
+credential on the deployed app, which looked like a broken portal and made all
+eleven B2B functions untestable. The portal was fine — the table was empty.
+There is nothing to log in as until either this script runs or an admin creates
+a client in **Admin → B2B clients**, and the admin console says so in as many
+words when the list is empty. Whichever route you take, it has to happen once
+per environment.
+
 **One-time effect of this deploy:** a migration deletes every row in
 `AdminSession` and `B2BSession`. Anyone signed in to the admin console or the
 `/b2b` dashboard at that moment is signed out and signs in again with the same
