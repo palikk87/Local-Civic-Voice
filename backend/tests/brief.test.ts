@@ -22,6 +22,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } fr
 import { BASE_URL, prisma, resetData, startServer, stopServer } from "./helpers/server";
 import { ensureReferenceContent, processReferenceBrief } from "../src/services/reference-content";
 import { briefState, releaseAbandonedWork, WORK_TIMEOUT_MS } from "../src/services/brief-state";
+import { mergeReferences } from "../src/services/deduplication-service";
 
 /**
  * A short bill, long enough to clear the 200-character floor the source chain
@@ -489,6 +490,50 @@ describe("the Get Citizen Brief button", () => {
     expect(row.contentStatus).toBe("unavailable");
     expect(row.contentStartedAt).toBeNull();
     expect(briefState(row)).toBe("unavailable");
+  });
+
+  test("an old id for a merged law gets the survivor's brief, not a second one", async () => {
+    // ONE LAW, ONE BRIEF is the reason two filings get merged at all. Anything
+    // still holding the loser's id — a shared link, a post attached before the
+    // merge, a cached query — has to land on the survivor. Refusing it would
+    // send the reader off to write a second brief for a law that already has
+    // one, which is exactly the duplication the merge removed.
+    const survivor = await record();
+    const absorbed = await record();
+
+    // The survivor is the one that has been read and summarized.
+    await processReferenceBrief(survivor.id, false);
+    const callsAfterWriting = modelCalls.length;
+    expect(callsAfterWriting).toBeGreaterThan(0);
+
+    await mergeReferences(absorbed.id, survivor.id);
+
+    // Ask using the id that no longer owns anything.
+    const response = await fetch(`${BASE_URL}/api/government-references/${absorbed.id}/brief`, {
+      method: "POST",
+    });
+    const body = (await response.json()) as {
+      state: string;
+      brief: { theGoal: string };
+      referenceId: string;
+      masterReferenceId: string;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("ready");
+    expect(body.brief.theGoal).toBe(BRIEF.theGoal);
+
+    // It says which record answered, so a client holding the old link can
+    // follow along instead of guessing.
+    expect(body.referenceId).toBe(survivor.id);
+    expect(body.masterReferenceId).toBe(survivor.masterReferenceId);
+
+    // And nothing was written a second time.
+    expect(modelCalls.length).toBe(callsAfterWriting);
+    const stale = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: absorbed.id },
+    });
+    expect(stale.citizenBriefJson).toBeNull();
   });
 
   test("force rewrites a brief that is already current", async () => {

@@ -982,31 +982,68 @@ governmentReferencesRouter.post("/:id/recalculate-stats", async (c) => {
  * work is bounded per reference by the in-flight guard in ensureReferenceContent,
  * not by who is signed in.
  */
-governmentReferencesRouter.post("/:id/brief", async (c) => {
-  const referenceId = c.req.param("id");
+const BRIEF_SELECT = {
+  id: true,
+  masterReferenceId: true,
+  mergedIntoId: true,
+  contentStatus: true,
+  contentStartedAt: true,
+  citizenBriefJson: true,
+  citizenBriefVersion: true,
+  lawVersion: true,
+  referenceType: true,
+  status: true,
+} as const;
 
-  const row = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
-    select: {
-      id: true,
-      mergedIntoId: true,
-      contentStatus: true,
-      contentStartedAt: true,
-      citizenBriefJson: true,
-      citizenBriefVersion: true,
-      lawVersion: true,
-      referenceType: true,
-      status: true,
-    },
+/**
+ * The record that actually holds this law's brief.
+ *
+ * Two filings of one bill get merged into a single master reference, and the
+ * loser keeps a tombstone pointing at the survivor. Anything holding the older
+ * id — a shared link, a post attached before the merge, a cached query — must
+ * still get the survivor's brief, because "one law, one brief" is the whole
+ * point of merging them. Answering "this reference has been merged" would send
+ * the reader to write a second brief for a law that already has one.
+ *
+ * Merges flatten their chains as they happen, so one hop is the normal case.
+ * The loop is a guard against a chain that somehow survived, and it is bounded:
+ * a cycle must end the walk rather than hang the request.
+ */
+async function briefOwner(startId: string) {
+  let row = await prisma.governmentReference.findUnique({
+    where: { id: startId },
+    select: BRIEF_SELECT,
   });
 
-  if (!row) return c.json({ error: "Reference not found" }, 404);
-  if (row.mergedIntoId) {
-    return c.json(
-      { error: "This reference has been merged", mergedInto: row.mergedIntoId },
-      409
-    );
+  const seen = new Set<string>();
+  while (row?.mergedIntoId) {
+    if (seen.has(row.id)) {
+      console.error(`[Brief] merge cycle reached from ${startId}; stopping at ${row.id}`);
+      return row;
+    }
+    seen.add(row.id);
+    const next = await prisma.governmentReference.findUnique({
+      where: { id: row.mergedIntoId },
+      select: BRIEF_SELECT,
+    });
+    // A tombstone pointing at nothing is worse than a tombstone: serve what we
+    // have rather than 404 a law the reader can see.
+    if (!next) return row;
+    row = next;
   }
+
+  return row;
+}
+
+governmentReferencesRouter.post("/:id/brief", async (c) => {
+  const requestedId = c.req.param("id");
+
+  const row = await briefOwner(requestedId);
+  if (!row) return c.json({ error: "Reference not found" }, 404);
+
+  // Everything below writes to and reads from the surviving record, so two
+  // filings of one law share one brief and one model call.
+  const referenceId = row.id;
 
   const force = c.req.query("force") === "true";
   const state = briefState(row);
@@ -1020,6 +1057,10 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
       labels: briefSectionLabels(row.referenceType, row.status),
       lawVersion: row.lawVersion,
       briefVersion: row.citizenBriefVersion,
+      // Which record answered. Differs from the id asked for when that one has
+      // been merged away, so a client holding an old link can follow along.
+      referenceId,
+      masterReferenceId: row.masterReferenceId,
     });
   }
 
@@ -1081,6 +1122,8 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
       labels: briefSectionLabels(after.referenceType, after.status),
       lawVersion: after.lawVersion,
       briefVersion: after.citizenBriefVersion,
+      referenceId,
+      masterReferenceId: row.masterReferenceId,
     });
   }
 
