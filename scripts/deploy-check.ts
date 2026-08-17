@@ -89,6 +89,7 @@ const expected = expectedCommit();
 console.log(`main is at ${short(expected)}\n`);
 
 let anyProblem = false;
+let schemaProblem = false;
 
 async function check(label: string, url: string, read: () => Promise<string | null>) {
   if (!url) {
@@ -132,6 +133,22 @@ async function check(label: string, url: string, read: () => Promise<string | nu
 await check("API", API_URL, async () => {
   const body = await fetchJson(`${API_URL.replace(/\/$/, "")}/health`);
   if (!body) return null;
+
+  // Reported alongside the commit because they fail independently: the right
+  // code can be running against an older schema, and that combination looks
+  // healthy from everywhere except the endpoint that touches the missing
+  // column.
+  const schema = body.schema as
+    | { inSync?: boolean; applied?: number; expected?: number; pending?: string[]; failed?: string[] }
+    | undefined;
+  if (schema && schema.inSync === false) {
+    console.log(`      SCHEMA BEHIND — ${schema.applied ?? "?"} of ${schema.expected ?? "?"} migrations applied`);
+    for (const name of schema.pending ?? []) console.log(`        pending: ${name}`);
+    for (const name of schema.failed ?? []) console.log(`        FAILED:  ${name}`);
+    anyProblem = true;
+    schemaProblem = true;
+  }
+
   const version = body.version as { commit?: string } | undefined;
   return version?.commit ?? "unknown";
 });
@@ -143,7 +160,13 @@ await check("WEB", WEB_URL, async () => {
 });
 
 if (anyProblem) {
-  console.error("Not everything on main is live. Nothing you built is reaching users until it is.");
+  console.error(
+    schemaProblem
+      ? "The database does not match the code that is running against it. Re-run the\n" +
+          "deploy so `prisma migrate deploy` runs, and check its log — a migration that\n" +
+          "failed leaves the API up and serving the wrong shape."
+      : "Not everything on main is live. Nothing you built is reaching users until it is.",
+  );
   process.exit(1);
 }
-console.log("Both deployments are running exactly what is on main.");
+console.log("Both deployments are running exactly what is on main, against a matching schema.");
