@@ -45,7 +45,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { categoryColors, categoryLabels } from '@/lib/mock-data';
+import { bills, categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
   castReferenceVote,
@@ -409,6 +409,21 @@ export default function BillDetailScreen() {
     ? timelinePosts.find((p) => p.sharedContent?.id === id && p.source === 'library')
     : null;
 
+  /**
+   * Last resort: one of the sixteen bills kept for the Related Laws panel.
+   *
+   * ORDER MATTERS AND IS THE WHOLE POINT. Read only after the API query has
+   * finished and produced nothing, and after the library-post path has produced
+   * nothing. The version of this that had to be deleted searched a hardcoded
+   * array FIRST and then passed `enabled: !bill` into the query, so for any id
+   * in that array the real fetch never ran and a live record could never win.
+   *
+   * Their vote counts are zero and their sponsor is unknown — see mock-data.ts
+   * for what was stripped and why.
+   */
+  const fallbackBill =
+    !bill && !libraryPost && !billRefLoading ? bills.find((b) => b.id === id) : undefined;
+
   // Fetch real sponsor info if this is a library post
   const { data: sponsorInfo } = useQuery({
     queryKey: ['billSponsor', libraryPost?.sharedContent?.sourceUrl],
@@ -507,6 +522,11 @@ export default function BillDetailScreen() {
         <Text className="text-slate-400 text-base">Loading bill...</Text>
       </View>
     );
+  }
+
+  // The fallback, applied after every live path has had its turn.
+  if (!bill && fallbackBill) {
+    bill = fallbackBill;
   }
 
   if (!bill) {

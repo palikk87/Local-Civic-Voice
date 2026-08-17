@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "render-check": "node scripts/render-check.mjs dist",
-    "layout-check": "node scripts/layout-check.mjs dist"
+    "layout-check": "node scripts/layout-check.mjs dist",
+    "related-laws-check": "node scripts/related-laws-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
