@@ -105,7 +105,11 @@ function inspect(name: string): Branch {
   return { name, sha, status: "AHEAD", commits, files };
 }
 
-tryGit("fetch origin --prune --quiet");
+// Every head, with an explicit refspec rather than the configured one. A CI
+// checkout — and this repository's own clone — fetches only main, so the
+// default `git fetch origin` leaves every other branch without objects and the
+// comparison below silently answers "unknown" for all of them.
+tryGit('fetch origin "+refs/heads/*:refs/remotes/origin/*" --prune --quiet');
 
 const names = remoteBranches();
 const mainSha = tryGit("rev-parse origin/main") ?? "";
@@ -172,11 +176,22 @@ if (ahead.length > 0) {
   process.exit(1);
 }
 
-if (!PRUNE && merged.length > 0) {
+// A branch that could not be read is not a branch that is clean. Saying "all
+// clear" here would be exactly the failure this script exists to prevent, one
+// level up.
+if (unknown.length > 0) {
+  console.error(
+    `${unknown.length} branch(es) could not be read, so this cannot say whether they are\n` +
+      `holding anything. Treat that as unanswered, not as clear.`,
+  );
+  process.exit(1);
+}
+
+if (merged.length === 0) {
+  console.log("Nothing is stranded off main.");
+} else if (!PRUNE) {
   console.log(
     `All ${merged.length} branch(es) are fully contained in main — clutter, not risk.\n` +
       `Clear them with: bun run branches --prune`,
   );
-} else if (merged.length === 0) {
-  console.log("Nothing is stranded off main.");
 }
