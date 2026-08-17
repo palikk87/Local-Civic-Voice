@@ -14,6 +14,17 @@
  */
 
 import { readdirSync } from "node:fs";
+import { parseBrief, serializeBrief } from "../src/services/citizen-brief";
+import { briefState, isWorking } from "../src/services/brief-state";
+
+/** A stored brief in the shape the card actually renders. */
+function briefJson(summary: string): string {
+  return serializeBrief({
+    summary,
+    argumentFor: "The text does the thing it says it does.",
+    argumentAgainst: "The text commits money without naming a measure of success.",
+  });
+}
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   B2B_TEST,
@@ -1744,9 +1755,10 @@ describe("merging two records loses nothing", () => {
     const target = await record();
     const source = await record({
       citizenBrief: "What this law actually does.",
-      citizenBriefJson: '{"summary":"..."}',
+      citizenBriefJson: briefJson("What this law actually does."),
       citizenBriefAt: writtenAt,
       citizenBriefModel: "some-model",
+      citizenBriefVersion: 1,
       fullText: "SECTION 1. SHORT TITLE.",
       fullTextHash: "abc123",
     });
@@ -1755,9 +1767,12 @@ describe("merging two records loses nothing", () => {
 
     const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
     expect(merged.citizenBrief).toBe("What this law actually does.");
-    expect(merged.citizenBriefJson).toBe('{"summary":"..."}');
+    expect(parseBrief(merged.citizenBriefJson)?.summary).toBe("What this law actually does.");
     expect(merged.citizenBriefModel).toBe("some-model");
     expect(merged.fullText).toBe("SECTION 1. SHORT TITLE.");
+    // Pinned to the SURVIVOR's version, so the next reader reuses it instead of
+    // paying to write the same brief again.
+    expect(merged.citizenBriefVersion).toBe(merged.lawVersion);
     // The timestamp comes across intact. If it were reset, the freshness check
     // would treat an existing brief as new work and pay to write it again.
     expect(merged.citizenBriefAt?.toISOString()).toBe(writtenAt.toISOString());
@@ -1765,13 +1780,72 @@ describe("merging two records loses nothing", () => {
 
   test("a brief the survivor already has is left alone", async () => {
     const cookie = await staff();
-    const target = await record({ citizenBrief: "The survivor's own brief." });
-    const source = await record({ citizenBrief: "The other one's brief." });
+    const target = await record({
+      citizenBrief: "The survivor's own brief.",
+      citizenBriefJson: briefJson("The survivor's own brief."),
+      citizenBriefVersion: 1,
+    });
+    const source = await record({
+      citizenBrief: "The other one's brief.",
+      citizenBriefJson: briefJson("The other one's brief."),
+      citizenBriefVersion: 1,
+    });
 
     expect((await merge(cookie, source.id, target.id)).status).toBe(200);
 
     const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
-    expect(merged.citizenBrief).toBe("The survivor's own brief.");
+    expect(parseBrief(merged.citizenBriefJson)?.summary).toBe("The survivor's own brief.");
+  });
+
+  test("a brief the reader cannot see does not count as having one", async () => {
+    // The survivor holds a brief written to an EARLIER definition of what a
+    // Citizen's Brief is. Every reader sees an empty card for it, so treating
+    // it as "already has one" would block the survivor from adopting the real
+    // brief the source is holding — a brief lost by a merge, which is the one
+    // thing merging is supposed to make impossible.
+    const cookie = await staff();
+    const target = await record({
+      citizenBrief: "Goal / Wallet / Debate, from the old shape.",
+      citizenBriefJson: JSON.stringify({
+        theGoal: "…",
+        theWallet: "…",
+        theDebate: "…",
+      }),
+      citizenBriefVersion: 1,
+    });
+    const source = await record({
+      citizenBrief: "A brief the card can actually render.",
+      citizenBriefJson: briefJson("A brief the card can actually render."),
+      citizenBriefVersion: 1,
+    });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect(parseBrief(merged.citizenBriefJson)?.summary).toBe(
+      "A brief the card can actually render."
+    );
+  });
+
+  test("a merge never hands the survivor a claim to be busy", async () => {
+    // The source was mid-write when it was merged away. That job was running
+    // against a record that is now a tombstone, so nothing is going to finish
+    // it — copying its status across would give the survivor a spinner with no
+    // end, which is the failure the whole brief-state design exists to prevent.
+    const cookie = await staff();
+    const target = await record();
+    const source = await record({
+      fullText: "SECTION 1. SHORT TITLE.",
+      contentStatus: "brief_pending",
+      contentStartedAt: new Date(),
+    });
+
+    expect((await merge(cookie, source.id, target.id)).status).toBe(200);
+
+    const merged = await prisma.governmentReference.findUniqueOrThrow({ where: { id: target.id } });
+    expect(merged.fullText).toBe("SECTION 1. SHORT TITLE.");
+    expect(isWorking(merged.contentStatus)).toBe(false);
+    expect(briefState(merged)).not.toBe("working");
   });
 
   test("the source's name still reaches the survivor", async () => {
@@ -2467,7 +2541,7 @@ describe("one brief per version of the law", () => {
 
   const STORED_BRIEF = {
     citizenBrief: "What this law does, in plain language.",
-    citizenBriefJson: '{"theGoal":"g","theWallet":"w","theDebate":"d"}',
+    citizenBriefJson: briefJson("What this law does, in plain language."),
     citizenBriefAt: new Date("2026-04-01T00:00:00Z"),
     citizenBriefModel: "some-model",
     fullText: "SECTION 1. SHORT TITLE.",

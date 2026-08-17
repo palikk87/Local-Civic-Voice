@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { parseBrief } from "./citizen-brief";
 import { computeWeightedTally } from "./delegation-service";
 import { canonicalReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName, namesFor, transferNames } from "./reference-names";
@@ -548,9 +549,15 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // merge neither loses a brief nor triggers a regeneration. If the survivor
     // already has one, nothing is touched: the two records describe the same
     // law, and swapping one good brief for another buys nothing.
-      // "Has a usable brief" is the stored JSON, not the flattened text: the JSON
-    // is what the panels render, and a row can carry one without the other.
-    const adoptBrief = !target.citizenBriefJson && Boolean(source.citizenBriefJson);
+    // "Has a usable brief" means one the card can actually render, so it is
+    // decided by PARSING, not by the column being non-null. A brief stored to
+    // an earlier definition of what a Citizen's Brief is reads as no brief to
+    // every reader — and treating it as one here would block the survivor from
+    // adopting a real brief the source is holding, which is precisely the loss
+    // this merge is supposed to make impossible.
+    const targetBrief = parseBrief(target.citizenBriefJson);
+    const sourceBrief = parseBrief(source.citizenBriefJson);
+    const adoptBrief = !targetBrief && !!sourceBrief;
     const adoptText = !target.fullText && Boolean(source.fullText);
 
     const updated = await tx.governmentReference.update({
@@ -582,7 +589,14 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
               fullTextUrl: source.fullTextUrl,
               fullTextHash: source.fullTextHash,
               fullTextAt: source.fullTextAt,
-              contentStatus: source.contentStatus,
+              // Only a settled status crosses. "fetching"/"brief_pending" on the
+              // source described a job running against a record that is now a
+              // tombstone; copying it would hand the survivor a claim to be busy
+              // that nothing is going to finish.
+              contentStatus:
+                source.contentStatus === "ready" || source.contentStatus === "unavailable"
+                  ? source.contentStatus
+                  : target.contentStatus,
             }
           : {}),
       },
