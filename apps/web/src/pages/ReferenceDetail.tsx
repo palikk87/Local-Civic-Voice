@@ -21,6 +21,8 @@ import {
   StatusBadge,
 } from "@/components/civic/badges";
 import { civicApi, formatDate, titleCase } from "@/lib/civic";
+import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
+import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 
 function MetaRow({
   icon: Icon,
@@ -53,6 +55,21 @@ export default function ReferenceDetail() {
   });
 
   const reference = data?.reference;
+
+  // The brief is asked for, not started by opening the page. Seeded with
+  // whatever the record already holds, so a law somebody has already asked
+  // about shows its brief immediately and costs nothing.
+  const citizenBrief = useCitizenBrief(reference?.id, {
+    initialBrief: reference?.citizenBriefSections ?? null,
+    initialLabels: reference?.citizenBriefLabels ?? null,
+    initialState: reference?.briefState ?? "idle",
+  });
+
+  // A brief written for an earlier text of this law. Worth reading and worth
+  // labelling; both numbers come from the server.
+  const briefIsStale =
+    !!reference?.citizenBriefSections &&
+    reference.citizenBriefVersion !== reference.lawVersion;
 
   return (
     <AppShell wide>
@@ -121,19 +138,22 @@ export default function ReferenceDetail() {
 
               <Separator className="my-6" />
 
-              {reference.citizenBrief ? (
-                <div>
-                  <h2 className="font-display text-xl font-semibold text-foreground">
-                    Citizen Brief
-                  </h2>
-                  <p className="mt-3 leading-relaxed text-foreground/90">
-                    {reference.citizenBrief}
-                  </p>
-                </div>
-              ) : null}
+              <CitizensBriefCard
+                state={citizenBrief.state}
+                brief={citizenBrief.brief}
+                labels={citizenBrief.labels}
+                reason={citizenBrief.reason}
+                isRequesting={citizenBrief.isRequesting}
+                onRequest={citizenBrief.request}
+                onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
+                isStale={briefIsStale}
+                sourceUrl={reference.fullTextUrl ?? reference.sourceUrl}
+                sourceLabel="View the official text"
+                emptyDescription={`A plain-English summary of ${reference.displayId}, written from its complete official text`}
+              />
 
               {reference.description ? (
-                <div className={reference.citizenBrief ? "mt-8" : ""}>
+                <div className="mt-8">
                   <h2 className="font-display text-xl font-semibold text-foreground">
                     Summary
                   </h2>

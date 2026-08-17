@@ -63,6 +63,40 @@ export interface CitizenBriefLabels {
  */
 export type ReferenceContentStatus = "ready" | "brief_pending" | "fetching" | "unavailable";
 
+/**
+ * What to show the reader, in one word — the server's collapsed answer.
+ *
+ * Prefer this over contentStatus. That is the raw column and it can say
+ * "fetching" about work that died with the process doing it; this reports such
+ * a row as `idle`, so the reader is offered the button again rather than a
+ * spinner nothing will ever resolve.
+ */
+export type BriefState = "ready" | "working" | "unavailable" | "idle";
+
+/** What POST /:id/brief answers with. Exactly one of these three shapes. */
+export type BriefResponse =
+  | {
+      state: "ready";
+      brief: CitizenBriefSections;
+      labels: CitizenBriefLabels;
+      lawVersion: number;
+      briefVersion: number | null;
+    }
+  | { state: "working"; startedAt: string | null }
+  | { state: "unavailable"; reason: string; sourceUrl?: string | null };
+
+/**
+ * Write the Citizen's Brief for this reference — what the button does.
+ *
+ * One request, one honest answer. Nothing here starts by itself: a brief is
+ * written only because somebody asked, and reused by everyone after.
+ */
+export function requestCitizenBrief(id: string, force = false) {
+  return api.post<BriefResponse>(
+    `/api/government-references/${id}/brief${force ? "?force=true" : ""}`,
+  );
+}
+
 export interface GovReferenceDetail extends GovReference {
   fullText: string | null;
   userVote: "support" | "oppose" | null;
@@ -72,6 +106,11 @@ export interface GovReferenceDetail extends GovReference {
   citizenBriefLabels: CitizenBriefLabels;
   citizenBriefAt: string | null;
   contentStatus: ReferenceContentStatus | null;
+  /** The collapsed state — what the brief card should render. */
+  briefState: BriefState;
+  /** Which version of the law the stored brief describes, against lawVersion. */
+  citizenBriefVersion: number | null;
+  lawVersion: number;
   fullTextSource: string | null;
   fullTextUrl: string | null;
   fullTextAt: string | null;
@@ -106,6 +145,7 @@ export interface LibraryResolveResponse {
     masterReferenceId: string;
     referenceType: ReferenceType;
     contentStatus: ReferenceContentStatus | null;
+    briefState: BriefState;
     created: boolean;
   };
 }
@@ -153,10 +193,14 @@ export function useLatestReferences(referenceType: ReferenceType, limit = 30) {
 /**
  * Single reference by database id — used by detail screens for synced items.
  *
- * Opening a law is what triggers the server to pull its official text and write
- * the citizen brief onto the master reference (first reader pays, everyone after
- * is served from storage). While that work is in flight the server reports
- * contentStatus brief_pending/fetching, so we poll until it lands.
+ * DOES NOT POLL. It used to refetch every four seconds while the server
+ * reported the brief as being written, which was fine until the work behind
+ * that status died with the process doing it: the row went on claiming to be
+ * busy, and this went on asking, forever. A reader who opened a law and did
+ * nothing else got a spinner no reload could clear.
+ *
+ * Writing a brief is now something a person asks for, and `useCitizenBrief`
+ * owns that request and its bounded wait. This is a plain read again.
  */
 export function useGovernmentReference(id: string | undefined, enabled = true) {
   return useQuery({
@@ -165,10 +209,6 @@ export function useGovernmentReference(id: string | undefined, enabled = true) {
     enabled: enabled && !!id,
     staleTime: 60 * 1000,
     retry: 1,
-    refetchInterval: (query) => {
-      const status = query.state.data?.reference?.contentStatus;
-      return status === "brief_pending" || status === "fetching" ? 4000 : false;
-    },
   });
 }
 

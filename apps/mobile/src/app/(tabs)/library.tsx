@@ -28,6 +28,7 @@ import {
   AlertCircle,
   CheckCircle,
   FileWarning,
+  RefreshCw,
 } from 'lucide-react-native';
 import Animated, {
   FadeInDown,
@@ -330,12 +331,23 @@ function SlideOverPreview({
   const { wp, isTablet, maxContentWidth } = useResponsive();
   const previewWidth = isTablet ? Math.min(maxContentWidth, 450) : wp(85);
 
-  // The brief is written on the SERVER from the entire official text and stored on
-  // the master reference. This panel only displays it — when no official source has
-  // the text, it says so rather than showing a guess.
-  const { referenceId, brief, labels, isPending, isUnavailable, isUnidentifiable } =
-    useLibraryBrief(result);
+  // The brief is written on the SERVER from the entire official text and stored
+  // on the master reference — once, when a reader asks for it. This panel offers
+  // the button and shows the result; when no official source has the text, it
+  // says so rather than showing a guess.
+  const {
+    referenceId,
+    brief,
+    labels,
+    reason,
+    state: briefState,
+    isRequesting,
+    isResolving,
+    isUnidentifiable,
+    request: requestBrief,
+  } = useLibraryBrief(result);
   const canShare = !!referenceId && !!brief;
+  const briefBusy = isRequesting || isResolving;
   const sections = brief
     ? [
         { label: labels?.goal ?? 'The Goal', body: brief.theGoal },
@@ -447,7 +459,7 @@ function SlideOverPreview({
               </View>
 
               {/* Citizen's Brief */}
-              {isPending ? (
+              {briefState === 'working' ? (
                 <View className="bg-amber-500/10 rounded-lg p-4 mb-4 flex-1 border border-amber-500/20">
                   <View className="flex-row items-center mb-3">
                     <Sparkles size={16} color="#F59E0B" />
@@ -461,8 +473,8 @@ function SlideOverPreview({
                       Reading the full official text...
                     </Text>
                     <Text className="text-slate-500 text-xs mt-1 text-center">
-                      First read of a document takes a few seconds. After that it's instant for
-                      everyone.
+                      Pulling the complete official text and writing the brief. This is saved for
+                      everyone, so it only happens once.
                     </Text>
                   </View>
                 </View>
@@ -494,7 +506,7 @@ function SlideOverPreview({
                     </Text>
                   </View>
                 </View>
-              ) : (
+              ) : isUnidentifiable ? (
                 <View className="bg-slate-800/50 rounded-lg p-4 mb-4 flex-1 border border-slate-700">
                   <View className="flex-row items-center mb-2">
                     <FileWarning size={16} color="#94A3B8" />
@@ -503,13 +515,56 @@ function SlideOverPreview({
                     </Text>
                   </View>
                   <Text className="text-slate-300 text-sm leading-6">
-                    {isUnidentifiable
-                      ? "This record can't be matched to an official document yet, so there's nothing to summarize from."
-                      : "The official text for this document isn't published anywhere we can read yet. Rather than guess at what it says, we're not showing a brief."}
+                    This record can't be matched to an official document yet, so there's nothing to
+                    summarize from.
                   </Text>
                   <Text className="text-slate-500 text-xs mt-2">
                     Read it at the official source below.
                   </Text>
+                </View>
+              ) : (
+                /* Nothing written yet, or nothing that still describes this law.
+                   Either way it is an offer, not something already running — the
+                   old screen started the work by itself and could never stop. */
+                <View className="bg-amber-500/10 rounded-lg p-4 mb-4 flex-1 border border-amber-500/20">
+                  <View className="items-center">
+                    <View className="w-16 h-16 rounded-full bg-amber-500/20 items-center justify-center mb-3">
+                      <Sparkles size={30} color="#F59E0B" />
+                    </View>
+                    <Text className="text-white text-lg font-bold text-center mb-1">
+                      Citizen's Brief
+                    </Text>
+                    <Text className="text-slate-400 text-sm text-center mb-4 px-2">
+                      A plain-English summary, written from the complete official text
+                    </Text>
+                    {briefState === 'unavailable' ? (
+                      <Text className="text-slate-400 text-sm text-center mb-4 px-2">
+                        {reason ??
+                          "The official text for this document isn't published anywhere we can read yet. Rather than guess at what it says, we're not showing one."}
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        requestBrief();
+                      }}
+                      disabled={briefBusy}
+                      className={`w-full rounded-xl py-3.5 px-6 flex-row items-center justify-center ${
+                        briefBusy ? 'bg-amber-500/50' : 'bg-amber-500'
+                      }`}
+                    >
+                      {briefBusy ? (
+                        <ActivityIndicator size="small" color="#0F172A" />
+                      ) : briefState === 'unavailable' ? (
+                        <RefreshCw size={18} color="#0F172A" />
+                      ) : (
+                        <Sparkles size={18} color="#0F172A" />
+                      )}
+                      <Text className="text-slate-900 font-bold text-base ml-2">
+                        {briefState === 'unavailable' ? 'Check the source again' : 'Get Citizen Brief'}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               )}
 
@@ -555,9 +610,9 @@ function SlideOverPreview({
                 )}
               </Pressable>
               <Text className="text-slate-500 text-xs text-center mt-2">
-                {isUnavailable || isUnidentifiable
-                  ? 'Nothing to share until the official text is available'
-                  : "Post this Citizen's Brief to start a discussion"}
+                {canShare
+                  ? "Post this Citizen's Brief to start a discussion"
+                  : 'Get the brief first — a post carries it with the law'}
               </Text>
             </View>
           </SafeAreaView>

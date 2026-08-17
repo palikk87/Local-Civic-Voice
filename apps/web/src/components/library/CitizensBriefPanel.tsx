@@ -2,10 +2,12 @@
 // mobile/src/app/(tabs)/library.tsx — same sections, same data calls.
 //
 // The brief is written on the SERVER from the entire official text and stored on
-// the master reference. This panel only displays it. When no official source has
-// the text, it says so — it never shows a guess.
-import { X, Sparkles, ExternalLink, Share2, Loader2, FileWarning } from "lucide-react";
+// the master reference, once, when a reader asks for it. This panel offers the
+// button and displays the result. When no official source has the text, it says
+// so — it never shows a guess.
+import { X, ExternalLink, Share2, Loader2 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
 import { useLibraryBrief } from "@/hooks/use-library-brief";
 import type { GovernmentSearchResult, SearchBranch } from "@/lib/mobile/government-api";
 import { cn } from "@/lib/utils";
@@ -40,8 +42,18 @@ export function CitizensBriefPanel({
   onConvert,
   isConverting,
 }: CitizensBriefPanelProps) {
-  const { referenceId, brief, labels, isPending, isUnavailable, isUnidentifiable } =
-    useLibraryBrief(result);
+  const {
+    referenceId,
+    brief,
+    labels,
+    reason,
+    state,
+    isRequesting,
+    isResolving,
+    isUnidentifiable,
+    request,
+    rewrite,
+  } = useLibraryBrief(result);
 
   const canShare = !!referenceId && !!brief;
 
@@ -134,67 +146,31 @@ export function CitizensBriefPanel({
           </div>
 
           {/* Citizen's Brief */}
-          {isPending ? (
-            <div className="mb-4 rounded-lg border border-accent/20 bg-accent/10 p-4">
-              <div className="mb-3 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent" />
-                <span className="text-sm font-semibold text-accent">CITIZEN'S BRIEF</span>
-              </div>
-              <div className="flex flex-col items-center justify-center gap-2 py-6">
-                <Loader2 className="h-4 w-4 animate-spin text-accent" />
-                <span className="text-sm text-muted-foreground">
-                  Reading the full official text…
-                </span>
-                <span className="text-center text-xs text-muted-foreground/80">
-                  First read of a document takes a few seconds. After that it's instant for everyone.
-                </span>
-              </div>
-            </div>
-          ) : sections.length > 0 ? (
-            <div className="mb-4 space-y-4 rounded-lg border border-accent/20 bg-accent/10 p-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent" />
-                <span className="text-sm font-semibold text-accent">CITIZEN'S BRIEF</span>
-              </div>
-              {sections.map((section) => (
-                <div key={section.label}>
-                  <p className="mb-1 text-xs font-medium uppercase text-accent">{section.label}</p>
-                  <p className="text-sm leading-6 text-foreground/90">{section.body}</p>
-                </div>
-              ))}
-              <p className="border-t border-accent/20 pt-3 text-xs text-muted-foreground">
-                Written from the complete official text of this document.
+          {isUnidentifiable ? (
+            <div className="mb-4 rounded-2xl border border-border bg-muted/50 p-4">
+              <p className="text-sm leading-6 text-muted-foreground">
+                This record can't be matched to an official document yet, so there's nothing to
+                summarize from.
               </p>
             </div>
           ) : (
-            <div className="mb-4 rounded-lg border border-border bg-muted/50 p-4">
-              <div className="mb-2 flex items-center gap-2">
-                <FileWarning className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-semibold text-muted-foreground">
-                  BRIEF UNAVAILABLE
-                </span>
-              </div>
-              <p className="text-sm leading-6 text-muted-foreground">
-                {isUnidentifiable
-                  ? "This record can't be matched to an official document yet, so there's nothing to summarize from."
-                  : "The official text for this document isn't published anywhere we can read yet. Rather than guess at what it says, we're not showing a brief."}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground/80">
-                Read it at the official source below.
-              </p>
-            </div>
+            <CitizensBriefCard
+              className="mb-4"
+              state={state}
+              brief={brief}
+              labels={labels}
+              reason={reason}
+              // Resolving is a step the reader did not ask for and cannot act
+              // on, so the button stays busy through it rather than appearing
+              // ready to press before there is anything to press it against.
+              isRequesting={isRequesting || isResolving}
+              onRequest={request}
+              onRewrite={brief ? rewrite : undefined}
+              sourceUrl={result.sourceUrl}
+              sourceLabel="View Official Source"
+            />
           )}
 
-          {/* Source Link */}
-          <a
-            href={result.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center justify-center gap-2 rounded-lg bg-muted py-3 font-medium text-legislative transition-colors hover:bg-muted/70"
-          >
-            <ExternalLink className="h-4 w-4" />
-            View Official Source
-          </a>
         </div>
 
         {/* Convert to Post */}
@@ -223,9 +199,9 @@ export function CitizensBriefPanel({
             )}
           </button>
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            {isUnavailable || isUnidentifiable
-              ? "Nothing to share until the official text is available"
-              : "Post this Citizen's Brief to start a discussion"}
+            {canShare
+              ? "Post this Citizen's Brief to start a discussion"
+              : "Get the brief first — a post carries it with the law"}
           </p>
         </div>
       </MotionDiv>

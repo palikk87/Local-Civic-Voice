@@ -8,6 +8,15 @@
  * asks whether anything is stranded short of main. Between them there is no
  * gap: work is on main and deployed, or this says out loud where it is sitting.
  *
+ * DORMANT IS A FINE PLACE FOR A BRANCH TO BE. A branch whose work is already on
+ * main holds nothing at risk, and keeping it costs nothing — it is history you
+ * might want to read later. This reports those as dormant and leaves them
+ * alone. --prune exists for when you actually want them gone, and is never the
+ * recommendation.
+ *
+ * The branches worth acting on are the ones carrying work main does not have,
+ * and those are reported separately and loudly.
+ *
  * A branch is only ever reported as MERGED when every commit it carries is
  * already on main. That is deliberately looser than `git branch --merged`,
  * which asks about ancestry alone and so calls a rebased or cherry-picked
@@ -17,7 +26,7 @@
  * have, so a branch that landed under a different id is correctly seen as
  * landed.
  *
- * --prune only ever deletes MERGED branches. It will not touch main, and it
+ * --prune only ever deletes dormant branches. It will not touch main, and it
  * will not touch a branch carrying work of its own, no matter what is asked.
  */
 
@@ -134,15 +143,15 @@ for (const branch of ahead) {
   console.log("");
 }
 
-for (const branch of merged) console.log(`merged   ${branch.name}`);
+for (const branch of merged) console.log(`dormant  ${branch.name}`);
 for (const branch of unknown) console.log(`?        ${branch.name} — could not read`);
 console.log("");
 
 if (PRUNE) {
   if (merged.length === 0) {
-    console.log("Nothing safe to delete.");
+    console.log("No dormant branches to delete.");
   } else {
-    console.log(`Deleting ${merged.length} branch(es) whose work is already on main.\n`);
+    console.log(`Deleting ${merged.length} dormant branch(es) — their work is already on main.\n`);
     const failures: string[] = [];
     for (const branch of merged) {
       try {
@@ -191,7 +200,8 @@ if (merged.length === 0) {
   console.log("Nothing is stranded off main.");
 } else if (!PRUNE) {
   console.log(
-    `All ${merged.length} branch(es) are fully contained in main — clutter, not risk.\n` +
-      `Clear them with: bun run branches --prune`,
+    `${merged.length} dormant branch(es): every change they carry is already on main, so\n` +
+      `nothing is at risk and nothing needs doing. Kept on purpose — they are history\n` +
+      `you may want later. \`bun run branches --prune\` deletes them if you ever do.`,
   );
 }

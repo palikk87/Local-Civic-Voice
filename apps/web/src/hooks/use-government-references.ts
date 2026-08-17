@@ -40,10 +40,14 @@ export function useLatestReferences(referenceType: ReferenceType, limit = 30) {
 /**
  * Single reference by database id — used by detail pages for synced items.
  *
- * Opening a law is what triggers the server to pull its official text and write
- * the citizen brief onto the master reference (first reader pays, everyone after
- * is served from storage). While that work is in flight the server reports
- * contentStatus brief_pending/fetching, so we poll until it lands.
+ * DOES NOT POLL. It used to refetch every four seconds while the server
+ * reported the brief as being written, which was fine until the work behind
+ * that status died with the process doing it: the row went on claiming to be
+ * busy, and this went on asking, forever. A reader who opened a law and did
+ * nothing else got a spinner no reload could clear.
+ *
+ * Writing a brief is now something a person asks for, and `useCitizenBrief`
+ * owns that request and its bounded wait. This is a plain read again.
  */
 export function useGovernmentReference(id: string | undefined, enabled = true) {
   return useQuery({
@@ -52,10 +56,6 @@ export function useGovernmentReference(id: string | undefined, enabled = true) {
     enabled: enabled && !!id,
     staleTime: 60 * 1000,
     retry: 1,
-    refetchInterval: (query) => {
-      const status = query.state.data?.reference?.contentStatus;
-      return status === "brief_pending" || status === "fetching" ? 4000 : false;
-    },
   });
 }
 

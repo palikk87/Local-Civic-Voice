@@ -19,8 +19,9 @@
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import { prisma, resetData, startServer, stopServer } from "./helpers/server";
+import { BASE_URL, prisma, resetData, startServer, stopServer } from "./helpers/server";
 import { ensureReferenceContent, processReferenceBrief } from "../src/services/reference-content";
+import { briefState, releaseAbandonedWork, WORK_TIMEOUT_MS } from "../src/services/brief-state";
 
 /**
  * A short bill, long enough to clear the 200-character floor the source chain
@@ -288,5 +289,222 @@ describe("writing a brief", () => {
     expect(row.contentStatus).toBe("unavailable");
     // And not a single model call was spent on it.
     expect(modelCalls).toEqual([]);
+  });
+});
+
+/**
+ * The load loop.
+ *
+ * A reader opened a law and watched a spinner that never stopped, and reloading
+ * did not help. The cause was a status column that could enter a working state
+ * and had no way to leave one: the job behind it died with the process running
+ * it — a restart, a deploy, a crash — and nothing was left to write an outcome.
+ * The row went on saying "being written", so the client went on polling.
+ *
+ * These pin the two halves of the fix. Work in flight now records when it
+ * started, so it can be aged out; and nothing starts work except a person
+ * asking for it.
+ */
+describe("a brief request always ends somewhere", () => {
+  test("work abandoned mid-flight is offered back as a button, not a spinner", async () => {
+    const law = await record();
+
+    // Exactly the state a killed process leaves behind: claiming to be busy,
+    // with nothing running.
+    await prisma.governmentReference.update({
+      where: { id: law.id },
+      data: {
+        contentStatus: "brief_pending",
+        contentStartedAt: new Date(Date.now() - WORK_TIMEOUT_MS - 1000),
+      },
+    });
+
+    const response = await fetch(`${BASE_URL}/api/government-references/${law.id}`);
+    const body = (await response.json()) as { reference: { briefState: string } };
+
+    // Not "working". That is the whole bug: the old code had no way to say
+    // anything else once the row said it was busy.
+    expect(body.reference.briefState).toBe("idle");
+  });
+
+  test("a row that predates the start-time column is treated as abandoned, not busy", async () => {
+    // Rows already stuck in production have no start time at all, so there is
+    // no evidence any work is happening. Trusting them would keep exactly the
+    // readers this fixes stuck.
+    const law = await record({ contentStatus: "fetching" });
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+
+    expect(row.contentStartedAt).toBeNull();
+    expect(briefState(row)).toBe("idle");
+  });
+
+  test("work that genuinely just started still reads as working", async () => {
+    // The timeout must not be so eager that two readers start the same brief.
+    const law = await record({
+      contentStatus: "brief_pending",
+      contentStartedAt: new Date(),
+    });
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+
+    expect(briefState(row)).toBe("working");
+  });
+
+  test("a restart releases every brief its predecessor was mid-way through", async () => {
+    const stranded = await record({
+      contentStatus: "brief_pending",
+      contentStartedAt: new Date(Date.now() - WORK_TIMEOUT_MS - 1000),
+    });
+    const legacy = await record({ contentStatus: "fetching" });
+    const running = await record({ contentStatus: "fetching", contentStartedAt: new Date() });
+
+    const released = await releaseAbandonedWork();
+    expect(released).toBe(2);
+
+    for (const id of [stranded.id, legacy.id]) {
+      const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id } });
+      expect(row.contentStatus).toBeNull();
+      expect(row.contentStartedAt).toBeNull();
+    }
+
+    // And work that is actually happening is left alone.
+    const untouched = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: running.id },
+    });
+    expect(untouched.contentStatus).toBe("fetching");
+  });
+});
+
+describe("the Get Citizen Brief button", () => {
+  // The server runs in its own process, so the network stub in this file does
+  // not reach it. Anything here that goes over HTTP is therefore written to
+  // need no outbound call — which is also the honest test of "reuse", since a
+  // request that reused nothing would have to reach a provider and fail.
+
+  test("nothing is written until somebody asks", async () => {
+    const law = await record();
+
+    // Reading the law does not write a brief, and does not put the row into a
+    // state the client would poll. Opening a law used to do both.
+    const read = await fetch(`${BASE_URL}/api/government-references/${law.id}`);
+    const body = (await read.json()) as { reference: { briefState: string } };
+
+    expect(body.reference.briefState).toBe("idle");
+    expect(modelCalls).toEqual([]);
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(row.contentStatus).toBeNull();
+    expect(row.citizenBriefJson).toBeNull();
+  });
+
+  test("resolving a document identifies it and starts nothing", async () => {
+    // Resolve used to mark the row as working and kick off a brief, so merely
+    // opening a search result began paying a model and armed the poll that
+    // could never end.
+    const law = await record();
+
+    const response = await fetch(`${BASE_URL}/api/government-references/resolve`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        branch: "legislative",
+        title: law.title,
+        masterReferenceId: law.masterReferenceId,
+        congress: 119,
+        billType: "hr",
+        billNumber: law.masterReferenceId.split("-")[1],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      reference: { id: string; briefState: string; contentStatus: string | null };
+    };
+    expect(body.reference.briefState).toBe("idle");
+    expect(body.reference.contentStatus).toBeNull();
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: body.reference.id },
+    });
+    expect(row.contentStatus).toBeNull();
+    expect(row.citizenBriefJson).toBeNull();
+  });
+
+  test("a brief that already exists comes straight back, and is not rewritten", async () => {
+    const law = await record();
+    // Write it once, for real, through the whole pipeline.
+    await processReferenceBrief(law.id, false);
+
+    const stored = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(stored.citizenBriefJson).not.toBeNull();
+
+    const response = await fetch(`${BASE_URL}/api/government-references/${law.id}/brief`, {
+      method: "POST",
+    });
+    const body = (await response.json()) as {
+      state: string;
+      brief: { theGoal: string };
+      labels: { goal: string };
+      lawVersion: number;
+      briefVersion: number;
+    };
+
+    expect(response.status).toBe(200);
+    expect(body.state).toBe("ready");
+    expect(body.brief.theGoal).toBe(BRIEF.theGoal);
+    // The panel headings come from the server because they differ by branch.
+    expect(body.labels.goal).toBeTruthy();
+    expect(body.briefVersion).toBe(body.lawVersion);
+
+    // Not rewritten: same brief, same timestamp. Once per version of the law,
+    // however many people press the button. (The server process has no stubbed
+    // provider, so a rewrite here could not have succeeded at all — which is
+    // the point: it never tried.)
+    const after = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(after.citizenBriefAt?.getTime()).toBe(stored.citizenBriefAt?.getTime());
+    expect(after.citizenBriefJson).toBe(stored.citizenBriefJson);
+    expect(after.contentStatus).toBe("ready");
+    expect(after.contentStartedAt).toBeNull();
+  });
+
+  test("no official text answers unavailable, and leaves nothing claiming to be busy", async () => {
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("congress.gov") || url.includes("govinfo") || url.includes("federalregister")) {
+        return new Response("Not found", { status: 404 });
+      }
+      if (url.includes("api.openai.com")) {
+        modelCalls.push({ model: "unexpected", kind: "write" });
+        return Response.json({ choices: [{ message: { content: JSON.stringify(BRIEF) } }] });
+      }
+      return realFetch(input, init);
+    }) as typeof fetch;
+
+    const law = await record({ sourceUrl: null });
+    await processReferenceBrief(law.id, false);
+
+    expect(modelCalls).toEqual([]);
+
+    // Settled, not busy. A row left claiming to be busy here is the load loop.
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(row.contentStatus).toBe("unavailable");
+    expect(row.contentStartedAt).toBeNull();
+    expect(briefState(row)).toBe("unavailable");
+  });
+
+  test("force rewrites a brief that is already current", async () => {
+    const law = await record();
+    await processReferenceBrief(law.id, false);
+    const afterFirst = modelCalls.length;
+    expect(afterFirst).toBeGreaterThan(0);
+
+    await ensureReferenceContent(law.id, { force: true, generateBriefInline: true });
+
+    // The reuse rule has one deliberate exception, and this is it.
+    expect(modelCalls.length).toBeGreaterThan(afterFirst);
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+    expect(row.contentStatus).toBe("ready");
+    expect(row.contentStartedAt).toBeNull();
+    expect(briefState(row)).toBe("ready");
   });
 });

@@ -87,6 +87,14 @@ const CHECKS: Check[] = [
     guards: "Related Laws renders, and a live record always beats the local fallback",
   },
   {
+    name: "web brief-button-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "brief-button-check"],
+    guards:
+      "the Citizen's Brief is asked for rather than automatic, and every state ends " +
+      "somewhere — no spinner without an exit",
+  },
+  {
     name: "mobile typecheck",
     cwd: "apps/mobile",
     cmd: ["bun", "run", "typecheck"],

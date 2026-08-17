@@ -20,6 +20,7 @@ import { ensureReferenceContent, parseBriefJson, briefSectionLabels } from "../s
 import { resolveLibraryDocument } from "../services/library-resolve";
 import { libraryResolveRequestSchema } from "../types";
 import { JobPriority, JobType, jobQueue } from "../services/job-queue";
+import { briefState, isAbandoned, isWorking, markSettled, markWorking } from "../services/brief-state";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -27,6 +28,16 @@ type AuthVariables = {
 };
 
 const governmentReferencesRouter = new Hono<{ Variables: AuthVariables }>();
+
+/**
+ * How long the brief request holds the connection before answering "working".
+ *
+ * Long enough for the ordinary case — pull the official text, one or two model
+ * passes, a fact-check — to finish while the reader is still looking at the
+ * button they pressed. Past it the work carries on server-side and the client
+ * asks again; nothing is lost, and no request hangs indefinitely.
+ */
+const BRIEF_REQUEST_DEADLINE_MS = 45_000;
 
 /**
  * The caller's standing vote per reference, in one query — every list of law
@@ -349,20 +360,19 @@ governmentReferencesRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const user = c.get("user");
 
-  const existing = await prisma.governmentReference.findUnique({
-    where: { id },
-    select: { id: true, mergedIntoId: true },
-  });
-
-  // The master reference is the cache and the first place we look. If this is the
-  // first time anyone has opened this law, pull the official text from the source
-  // chain now and store it here; the citizen brief is queued so the reader isn't
-  // left waiting on the model. Already stored and still current? This is a no-op.
-  if (existing && !existing.mergedIntoId) {
-    await ensureReferenceContent(id).catch((error) => {
-      console.error(`[RefContent] ensure failed for ${id}:`, error);
-    });
-  }
+  // READS. DOES NOT WRITE.
+  //
+  // This used to pull the official text and queue a brief on every open, which
+  // is where the load loop began: opening a law put the row into a working
+  // state, the client polled while the server said it was working, and if the
+  // job behind it died — a restart, a deploy — the row went on saying it was
+  // working and the spinner went on spinning. A reader who asked for nothing
+  // could not get out of it, and reloading did not help, because the stuck
+  // state was in the database.
+  //
+  // Pulling the text and writing the brief now happen when somebody presses
+  // "Get Citizen Brief" (POST /:id/brief), which is the act that costs money
+  // and the act a person should choose.
 
   const reference = await prisma.governmentReference.findUnique({
     where: { id },
@@ -427,8 +437,9 @@ governmentReferencesRouter.get("/:id", async (c) => {
       description: reference.description,
       citizenBrief: reference.citizenBrief,
       // Structured brief straight off the master reference — the three panels both
-      // faucets render. null while the brief job is still running (contentStatus
-      // tells the client whether to poll or offer a manual generate).
+      // faucets render. Returned even when it describes an earlier version of
+      // the law, because the reader deserves to see what exists and that it is
+      // behind; citizenBriefVersion and lawVersion below say which.
       citizenBriefSections: parseBriefJson(reference.citizenBriefJson),
       citizenBriefLabels: briefSectionLabels(reference.referenceType, reference.status),
       citizenBriefAt: reference.citizenBriefAt?.toISOString() ?? null,
@@ -442,6 +453,15 @@ governmentReferencesRouter.get("/:id", async (c) => {
       lawVersion: reference.lawVersion,
       lawChangedAt: reference.lawChangedAt?.toISOString() ?? null,
       contentStatus: reference.contentStatus ?? (reference.citizenBriefJson ? "ready" : null),
+      // WHAT THE READER SHOULD BE SHOWN, in one word.
+      //
+      // contentStatus above is the raw column and stays for anything reading
+      // it; this is the collapsed answer, and it is the one the clients use.
+      // The difference that matters: work claiming to be in flight past its
+      // timeout reports `idle` here, so the reader is offered the button again
+      // instead of a spinner that can never resolve — which is exactly what a
+      // job lost to a restart used to produce, permanently.
+      briefState: briefState(reference),
       fullText: reference.fullText,
       fullTextSource: reference.fullTextSource,
       fullTextUrl: reference.fullTextUrl,
@@ -497,34 +517,36 @@ governmentReferencesRouter.post(
 
     const row = await prisma.governmentReference.findUnique({
       where: { id: resolved.id },
-      select: { contentStatus: true, citizenBriefJson: true },
+      select: {
+        contentStatus: true,
+        contentStartedAt: true,
+        citizenBriefJson: true,
+        citizenBriefVersion: true,
+        lawVersion: true,
+      },
     });
 
-    // Mark the row as working BEFORE responding. The client polls GET /:id, and a
-    // null status there reads as "nothing is happening" — it would stop polling
-    // before the brief ever lands.
-    let contentStatus = row?.contentStatus ?? null;
-    if (!contentStatus) {
-      contentStatus = row?.citizenBriefJson ? "ready" : "fetching";
-      await prisma.governmentReference.update({
-        where: { id: resolved.id },
-        data: { contentStatus },
-      });
-    }
-
-    // Kick off the pull; don't hold the response for it. ensureReferenceContent
-    // de-duplicates concurrent runs, so several readers opening the same law at
-    // once still means one fetch.
-    void ensureReferenceContent(resolved.id).catch((error) => {
-      console.error(`[RefContent] ensure failed for ${resolved.masterReferenceId}:`, error);
-    });
-
+    // DELIBERATELY DOES NO WORK. Resolving a document means "which record is
+    // this" and nothing more.
+    //
+    // It used to mark the row as working and start a brief in the background,
+    // so merely opening a law began paying a model, and the client polled a
+    // status the server could get permanently stuck on — a reader who asked for
+    // nothing could end up watching a spinner that no reload could clear.
+    //
+    // Writing a brief is now something a person asks for, at
+    // POST /:id/brief. This just reports where the record stands.
     return c.json({
       reference: {
         id: resolved.id,
         masterReferenceId: resolved.masterReferenceId,
         referenceType: resolved.referenceType,
-        contentStatus,
+        contentStatus: row?.contentStatus ?? null,
+        briefState: row
+          ? briefState(row)
+          : // No row yet means nothing has been written for it, which is
+            // exactly the state that offers the button.
+            ("idle" as const),
         created: resolved.created,
       },
     });
@@ -936,6 +958,148 @@ governmentReferencesRouter.post("/:id/recalculate-stats", async (c) => {
 });
 
 /**
+ * POST /api/government-references/:id/brief
+ *
+ * The one thing the "Get Citizen Brief" button does.
+ *
+ * WHY IT IS A BUTTON. Opening a law used to start this work by itself, and the
+ * client polled a status the server could get permanently stuck on, so a reader
+ * who did nothing at all could end up watching a spinner forever. Reading a law
+ * and paying a model to summarize it are different acts, and only the second one
+ * should need a person to ask for it.
+ *
+ * Answers with one of four states, and never with a promise it cannot keep:
+ *
+ *   ready        the brief, written from the complete official text
+ *   working      genuinely being written right now; ask again shortly
+ *   unavailable  no official source publishes the text, so there is nothing to
+ *                write from and we will not guess
+ *
+ * `force` rewrites a brief that is already current. Everything else reuses:
+ * a brief is written once per version of the law, however many people ask.
+ *
+ * No auth. Reading a law is public, and so is asking for its summary — the
+ * work is bounded per reference by the in-flight guard in ensureReferenceContent,
+ * not by who is signed in.
+ */
+governmentReferencesRouter.post("/:id/brief", async (c) => {
+  const referenceId = c.req.param("id");
+
+  const row = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: {
+      id: true,
+      mergedIntoId: true,
+      contentStatus: true,
+      contentStartedAt: true,
+      citizenBriefJson: true,
+      citizenBriefVersion: true,
+      lawVersion: true,
+      referenceType: true,
+      status: true,
+    },
+  });
+
+  if (!row) return c.json({ error: "Reference not found" }, 404);
+  if (row.mergedIntoId) {
+    return c.json(
+      { error: "This reference has been merged", mergedInto: row.mergedIntoId },
+      409
+    );
+  }
+
+  const force = c.req.query("force") === "true";
+  const state = briefState(row);
+
+  // Already written for this version of the law: hand it over without paying
+  // for it again. This is the common case once one person has asked.
+  if (state === "ready" && !force) {
+    return c.json({
+      state: "ready",
+      brief: parseBriefJson(row.citizenBriefJson),
+      labels: briefSectionLabels(row.referenceType, row.status),
+      lawVersion: row.lawVersion,
+      briefVersion: row.citizenBriefVersion,
+    });
+  }
+
+  // Someone else asked moments ago and it is genuinely running. Say so rather
+  // than starting a second write of the same brief.
+  if (state === "working" && !force) {
+    return c.json({ state: "working", startedAt: row.contentStartedAt?.toISOString() ?? null });
+  }
+
+  // Claim the work before doing any of it, so a second reader arriving during
+  // the model call is told "working" instead of starting their own run.
+  if (!isWorking(row.contentStatus) || isAbandoned(row) || force) {
+    await markWorking(referenceId, "fetching");
+  }
+
+  try {
+    // Inline: this request IS the wait. The reader pressed a button and is
+    // watching, so handing the work to a background queue and asking them to
+    // poll adds a failure mode without adding speed.
+    await ensureReferenceContent(referenceId, {
+      force,
+      deadlineMs: BRIEF_REQUEST_DEADLINE_MS,
+      generateBriefInline: true,
+    });
+  } catch (error) {
+    // A thrown job must not leave the row claiming to be busy — that is the
+    // exact shape of the bug this endpoint replaces.
+    await markSettled(referenceId, "unavailable").catch(() => undefined);
+    console.error(`[Brief] generation failed for ${referenceId}:`, error);
+    return c.json(
+      { state: "unavailable", reason: "The brief could not be written just now. Try again." },
+      200
+    );
+  }
+
+  const after = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: {
+      contentStatus: true,
+      contentStartedAt: true,
+      citizenBriefJson: true,
+      citizenBriefVersion: true,
+      lawVersion: true,
+      referenceType: true,
+      status: true,
+      fullTextUrl: true,
+      sourceUrl: true,
+    },
+  });
+
+  if (!after) return c.json({ error: "Reference not found" }, 404);
+
+  const settled = briefState(after);
+
+  if (settled === "ready") {
+    return c.json({
+      state: "ready",
+      brief: parseBriefJson(after.citizenBriefJson),
+      labels: briefSectionLabels(after.referenceType, after.status),
+      lawVersion: after.lawVersion,
+      briefVersion: after.citizenBriefVersion,
+    });
+  }
+
+  if (settled === "working") {
+    // Still going past our deadline — a long bill in several passes. The work
+    // continues; the client asks again.
+    return c.json({ state: "working", startedAt: after.contentStartedAt?.toISOString() ?? null });
+  }
+
+  return c.json({
+    state: "unavailable",
+    reason:
+      "The official text for this document isn't published anywhere we can read yet. " +
+      "Rather than guess at what it says, we're not writing a brief.",
+    sourceUrl: after.fullTextUrl ?? after.sourceUrl,
+  });
+});
+
+/**
  * POST /api/government-references/:id/refresh-content
  * Force the master reference to re-pull official text and rebuild the citizen brief,
  * bypassing the daily staleness check. Used when a reader reports the stored copy
@@ -966,13 +1130,11 @@ governmentReferencesRouter.post("/:id/refresh-content", async (c) => {
     JobPriority.HIGH
   );
 
-  await prisma.governmentReference.update({
-    where: { id: referenceId },
-    data: { contentStatus: "fetching" },
-  });
+  await markWorking(referenceId, "fetching");
 
   return c.json({
     contentStatus: "fetching",
+    briefState: "working" as const,
     message: "Re-pulling official text and rebuilding the citizen brief",
   });
 });

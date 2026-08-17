@@ -22,6 +22,7 @@ import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
 import { schemaState } from "./services/schema-state";
+import { releaseAbandonedWork } from "./services/brief-state";
 
 // Import rate limiters
 import {
@@ -255,6 +256,21 @@ const port = Number(process.env.PORT) || 3000;
 initializeProcessors();
 jobQueue.start();
 console.log(`[Server] Job queue started`);
+
+// Release briefs whose work this process's predecessor was doing when it went
+// away. The job queue is in memory, so a restart or a deploy loses everything
+// in it — and the rows those jobs were working on kept saying "in progress"
+// with nothing left to finish them. Anyone opening one watched a spinner that
+// no reload could clear, because the stuck state was in the database.
+//
+// The process that replaces the one that died is the right place to notice.
+void releaseAbandonedWork()
+  .then((released) => {
+    if (released > 0) {
+      console.log(`[Server] released ${released} brief(s) left mid-flight by a previous process`);
+    }
+  })
+  .catch((error) => console.error("[Server] could not release abandoned brief work:", error));
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
 // SCOTUS cases at boot, then once every 24 hours. The sync itself skips if it

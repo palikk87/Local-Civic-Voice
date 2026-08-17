@@ -23,6 +23,7 @@ import { type BriefJobPlan, classifyBriefJob, generateAI, parseJsonObject } from
 import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
+import { markSettled, markWorking } from "./brief-state";
 
 const FETCH_TIMEOUT_MS = 15_000;
 /** How long stored text is trusted before we re-compare it against the official source. */
@@ -718,10 +719,7 @@ async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
   // The document says "official text unavailable" instead, and the next reader
   // retries the source chain.
   if (!ref.fullText) {
-    await prisma.governmentReference.update({
-      where: { id: ref.id },
-      data: { contentStatus: "unavailable" },
-    });
+    await markSettled(ref.id, "unavailable");
     console.warn(
       `[RefContent] No brief for ${ref.masterReferenceId} — official text unavailable, refusing to summarize metadata`
     );
@@ -773,10 +771,7 @@ async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
   // Every provider failed on text we DO have. Leave the brief empty and let the
   // reader retry rather than storing boilerplate that reads like a real summary.
   if (!generated.sections) {
-    await prisma.governmentReference.update({
-      where: { id: ref.id },
-      data: { contentStatus: "unavailable" },
-    });
+    await markSettled(ref.id, "unavailable");
     console.warn(
       `[RefContent] Brief generation failed for ${ref.masterReferenceId} (${plan.lane} lane, ${chunks.length} pass${chunks.length === 1 ? "" : "es"}) — nothing stored`
     );
@@ -796,6 +791,7 @@ async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
       // lawVersion and reuses instead of paying again.
       citizenBriefVersion: ref.lawVersion,
       contentStatus: "ready",
+      contentStartedAt: null,
     },
   });
 
@@ -876,10 +872,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
 
   if (shouldFetchText) {
     if (textMissing) {
-      await prisma.governmentReference.update({
-        where: { id: ref.id },
-        data: { contentStatus: "fetching" },
-      });
+      await markWorking(ref.id, "fetching");
     }
 
     const fetched = await fetchOfficialText(ref, deadlineAt);
@@ -956,10 +949,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
   // every page view would re-enqueue a brief job and flip the row back to
   // brief_pending, so the reader would watch a spinner that never resolves.
   if (!current.fullText) {
-    await prisma.governmentReference.update({
-      where: { id: ref.id },
-      data: { contentStatus: "unavailable" },
-    });
+    await markSettled(ref.id, "unavailable");
     return;
   }
 
@@ -978,10 +968,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
     Boolean(current.citizenBriefJson) && current.citizenBriefVersion === current.lawVersion;
   const briefNeeded = force || !briefIsCurrent || textChanged;
   if (!briefNeeded) {
-    await prisma.governmentReference.update({
-      where: { id: ref.id },
-      data: { contentStatus: "ready" },
-    });
+    await markSettled(ref.id, "ready");
     return;
   }
 
@@ -992,10 +979,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
 
   // Hand the brief to the queue: the reader gets official text now and the brief
   // lands a few seconds later, which both faucets poll for.
-  await prisma.governmentReference.update({
-    where: { id: ref.id },
-    data: { contentStatus: "brief_pending" },
-  });
+  await markWorking(ref.id, "brief_pending");
   jobQueue.enqueue(
     JobType.GENERATE_REFERENCE_BRIEF,
     { referenceId: ref.id, force },

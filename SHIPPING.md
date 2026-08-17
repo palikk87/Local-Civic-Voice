@@ -69,20 +69,25 @@ bun run branches
 
 The other half of the same question. `deploy-check` asks whether `main` is
 live; this asks whether anything finished is sitting short of `main`. Every
-branch on the remote is listed as either **merged** — every change it carries
-is already on `main`, so it is clutter — or **AHEAD**, with the commits that
-would be lost by deleting it.
+branch on the remote is listed as either **dormant** — every change it carries
+is already on `main` — or **AHEAD**, with the commits that would be lost by
+deleting it.
 
 It compares what each commit *does*, not which id it has, so a branch that
 landed via rebase or cherry-pick is correctly read as landed.
+
+Dormant is a fine place for a branch to be. It holds nothing at risk, costs
+nothing, and is history you may want to read later, so they are kept. The ones
+worth acting on are the AHEAD ones — work that is finished and invisible.
 
 ```bash
 bun run branches --prune
 ```
 
-Deletes the merged ones. It refuses to touch `main` or any branch carrying work
-of its own, and it prints each deleted branch's commit id, so any of them can be
-put back with `git push origin <sha>:refs/heads/<name>`.
+Deletes the dormant ones, for when you actually want them gone. It refuses to
+touch `main` or any branch carrying work of its own, and prints each deleted
+branch's commit id, so any of them can be put back with
+`git push origin <sha>:refs/heads/<name>`.
 
 CI runs the report on every `main` build and writes it into the run summary, so
 a forgotten branch surfaces on its own rather than waiting to be noticed.
@@ -132,8 +137,9 @@ CI writes a banner on the run saying, in as many words, that this branch is not
 deployed and how many commits are waiting. Green CI on a branch never reads as
 "shipped".
 
-Merge it to `main` as soon as it is ready, run `deploy-check` to confirm it
-shipped, and clear the branch with `bun run branches --prune`.
+Merge it to `main` as soon as it is ready and run `deploy-check` to confirm it
+shipped. The branch itself can stay — once its work is on `main` it is dormant,
+not a liability.
 
 ---
 

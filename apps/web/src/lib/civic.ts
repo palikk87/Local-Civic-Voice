@@ -68,6 +68,33 @@ export interface CitizenBriefLabels {
  */
 export type ReferenceContentStatus = "ready" | "brief_pending" | "fetching" | "unavailable";
 
+/**
+ * What to show the reader, in one word — the server's collapsed answer.
+ *
+ * Prefer this over contentStatus. That is the raw column and it can say
+ * "fetching" about work that died with the process doing it; this reports such
+ * a row as `idle`, so the reader is offered the button again rather than a
+ * spinner nothing will ever resolve.
+ *
+ *   ready        a brief written for the version of the law in front of you
+ *   working      genuinely being written right now
+ *   unavailable  no official source publishes the text to write from
+ *   idle         nobody has asked yet — show the button
+ */
+export type BriefState = "ready" | "working" | "unavailable" | "idle";
+
+/** What POST /:id/brief answers with. Exactly one of these three shapes. */
+export type BriefResponse =
+  | {
+      state: "ready";
+      brief: CitizenBriefSections;
+      labels: CitizenBriefLabels;
+      lawVersion: number;
+      briefVersion: number | null;
+    }
+  | { state: "working"; startedAt: string | null }
+  | { state: "unavailable"; reason: string; sourceUrl?: string | null };
+
 export interface GovReferenceDetail extends GovReference {
   fullText: string | null;
   aliases: string[];
@@ -78,6 +105,11 @@ export interface GovReferenceDetail extends GovReference {
   citizenBriefLabels: CitizenBriefLabels;
   citizenBriefAt: string | null;
   contentStatus: ReferenceContentStatus | null;
+  /** The collapsed state — what the brief card should render. */
+  briefState: BriefState;
+  /** Which version of the law the stored brief describes, against lawVersion. */
+  citizenBriefVersion: number | null;
+  lawVersion: number;
   fullTextSource: string | null;
   fullTextUrl: string | null;
   fullTextAt: string | null;
@@ -112,6 +144,7 @@ export interface LibraryResolveResponse {
     masterReferenceId: string;
     referenceType: ReferenceType;
     contentStatus: ReferenceContentStatus | null;
+    briefState: BriefState;
     created: boolean;
   };
 }
@@ -345,6 +378,18 @@ export const civicApi = {
    */
   resolveLibraryDocument: (input: LibraryResolveRequest) =>
     api.post<LibraryResolveResponse>("/api/government-references/resolve", input),
+
+  /**
+   * Write the Citizen's Brief for this reference — what the button does.
+   *
+   * One request, one honest answer: the brief, "still working", or "no official
+   * text to write from". Nothing here starts by itself; a brief is written only
+   * because somebody asked for it, and then reused by everyone after.
+   */
+  getCitizenBrief: (id: string, force = false) =>
+    api.post<BriefResponse>(
+      `/api/government-references/${id}/brief${force ? "?force=true" : ""}`,
+    ),
 
   /** Re-pull the official text and rewrite the brief stored on the master reference. */
   refreshReferenceContent: (id: string) =>

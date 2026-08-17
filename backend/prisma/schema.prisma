@@ -617,6 +617,17 @@ model GovernmentReference {
   // "one brief per version" a fact rather than an intention.
   lawVersion          Int       @default(1)
   contentStatus       String?
+  // When the current contentStatus started, for the two working states only.
+  //
+  // "fetching" and "brief_pending" describe work in flight, and work in flight
+  // ends — but nothing was writing down when it began, so a job lost to a
+  // restart, a crash, or a deploy left the row claiming to be busy forever.
+  // The reader then watched a spinner that could never resolve, and a reload
+  // did not help because the lie was stored, not local.
+  //
+  // With a start time, "busy" is checkable: past the timeout it is abandoned
+  // work, not current work, and the next reader is offered the button again.
+  contentStartedAt    DateTime?
   signedDate          DateTime?
   decidedDate         DateTime?
   aliases             String?
