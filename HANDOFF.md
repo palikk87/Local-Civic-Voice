@@ -1,5 +1,10 @@
 # What still needs you
 
+> **How work reaches you: see [SHIPPING.md](SHIPPING.md).** `main` is the
+> product; anything not on it is not live. `bun run verify` before pushing,
+> `bun run deploy-check` after, and the second one tells you whether the site
+> and the API are actually running what you think they are.
+
 Everything in this file requires an account, a password, a card, or a decision
 that is yours to make. None of it can be done from inside a coding session, and
 none of it has been done on your behalf — by design. Every service here is

@@ -96,6 +96,22 @@ app.get("/health", (c) => {
     status: "ok",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    // WHICH COMMIT IS ACTUALLY RUNNING.
+    //
+    // The failure this exists for: a fix is written, reviewed, tested and
+    // pushed, and it lands on a branch nothing deploys. The code is perfect and
+    // the product is unchanged, and from outside those look identical — the
+    // only way anybody found out was by using the feature and seeing the old
+    // behaviour. A backend change nobody clicks could sit undeployed forever.
+    //
+    // Baked in at image build (Dockerfile ARG GIT_SHA), so it describes the
+    // code in this container and cannot be faked by the environment.
+    // "unknown" means the image was built without it, which is itself worth
+    // seeing.
+    version: {
+      commit: process.env.GIT_SHA ?? "unknown",
+      builtAt: process.env.BUILD_TIME ?? null,
+    },
     // Surfaced because an unsent one-time code is otherwise invisible: sign-in
     // and password reset both fail at the moment a user needs them, not at boot.
     email: { configured: isEmailConfigured() },

@@ -126,6 +126,28 @@ jobs:
           # build only needs to prove it compiles, not to reach a real API.
           VITE_BACKEND_URL: https://ci.invalid
 
+      # The bundle has to boot, not just build. A chunking mistake compiles
+      # green and white-screens in production; only executing it catches that.
+      - name: Install Chromium for the browser checks
+        run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: bun run render-check
+        working-directory: apps/web
+      - run: bun run layout-check
+        working-directory: apps/web
+      - run: bun run related-laws-check
+        working-directory: apps/web
+
+      # The built site must be able to say which commit it is. Without the
+      # stamp, deploy-check cannot tell a deploy that happened from one that
+      # did not, and that is precisely how a finished fix sat unshipped.
+      - name: The build stamped itself with a commit
+        working-directory: apps/web
+        run: |
+          test -f dist/version.json || { echo "::error::dist/version.json missing — the version stamp did not run"; exit 1; }
+          cat dist/version.json
+          node -e "const v=require('./dist/version.json'); if(!v.commit||v.commit==='unknown'){console.error('::error::build carries no commit stamp');process.exit(1)}"
+
   mobile:
     name: mobile
     runs-on: ubuntu-latest
@@ -151,3 +173,73 @@ jobs:
       - name: Bundle for iOS
         run: bunx expo export --platform ios --output-dir /tmp/expo-ci
         working-directory: apps/mobile
+
+  # Is this branch's work actually going to reach users?
+  #
+  # THE FAILURE THIS EXISTS FOR. A fix was written, reviewed, tested green and
+  # pushed — to a branch nothing deploys. The repository was correct and the
+  # product was unchanged, and from outside those look identical. It surfaced
+  # only because somebody clicked the button by hand; a server-side change
+  # nobody clicks would have sat undeployed indefinitely.
+  #
+  # This does not fail the build. A branch is allowed to exist. It writes a
+  # loud, unmissable summary saying the work is NOT live yet and what to do
+  # about it, so "green CI" is never mistaken for "shipped".
+  deploy-reminder:
+    name: is it live
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Say plainly that this is not deployed
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          AHEAD=$(git rev-list --count origin/main..HEAD 2>/dev/null || echo "?")
+          {
+            echo "## Green, but not live"
+            echo ""
+            echo "This is \`$BRANCH\`, which **nothing deploys**. Vercel and Railway build"
+            echo "from \`main\`."
+            echo ""
+            echo "**$AHEAD commit(s)** here are not on \`main\`, which means they are not in"
+            echo "the product, no matter how green this run is."
+            echo ""
+            echo "Merge to \`main\`, then confirm it actually shipped:"
+            echo ""
+            echo '```'
+            echo "bun run deploy-check"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Branch $BRANCH is $AHEAD commit(s) ahead of main and is not deployed."
+
+  # The same question from the other side. `deploy-reminder` tells a branch it
+  # is not live; this tells main what is stranded short of it, so a finished fix
+  # sitting on a forgotten branch surfaces on its own instead of waiting to be
+  # noticed by hand.
+  #
+  # Reports, never fails. Work in progress is legitimate, and a build that goes
+  # red because somebody has an open branch is a build people learn to ignore.
+  stranded-work:
+    name: anything stranded
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: List branches carrying work main does not have
+        run: |
+          REPORT=$(bun run branches 2>&1 || true)
+          echo "$REPORT"
+          {
+            echo "## Branches"
+            echo ""
+            echo '```'
+            echo "$REPORT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

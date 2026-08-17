@@ -1,0 +1,10 @@
+{
+  "name": "civic-voice",
+  "private": true,
+  "workspaces": [],
+  "scripts": {
+    "verify": "bun scripts/verify.ts",
+    "deploy-check": "bun scripts/deploy-check.ts",
+    "branches": "bun scripts/branches.ts"
+  }
+}

@@ -1,5 +1,10 @@
 # Deploying Civic Voice
 
+> **Before anything else, read [SHIPPING.md](SHIPPING.md).** It is one page and
+> it answers the question this document cannot: whether the code you deployed is
+> the code that is running. Both apps now report the commit they were built
+> from, and `bun run deploy-check` compares that to `main`.
+
 Two pieces go to two places: the **API** (`backend/`) runs as a container, and
 the **web app** (`apps/web/`) is a static site. The phone app talks to the same
 API.

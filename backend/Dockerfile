@@ -34,6 +34,16 @@ COPY . .
 ENV UPLOADS_DIR=/data/uploads
 RUN mkdir -p /data/uploads
 
+# The commit this image was built from, reported by /health.
+#
+# Railway passes RAILWAY_GIT_COMMIT_SHA; any other builder can pass --build-arg
+# GIT_SHA=$(git rev-parse HEAD). Left as "unknown" the health endpoint says so,
+# which is better than silently claiming to be up to date.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=""
+ENV GIT_SHA=$GIT_SHA
+ENV BUILD_TIME=$BUILD_TIME
+
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000

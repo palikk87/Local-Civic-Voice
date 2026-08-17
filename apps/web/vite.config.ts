@@ -1,6 +1,42 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { execSync } from "node:child_process";
+import { writeFileSync, mkdirSync } from "node:fs";
+
+/**
+ * The commit this bundle was built from.
+ *
+ * Vercel sets VERCEL_GIT_COMMIT_SHA; a local build asks git. Either way the
+ * built site can say which code it is, which is the only way to tell a deploy
+ * that did not happen from one that did — those look identical from outside,
+ * and the last time they diverged the only symptom was a fixed feature still
+ * behaving like the bug.
+ */
+function commitSha(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA;
+  try {
+    return execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Writes dist/version.json so the deployed site can be asked what it is. */
+function versionStamp() {
+  return {
+    name: "version-stamp",
+    apply: "build" as const,
+    closeBundle() {
+      const dir = path.resolve(__dirname, "dist");
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, "version.json"),
+        JSON.stringify({ commit: commitSha(), builtAt: new Date().toISOString() }, null, 2) + "\n",
+      );
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
@@ -59,6 +95,7 @@ export default defineConfig(() => ({
   },
   plugins: [
     react(),
+    versionStamp(),
   ],
   resolve: {
     alias: {
