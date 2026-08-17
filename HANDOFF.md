@@ -73,6 +73,19 @@ clients** tab that creates accounts, rotates credentials, changes tiers and
 revokes access without shell access. The script exists for the cold start, when
 there is no admin account to log in with yet.
 
+While you have a shell open, clear the two test posts a since-fixed bug
+orphaned (they cannot be reached from the UI that made them):
+
+```bash
+cd backend
+railway run bun scripts/delete-posts.ts --confirm \
+  --content "Parity audit test post - please ignore. Will delete." \
+  --content "Pagination probe A - will delete"
+```
+
+Drop `--confirm` to see what it matches first. It matches exact text only, so it
+cannot take a real post with a similar opening line.
+
 **Do not skip the B2B half.** A parity audit found `/b2b/login` rejecting every
 credential on the deployed app, which looked like a broken portal and made all
 eleven B2B functions untestable. The portal was fine — the table was empty.
