@@ -1,0 +1,25 @@
+{
+  "recordedFor": "hr-3194-119",
+  "why": "LOCOMOTIVES Act. CRS records s-1779-119 as an Identical bill from both directions - the one relationship strong enough to merge without a person.",
+  "body": {
+    "relatedBills": [
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-15",
+          "text": "Read twice and referred to the Committee on Environment and Public Works."
+        },
+        "number": 1779,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Identical bill"
+          }
+        ],
+        "title": "LOCOMOTIVES Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/1779?format=json"
+      }
+    ]
+  }
+}

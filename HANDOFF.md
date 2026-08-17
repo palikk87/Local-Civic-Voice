@@ -128,6 +128,18 @@ CourtListener. Both free, both issued in minutes.
 Without them `GovernmentReference` stays empty and Discover has nothing in it.
 This is how the product gets its content, so it is not optional in practice.
 
+If you ever need to refresh the recorded congress.gov fixtures the tests replay
+(`backend/tests/fixtures/congress/`), that is the one place a real key is used
+outside production:
+
+```bash
+cd backend
+CONGRESS_API_KEY=... bun scripts/record-lineage-fixtures.ts
+```
+
+It strips the echoed request before writing, so no key lands in the repository.
+The tests never touch the network.
+
 `CONGRESS_API_KEY` now does a second job. Once a day the server asks
 congress.gov which stored records are really the same law and reads the
 published relationships — the ones the House, the Senate or the Congressional
@@ -277,5 +289,9 @@ read the law live instead of a copy frozen when they were written. A brief is
 generated once per version of the law and reused by everyone after. And no
 number this platform publishes is invented.
 
-There are 131 tests, and each one was verified by breaking the thing it covers
-and watching it fail.
+There are 147 tests, and each one was verified by breaking the thing it covers
+and watching it fail. That includes the two paths that used to be excused as
+"needs a real API call": the auto-merge runs against congress.gov responses
+recorded from the live API and replayed offline, and the brief pipeline runs end
+to end with the model answered at the network boundary — the classifier, the
+chunker, the prompts, the fact-check pass and the version pin all real.

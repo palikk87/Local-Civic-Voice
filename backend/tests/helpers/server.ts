@@ -275,10 +275,28 @@ export async function startServer(): Promise<void> {
 
 export async function stopServer(): Promise<void> {
   await prisma.$disconnect();
+
+  // Disconnect the OTHER client too.
+  //
+  // A test that imports a service directly — the notification helper, the
+  // lineage matchmaker — pulls in src/prisma, which builds its own client from
+  // the environment and holds an open pool. Left connected, it keeps the
+  // process from going idle after the suite is done.
+  const appPrisma = (await import("../../src/prisma")).prisma;
+  await appPrisma.$disconnect();
   if (server) {
-    server.kill();
-    // Wait for it to actually exit. kill() only sends the signal; returning
-    // before the process is gone leaves the port held for the next run.
+    // SIGKILL, not the default SIGTERM.
+    //
+    // The server installs no signal handler, and a Bun.serve() loop does not
+    // stop for SIGTERM on its own, so `await server.exited` hung until bun's
+    // 5-second hook timeout fired and force-killed it. That showed up on every
+    // run as an unnamed failing test with no assertions and no test body —
+    // "a beforeEach/afterEach hook timed out" — which looked like a flake and
+    // was in fact this teardown, every time.
+    //
+    // Waiting for it to actually exit still matters: kill() only sends the
+    // signal, and returning early leaves the port held for the next run.
+    server.kill("SIGKILL");
     await server.exited;
     server = null;
   }

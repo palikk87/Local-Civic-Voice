@@ -13,10 +13,16 @@
  * and how, and — crucially — who made that call: the House, the Senate, or the
  * Congressional Research Service. The labels are the government's own:
  *
- *   "Identical bill"        the two texts are the same
- *   "Companion measure"     filed in the other chamber to move in parallel
- *   "Procedurally-related"  linked by a rule or a motion, not by text
- *   "Related bill"          a different law on the same subject
+ *   "Identical bill"                 the two texts are the same
+ *   "Companion measure"              filed in the other chamber to move in parallel
+ *   "Procedurally related"           linked by a rule or a motion, not by text
+ *   "Public law contains the text"   these words were enacted inside another law
+ *   "Related bill"                   a different law on the same subject
+ *
+ * Those strings are taken from recorded responses in tests/fixtures/congress/,
+ * not from the documentation. Getting one wrong is silent — an unrecognised
+ * label is skipped, the relationship never reaches the queue, and nothing says
+ * why. "Procedurally-related" with a hyphen was exactly that mistake.
  *
  * ONLY "IDENTICAL BILL" IS ACTED ON WITHOUT A PERSON
  *
@@ -50,11 +56,26 @@ import { mergeReferences } from "./deduplication-service";
 import { ReferenceKind, billReferenceId, parseReferenceId } from "./master-reference-id";
 import { findByName } from "./reference-names";
 
-/** The government's label, exactly as congress.gov spells it. */
+/**
+ * The government's labels, spelled the way congress.gov actually returns them.
+ *
+ * Taken from recorded responses, not from the documentation. "Procedurally
+ * related" has no hyphen in the payload even though it is written with one
+ * nearly everywhere else — a mismatch here is silent, because an unrecognised
+ * label is simply skipped, so the relationship never reaches the queue and
+ * nothing anywhere says why. tests/fixtures/congress/ is what keeps this
+ * honest.
+ */
 export const Relationship = {
   IDENTICAL: "Identical bill",
   COMPANION: "Companion measure",
-  PROCEDURAL: "Procedurally-related",
+  PROCEDURAL: "Procedurally related",
+  /**
+   * The bill's text was enacted inside a public law. Not the same filing, but
+   * the same words carrying the same legal force, which is exactly the kind of
+   * call a person should make and a machine should not.
+   */
+  ENACTED_INSIDE: "Public law contains the text",
   RELATED: "Related bill",
 } as const;
 
@@ -82,6 +103,10 @@ const REVIEWABLE: ReadonlySet<string> = new Set([
   Relationship.IDENTICAL,
   Relationship.COMPANION,
   Relationship.PROCEDURAL,
+  // Kept alongside the unhyphenated spelling congress.gov actually returns,
+  // because a label this code fails to recognise fails silently.
+  "Procedurally-related",
+  Relationship.ENACTED_INSIDE,
 ]);
 
 /** How alike two titles must be before the pair is worth suggesting. */
