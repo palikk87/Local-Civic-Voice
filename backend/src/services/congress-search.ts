@@ -1,5 +1,11 @@
 import { prisma } from "../prisma";
 import { formatSnippetsForPrompt, searchWebForContext, type WebSnippet } from "./web-search";
+import {
+  ReferenceKind,
+  billReferenceId,
+  isBillType,
+  parseReferenceId,
+} from "./master-reference-id";
 
 /**
  * Multi-source Congress bill search.
@@ -69,7 +75,6 @@ interface Interpretation {
   billType?: string;
 }
 
-const BILL_TYPES = ["hconres", "hjres", "hres", "hr", "sconres", "sjres", "sres", "s"] as const;
 const CURRENT_CONGRESS = 119;
 
 const STOPWORDS = new Set([
@@ -79,8 +84,21 @@ const STOPWORDS = new Set([
 
 // ---------- Helpers ----------
 
+/**
+ * The canonical name of a bill record.
+ *
+ * Delegates to master-reference-id.ts rather than formatting the string here,
+ * because a second opinion about naming is exactly how search ended up looking
+ * for `sres-829-119` while the database held `s-res-829-119`. `??` is not a
+ * fallback to a guess: billReferenceId only returns null for a measure type
+ * congress.gov does not publish, and the raw form is then more honest than a
+ * corrected one.
+ */
 export function masterRefId(b: BillIdentity): string {
-  return `${b.type.toLowerCase()}-${b.number}-${b.congress}`;
+  return (
+    billReferenceId({ type: b.type, number: b.number, congress: b.congress }) ??
+    `${b.type.toLowerCase()}-${b.number}-${b.congress}`
+  );
 }
 
 function meaningfulKeywords(text: string): string[] {
@@ -153,7 +171,7 @@ export function parseExplicitBillRefs(query: string): BillIdentity[] {
   while ((m = re.exec(query)) !== null) {
     const prefix = (m[1] ?? "").toLowerCase().replace(/[.\s]/g, "");
     const number = m[2] ?? "";
-    if (BILL_TYPES.includes(prefix as (typeof BILL_TYPES)[number]) && number) {
+    if (isBillType(prefix) && number) {
       refs.push({ congress: CURRENT_CONGRESS, type: prefix, number });
     }
   }
@@ -321,7 +339,7 @@ You will ALSO be given real-time web search snippets retrieved just now for this
       // placeholder ("XXXX", "TBD", "H.R. ____"), which we would otherwise
       // pass straight to congress.gov as a bill lookup and burn on a 404.
       .filter((b) => b.type && /^\d+$/.test(String(b.number ?? "").trim()))
-      .filter((b) => BILL_TYPES.includes(String(b.type).toLowerCase() as (typeof BILL_TYPES)[number]))
+      .filter((b) => isBillType(String(b.type).toLowerCase()))
       .slice(0, 5)
       .map((b) => ({
         congress: b.congress ?? CURRENT_CONGRESS,
@@ -484,11 +502,17 @@ async function searchDbReferences(query: string, keywords: string[]): Promise<Db
   }));
 }
 
-/** Parse a bill masterReferenceId like "hr-22-119" back into an identity. */
+/**
+ * Parse a bill masterReferenceId like "hr-22-119" back into an identity.
+ *
+ * Returns null when the stored id carries no Congress, because everything
+ * downstream of this — the congress.gov lookup, the public URL — needs one and
+ * would otherwise have to invent it.
+ */
 function parseMasterRefId(id: string): BillIdentity | null {
-  const m = /^(hconres|hjres|hres|hr|sconres|sjres|sres|s)-(\d+)-(\d+)$/.exec(id);
-  if (!m || !m[1] || !m[2] || !m[3]) return null;
-  return { type: m[1], number: m[2], congress: parseInt(m[3], 10) };
+  const key = parseReferenceId(ReferenceKind.BILL, id);
+  if (key?.kind !== "bill" || key.congress === null) return null;
+  return { type: key.billType, number: key.number, congress: key.congress };
 }
 
 // ---------- Scoring ----------

@@ -12,10 +12,12 @@ import {
 } from "../services/notification-service";
 import { resolvePostReference } from "../services/reference-resolver";
 import {
+  lawMovedSincePost,
   loadPostReferenceView,
   loadPostReferenceViews,
 } from "../services/post-reference-view";
 import { JobPriority, JobType, jobQueue } from "../services/job-queue";
+import { invalidatePostCache } from "../services/cache";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -140,10 +142,21 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
       governmentReferenceId: post.governmentReferenceId,
       referenceType: post.referenceType,
       referenceId: post.referenceId,
-      referenceTitle: post.referenceTitle,
+      // The law as it stands, not the copy frozen when the post was written.
+      // The record is shared; the post frames it to one person's timeline.
+      referenceTitle:
+        (post.governmentReferenceId
+          ? referenceViews.get(post.governmentReferenceId)?.title
+          : null) ?? post.referenceTitle,
       reference: post.governmentReferenceId
         ? referenceViews.get(post.governmentReferenceId) ?? null
         : null,
+      // The law under this post has moved since it was written. The post is
+      // untouched; the card says so.
+      lawUpdatedSincePosting: lawMovedSincePost(
+        post.createdAt,
+        post.governmentReferenceId ? referenceViews.get(post.governmentReferenceId) : null,
+      ),
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
@@ -295,8 +308,12 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
       governmentReferenceId: post.governmentReferenceId,
       referenceType: post.referenceType,
       referenceId: post.referenceId,
-      referenceTitle: post.referenceTitle,
+      // The law as it stands, not the copy frozen when the post was written.
+      referenceTitle: referenceView?.title ?? post.referenceTitle,
       reference: referenceView,
+      // The law under this post has moved since it was written. The post is
+      // untouched; the card says so.
+      lawUpdatedSincePosting: lawMovedSincePost(post.createdAt, referenceView),
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
@@ -383,8 +400,12 @@ postsRouter.get("/:id", async (c) => {
       governmentReferenceId: post.governmentReferenceId,
       referenceType: post.referenceType,
       referenceId: post.referenceId,
-      referenceTitle: post.referenceTitle,
+      // The law as it stands, not the copy frozen when the post was written.
+      referenceTitle: referenceView?.title ?? post.referenceTitle,
       reference: referenceView,
+      // The law under this post has moved since it was written. The post is
+      // untouched; the card says so.
+      lawUpdatedSincePosting: lawMovedSincePost(post.createdAt, referenceView),
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
@@ -437,6 +458,11 @@ postsRouter.delete("/:id", async (c) => {
   }
 
   await prisma.post.delete({ where: { id } });
+
+  // The feed serves from a cache. Without this the row is gone and /api/feed
+  // still hands the post out for up to two minutes, which is indistinguishable
+  // from the delete not having worked.
+  invalidatePostCache(id, post.authorId);
 
   return c.json({ success: true });
 });

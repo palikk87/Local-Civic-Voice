@@ -69,6 +69,17 @@ export const postReferenceSchema = z.object({
   }),
   /** The caller's own position, null when they haven't voted or aren't signed in. */
   userVote: z.enum(["support", "oppose"]).nullable(),
+  /**
+   * When the LAW last changed — a new title, a new status, or new official
+   * text. Not when the row was last written: that moves on every vote.
+   *
+   * A post created before this timestamp is showing a law that has moved since
+   * its author wrote about it. The post itself is untouched; the card carries a
+   * badge saying so.
+   */
+  lawChangedAt: z.string().nullable(),
+  /** Increments with lawChangedAt. One citizen brief per version. */
+  lawVersion: z.number(),
 });
 
 export type PostReference = z.infer<typeof postReferenceSchema>;

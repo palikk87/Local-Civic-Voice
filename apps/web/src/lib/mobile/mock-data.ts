@@ -145,6 +145,49 @@ export const representatives: Representative[] = [
 export const mockRepresentatives = representatives;
 
 // Real Congressional Bills (from Congress.gov most-viewed)
+
+/**
+ * The sponsor slot on the bills below.
+ *
+ * They used to point into the representatives list, which attributed real
+ * legislation to members who did not file it. Naming nobody is the honest
+ * answer when the real sponsor is not known here; the live record from the API
+ * carries the actual one.
+ */
+const SPONSOR_UNKNOWN: Representative = {
+  id: 'unknown',
+  name: 'Sponsor unknown',
+  party: 'I',
+  state: '',
+  chamber: 'house',
+  imageUrl: '',
+};
+
+/**
+ * Sixteen bills that exist so the Related Laws panel has something to show.
+ *
+ * WHAT IS REAL HERE AND WHAT IS NOT.
+ *
+ * The bill numbers, titles, dates and official text are real, and so are the
+ * `relatedLaws` entries — the Social Security Act really is what H.R. 82
+ * amends, Citizens United really is the decision H.R. 6234 responds to. That
+ * is the content this list is kept for.
+ *
+ * The vote counts and the sponsors were not. Every bill carried a fabricated
+ * community tally — 45,200 to 8,100 on the first one — plus an invented roll
+ * call, and a sponsor picked out of a list of representatives with a code
+ * comment on the first entry admitting the real sponsor was somebody else.
+ *
+ * Those are stripped. Community and official tallies are zero, and the sponsor
+ * is `SPONSOR_UNKNOWN`, because this platform does not publish numbers nobody
+ * cast or attribute a bill to a member who did not file it. A card reading 0-0
+ * is telling the truth; a card reading 45,200 is not, and that number would
+ * flow into the pulse the same as any other.
+ *
+ * These are a fallback of last resort. BillDetail asks the API first and always
+ * prefers a real record — see the comment on the lookup there for the bug that
+ * caused when the order was the other way round.
+ */
 export const bills: Bill[] = [
   {
     id: 'hr-82',
@@ -152,7 +195,7 @@ export const bills: Bill[] = [
     shortTitle: 'Social Security Fairness Act',
     status: 'passed_house',
     chamber: 'house',
-    sponsor: representatives[5], // Nancy Pelosi - actual sponsor was Rep. Garret Graves (R-LA)
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2023-01-09',
     lastActionDate: '2024-11-12',
     category: 'economy',
@@ -200,9 +243,9 @@ For New Retirees: Future public sector retirees would receive the full Social Se
         summary: 'Repeals the WEP and GPO provisions added in 1983 that reduced benefits for public workers.',
       },
     ],
-    communityVotes: { yea: 45200, nay: 8100, totalVoters: 53300 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'likely_pass',
-    officialVotes: { yea: 327, nay: 75, abstain: 0, notVoting: 33 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-7024',
@@ -210,7 +253,7 @@ For New Retirees: Future public sector retirees would receive the full Social Se
     shortTitle: 'Tax Relief Act',
     status: 'passed_house',
     chamber: 'senate',
-    sponsor: mockRepresentatives[1],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-01-17',
     lastActionDate: '2024-08-01',
     category: 'economy',
@@ -268,9 +311,9 @@ For Disaster Victims: Special tax provisions would help families and businesses 
         summary: 'Builds on expanded Child Tax Credit from pandemic relief legislation.',
       },
     ],
-    communityVotes: { yea: 38700, nay: 12400, totalVoters: 51100 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'uncertain',
-    officialVotes: { yea: 357, nay: 70, abstain: 0, notVoting: 8 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-2',
@@ -278,7 +321,7 @@ For Disaster Victims: Special tax provisions would help families and businesses 
     shortTitle: 'Secure the Border Act',
     status: 'passed_house',
     chamber: 'senate',
-    sponsor: mockRepresentatives[1],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2023-01-09',
     lastActionDate: '2024-05-23',
     category: 'immigration',
@@ -338,9 +381,9 @@ For Legal System: Immigration courts would see reformed procedures. Backlogs cou
         summary: 'Strengthens enforcement provisions from the 1996 immigration reform.',
       },
     ],
-    communityVotes: { yea: 24600, nay: 31200, totalVoters: 55800 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 219, nay: 213, abstain: 0, notVoting: 3 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 's-596',
@@ -348,7 +391,7 @@ For Legal System: Immigration courts would see reformed procedures. Backlogs cou
     shortTitle: 'Treat and Reduce Obesity Act',
     status: 'in_committee',
     chamber: 'senate',
-    sponsor: mockRepresentatives[3],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2023-02-28',
     lastActionDate: '2024-07-15',
     category: 'healthcare',
@@ -406,7 +449,7 @@ For Weight-Loss Industry: Would legitimize medical treatment of obesity and pote
         summary: 'Builds on ACA preventive care requirements.',
       },
     ],
-    communityVotes: { yea: 42300, nay: 7800, totalVoters: 50100 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'likely_pass',
   },
   {
@@ -415,7 +458,7 @@ For Weight-Loss Industry: Would legitimize medical treatment of obesity and pote
     shortTitle: 'TikTok Ban Act',
     status: 'signed_into_law',
     chamber: 'house',
-    sponsor: mockRepresentatives[0],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-03-05',
     lastActionDate: '2024-04-24',
     category: 'technology',
@@ -473,9 +516,9 @@ For Free Speech: Critics argue the ban raises First Amendment concerns and sets 
         summary: 'Complements existing foreign investment review processes.',
       },
     ],
-    communityVotes: { yea: 31400, nay: 28900, totalVoters: 60300 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'likely_pass',
-    officialVotes: { yea: 352, nay: 65, abstain: 0, notVoting: 18 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 's-1409',
@@ -483,7 +526,7 @@ For Free Speech: Critics argue the ban raises First Amendment concerns and sets 
     shortTitle: 'KOSA',
     status: 'passed_house',
     chamber: 'senate',
-    sponsor: mockRepresentatives[2],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2023-05-02',
     lastActionDate: '2024-07-30',
     category: 'technology',
@@ -547,9 +590,9 @@ For Tech Companies: Would require significant redesign of products for minor use
         summary: 'Creates new liability for platforms regarding minor safety.',
       },
     ],
-    communityVotes: { yea: 48900, nay: 6200, totalVoters: 55100 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'likely_pass',
-    officialVotes: { yea: 91, nay: 3, abstain: 0, notVoting: 6 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-8070',
@@ -557,7 +600,7 @@ For Tech Companies: Would require significant redesign of products for minor use
     shortTitle: 'FY2025 NDAA',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[1],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-04-17',
     lastActionDate: '2024-12-01',
     category: 'defense',
@@ -612,7 +655,7 @@ For Veterans: Includes provisions for veteran healthcare and transition programs
         summary: 'Continues and modifies programs from the prior year\'s defense bill.',
       },
     ],
-    communityVotes: { yea: 35600, nay: 8900, totalVoters: 44500 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'likely_pass',
   },
   {
@@ -621,7 +664,7 @@ For Veterans: Includes provisions for veteran healthcare and transition programs
     shortTitle: 'Antisemitism Awareness Act',
     status: 'passed_house',
     chamber: 'senate',
-    sponsor: mockRepresentatives[0],
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2023-10-26',
     lastActionDate: '2024-05-01',
     category: 'civil_rights',
@@ -674,9 +717,9 @@ For Civil Rights: Supporters say it clarifies existing civil rights law; opponen
         summary: 'Provides interpretation guidance for existing civil rights protections.',
       },
     ],
-    communityVotes: { yea: 29800, nay: 18700, totalVoters: 48500 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'uncertain',
-    officialVotes: { yea: 320, nay: 91, abstain: 0, notVoting: 24 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   // CONTROVERSIAL BILLS WITH LARGE VOTING GAPS
   {
@@ -685,7 +728,7 @@ For Civil Rights: Supporters say it clarifies existing civil rights law; opponen
     shortTitle: 'Epstein Client List Act',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[9], // MTG
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2025-01-15',
     lastActionDate: '2025-01-20',
     category: 'civil_rights',
@@ -734,9 +777,9 @@ For Democracy: Would test whether powerful people truly face equal justice under
         summary: 'Overrides FOIA exemptions for this specific category of documents.',
       },
     ],
-    communityVotes: { yea: 89200, nay: 4800, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 47, nay: 312, abstain: 76, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-2847',
@@ -744,7 +787,7 @@ For Democracy: Would test whether powerful people truly face equal justice under
     shortTitle: 'Ban Congressional Stock Trading',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[2], // AOC
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-06-15',
     lastActionDate: '2024-12-01',
     category: 'economy',
@@ -793,9 +836,9 @@ For Corruption: Would eliminate one of the most visible forms of legal corruptio
         summary: 'Current law requires disclosure but not prohibition - largely unenforced.',
       },
     ],
-    communityVotes: { yea: 91500, nay: 2500, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 12, nay: 0, abstain: 423, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-3391',
@@ -803,7 +846,7 @@ For Corruption: Would eliminate one of the most visible forms of legal corruptio
     shortTitle: 'End Pharma Price Gouging',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[3], // Bernie Sanders
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-03-20',
     lastActionDate: '2024-11-15',
     category: 'healthcare',
@@ -849,9 +892,9 @@ For Lobbying: Pharma spends more on lobbying than any other industry. This bill 
         summary: 'Dramatically expands IRA provisions limiting Medicare to negotiating only 10 drugs.',
       },
     ],
-    communityVotes: { yea: 88400, nay: 5600, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 89, nay: 301, abstain: 45, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-4521',
@@ -859,7 +902,7 @@ For Lobbying: Pharma spends more on lobbying than any other industry. This bill 
     shortTitle: 'Abolish Electoral College',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[2], // AOC
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-09-10',
     lastActionDate: '2024-10-05',
     category: 'civil_rights',
@@ -904,9 +947,9 @@ For Political Reality: Most Americans support this (61% in polls) but small stat
         summary: 'Would replace the original Electoral College framework.',
       },
     ],
-    communityVotes: { yea: 62300, nay: 31700, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 148, nay: 287, abstain: 0, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-5892',
@@ -914,7 +957,7 @@ For Political Reality: Most Americans support this (61% in polls) but small stat
     shortTitle: 'Term Limits for Congress',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[4], // Ted Cruz
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-08-01',
     lastActionDate: '2024-09-15',
     category: 'civil_rights',
@@ -959,9 +1002,9 @@ For Popular Support: 82% of Americans support term limits. Yet Congress has neve
         summary: 'Presidents limited to 2 terms since 1951. No such limit for Congress.',
       },
     ],
-    communityVotes: { yea: 86700, nay: 7300, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 78, nay: 357, abstain: 0, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-6234',
@@ -969,7 +1012,7 @@ For Popular Support: 82% of Americans support term limits. Yet Congress has neve
     shortTitle: 'Overturn Citizens United',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[3], // Bernie Sanders
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-07-20',
     lastActionDate: '2024-08-30',
     category: 'civil_rights',
@@ -1014,9 +1057,9 @@ For Reality Check: 75% of Americans want this. Both parties' bases agree. Yet it
         summary: 'Supreme Court decision that corporations have free speech rights including political spending.',
       },
     ],
-    communityVotes: { yea: 81200, nay: 12800, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 124, nay: 311, abstain: 0, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-7812',
@@ -1024,7 +1067,7 @@ For Reality Check: 75% of Americans want this. Both parties' bases agree. Yet it
     shortTitle: 'Audit the Fed',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[4], // Ted Cruz
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-05-10',
     lastActionDate: '2024-06-20',
     category: 'economy',
@@ -1070,9 +1113,9 @@ For Fed: Claims audit would politicize monetary policy. Critics say they just do
         summary: 'Would override provisions that exempt Fed from full government audit.',
       },
     ],
-    communityVotes: { yea: 78900, nay: 15100, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 67, nay: 368, abstain: 0, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
     id: 'hr-8234',
@@ -1080,7 +1123,7 @@ For Fed: Claims audit would politicize monetary policy. Critics say they just do
     shortTitle: 'Protect Government Whistleblowers',
     status: 'in_committee',
     chamber: 'house',
-    sponsor: mockRepresentatives[3], // Bernie Sanders
+    sponsor: SPONSOR_UNKNOWN,
     introducedDate: '2024-10-15',
     lastActionDate: '2024-11-30',
     category: 'civil_rights',
@@ -1129,9 +1172,9 @@ For Accountability: Government claims to want accountability but prosecutes thos
         summary: 'Current law has loopholes that allow retaliation. This would close them.',
       },
     ],
-    communityVotes: { yea: 85600, nay: 8400, totalVoters: 94000 },
+    communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
     projectedOutcome: 'unlikely_pass',
-    officialVotes: { yea: 134, nay: 301, abstain: 0, notVoting: 0 },
+    officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
 ];
 

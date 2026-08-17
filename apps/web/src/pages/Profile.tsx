@@ -31,7 +31,6 @@ import {
   selectActiveDelegationsCount,
 } from "@/lib/mobile/delegation-store";
 import { cn } from "@/lib/utils";
-import { isSupabaseConfigured } from "@/lib/mobile/supabase";
 import { useUserVoteHistory } from "@/lib/mobile/hooks";
 import { useCurrentUser, usePermissions } from "@/hooks/use-civic-auth";
 import { signOut as betterAuthSignOut } from "@/lib/auth-client";
@@ -198,9 +197,6 @@ function AchievementBadge({
 
 export default function Profile() {
   const navigate = useNavigate();
-  // Supabase is hard-disabled (see lib/mobile/supabase.ts) — same as mobile.
-  const useSupabase = isSupabaseConfigured();
-
   // Auth — web equivalent of mobile: login populates the mock auth store from
   // the Better Auth session (mobile login.tsx does the same mapping after OTP
   // sign-in). If the store is empty but a session exists, derive the user.
@@ -222,25 +218,14 @@ export default function Profile() {
 
   // Votes
   const mockUserVotes = useVotingStore((s) => s.userVotes);
-  const { data: supabaseVoteHistory, isLoading: votesLoading } = useUserVoteHistory(
-    useSupabase ? sessionUser?.id : undefined
-  );
+  // useUserVoteHistory was the Supabase half. It was only ever passed a user id
+  // when isSupabaseConfigured() was true, which it has not been since the client
+  // was removed — so it always ran disabled and returned nothing.
 
   const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
 
   // Calculate vote stats
   const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
-    if (useSupabase && supabaseVoteHistory) {
-      const yea = supabaseVoteHistory.filter((v) => v.vote === "yea").length;
-      const nay = supabaseVoteHistory.filter((v) => v.vote === "nay").length;
-      return {
-        yeaVotes: yea,
-        nayVotes: nay,
-        totalVotes: supabaseVoteHistory.length,
-        voteEntries: [] as [string, "yea" | "nay"][],
-      };
-    }
-
     const entries = Object.entries(mockUserVotes) as [string, "yea" | "nay"][];
     const yea = entries.filter(([, v]) => v === "yea").length;
     const nay = entries.filter(([, v]) => v === "nay").length;
@@ -250,7 +235,7 @@ export default function Profile() {
       totalVotes: entries.length,
       voteEntries: entries,
     };
-  }, [useSupabase, supabaseVoteHistory, mockUserVotes]);
+  }, [mockUserVotes]);
 
   const handleSignOut = async () => {
     // One click = one sign-out. Matches mobile: without the guard the button fired
@@ -606,12 +591,13 @@ export default function Profile() {
               <span className="text-slate-400 text-sm">{totalVotes} votes</span>
             </div>
 
-            {votesLoading ? (
-              <div className="bg-slate-800/40 rounded-xl p-8 flex flex-col items-center border border-slate-700/30">
-                <Loader2 className="h-9 w-9 animate-spin" color="#F59E0B" />
-                <span className="text-slate-400 mt-4">Loading vote history...</span>
-              </div>
-            ) : voteEntries.length > 0 ? (
+            {/*
+              The spinner that used to sit here was driven by a Supabase query
+              gated on a flag that has been a hardcoded false since the client
+              was removed, so it never ran and never resolved. Votes come from
+              the local store, which is synchronous.
+            */}
+            {voteEntries.length > 0 ? (
               voteEntries.map(([billId, vote], index) => (
                 <VoteHistoryCard
                   key={billId}

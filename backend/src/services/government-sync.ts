@@ -12,7 +12,13 @@
  */
 
 import { prisma } from "../prisma";
-import { ReferenceType, normalizeReferenceId, seedTallyFor } from "./deduplication-service";
+import { ReferenceType, normalizeReferenceId } from "./deduplication-service";
+import { billReferenceId } from "./master-reference-id";
+import { NameSource, claimName, findByName as claimedBy } from "./reference-names";
+// The one fingerprint for official text. A second implementation here would
+// disagree with that one on every row and report the law as changed nightly.
+import { hashText } from "./reference-content";
+import { notifyLawUpdate } from "./notification-service";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -108,31 +114,117 @@ interface UpsertData {
   decidedDate?: Date;
 }
 
-/** Insert new rows or refresh factual fields, never touching votes/briefs. */
+/**
+ * Insert new rows or refresh factual fields, never touching votes/briefs.
+ *
+ * The name goes into the registry in the same transaction as the row. A record
+ * the registry does not know about is one no former-name lookup can ever reach,
+ * and this is the path most records arrive by — so registering names only in
+ * findOrCreateReference would have left the daily sync's records outside the
+ * system that is supposed to guarantee their links never die.
+ *
+ * claimName is idempotent, so the refresh half of an upsert re-registers
+ * nothing; and it never steals a name another record holds, so a sync cannot
+ * quietly reassign one.
+ */
 async function upsertReference(data: UpsertData): Promise<void> {
   const { masterReferenceId, ...fields } = data;
-  const seed = seedTallyFor(masterReferenceId);
-  await prisma.governmentReference.upsert({
-    where: { masterReferenceId },
-    create: {
-      masterReferenceId,
-      ...fields,
-      ...seed,
-      // Public tally starts as the seed layer; real votes add on top of it.
-      supportVotes: seed.seedSupport,
-      opposeVotes: seed.seedOppose,
-    },
-    update: {
-      title: fields.title,
-      status: fields.status,
-      ...(fields.shortTitle ? { shortTitle: fields.shortTitle } : {}),
-      ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
-      ...(fields.description ? { description: fields.description } : {}),
-      ...(fields.fullText ? { fullText: fields.fullText } : {}),
-      ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
-      ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
-    },
+  const notifyAfterCommit: Array<{ id: string; masterReferenceId: string; title: string }> = [];
+
+  await prisma.$transaction(async (tx) => {
+    // Which record does this name belong to? Usually the one called that, but a
+    // name can also be one a record used to be called — after a repair, or a
+    // merge. Either way that record IS this law, and refreshing it is right
+    // where creating a second row named after it would be a split vote pool.
+    const held = await claimedBy(masterReferenceId, tx);
+
+    // Did the LAW change, or just the row?
+    //
+    // `updatedAt` moves every time somebody votes, so it cannot answer that.
+    // Only three things count as the law itself moving: a new title, a new
+    // status, or official text that no longer hashes the same. A refreshed
+    // description or a re-fetched source URL is bookkeeping, and treating it as
+    // a change would badge every post on the platform every night and pay to
+    // rewrite every brief.
+    const before = await tx.governmentReference.findUnique({
+      where: held ? { id: held.referenceId } : { masterReferenceId },
+      select: { id: true, title: true, status: true, fullTextHash: true, lawVersion: true },
+    });
+
+    const nextTextHash = fields.fullText ? hashText(fields.fullText) : null;
+    const lawMoved =
+      before !== null &&
+      (before.title !== fields.title ||
+        before.status !== fields.status ||
+        (nextTextHash !== null && before.fullTextHash !== null && before.fullTextHash !== nextTextHash));
+
+    const row = await tx.governmentReference.upsert({
+      where: held ? { id: held.referenceId } : { masterReferenceId },
+      create: {
+        masterReferenceId,
+        ...fields,
+        ...(nextTextHash ? { fullTextHash: nextTextHash } : {}),
+        // The tally starts at nothing, because nothing is what anybody has
+        // said about it yet.
+      },
+      update: {
+        title: fields.title,
+        status: fields.status,
+        ...(fields.shortTitle ? { shortTitle: fields.shortTitle } : {}),
+        ...(fields.sourceUrl ? { sourceUrl: fields.sourceUrl } : {}),
+        ...(fields.description ? { description: fields.description } : {}),
+        ...(fields.fullText ? { fullText: fields.fullText } : {}),
+        ...(nextTextHash ? { fullTextHash: nextTextHash } : {}),
+        ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
+        ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
+        ...(lawMoved
+          ? { lawChangedAt: new Date(), lawVersion: { increment: 1 } }
+          : {}),
+      },
+      select: { id: true },
+    });
+
+    if (lawMoved && before) {
+      // Outside the transaction on purpose. Notifying is not part of writing the
+      // record, and a notification failure must never roll back a law update —
+      // the record being right matters more than the telling.
+      notifyAfterCommit.push({
+        id: row.id,
+        masterReferenceId,
+        title: fields.title,
+      });
+
+      console.log(
+        `[GovSync] ${masterReferenceId} moved to version ${before.lawVersion + 1}: ` +
+          [
+            before.title !== fields.title ? "title" : null,
+            before.status !== fields.status ? `status ${before.status} -> ${fields.status}` : null,
+            nextTextHash && before.fullTextHash && before.fullTextHash !== nextTextHash
+              ? "official text"
+              : null,
+          ]
+            .filter(Boolean)
+            .join(", "),
+      );
+    }
+
+    const claimed = await claimName(tx, row.id, masterReferenceId, NameSource.CREATED, {
+      current: true,
+    });
+    if (!claimed.ok) {
+      console.warn(
+        `[GovSync] "${masterReferenceId}" is already registered to another record — ` +
+          `left alone; these two are a duplicate pair, not a rename`,
+      );
+    }
   });
+
+  for (const moved of notifyAfterCommit) {
+    const { notified } = await notifyLawUpdate(moved.id, moved.masterReferenceId, moved.title);
+    if (notified > 0) {
+      console.log(`[GovSync] told ${notified} person(s) that ${moved.masterReferenceId} changed`);
+    }
+  }
 }
 
 // ---------- Bills (congress.gov) ----------
@@ -167,10 +259,19 @@ async function syncBills(): Promise<number> {
     if (synced >= SYNC_COUNT) break;
     if (!bill.title || !bill.number || !bill.type) continue;
     const type = bill.type.toLowerCase();
-    const masterReferenceId = normalizeReferenceId(
-      ReferenceType.BILL,
-      `${type}-${bill.number}-${bill.congress ?? congress}`,
-    );
+    // Named from congress.gov's own three fields, which is the only place they
+    // arrive already separated. A type congress.gov has never published yields
+    // null, and the row is skipped rather than written under a guessed name —
+    // an unfindable record is worse than a missing one.
+    const masterReferenceId = billReferenceId({
+      type,
+      number: bill.number,
+      congress: bill.congress ?? congress,
+    });
+    if (!masterReferenceId) {
+      console.warn(`[GovSync] Skipping bill with unrecognised type "${bill.type}" (${bill.number})`);
+      continue;
+    }
     const chamberPath = type.startsWith("h") ? "house-bill" : "senate-bill";
     await upsertReference({
       masterReferenceId,

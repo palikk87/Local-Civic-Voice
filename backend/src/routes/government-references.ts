@@ -14,6 +14,7 @@ import {
   recalculateReferenceStats,
 } from "../services/deduplication-service";
 import { applyWeightedTally } from "../services/delegation-service";
+import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
 import { ensureReferenceContent, parseBriefJson, briefSectionLabels } from "../services/reference-content";
 import { resolveLibraryDocument } from "../services/library-resolve";
@@ -307,6 +308,10 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
     references: topReferences.map((ref) => ({
       id: ref.id,
       masterReferenceId: ref.masterReferenceId,
+      // The id as printed ("H.R. 4836", "S.Res. 829"). Sent from here so both
+      // clients render one spelling instead of each deriving its own from the
+      // raw id — which is how "sres-829-119" reached a card as "SRES.829".
+      displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
       referenceType: ref.referenceType,
       title: ref.title,
       shortTitle: ref.shortTitle,
@@ -399,20 +404,18 @@ governmentReferencesRouter.get("/:id", async (c) => {
     }, 301);
   }
 
-  // Parse aliases
-  let aliases: string[] = [];
-  if (reference.aliases) {
-    try {
-      aliases = JSON.parse(reference.aliases) as string[];
-    } catch {
-      // Invalid JSON, ignore
-    }
-  }
+  // Every name this record used to answer to, read from the registry rather
+  // than the `aliases` mirror on the row. The mirror is kept in step by the
+  // same writer, but it exists for a search that has not been rebuilt yet —
+  // reading it here would put a derived copy on the screen when the authority
+  // is one indexed query away.
+  const { former: aliases } = await namesFor(reference.id);
 
   return c.json({
     reference: {
       id: reference.id,
       masterReferenceId: reference.masterReferenceId,
+      displayId: formatReferenceDisplayId(reference.masterReferenceId, reference.referenceType),
       referenceType: reference.referenceType,
       title: reference.title,
       shortTitle: reference.shortTitle,
@@ -429,6 +432,15 @@ governmentReferencesRouter.get("/:id", async (c) => {
       citizenBriefSections: parseBriefJson(reference.citizenBriefJson),
       citizenBriefLabels: briefSectionLabels(reference.referenceType, reference.status),
       citizenBriefAt: reference.citizenBriefAt?.toISOString() ?? null,
+      // Which version of the law the stored brief was written for, and which
+      // version the law is on. Equal means the brief describes the law in front
+      // of you; different means it describes an earlier text and a rewrite is
+      // due. Exposed because a reader deserves to know which they are looking
+      // at, and because it is the only way to check "one brief per version"
+      // from outside.
+      citizenBriefVersion: reference.citizenBriefVersion,
+      lawVersion: reference.lawVersion,
+      lawChangedAt: reference.lawChangedAt?.toISOString() ?? null,
       contentStatus: reference.contentStatus ?? (reference.citizenBriefJson ? "ready" : null),
       fullText: reference.fullText,
       fullTextSource: reference.fullTextSource,
@@ -869,9 +881,8 @@ governmentReferencesRouter.post("/merge", zValidator("json", mergeSchema), async
     return c.json({ error: "Authentication required" }, 401);
   }
 
-  // Merging rewrites which reference every affected post and vote belongs to, so
-  // it is restricted to staff. The current implementation is also known to skew
-  // the denormalized counters, which is a further reason not to expose it.
+  // Merging rewrites which reference every affected post and vote belongs to,
+  // so it is restricted to staff.
   const actor = await prisma.user.findUnique({
     where: { id: user.id },
     select: { role: true },
@@ -884,14 +895,16 @@ governmentReferencesRouter.post("/merge", zValidator("json", mergeSchema), async
   const { sourceId, targetId } = c.req.valid("json");
 
   try {
+    // The full report goes back, not a success flag. Whoever approved this
+    // merge has to be able to see what it actually did to the count, and an
+    // audit trail assembled from "success: true" is not an audit trail.
     const result = await mergeReferences(sourceId, targetId);
-    return c.json({
-      success: true,
-      postsUpdated: result.postsUpdated,
-      votesTransferred: result.votesTransferred,
-      aliasesMerged: result.aliasesMerged,
-      message: "References merged successfully",
-    });
+    console.log(
+      `[merge] ${result.source.masterReferenceId} -> ${result.target.masterReferenceId} by ${user.id}: ` +
+        `${result.postsMoved} posts, ${result.votesMoved} votes moved, ` +
+        `${result.votesSuperseded} superseded, tally now ${result.tally.support}-${result.tally.oppose}`,
+    );
+    return c.json({ success: true, merge: result, message: "References merged successfully" });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to merge references";
     return c.json({ error: message }, 400);

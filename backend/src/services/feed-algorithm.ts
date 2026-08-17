@@ -491,6 +491,10 @@ export async function getPersonalizedFeed(
       governmentReferenceId: post.governmentReferenceId,
       referenceType: post.referenceType,
       referenceId: post.referenceId,
+      // The frozen copy from when the post was written. The routes replace it
+      // with the record's live title before responding — see routes/feed.ts.
+      // It is carried this far only so a post with no linked record still has
+      // something to show.
       referenceTitle: post.referenceTitle,
       metrics: {
         likes: post._count.likes,

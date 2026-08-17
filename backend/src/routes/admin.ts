@@ -9,6 +9,10 @@ import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { purgeMediaObjects } from "../services/media-objects";
+import { mergeReferences } from "../services/deduplication-service";
+import { LOOK_ALIKE } from "../services/reference-lineage";
+import { formatReferenceDisplayId } from "../services/reference-id";
+import { JobPriority, enqueueLineageSync } from "../services/job-queue";
 
 // ==========================================
 // Type Definitions
@@ -1629,58 +1633,278 @@ adminRouter.get("/announcements", zValidator("query", paginationQuerySchema), as
 });
 
 // ==========================================
-// Seed Votes (placeholder tally layer)
+// Merge review queue
 // ==========================================
 
 /**
- * POST /api/admin/references/clear-seed-votes
- * Strip the placeholder seed numbers out of the public vote tallies.
- * Body: { referenceId?: string } — omit to clear every reference.
- * Real citizen votes are untouched; tallies are recomputed from them.
+ * Two records that might be one law, waiting for somebody to say yes or no.
+ *
+ * Congress.gov publishes bill relationships and who assigned them. "Identical
+ * bill" — a Library of Congress analyst confirming two texts match — is the only
+ * label the system acts on by itself; the merge has already happened by the time
+ * it appears here, marked approved with the analyst named. Everything else is a
+ * question, and this is where it gets answered.
+ *
+ * Approving is destructive: it rewrites which record every affected post and
+ * vote belongs to. Same bar as merging by hand — superadmin only. Reading the
+ * queue is open to any admin.
+ */
+adminRouter.use("/reference-merges", mergeQueueAuth);
+adminRouter.use("/reference-merges/*", mergeQueueAuth);
+
+async function mergeQueueAuth(c: Context<{ Variables: { adminSession: AdminSession } }>, next: Next) {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (c.req.method !== "GET" && session.role !== "superadmin") {
+    return c.json({ error: "Only superadmin can decide a merge" }, { status: 403 });
+  }
+  c.set("adminSession", session);
+  await next();
+}
+
+const MERGE_SIDE_SELECT = {
+  id: true,
+  masterReferenceId: true,
+  referenceType: true,
+  title: true,
+  status: true,
+  congress: true,
+  sourceUrl: true,
+  supportVotes: true,
+  opposeVotes: true,
+  citizenBrief: true,
+  createdAt: true,
+  _count: { select: { posts: true, votes: true } },
+} as const;
+
+function toMergeSide(row: {
+  id: string;
+  masterReferenceId: string;
+  referenceType: string;
+  title: string;
+  status: string;
+  congress: number | null;
+  sourceUrl: string | null;
+  supportVotes: number;
+  opposeVotes: number;
+  citizenBrief: string | null;
+  createdAt: Date;
+  _count: { posts: number; votes: number };
+}) {
+  return {
+    id: row.id,
+    masterReferenceId: row.masterReferenceId,
+    displayId: formatReferenceDisplayId(row.masterReferenceId, row.referenceType),
+    referenceType: row.referenceType,
+    title: row.title,
+    status: row.status,
+    congress: row.congress,
+    sourceUrl: row.sourceUrl,
+    // What a reviewer needs to judge the cost of getting this wrong.
+    votes: { support: row.supportVotes, oppose: row.opposeVotes },
+    posts: row._count.posts,
+    realVotes: row._count.votes,
+    hasBrief: Boolean(row.citizenBrief),
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+const mergeDecisionSchema = z.object({
+  /** Which record survives. Must be one of the two in the pair. */
+  keepId: z.string().min(1).optional(),
+  note: z.string().max(1000).optional(),
+});
+
+adminRouter.get("/reference-merges", async (c) => {
+  const status = c.req.query("status") ?? "pending";
+
+  const rows = await prisma.referenceMergeCandidate.findMany({
+    where: status === "all" ? {} : { status },
+    include: { left: { select: MERGE_SIDE_SELECT }, right: { select: MERGE_SIDE_SELECT } },
+    // Government-assigned relationships before this platform's own guesses, and
+    // within each, oldest first — a queue that reorders itself is a queue where
+    // the same item is judged twice.
+    orderBy: [{ relationship: "asc" }, { createdAt: "asc" }],
+    take: 200,
+  });
+
+  return c.json({
+    candidates: rows.map((row) => ({
+      id: row.id,
+      relationship: row.relationship,
+      // Null for a look-alike, and that absence is the point: nobody official
+      // stands behind it.
+      identifiedBy: row.identifiedBy,
+      evidenceUrl: row.evidenceUrl,
+      similarity: row.similarity,
+      isSuggestion: row.relationship === LOOK_ALIKE,
+      status: row.status,
+      note: row.note,
+      decidedAt: row.decidedAt?.toISOString() ?? null,
+      createdAt: row.createdAt.toISOString(),
+      left: toMergeSide(row.left),
+      right: toMergeSide(row.right),
+    })),
+  });
+});
+
+/**
+ * Yes — these two are one law.
+ *
+ * The reviewer picks which record survives, because they can see which one
+ * carries the posts and the votes. Defaults to the record with more real
+ * engagement so the merge moves as little as possible.
  */
 adminRouter.post(
-  "/references/clear-seed-votes",
-  zValidator("json", z.object({ referenceId: z.string().optional() })),
+  "/reference-merges/:id/approve",
+  zValidator("json", mergeDecisionSchema),
   async (c) => {
-    const authHeader = c.req.header("Authorization");
-    const session = await getAdminFromToken(authHeader);
-    if (!session) {
-      return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
-    }
-    if (session.role === "moderator") {
-      return c.json({ error: "Moderators cannot modify vote tallies" }, { status: 403 });
-    }
+    const session = c.get("adminSession");
+    const { keepId, note } = c.req.valid("json");
 
-    const { referenceId } = c.req.valid("json");
-
-    const targets = await prisma.governmentReference.findMany({
-      where: {
-        ...(referenceId ? { id: referenceId } : {}),
-        OR: [{ seedSupport: { gt: 0 } }, { seedOppose: { gt: 0 } }],
+    const candidate = await prisma.referenceMergeCandidate.findUnique({
+      where: { id: c.req.param("id") },
+      include: {
+        left: { select: { id: true, masterReferenceId: true, mergedIntoId: true, _count: { select: { posts: true, votes: true } } } },
+        right: { select: { id: true, masterReferenceId: true, mergedIntoId: true, _count: { select: { posts: true, votes: true } } } },
       },
-      select: { id: true },
     });
 
-    for (const ref of targets) {
-      await prisma.governmentReference.update({
-        where: { id: ref.id },
-        data: { seedSupport: 0, seedOppose: 0 },
+    if (!candidate) {
+      return c.json({ error: "Candidate not found" }, 404);
+    }
+    if (candidate.status !== "pending") {
+      return c.json({ error: `This pair was already ${candidate.status}` }, 409);
+    }
+    if (candidate.left.mergedIntoId || candidate.right.mergedIntoId) {
+      await prisma.referenceMergeCandidate.update({
+        where: { id: candidate.id },
+        data: {
+          status: "superseded",
+          decidedAt: new Date(),
+          note: "One of these records has since been merged elsewhere.",
+        },
       });
-      await applyWeightedTally(ref.id);
+      return c.json({ error: "One of these records has already been merged elsewhere" }, 409);
     }
 
+    if (keepId && keepId !== candidate.left.id && keepId !== candidate.right.id) {
+      return c.json({ error: "keepId must be one of the two records in this pair" }, 400);
+    }
+
+    // Default: whichever record carries more real engagement survives, so the
+    // merge moves as little as possible and readers stay where they already are.
+    const weight = (side: { _count: { posts: number; votes: number } }) =>
+      side._count.votes * 10 + side._count.posts * 5;
+    const survivorId =
+      keepId ??
+      (weight(candidate.left) >= weight(candidate.right) ? candidate.left.id : candidate.right.id);
+    const sourceId = survivorId === candidate.left.id ? candidate.right.id : candidate.left.id;
+
+    try {
+      const merge = await mergeReferences(sourceId, survivorId);
+
+      await prisma.referenceMergeCandidate.update({
+        where: { id: candidate.id },
+        data: {
+          status: "approved",
+          decidedById: session.adminId,
+          decidedAt: new Date(),
+          ...(note ? { note } : {}),
+        },
+      });
+
+      createActivityLog(
+        "approve_reference_merge",
+        session.adminId,
+        session.username,
+        "system",
+        candidate.id,
+        `Merged ${merge.source.masterReferenceId} into ${merge.target.masterReferenceId} ` +
+          `(${candidate.relationship}${candidate.identifiedBy ? `, identified by ${candidate.identifiedBy}` : ""}): ` +
+          `${merge.postsMoved} post(s), ${merge.votesMoved} vote(s) moved, ${merge.votesSuperseded} superseded`
+      );
+
+      return c.json({ success: true, merge });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Merge failed";
+      return c.json({ error: message }, 400);
+    }
+  }
+);
+
+/**
+ * No — these are two different laws.
+ *
+ * Recorded rather than deleted, so the same pair is not put back in front of a
+ * reviewer every night. A "no" is a decision, not a temporary state.
+ */
+adminRouter.post(
+  "/reference-merges/:id/reject",
+  zValidator("json", mergeDecisionSchema),
+  async (c) => {
+    const session = c.get("adminSession");
+    const { note } = c.req.valid("json");
+
+    const candidate = await prisma.referenceMergeCandidate.findUnique({
+      where: { id: c.req.param("id") },
+      include: { left: { select: { masterReferenceId: true } }, right: { select: { masterReferenceId: true } } },
+    });
+
+    if (!candidate) {
+      return c.json({ error: "Candidate not found" }, 404);
+    }
+    if (candidate.status !== "pending") {
+      return c.json({ error: `This pair was already ${candidate.status}` }, 409);
+    }
+
+    await prisma.referenceMergeCandidate.update({
+      where: { id: candidate.id },
+      data: {
+        status: "rejected",
+        decidedById: session.adminId,
+        decidedAt: new Date(),
+        note: note ?? null,
+      },
+    });
+
     createActivityLog(
-      "clear_seed_votes",
+      "reject_reference_merge",
       session.adminId,
       session.username,
       "system",
-      referenceId ?? "all",
-      `Cleared seed votes on ${targets.length} reference(s)`
+      candidate.id,
+      `Declined to merge ${candidate.left.masterReferenceId} and ${candidate.right.masterReferenceId}` +
+        (note ? `: ${note}` : "")
     );
 
-    return c.json({ success: true, cleared: targets.length });
+    return c.json({ success: true });
   }
 );
+
+/**
+ * Check congress.gov now rather than waiting for tonight.
+ *
+ * Queued, not run inline: the sweep is one request per record and a reviewer
+ * should not be holding a browser tab open through it.
+ */
+adminRouter.post("/reference-merges/refresh", async (c) => {
+  const session = c.get("adminSession");
+  enqueueLineageSync("admin", undefined, JobPriority.HIGH);
+
+  createActivityLog(
+    "refresh_reference_lineage",
+    session.adminId,
+    session.username,
+    "system",
+    "all",
+    "Queued a congress.gov lineage sweep"
+  );
+
+  return c.json({ success: true, message: "Checking congress.gov for published relationships" });
+});
 
 export { adminRouter };
 export type { AdminUser, AdminSession, BannedUser, ActivityLog, Announcement };

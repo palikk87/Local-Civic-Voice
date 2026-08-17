@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { findByName } from "./reference-names";
 
 /**
  * Resolves a client-selected GovernmentReference to its active canonical row.
@@ -28,8 +29,40 @@ export type ResolveFailure =
 
 export type ResolveResult = { ok: true; reference: ResolvedReference } | ResolveFailure;
 
+/**
+ * The client these functions read through: the shared one, or a transaction so
+ * a caller can resolve a reference inside the same unit of work that writes it.
+ */
+export type ReferenceDb = Pick<typeof prisma, "governmentReference" | "referenceName">;
+
 /** Guard against a corrupt `mergedIntoId` chain looping forever. */
 const MAX_MERGE_HOPS = 10;
+
+/**
+ * Find a record by a name it used to have.
+ *
+ * A record's master reference id can change — a mangled id gets repaired, a
+ * merge folds one record into another, Congress renumbers a measure. Every name
+ * a record has ever answered to lives in the ReferenceName registry, so a link
+ * shared under an old name keeps working, and finding it is one indexed probe
+ * on a unique column rather than a LIKE across every row.
+ *
+ * Deliberately last. An exact id is always preferred, so a former name can
+ * never shadow a record that currently holds that name.
+ */
+async function findByFormerName<S extends object, R>(
+  referenceId: string,
+  db: ReferenceDb,
+  select: S,
+): Promise<R | null> {
+  const held = await findByName(referenceId.toLowerCase(), db as never);
+  if (!held) return null;
+
+  return (await db.governmentReference.findUnique({
+    where: { id: held.referenceId },
+    select: select as never,
+  })) as R | null;
+}
 
 /**
  * Pick the reference ID to use from the new and legacy request fields.
@@ -63,7 +96,7 @@ export function selectReferenceInput(input: {
  */
 export async function resolveReferenceId(
   referenceId: string,
-  db: Pick<typeof prisma, "governmentReference"> = prisma
+  db: ReferenceDb = prisma
 ): Promise<ResolveResult> {
   type Row = ResolvedReference & { mergedIntoId: string | null };
 
@@ -85,7 +118,8 @@ export async function resolveReferenceId(
     (await db.governmentReference.findUnique({
       where: { masterReferenceId: referenceId.toLowerCase() },
       select,
-    }));
+    })) ??
+    (await findByFormerName(referenceId, db, select));
 
   if (!first) {
     return { ok: false, reason: "not_found", value: referenceId };
@@ -129,7 +163,7 @@ export async function resolveReferenceId(
  */
 export async function resolvePostReference(
   input: { governmentReferenceId?: string; referenceType?: string; referenceId?: string },
-  db: Pick<typeof prisma, "governmentReference"> = prisma
+  db: ReferenceDb = prisma
 ): Promise<ResolveResult & { usedLegacyField?: boolean }> {
   const selected = selectReferenceInput(input);
   if (!selected.ok) {

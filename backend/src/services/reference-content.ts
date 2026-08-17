@@ -21,6 +21,8 @@ import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
 import { type BriefJobPlan, classifyBriefJob, generateAI, parseJsonObject } from "./ai-generate";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
+import { notifyLawUpdate } from "./notification-service";
+import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 
 const FETCH_TIMEOUT_MS = 15_000;
 /** How long stored text is trusted before we re-compare it against the official source. */
@@ -123,7 +125,21 @@ async function fetchDocumentText(url: string, deadlineAt: number): Promise<strin
   }
 }
 
-function hashText(text: string): string {
+/**
+ * The fingerprint of a piece of official text.
+ *
+ * Exported because the daily sync needs the SAME answer. Two hash functions
+ * over one column is not a style problem: each writer would see the other's
+ * value as different, report the law as changed every night, and pay to rewrite
+ * every brief on the platform.
+ *
+ * Known limitation, left alone deliberately: this hashes raw bytes, so a source
+ * that re-wraps or re-indents identical text reads as a new version. Making it
+ * whitespace-insensitive would be better, but it would also invalidate every
+ * hash already stored and regenerate every brief once — a real cost to pay on a
+ * guess about behaviour nobody has measured here.
+ */
+export function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 32);
 }
 
@@ -156,26 +172,27 @@ interface ReferenceRow {
   fullTextUrl: string | null;
   citizenBriefJson: string | null;
   sourceCheckedAt: Date | null;
+  lawVersion: number;
+  citizenBriefVersion: number | null;
 }
 
 /**
  * "hr-82-119" → { type: "hr", number: "82", congress: 119 }
  *
- * Resolution ids split the bill type across segments for resolutions — normalizing
- * "hres-1443-119" yields "hr-es-1443-119" — so letter segments are rejoined
- * ("hr" + "es" = "hres", which is what congress.gov expects in the URL path).
+ * `fallbackCongress` is the row's own `congress` column, used when the id
+ * carries no Congress of its own. Ids written before the naming rules were
+ * consolidated split the type across segments — "hres-1443-119" was stored as
+ * "hr-es-1443-119" — and the shared parser rejoins them, so a record still
+ * reaches congress.gov under the name it was filed with.
  */
 function parseBillId(masterReferenceId: string, fallbackCongress: number | null) {
-  const segments = masterReferenceId.split("-").filter(Boolean);
-  const letters = segments.filter((s) => /^[a-z]+$/.test(s));
-  const numbers = segments.filter((s) => /^\d+$/.test(s));
+  const key = parseReferenceId(ReferenceKind.BILL, masterReferenceId);
+  if (key?.kind !== "bill") return null;
 
-  const type = letters.join("");
-  const number = numbers[0];
-  const congress = numbers[1] ? Number(numbers[1]) : fallbackCongress;
+  const congress = key.congress ?? fallbackCongress;
+  if (!congress) return null;
 
-  if (!type || !number || !congress) return null;
-  return { type, number, congress };
+  return { type: key.billType as string, number: key.number, congress };
 }
 
 async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
@@ -774,6 +791,10 @@ async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
       citizenBrief: flattenBrief(ref, brief),
       citizenBriefAt: new Date(),
       citizenBriefModel: generated.provider,
+      // Pin the brief to the version of the law it describes. This is what
+      // makes "one per version" checkable: every later reader compares this to
+      // lawVersion and reuses instead of paying again.
+      citizenBriefVersion: ref.lawVersion,
       contentStatus: "ready",
     },
   });
@@ -807,6 +828,8 @@ const SELECT_FIELDS = {
   fullTextUrl: true,
   citizenBriefJson: true,
   sourceCheckedAt: true,
+  lawVersion: true,
+  citizenBriefVersion: true,
 } as const;
 
 /** One pull per reference at a time, however many readers arrive at once. */
@@ -867,6 +890,11 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
       textChanged = hash !== ref.fullTextHash;
 
       if (textChanged) {
+        // A first pull is not a change. The law did not move; we simply did not
+        // have it yet, and badging every post on a record whose text we just
+        // fetched for the first time would be a lie told at scale.
+        const lawMoved = ref.fullTextHash !== null;
+
         // Stored copy is outdated (or absent) — the master reference takes the new text.
         await prisma.governmentReference.update({
           where: { id: ref.id },
@@ -877,12 +905,34 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
             fullTextUrl: fetched.url,
             fullTextAt: now,
             sourceCheckedAt: now,
+            ...(lawMoved ? { lawChangedAt: now, lawVersion: { increment: 1 } } : {}),
           },
         });
-        current = { ...ref, fullText: fetched.text, fullTextHash: hash, fullTextUrl: fetched.url };
+        // Carry the incremented version forward. The brief written below is
+        // pinned to whatever `current.lawVersion` says, so leaving the stale
+        // number here would pin every new brief to the version before the one
+        // it describes — and every later reader would regenerate it again.
+        current = {
+          ...ref,
+          fullText: fetched.text,
+          fullTextHash: hash,
+          fullTextUrl: fetched.url,
+          lawVersion: lawMoved ? ref.lawVersion + 1 : ref.lawVersion,
+        };
         console.log(
           `[RefContent] Text ${textMissing ? "pulled" : "refreshed"} for ${ref.masterReferenceId} from ${fetched.source}`
         );
+
+        if (lawMoved) {
+          // Everyone who shared this law gets told, once. Their posts are not
+          // touched; the card on each one carries the badge.
+          const { notified } = await notifyLawUpdate(ref.id, ref.masterReferenceId, ref.title);
+          if (notified > 0) {
+            console.log(
+              `[RefContent] told ${notified} person(s) that ${ref.masterReferenceId} changed`
+            );
+          }
+        }
       } else {
         await prisma.governmentReference.update({
           where: { id: ref.id },
@@ -913,7 +963,20 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
     return;
   }
 
-  const briefNeeded = force || !ref.citizenBriefJson || textChanged;
+  // The stored brief still describes this law if it was written for the version
+  // the law is on now.
+  //
+  // `textChanged` alone is not enough and never was: it lives for the length of
+  // this function call, so a regeneration that failed left a brief on the row,
+  // no record of the failure, and every later reader served a summary of a law
+  // that no longer existed. The version comparison outlives the process.
+  //
+  // It also makes the other half true. A brief that IS current is never
+  // rewritten, however many people open it — not per click, not per user, not
+  // per post. Once per version of the law.
+  const briefIsCurrent =
+    Boolean(current.citizenBriefJson) && current.citizenBriefVersion === current.lawVersion;
+  const briefNeeded = force || !briefIsCurrent || textChanged;
   if (!briefNeeded) {
     await prisma.governmentReference.update({
       where: { id: ref.id },

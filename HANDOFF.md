@@ -73,6 +73,27 @@ clients** tab that creates accounts, rotates credentials, changes tiers and
 revokes access without shell access. The script exists for the cold start, when
 there is no admin account to log in with yet.
 
+While you have a shell open, clear the two test posts a since-fixed bug
+orphaned (they cannot be reached from the UI that made them):
+
+```bash
+cd backend
+railway run bun scripts/delete-posts.ts --confirm \
+  --content "Parity audit test post - please ignore. Will delete." \
+  --content "Pagination probe A - will delete"
+```
+
+Drop `--confirm` to see what it matches first. It matches exact text only, so it
+cannot take a real post with a similar opening line.
+
+**Do not skip the B2B half.** A parity audit found `/b2b/login` rejecting every
+credential on the deployed app, which looked like a broken portal and made all
+eleven B2B functions untestable. The portal was fine — the table was empty.
+There is nothing to log in as until either this script runs or an admin creates
+a client in **Admin → B2B clients**, and the admin console says so in as many
+words when the list is empty. Whichever route you take, it has to happen once
+per environment.
+
 **One-time effect of this deploy:** a migration deletes every row in
 `AdminSession` and `B2BSession`. Anyone signed in to the admin console or the
 `/b2b` dashboard at that moment is signed out and signs in again with the same
@@ -128,6 +149,31 @@ CourtListener. Both free, both issued in minutes.
 Without them `GovernmentReference` stays empty and Discover has nothing in it.
 This is how the product gets its content, so it is not optional in practice.
 
+If you ever need to refresh the recorded congress.gov fixtures the tests replay
+(`backend/tests/fixtures/congress/`), that is the one place a real key is used
+outside production:
+
+```bash
+cd backend
+CONGRESS_API_KEY=... bun scripts/record-lineage-fixtures.ts
+```
+
+It strips the echoed request before writing, so no key lands in the repository.
+The tests never touch the network.
+
+`CONGRESS_API_KEY` now does a second job. Once a day the server asks
+congress.gov which stored records are really the same law and reads the
+published relationships — the ones the House, the Senate or the Congressional
+Research Service assigned. A pair labelled "Identical bill" is merged
+automatically, because that label means a Library of Congress analyst read both
+texts and confirmed they match. Everything else goes to **Merge review** in the
+admin console for you to answer once.
+
+That sweep is one request per stored bill. A signed key allows 1,000 an hour and
+the sweep is capped at 50 records a night, so it cannot starve search of the
+same budget. Without the key nothing breaks — no lineage is fetched and the
+queue simply stays empty.
+
 ---
 
 ## 6. Rotate everything that was ever in the repository
@@ -175,6 +221,39 @@ can keep both during the switch.
 
 ---
 
+## What this deploy changes that you will notice
+
+**Vote counts drop to zero on most cards.** Every record carried a fabricated
+tally — between 400 and 4,999 invented supporters and between 300 and 3,999
+invented opponents, derived from a hash of its id — and those numbers were
+inside the public count. A live check found all 33 stored records carrying them
+and not one carrying a real vote, so the entire published pulse was invented. A
+migration subtracts the fabricated layer and leaves exactly the real weighted
+count, which for most records is nothing.
+
+That is the correct number. A card saying nobody has voted yet is telling the
+truth; a card saying four thousand people support a bill nobody has read is not,
+and that number fed the trending list and the enterprise feed.
+
+**Some record ids change.** Four of the eight congressional measure types were
+being stored under mangled names — `sres-829-119` was written as
+`s-res-829-119`, which no search could find and no government API could refresh.
+A migration gives those records their real names back and keeps the old name, so
+links already shared under it still work. Where the correct name was already
+taken by another record, the pair is left alone and appears in Merge review
+instead.
+
+**A new admin tab: Merge review.** Two records that might be one law, with the
+government's own label, who assigned it, and a link to the congress.gov page.
+Approving is superadmin-only because it rewrites which record every affected
+post and vote belongs to.
+
+**People get notified when a law they shared changes.** Their post is never
+edited — the card carries a badge saying the law has moved since it was posted.
+On by default; it is in notification preferences like any other.
+
+---
+
 ## Still open in the code
 
 Nothing blocking, and nothing that needs you. Recorded so it is not forgotten:
@@ -191,6 +270,22 @@ Nothing blocking, and nothing that needs you. Recorded so it is not forgotten:
   not. It works, it is just duplicated.
 - **`connect` on already-attached media moves it** rather than sharing it, and
   the ownership check verifies only the uploader, not that the media is free.
+- **Executive orders and Supreme Court cases have no lineage check.** The
+  matchmaker only asks congress.gov, which only knows about bills. Orders are
+  numbered uniquely and dockets are unique per term, so duplicates there are far
+  less likely — but nothing is watching.
+- **Reintroduction across Congresses is not detected.** A bill that dies and is
+  filed again next session gets a new number and no published relationship to
+  the old one. Catching that needs text comparison, not a lookup.
+- **The text fingerprint is whitespace-sensitive.** A source that re-wraps
+  identical text reads as a new version of the law, which would badge posts and
+  regenerate a brief for nothing. Changing it invalidates every stored hash and
+  regenerates every brief once, so it was left alone rather than swapped on a
+  guess. If you see version numbers climbing on records nobody has amended, this
+  is why.
+- **The daily lineage sweep is capped at 50 records a night** so it cannot spend
+  the congress.gov budget search shares. Past a few hundred stored bills that is
+  a slow full pass, not a broken one.
 
 ---
 
@@ -204,5 +299,20 @@ source. Session tokens and media keys come from the CSPRNG. Deleting a post, a
 media item, or an entire account removes the stored files and fails loudly if it
 cannot. Admin and B2B login no longer leak which accounts exist. Bans,
 announcements, audit logs, direct messages and both kinds of session survive a
-restart. The mobile app builds. The web app builds. There are 49 tests, and each
-one was verified by breaking the thing it covers and watching it fail.
+restart. The mobile app builds. The web app builds.
+
+One law now has one record and one vote count. Every congressional measure type
+is named the same way by every part of the system, and a record answers to every
+name it has ever had, so no shared link dies when a name is corrected. Merging
+two records moves every vote into one pool without counting anybody twice,
+without losing a post, and without losing or rewriting a citizen brief. Posts
+read the law live instead of a copy frozen when they were written. A brief is
+generated once per version of the law and reused by everyone after. And no
+number this platform publishes is invented.
+
+There are 147 tests, and each one was verified by breaking the thing it covers
+and watching it fail. That includes the two paths that used to be excused as
+"needs a real API call": the auto-merge runs against congress.gov responses
+recorded from the live API and replayed offline, and the brief pipeline runs end
+to end with the model answered at the network boundary — the classifier, the
+chunker, the prompts, the fact-check pass and the version pin all real.

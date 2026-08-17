@@ -35,4 +35,7 @@ studio.log
 .DS_Store
 
 # Prisma generated files (bunx prisma generate)
-/generated/prisma.test-uploads/
+/generated/prisma
+
+# Where the test harness writes uploads (tests/helpers/server.ts).
+.test-uploads/

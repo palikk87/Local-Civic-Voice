@@ -1,0 +1,604 @@
+{
+  "recordedFor": "hr-1-119",
+  "why": "A high-traffic bill with a long relationship list, including Related bills that must never become candidates.",
+  "body": {
+    "relatedBills": [
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2026-04-21",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 8415,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Small Business Tax Cut Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/8415?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-09-18",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 5463,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Choice Arrangement",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/5463?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-09-18",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 2875,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "CHOICE Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/2875?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-20",
+          "text": "Star Print ordered on the reported concurrent resolution."
+        },
+        "number": 14,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "House",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Establishing the congressional budget for the United States Government for fiscal year 2025 and setting forth the appropriate budgetary levels for fiscal years 2026 through 2034.",
+        "type": "HCONRES",
+        "url": "https://api.congress.gov/v3/bill/119/hconres/14?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-09-26",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 5595,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Requiring Excise for Migrant Income Transfers Act\u201d or the \u201cREMIT Act.",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/5595?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-18",
+          "text": "Referred to the House Committee on Energy and Commerce."
+        },
+        "number": 1403,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          },
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "LIVE Beneficiaries Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1403?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-07",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 1151,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          },
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "Freedom to Invest in Tomorrow\u2019s Workforce Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1151?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-03-18",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 2186,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "To amend the Internal Revenue Code of 1986 to restore the limitation on downward attribution of stock ownership in applying constructive ownership rules.",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/2186?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-05",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 1003,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          },
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "Enhancing Energy Recovery Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1003?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-03-05",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 1882,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          },
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "Saving Gig Economy Taxpayers Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1882?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2026-07-01",
+          "text": "Ordered to be Reported in the Nature of a Substitute by the Yeas and Nays: 40 - 0."
+        },
+        "number": 9496,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "End Tax Penalties on American Hostages Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/9496?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-12-17",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 6800,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "To amend the Internal Revenue Code of 1986 to terminate the tax-exempt status of terrorist supporting organizations.",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/6800?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-12-17",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 3554,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "A bill to amend the Internal Revenue Code of 1986 to terminate the tax-exempt status of terrorist supporting organizations.",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/3554?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-05",
+          "text": "Referred to the House Committee on Energy and Commerce."
+        },
+        "number": 1019,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "Medicaid Program Improvement Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1019?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-18",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 1436,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "ENABLE Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1436?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-07",
+          "text": "Referred to the House Committee on Education and Workforce."
+        },
+        "number": 1131,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Public law contains the text"
+          }
+        ],
+        "title": "Family Farm and Small Business Exemption Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/1131?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-22",
+          "actionTime": "02:39:48",
+          "text": "Motion to reconsider laid on the table Agreed to without objection."
+        },
+        "number": 436,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "House",
+            "type": "Procedurally related"
+          }
+        ],
+        "title": "Providing for consideration of the bill (H.R. 1) to provide for reconciliation pursuant to title II of H. Con. Res. 14.",
+        "type": "HRES",
+        "url": "https://api.congress.gov/v3/bill/119/hres/436?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-04",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 939,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Student Empowerment Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/939?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-08",
+          "text": "Read twice and referred to the Committee on Health, Education, Labor, and Pensions."
+        },
+        "number": 1683,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "PELL Act of 2025",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/1683?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-06-11",
+          "actionTime": "16:51:25",
+          "text": "Pursuant to the provisions of H. Res. 499, H. Res. 492 is considered passed House. (consideration: CR H2647; text: CR H2647)"
+        },
+        "number": 492,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "House",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Directing the Clerk of the House of Representatives to make a correction in the engrossment of H.R. 1.",
+        "type": "HRES",
+        "url": "https://api.congress.gov/v3/bill/119/hres/492?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-01-23",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 662,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Promoting Domestic Energy Production Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/662?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-01-23",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 224,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Promoting Domestic Energy Production Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/224?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-05",
+          "text": "Read twice and referred to the Committee on Finance. (text: CR S668)"
+        },
+        "number": 425,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Enhancing Energy Recovery Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/425?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-20",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 678,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "LIVE Beneficiaries Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/678?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-02-26",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 756,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Freedom to Invest in Tomorrow\u2019s Workforce Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/756?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-08",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 1687,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Fair Accounting for Condominium Construction Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/1687?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-15",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 3450,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "To amend the Internal Revenue Code of 1986 to provide for special rules allowing taxpayers to deduct qualified passenger vehicle loan interest paid or accrued during the taxable year on certain indebtedness, and for other purposes.",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/3450?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-15",
+          "text": "Referred to the House Committee on Agriculture."
+        },
+        "number": 3448,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "LIP Enhancement Act of 2025",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/3448?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-05-15",
+          "text": "Read twice and referred to the Committee on Agriculture, Nutrition, and Forestry."
+        },
+        "number": 1781,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "LIP Enhancement Act of 2025",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/1781?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-01-20",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 152,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Student Empowerment Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/152?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-06-03",
+          "text": "Referred to the House Committee on Ways and Means."
+        },
+        "number": 3687,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "To amend the Internal Revenue Code of 1986 to renew and enhance opportunity zones, and for other purposes.",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/3687?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-06-04",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 1944,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "Employee Access to Worksite Health Services Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/1944?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-06-10",
+          "text": "Read twice and referred to the Committee on Finance."
+        },
+        "number": 2002,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "REMIT Act",
+        "type": "S",
+        "url": "https://api.congress.gov/v3/bill/119/s/2002?format=json"
+      },
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2025-06-26",
+          "text": "Referred to the House Committee on Energy and Commerce."
+        },
+        "number": 4209,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Related bill"
+          }
+        ],
+        "title": "No Medicaid for Illegals Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/4209?format=json"
+      }
+    ]
+  }
+}

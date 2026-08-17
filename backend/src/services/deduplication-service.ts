@@ -1,26 +1,8 @@
 import { prisma } from "../prisma";
 import { computeWeightedTally } from "./delegation-service";
+import { canonicalReferenceId } from "./master-reference-id";
+import { NameSource, claimName, findByName, namesFor, transferNames } from "./reference-names";
 
-/**
- * Deterministic placeholder tally for a brand-new reference so its card never
- * shows a dead 0–0. Hash of the master id → stable numbers per reference.
- * Lives in the seed columns, so an admin can strip it later without touching
- * real votes (POST /api/admin/references/clear-seed-votes).
- */
-export function seedTallyFor(masterReferenceId: string): {
-  seedSupport: number;
-  seedOppose: number;
-} {
-  let hash = 0;
-  for (let i = 0; i < masterReferenceId.length; i++) {
-    hash = (hash * 31 + masterReferenceId.charCodeAt(i)) >>> 0;
-  }
-  // NOTE: >>> keeps the shift unsigned — >> flips negative for hashes ≥ 2^31
-  // and produced negative tallies.
-  const seedSupport = 400 + (hash % 4600); // 400–4,999
-  const seedOppose = 300 + ((hash >>> 7) % 3700); // 300–3,999
-  return { seedSupport, seedOppose };
-}
 
 /**
  * Valid reference types for government references
@@ -34,19 +16,21 @@ export const ReferenceType = {
 export type ReferenceTypeValue = (typeof ReferenceType)[keyof typeof ReferenceType];
 
 /**
- * Data required to generate a master reference ID
+ * Every name a record has ever answered to, read out of the `aliases` column.
+ *
+ * The column is TEXT holding a JSON array, and rows predating that convention
+ * hold other things. Unreadable content is an empty list rather than a throw:
+ * a record with a corrupt alias blob is a record with no former names, which is
+ * true and recoverable, whereas a merge that dies on one is neither.
  */
-export interface ReferenceData {
-  type: ReferenceTypeValue;
-  // For bills
-  billNumber?: string;
-  congress?: number;
-  chamber?: string; // hr, s, hjres, sjres, hconres, sconres, hres, sres
-  // For executive orders
-  eoNumber?: string;
-  // For SCOTUS cases
-  caseNumber?: string; // e.g., "22-451"
-  title?: string;
+export function parseAliases(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -62,77 +46,17 @@ export interface DuplicateSearchResult {
 }
 
 /**
- * Normalize a reference ID by:
- * - Converting to lowercase
- * - Removing extra whitespace
- * - Standardizing separators (use hyphens)
- * - Removing common prefixes/suffixes
+ * Canonical form of a reference id.
+ *
+ * Kept as a name because a dozen call sites use it, but it holds no opinion of
+ * its own any more — naming lives in master-reference-id.ts, which is the only
+ * module allowed to decide how a law is spelled. The version that used to live
+ * here matched bill prefixes with a leftmost-first alternation and mangled four
+ * of the eight measure types; that is the whole reason the naming rules were
+ * pulled out into one place with a round-trip test around them.
  */
 export function normalizeReferenceId(type: ReferenceTypeValue, id: string): string {
-  let normalized = id.toLowerCase().trim();
-
-  // Replace various separators with hyphens
-  normalized = normalized.replace(/[\s_\.]+/g, "-");
-
-  // Remove duplicate hyphens
-  normalized = normalized.replace(/-+/g, "-");
-
-  // Remove leading/trailing hyphens
-  normalized = normalized.replace(/^-|-$/g, "");
-
-  switch (type) {
-    case ReferenceType.BILL:
-      // Normalize bill IDs: "H.R. 82" -> "hr-82", "S. 1234" -> "s-1234"
-      // Also handle "HR82", "hr 82", etc.
-      normalized = normalized.replace(/^(h\.?r\.?|s\.?|h\.?j\.?res\.?|s\.?j\.?res\.?|h\.?con\.?res\.?|s\.?con\.?res\.?|h\.?res\.?|s\.?res\.?)[\s-]*/, (_, prefix) => {
-        const cleanPrefix = prefix.replace(/\./g, "").replace(/\s+/g, "");
-        return cleanPrefix + "-";
-      });
-      break;
-
-    case ReferenceType.EXECUTIVE_ORDER:
-      // Normalize EO IDs: "E.O. 14147" -> "eo-14147", "Executive Order 14147" -> "eo-14147"
-      normalized = normalized.replace(/^(e\.?o\.?|executive[-\s]?order)[\s-]*/, "eo-");
-      break;
-
-    case ReferenceType.SCOTUS_CASE:
-      // SCOTUS case numbers are already in format like "22-451"
-      // Just ensure consistent formatting
-      normalized = normalized.replace(/^no\.?\s*/, "");
-      break;
-  }
-
-  return normalized;
-}
-
-/**
- * Generate a canonical master reference ID from reference data
- */
-export function generateMasterReferenceId(data: ReferenceData): string {
-  switch (data.type) {
-    case ReferenceType.BILL:
-      if (data.chamber && data.billNumber) {
-        const congress = data.congress ? `-${data.congress}` : "";
-        const chamber = data.chamber.toLowerCase().replace(/\./g, "");
-        return `${chamber}-${data.billNumber}${congress}`;
-      }
-      throw new Error("Bill reference requires chamber and billNumber");
-
-    case ReferenceType.EXECUTIVE_ORDER:
-      if (data.eoNumber) {
-        return `eo-${data.eoNumber.replace(/\D/g, "")}`;
-      }
-      throw new Error("Executive order reference requires eoNumber");
-
-    case ReferenceType.SCOTUS_CASE:
-      if (data.caseNumber) {
-        return normalizeReferenceId(ReferenceType.SCOTUS_CASE, data.caseNumber);
-      }
-      throw new Error("SCOTUS case reference requires caseNumber");
-
-    default:
-      throw new Error(`Unknown reference type: ${data.type}`);
-  }
+  return canonicalReferenceId(type, id);
 }
 
 /**
@@ -274,28 +198,21 @@ export async function findDuplicates(
     });
 
     for (const candidate of candidates) {
-      if (candidate.aliases) {
-        try {
-          const candidateAliases = JSON.parse(candidate.aliases) as string[];
-          const normalizedAliases = candidateAliases.map(a => normalizeReferenceId(type, a));
+      const names = parseAliases(candidate.aliases).map((a) => normalizeReferenceId(type, a));
 
-          for (const searchTerm of allSearchTerms) {
-            if (normalizedAliases.includes(searchTerm) || candidate.masterReferenceId === searchTerm) {
-              // Avoid duplicates
-              if (!results.some(r => r.id === candidate.id)) {
-                results.push({
-                  id: candidate.id,
-                  masterReferenceId: candidate.masterReferenceId,
-                  title: candidate.title,
-                  referenceType: candidate.referenceType,
-                  matchType: "alias",
-                });
-              }
-              break;
-            }
+      for (const searchTerm of allSearchTerms) {
+        if (names.includes(searchTerm) || candidate.masterReferenceId === searchTerm) {
+          // Avoid duplicates
+          if (!results.some((r) => r.id === candidate.id)) {
+            results.push({
+              id: candidate.id,
+              masterReferenceId: candidate.masterReferenceId,
+              title: candidate.title,
+              referenceType: candidate.referenceType,
+              matchType: "alias",
+            });
           }
-        } catch {
-          // Invalid JSON in aliases, skip
+          break;
         }
       }
     }
@@ -389,40 +306,61 @@ export async function findOrCreateReference(
     };
   }
 
-  // No duplicate found, create new reference
-  const reference = await prisma.governmentReference.create({
-    data: {
-      masterReferenceId: normalizedId,
-      referenceType: data.referenceType,
-      title: data.title,
-      shortTitle: data.shortTitle,
-      sourceUrl: data.sourceUrl,
-      chamber: data.chamber,
-      congress: data.congress,
-      status: data.status,
-      category: data.category,
-      description: data.description,
-      fullText: data.fullText,
-      signedDate: data.signedDate,
-      decidedDate: data.decidedDate,
-      aliases: data.aliases ? JSON.stringify(data.aliases) : null,
-      ...(() => {
-        // Same removable placeholder layer new synced references get — a card
-        // should never appear with a dead 0–0 tally.
-        const seed = seedTallyFor(normalizedId);
-        return {
-          seedSupport: seed.seedSupport,
-          seedOppose: seed.seedOppose,
-          supportVotes: seed.seedSupport,
-          opposeVotes: seed.seedOppose,
-        };
-      })(),
-    },
-    select: {
-      id: true,
-      masterReferenceId: true,
-      title: true,
-    },
+  // One more check before creating anything: does some record already answer to
+  // this name? findDuplicates asks the `aliases` mirror; this asks the registry,
+  // which is the authority and which holds names the mirror never had. A name
+  // held by another record does not mean "close enough to merge" — it means
+  // this IS that record, and creating a second one would be the exact
+  // duplication the master reference system exists to prevent.
+  const held = await findByName(normalizedId);
+  if (held) {
+    const owner = await prisma.governmentReference.findUnique({
+      where: { id: held.referenceId },
+      select: { id: true, masterReferenceId: true, title: true },
+    });
+    if (owner) return { reference: owner, created: false };
+  }
+
+  // Create the record and register its name in the same transaction, so a
+  // record can never exist that the registry does not know about. Anything
+  // created outside that registration is a record no former-name lookup can
+  // ever reach.
+  const reference = await prisma.$transaction(async (tx) => {
+    const created = await tx.governmentReference.create({
+      data: {
+        masterReferenceId: normalizedId,
+        referenceType: data.referenceType,
+        title: data.title,
+        shortTitle: data.shortTitle,
+        sourceUrl: data.sourceUrl,
+        chamber: data.chamber,
+        congress: data.congress,
+        status: data.status,
+        category: data.category,
+        description: data.description,
+        fullText: data.fullText,
+        signedDate: data.signedDate,
+        decidedDate: data.decidedDate,
+        aliases: data.aliases ? JSON.stringify(data.aliases) : null,
+        // No placeholder tally. A new record starts at nothing, because
+        // nothing is what anybody has said about it yet.
+      },
+      select: {
+        id: true,
+        masterReferenceId: true,
+        title: true,
+      },
+    });
+
+    await claimName(tx, created.id, normalizedId, NameSource.CREATED, { current: true });
+    for (const alias of data.aliases ?? []) {
+      // A name another record already holds is left where it is. Two records
+      // answering to one name is the duplicate this system exists to prevent,
+      // and quietly reassigning it would hide exactly that.
+      await claimName(tx, created.id, normalizeReferenceId(data.referenceType, alias), NameSource.CREATED);
+    }
+
+    return created;
   });
 
   return {
@@ -432,164 +370,308 @@ export async function findOrCreateReference(
 }
 
 /**
- * Merge two references by updating all posts to point to the target
- * and marking the source as merged
+ * The shape of a completed merge, reported rather than summarised.
+ *
+ * A merge is the one operation that rewrites who owns what. `success: true`
+ * with no detail is not an answer anybody can check, and the previous version
+ * of this function returned exactly that while quietly skewing the counters.
  */
-export async function mergeReferences(
-  sourceId: string,
-  targetId: string
-): Promise<{
-  success: boolean;
-  postsUpdated: number;
-  votesTransferred: number;
-  aliasesMerged: string[];
-}> {
+export interface MergeReport {
+  target: { id: string; masterReferenceId: string; title: string };
+  source: { id: string; masterReferenceId: string };
+  postsMoved: number;
+  votesMoved: number;
+  votesSuperseded: number;
+  chainsFlattened: number;
+  namesKept: string[];
+  brief: "target kept its own" | "adopted from source" | "neither had one";
+  officialText: "target kept its own" | "adopted from source" | "neither had one";
+  tally: { support: number; oppose: number };
+}
+
+/**
+ * Fold one record into another.
+ *
+ * This is what makes the Public Pulse a single number. Congress files the same
+ * law twice — a House bill and its identical Senate companion — and until they
+ * are joined, the country's opinion on that law is split across two counts and
+ * neither is true.
+ *
+ * WHAT MOVES AND WHAT DOES NOT
+ *
+ * Votes move. A vote is a position on the government's business, not on a
+ * particular filing of it, so every vote from both records ends up in one pool.
+ * That is the Public Pulse.
+ *
+ * Speech does not merge. Posts move to point at the surviving record, because
+ * they must keep showing a law that exists — but they are never rewritten,
+ * combined, or reattributed. Comments and shares stay in the thread they were
+ * written in, under the post they belong to. Somebody's words are theirs.
+ *
+ * WHEN ONE PERSON VOTED ON BOTH
+ *
+ * They stated a position twice on the same business. The later one stands. Not
+ * the survivor's by default — that would be an accident of which record an
+ * admin happened to type first — and not both, because one person is one voice.
+ * If they said support in March and oppose in July, they oppose it.
+ *
+ * WHY THE TALLY IS RECOMPUTED RATHER THAN ADDED UP
+ *
+ * The old implementation read both records' counters before moving anything and
+ * then incremented the survivor by the source's numbers. Every vote it went on
+ * to discard as a duplicate was still counted, so a merge inflated the pulse by
+ * exactly the number of people who cared enough to vote on both. It also used a
+ * snapshot taken before the votes moved. Counting the votes that actually exist
+ * afterwards cannot drift.
+ *
+ * SEED LAYERS ARE NOT ADDED TOGETHER
+ *
+ * Seed votes are a per-record display placeholder so a brand-new card does not
+ * read 0–0. They are not support anybody expressed, so they are not a quantity
+ * that can be transferred or accumulated: summing two of them would manufacture
+ * thousands of new fake votes out of a bookkeeping event. The survivor keeps its
+ * own seed layer and the source's is dropped. Clearing seeds entirely is still
+ * one admin action away, and after that this line does nothing at all.
+ *
+ * ATOMIC
+ *
+ * Everything happens in one transaction. The previous version moved votes in a
+ * loop of individual queries outside the transaction that marked the source
+ * merged, so a process that died halfway left votes on a record nothing pointed
+ * at any more.
+ */
+export async function mergeReferences(sourceId: string, targetId: string): Promise<MergeReport> {
   if (sourceId === targetId) {
     throw new Error("Cannot merge a reference into itself");
   }
 
-  // Get both references
-  const [source, target] = await Promise.all([
-    prisma.governmentReference.findUnique({
-      where: { id: sourceId },
-      include: {
-        posts: { select: { id: true } },
-        votes: true,
-      },
-    }),
-    prisma.governmentReference.findUnique({
-      where: { id: targetId },
-    }),
-  ]);
+  return prisma.$transaction(async (tx) => {
+    const [source, target] = await Promise.all([
+      tx.governmentReference.findUnique({ where: { id: sourceId } }),
+      tx.governmentReference.findUnique({ where: { id: targetId } }),
+    ]);
 
-  if (!source) {
-    throw new Error("Source reference not found");
-  }
-  if (!target) {
-    throw new Error("Target reference not found");
-  }
-  if (source.mergedIntoId) {
-    throw new Error("Source reference has already been merged");
-  }
-  if (target.mergedIntoId) {
-    throw new Error("Target reference has been merged into another reference");
-  }
+    if (!source) throw new Error("Source reference not found");
+    if (!target) throw new Error("Target reference not found");
+    if (source.mergedIntoId) throw new Error("Source reference has already been merged");
+    if (target.mergedIntoId) {
+      throw new Error("Target reference has been merged into another reference");
+    }
+    if (source.referenceType !== target.referenceType) {
+      // A bill is not an executive order. Nothing in the platform should ever
+      // ask for this, and honouring it would produce a record that is one type
+      // on paper and another in substance.
+      throw new Error(
+        `Cannot merge a ${source.referenceType} into a ${target.referenceType}`,
+      );
+    }
 
-  // Merge aliases
-  const sourceAliases = source.aliases ? JSON.parse(source.aliases) as string[] : [];
-  const targetAliases = target.aliases ? JSON.parse(target.aliases) as string[] : [];
+    // --- Votes -------------------------------------------------------------
+    //
+    // Written as set operations rather than a loop over rows: a loop is one
+    // round trip per vote, and on a record with real traffic that is the
+    // difference between a merge and a timeout.
 
-  // Add source's master ID and aliases to target's aliases
-  const newAliases = [
-    ...new Set([
-      ...targetAliases,
-      source.masterReferenceId,
-      ...sourceAliases,
-    ]),
-  ];
+    // Someone voted on both, and their vote on the source is the later one:
+    // their position on the survivor becomes the one they last stated.
+    const votesSuperseded = await tx.$executeRaw`
+      UPDATE "GovernmentReferenceVote" AS t
+         SET "position" = s."position",
+             "updatedAt" = s."updatedAt"
+        FROM "GovernmentReferenceVote" AS s
+       WHERE t."governmentReferenceId" = ${targetId}
+         AND s."governmentReferenceId" = ${sourceId}
+         AND s."userId" = t."userId"
+         AND s."updatedAt" > t."updatedAt"
+    `;
 
-  // Transfer votes (if user hasn't already voted on target)
-  let votesTransferred = 0;
-  for (const vote of source.votes) {
-    const existingVote = await prisma.governmentReferenceVote.findUnique({
-      where: {
-        governmentReferenceId_userId: {
-          governmentReferenceId: targetId,
-          userId: vote.userId,
-        },
-      },
+    // Their duplicate on the source is then spent, whichever way it went.
+    await tx.$executeRaw`
+      DELETE FROM "GovernmentReferenceVote" AS s
+       WHERE s."governmentReferenceId" = ${sourceId}
+         AND EXISTS (
+           SELECT 1 FROM "GovernmentReferenceVote" AS t
+            WHERE t."governmentReferenceId" = ${targetId}
+              AND t."userId" = s."userId"
+         )
+    `;
+
+    // Everyone who voted only on the source now counts toward the survivor.
+    const votesMoved = await tx.$executeRaw`
+      UPDATE "GovernmentReferenceVote"
+         SET "governmentReferenceId" = ${targetId}
+       WHERE "governmentReferenceId" = ${sourceId}
+    `;
+
+    // --- Posts -------------------------------------------------------------
+    //
+    // `referenceId` and `referenceTitle` are legacy denormalised copies that
+    // older clients still read. The id has to follow the post to the survivor
+    // or it points at a tombstone; the title is left alone deliberately —
+    // rewriting it would edit somebody's post, and the badge that tells a
+    // reader the law has moved on is a separate piece of work.
+    const posts = await tx.post.updateMany({
+      where: { governmentReferenceId: sourceId },
+      data: { governmentReferenceId: targetId, referenceId: targetId },
     });
 
-    if (!existingVote) {
-      await prisma.governmentReferenceVote.update({
-        where: { id: vote.id },
-        data: { governmentReferenceId: targetId },
-      });
-      votesTransferred++;
-    } else {
-      // User already voted on target, delete the source vote
-      await prisma.governmentReferenceVote.delete({
-        where: { id: vote.id },
-      });
-    }
-  }
+    // --- Earlier merges ----------------------------------------------------
+    //
+    // If something was already merged into the source, it now points at the
+    // survivor directly. Resolution follows these chains, so leaving them
+    // nested still works — but every hop is a query, and a chain that only
+    // grows eventually hits the cycle guard and starts failing.
+    const chains = await tx.governmentReference.updateMany({
+      where: { mergedIntoId: sourceId },
+      data: { mergedIntoId: targetId },
+    });
 
-  // Perform the merge in a transaction
-  const result = await prisma.$transaction([
-    // Update all posts to point to target
-    prisma.post.updateMany({
-      where: { governmentReferenceId: sourceId },
-      data: { governmentReferenceId: targetId },
-    }),
+    // --- Names -------------------------------------------------------------
+    //
+    // The survivor answers to everything either record ever answered to, so no
+    // link that was shared under an old name dies. The registry is the
+    // authority; `aliases` on the row is a mirror it rewrites.
+    await transferNames(tx, sourceId, targetId);
+    const namesKept = (
+      await tx.referenceName.findMany({
+        where: { referenceId: targetId, isCurrent: false },
+        select: { name: true },
+        orderBy: { firstSeenAt: "asc" },
+      })
+    ).map((n) => n.name);
 
-    // Update target with merged aliases and recalculate stats
-    prisma.governmentReference.update({
+    // --- Content -----------------------------------------------------------
+    //
+    // A brief costs real money and real time to produce. If the survivor has
+    // none and the source does, the survivor adopts it whole — brief, the
+    // structured copy, when it was written and which model wrote it — so the
+    // merge neither loses a brief nor triggers a regeneration. If the survivor
+    // already has one, nothing is touched: the two records describe the same
+    // law, and swapping one good brief for another buys nothing.
+      // "Has a usable brief" is the stored JSON, not the flattened text: the JSON
+    // is what the panels render, and a row can carry one without the other.
+    const adoptBrief = !target.citizenBriefJson && Boolean(source.citizenBriefJson);
+    const adoptText = !target.fullText && Boolean(source.fullText);
+
+    const updated = await tx.governmentReference.update({
       where: { id: targetId },
       data: {
-        aliases: JSON.stringify(newAliases),
-        supportVotes: { increment: source.supportVotes },
-        opposeVotes: { increment: source.opposeVotes },
-        seedSupport: { increment: source.seedSupport },
-        seedOppose: { increment: source.seedOppose },
         totalComments: { increment: source.totalComments },
         totalShares: { increment: source.totalShares },
+        ...(target.sourceUrl ? {} : { sourceUrl: source.sourceUrl }),
+        ...(target.description ? {} : { description: source.description }),
+        ...(adoptBrief
+          ? {
+              citizenBrief: source.citizenBrief,
+              citizenBriefJson: source.citizenBriefJson,
+              citizenBriefAt: source.citizenBriefAt,
+              citizenBriefModel: source.citizenBriefModel,
+              // Pinned to the SURVIVOR's version, not the source's. The two
+              // records describe one law, so the adopted brief describes the
+              // survivor's current text — and a merge must never be the reason
+              // a brief gets rewritten. Carrying the source's number across
+              // would make the survivor look a version behind and pay for a
+              // regeneration on the next read.
+              citizenBriefVersion: target.lawVersion,
+            }
+          : {}),
+        ...(adoptText
+          ? {
+              fullText: source.fullText,
+              fullTextSource: source.fullTextSource,
+              fullTextUrl: source.fullTextUrl,
+              fullTextHash: source.fullTextHash,
+              fullTextAt: source.fullTextAt,
+              contentStatus: source.contentStatus,
+            }
+          : {}),
       },
-    }),
+      select: { id: true, masterReferenceId: true, title: true },
+    });
 
-    // Mark source as merged (don't delete to preserve history)
-    prisma.governmentReference.update({
+    // --- The survivor's real tally ----------------------------------------
+    const { support, oppose } = await computeWeightedTally(targetId, tx);
+
+    await tx.governmentReference.update({
+      where: { id: targetId },
+      data: { supportVotes: support, opposeVotes: oppose },
+    });
+
+    // --- The source becomes a tombstone ------------------------------------
+    //
+    // Kept, not deleted: it is the record of what the name used to mean, and
+    // resolution walks through it so old ids keep working. Its counters go to
+    // zero because everything they counted now lives on the survivor, and a
+    // tombstone that still reports votes would be counted twice by anything
+    // that sums across records.
+    await tx.governmentReference.update({
       where: { id: sourceId },
       data: {
         mergedIntoId: targetId,
-        // Reset stats since they've been transferred
         supportVotes: 0,
         opposeVotes: 0,
-        seedSupport: 0,
-        seedOppose: 0,
         totalComments: 0,
         totalShares: 0,
       },
-    }),
-  ]);
+    });
 
-  return {
-    success: true,
-    postsUpdated: result[0].count,
-    votesTransferred,
-    aliasesMerged: newAliases,
-  };
+    return {
+      target: { id: updated.id, masterReferenceId: updated.masterReferenceId, title: updated.title },
+      source: { id: source.id, masterReferenceId: source.masterReferenceId },
+      postsMoved: posts.count,
+      votesMoved,
+      votesSuperseded,
+      chainsFlattened: chains.count,
+      namesKept,
+      brief: adoptBrief
+        ? ("adopted from source" as const)
+        : target.citizenBriefJson
+          ? ("target kept its own" as const)
+          : ("neither had one" as const),
+      officialText: adoptText
+        ? ("adopted from source" as const)
+        : target.fullText
+          ? ("target kept its own" as const)
+          : ("neither had one" as const),
+      tally: { support, oppose },
+    };
+  });
 }
 
 /**
- * Add an alias to an existing reference
+ * Teach a record another name it should answer to.
+ *
+ * Fails rather than steals when the name belongs to somebody else. Two records
+ * answering to one name is the duplicate the master reference system exists to
+ * prevent, so being told which record holds it is more useful than a silent
+ * reassignment — that is a merge candidate, not an alias.
  */
 export async function addAlias(
   referenceId: string,
   alias: string
 ): Promise<{ success: boolean; aliases: string[] }> {
-  const reference = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
+  return prisma.$transaction(async (tx) => {
+    const reference = await tx.governmentReference.findUnique({
+      where: { id: referenceId },
+      select: { referenceType: true },
+    });
+
+    if (!reference) {
+      throw new Error("Reference not found");
+    }
+
+    const name = normalizeReferenceId(reference.referenceType as ReferenceTypeValue, alias);
+    const claim = await claimName(tx, referenceId, name, NameSource.MANUAL);
+
+    if (!claim.ok) {
+      throw new Error(
+        `"${name}" already belongs to another reference — these two are a merge candidate, not an alias`,
+      );
+    }
+
+    const { former } = await namesFor(referenceId, tx);
+    return { success: true, aliases: former };
   });
-
-  if (!reference) {
-    throw new Error("Reference not found");
-  }
-
-  const currentAliases = reference.aliases ? JSON.parse(reference.aliases) as string[] : [];
-  const normalizedAlias = normalizeReferenceId(reference.referenceType as ReferenceTypeValue, alias);
-
-  if (currentAliases.includes(normalizedAlias)) {
-    return { success: true, aliases: currentAliases };
-  }
-
-  const newAliases = [...currentAliases, normalizedAlias];
-
-  await prisma.governmentReference.update({
-    where: { id: referenceId },
-    data: { aliases: JSON.stringify(newAliases) },
-  });
-
-  return { success: true, aliases: newAliases };
 }
 
 /**
@@ -619,15 +701,9 @@ export async function recalculateReferenceStats(referenceId: string): Promise<{
   totalComments: number;
   totalShares: number;
 }> {
-  // Recompute the public tally the same way voting does: weighted real votes
-  // (delegations included) plus the reference's seed layer.
-  const tally = await computeWeightedTally(referenceId);
-  const seed = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
-    select: { seedSupport: true, seedOppose: true },
-  });
-  const supportVotes = tally.support + (seed?.seedSupport ?? 0);
-  const opposeVotes = tally.oppose + (seed?.seedOppose ?? 0);
+  // The same way voting does: weighted real votes, delegations included, and
+  // nothing else.
+  const { support: supportVotes, oppose: opposeVotes } = await computeWeightedTally(referenceId);
 
   // Count comments on related posts
   const posts = await prisma.post.findMany({

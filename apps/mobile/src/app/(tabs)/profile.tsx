@@ -38,7 +38,6 @@ import { useAdminStore } from '@/lib/admin-store';
 import { useB2BStore } from '@/lib/b2b-store';
 import { usePermissions, useCurrentUser } from '@/lib/auth/use-civic-auth';
 import { cn } from '@/lib/cn';
-import { isSupabaseConfigured } from '@/lib/supabase';
 import { useUserVoteHistory } from '@/lib/hooks';
 import type { Bill, BillCategory } from '@/lib/types';
 import type { VoteWithBill } from '@/lib/database.types';
@@ -229,8 +228,6 @@ export default function ProfileScreen() {
 function ProfileContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const useSupabase = isSupabaseConfigured();
-
   // Auth — Better Auth only.
   //
   // This used to branch on isSupabaseConfigured() and read a Supabase profile
@@ -247,11 +244,9 @@ function ProfileContent() {
 
   // Votes
   const mockUserVotes = useVotingStore((s) => s.userVotes);
-  const { data: supabaseVoteHistory, isLoading: votesLoading } = useUserVoteHistory(
-    // The flag still selects the vote-history data source; the identity it is
-    // looked up by now comes from the Better Auth session either way.
-    useSupabase ? sessionUser?.id : undefined
-  );
+  // useUserVoteHistory was the Supabase half. It was only ever passed a user id
+  // when isSupabaseConfigured() was true, which it has not been since the client
+  // was removed — so it always ran disabled and returned nothing.
 
   const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
 
@@ -268,17 +263,6 @@ function ProfileContent() {
 
   // Calculate vote stats
   const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
-    if (useSupabase && supabaseVoteHistory) {
-      const yea = supabaseVoteHistory.filter((v) => v.vote === 'yea').length;
-      const nay = supabaseVoteHistory.filter((v) => v.vote === 'nay').length;
-      return {
-        yeaVotes: yea,
-        nayVotes: nay,
-        totalVotes: supabaseVoteHistory.length,
-        voteEntries: supabaseVoteHistory,
-      };
-    }
-
     const entries = Object.entries(mockUserVotes);
     const yea = entries.filter(([_, v]) => v === 'yea').length;
     const nay = entries.filter(([_, v]) => v === 'nay').length;
@@ -288,7 +272,7 @@ function ProfileContent() {
       totalVotes: entries.length,
       voteEntries: entries,
     };
-  }, [useSupabase, supabaseVoteHistory, mockUserVotes]);
+  }, [mockUserVotes]);
 
   const handleSignOut = async () => {
     // One tap = one sign-out. Without this the button fired again on every tap while
@@ -730,54 +714,18 @@ function ProfileContent() {
               <Text className="text-slate-400 text-sm">{totalVotes} votes</Text>
             </View>
 
-            {votesLoading ? (
-              <View className="bg-slate-800/40 rounded-xl p-8 items-center border border-slate-700/30">
-                <ActivityIndicator size="large" color="#F59E0B" />
-                <Text className="text-slate-400 mt-4">Loading vote history...</Text>
-              </View>
-            ) : useSupabase && Array.isArray(voteEntries) && voteEntries.length > 0 ? (
-              // Supabase vote history
-              (voteEntries as VoteWithBill[])
-                .filter((voteItem) => voteItem.bill != null)
-                .map((voteItem, index) => (
-                <VoteHistoryCard
-                  key={voteItem.id}
-                  billId={voteItem.bill_id}
-                  vote={voteItem.vote}
-                  index={index}
-                  bill={{
-                    id: voteItem.bill!.id,
-                    title: voteItem.bill!.title,
-                    shortTitle: voteItem.bill!.short_title,
-                    status: voteItem.bill!.status,
-                    chamber: voteItem.bill!.chamber,
-                    category: voteItem.bill!.category as BillCategory,
-                    sponsor: {
-                      id: voteItem.bill!.sponsor_id ?? '',
-                      name: 'Sponsor',
-                      party: 'D',
-                      state: 'US',
-                      chamber: voteItem.bill!.chamber,
-                      imageUrl: '',
-                    },
-                    introducedDate: voteItem.bill!.introduced_date,
-                    lastActionDate: voteItem.bill!.last_action_date,
-                    fullText: voteItem.bill!.full_text,
-                    simplifiedText: voteItem.bill!.simplified_text ?? '',
-                    realWorldImpact: voteItem.bill!.real_world_impact ?? '',
-                    relatedLaws: [],
-                    communityVotes: {
-                      yea: voteItem.bill!.yea_count,
-                      nay: voteItem.bill!.nay_count,
-                      totalVoters: voteItem.bill!.total_votes || 1,
-                    },
-                    projectedOutcome: voteItem.bill!.projected_outcome,
-                  }}
-                />
-              ))
-            ) : !useSupabase && Array.isArray(voteEntries) === false && Object.keys(voteEntries).length > 0 ? (
-              // Mock vote history
-              (Object.entries(voteEntries as Record<string, 'yea' | 'nay'>)).map(([billId, vote], index) => (
+            {/*
+              One branch, because there is only one source.
+
+              This used to be a three-way: a Supabase vote history, a local one,
+              and an empty state — with the first two gated on a flag that has
+              been a hardcoded false since the client was removed. The local
+              branch additionally required `Array.isArray(voteEntries) === false`,
+              which was never true, so BOTH branches were unreachable and the
+              screen showed the empty state to people who had voted.
+            */}
+            {voteEntries.length > 0 ? (
+              voteEntries.map(([billId, vote], index) => (
                 <VoteHistoryCard
                   key={billId}
                   billId={billId}

@@ -38,14 +38,10 @@ import {
 } from "@/lib/mobile/mock-data";
 import type { FeedItem, Bill, BillCategory, GovernmentBranch } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
-import { isSupabaseConfigured } from "@/lib/mobile/supabase";
 import {
-  useFeed,
   useTrendingBills,
   useCastVote,
   useUserVote,
-  useUserFeedLikes,
-  useToggleFeedLike,
   useRandomizedBillFeed,
 } from "@/lib/mobile/hooks";
 import { useCurrentUser, useRequireAuth } from "@/hooks/use-civic-auth";
@@ -507,8 +503,6 @@ function TrustBadge({ bill }: { bill: Bill }) {
 
 interface VoteButtonsProps {
   bill: Bill;
-  userId?: string;
-  useSupabase: boolean;
 }
 
 function VoteButtons({ bill }: VoteButtonsProps) {
@@ -640,30 +634,21 @@ interface FeedCardProps {
   item: ScoredFeedItem;
   index: number;
   userId?: string;
-  useSupabase: boolean;
-  likedItems?: Set<string>;
   onReply?: (item: ScoredFeedItem) => void;
   onShare?: (item: ScoredFeedItem) => void;
 }
 
-function FeedCard({ item, index, userId, useSupabase, likedItems, onReply, onShare }: FeedCardProps) {
-  // Mock likes
-  const mockToggleLike = useVotingStore((s) => s.toggleLike);
-  const mockIsLiked = useVotingStore(selectIsLiked(item.id));
-
-  // Supabase likes
-  const toggleLikeMutation = useToggleFeedLike();
+function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
+  // Likes live in the local store. The other half of this used to call a
+  // Supabase mutation behind an `isSupabaseConfigured()` gate that has returned
+  // a hardcoded false since the client was removed, so it was unreachable.
+  const toggleLike = useVotingStore((s) => s.toggleLike);
+  const isLiked = useVotingStore(selectIsLiked(item.id));
   const requireAuth = useRequireAuth();
-
-  const isLiked = useSupabase ? likedItems?.has(item.id) ?? false : mockIsLiked;
 
   const handleLike = () => {
     if (!requireAuth("Sign in to like posts.")) return;
-    if (useSupabase && userId) {
-      toggleLikeMutation.mutate({ userId, feedItemId: item.id, isLiked });
-    } else {
-      mockToggleLike(item.id);
-    }
+    toggleLike(item.id);
   };
 
   const categoryColor = categoryColors[item.bill.category] ?? "#64748B";
@@ -755,7 +740,7 @@ function FeedCard({ item, index, userId, useSupabase, likedItems, onReply, onSha
           <p className="text-white font-semibold text-base mb-1">{item.bill.shortTitle}</p>
           <p className="text-slate-400 text-sm line-clamp-2">{item.bill.title}</p>
 
-          <VoteButtons bill={item.bill} userId={userId} useSupabase={useSupabase} />
+          <VoteButtons bill={item.bill} />
 
           {/* Representation Gap - The People vs Congress */}
           {item.bill.officialVotes ? (
@@ -808,7 +793,6 @@ export default function HomeScreen() {
   const [selectedItem, setSelectedItem] = useState<ScoredFeedItem | null>(null);
   const { user } = useCurrentUser();
   const requireAuth = useRequireAuth();
-  const useSupabase = isSupabaseConfigured();
   const navigate = useNavigate();
 
   // Seen bills tracking for session exclusion
@@ -836,10 +820,11 @@ export default function HomeScreen() {
     refetch: refetchAlgorithmicFeed,
   } = useAlgorithmicFeed(30);
 
-  // Supabase data
-  const { data: supabaseFeed, isLoading, refetch } = useFeed(20);
+  // useFeed/useUserFeedLikes were the Supabase half of this screen. Both are
+  // gated on isSupabaseConfigured(), which has returned a hardcoded false since
+  // the client was removed, so they never ran and their results never reached
+  // the page. Only useTrendingBills is kept — it is read below.
   const { data: trendingBills } = useTrendingBills(5);
-  const { data: likedItems } = useUserFeedLikes(user?.id);
 
   // Randomized bill feed with session exclusion (for Supabase)
   const { data: randomizedData } = useRandomizedBillFeed(seenBillIds, 10);
@@ -862,38 +847,7 @@ export default function HomeScreen() {
     // allowed to be empty, and says so.
     let rawItems: FeedItem[] = (algorithmicFeed?.posts ?? []).map(algorithmicPostToFeedItem);
 
-    // Add Supabase feed items if available (filter out low-quality items)
-    if (useSupabase && supabaseFeed && supabaseFeed.length > 0) {
-      const supabaseItems = supabaseFeed
-        .filter((item: FeedItemWithDetails) => {
-          // Filter out items with missing/invalid data
-          return item.bill && item.bill.title && item.bill.total_votes > 0;
-        })
-        .map(
-          (item: FeedItemWithDetails): FeedItem => ({
-            id: item.id,
-            type: item.type,
-            user: {
-              id: item.user?.id ?? "",
-              username: item.user?.username ?? "user",
-              displayName: item.user?.display_name ?? "User",
-              avatar:
-                item.user?.avatar ??
-                `https://api.dicebear.com/7.x/avataaars/png?seed=${item.user_id}`,
-              joinedDate: item.user?.joined_date ?? new Date().toISOString(),
-              followers: item.user?.followers_count ?? 0,
-              following: item.user?.following_count ?? 0,
-              votesCount: item.user?.votes_count ?? 0,
-            },
-            bill: convertBillToLegacy(item.bill),
-            vote: item.vote?.vote,
-            timestamp: item.created_at,
-            likes: item.likes_count,
-            isLiked: likedItems?.has(item.id),
-          })
-        );
-      rawItems = [...rawItems, ...supabaseItems];
-    }
+
 
     // Apply branch filter
     if (branchFilter !== "all") {
@@ -960,7 +914,7 @@ export default function HomeScreen() {
 
     return scoredItems;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [algorithmicFeed, useSupabase, supabaseFeed, likedItems, feedType, branchFilter, seenBillIds.size, refreshing]);
+  }, [algorithmicFeed, feedType, branchFilter, seenBillIds.size, refreshing]);
 
   // Track seen bills separately to avoid circular updates
   const lastSeenRef = React.useRef<string[]>([]);
@@ -987,12 +941,9 @@ export default function HomeScreen() {
     }
 
     await refetchAlgorithmicFeed();
-    if (useSupabase) {
-      await refetch();
-    }
 
     setTimeout(() => setRefreshing(false), 500);
-  }, [useSupabase, refetch, refetchAlgorithmicFeed, feedType, clearSeenBills]);
+  }, [refetchAlgorithmicFeed, feedType, clearSeenBills]);
 
   const handleReply = useCallback(
     (_item: ScoredFeedItem) => {
@@ -1011,17 +962,6 @@ export default function HomeScreen() {
     },
     [requireAuth]
   );
-
-  if (useSupabase && isLoading) {
-    return (
-      <AppShell>
-        <div className="flex-1 flex flex-col items-center justify-center py-32">
-          <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
-          <p className="text-slate-400 mt-4">Loading feed...</p>
-        </div>
-      </AppShell>
-    );
-  }
 
   return (
     <AppShell>
@@ -1115,8 +1055,6 @@ export default function HomeScreen() {
                 item={item}
                 index={index}
                 userId={user?.id}
-                useSupabase={useSupabase}
-                likedItems={likedItems}
                 onReply={handleReply}
                 onShare={handleShare}
               />

@@ -1,0 +1,25 @@
+{
+  "recordedFor": "s-1779-119",
+  "why": "The Senate half of the same pair, so the auto-merge can be proven symmetric.",
+  "body": {
+    "relatedBills": [
+      {
+        "congress": 119,
+        "latestAction": {
+          "actionDate": "2026-07-14",
+          "text": "Forwarded by Subcommittee to Full Committee by Voice Vote."
+        },
+        "number": 3194,
+        "relationshipDetails": [
+          {
+            "identifiedBy": "CRS",
+            "type": "Identical bill"
+          }
+        ],
+        "title": "LOCOMOTIVES Act",
+        "type": "HR",
+        "url": "https://api.congress.gov/v3/bill/119/hr/3194?format=json"
+      }
+    ]
+  }
+}

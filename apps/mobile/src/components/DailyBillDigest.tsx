@@ -17,7 +17,7 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInRight } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { useDailyBillDigest, type DailyDigestBill } from '@/lib/hooks';
+import type { DailyDigestBill } from '@/lib/hooks';
 import {
   useTrendingReferences,
   useLatestReferences,
@@ -32,7 +32,6 @@ import {
   getStatusLabel,
   type WeightTier,
 } from '@/lib/voice-weight';
-import { isSupabaseConfigured } from '@/lib/supabase';
 import type { Bill, BillCategory } from '@/lib/types';
 import type { BillStatus, ProjectedOutcome } from '@/lib/database.types';
 import { cn } from '@/lib/cn';
@@ -250,18 +249,18 @@ export function DailyBillDigest({
   title = 'Daily Bill Digest',
 }: DailyBillDigestProps) {
   const router = useRouter();
-  const useSupabase = isSupabaseConfigured();
 
-  // Fetch from Supabase if configured
-  const { data: supabaseBills, isLoading: supabaseLoading } = useDailyBillDigest(limit, category);
+  // The Supabase digest query used to sit here as a second source. It is gated
+  // on isSupabaseConfigured(), which has returned a hardcoded false since the
+  // client was removed, so it never ran.
 
   // Live daily-synced bills — the SAME source and query cache the Discover tab
   // uses, so whatever Discover pulls each day shows up here automatically.
   const { data: latestRefs, isLoading: latestLoading } = useLatestReferences('bill', 30);
   const { data: trendingRefs, isLoading: trendingLoading } = useTrendingReferences('bill', 10);
-  const isLoading = supabaseLoading || latestLoading || trendingLoading;
+  const isLoading = latestLoading || trendingLoading;
 
-  // Calculate weights for bills (live references first, then Supabase, then mock)
+  // Calculate weights for bills from the live daily-synced references.
   const digestBills = useMemo(() => {
     const seen = new Set<string>();
     const liveBills: Bill[] = [
@@ -281,18 +280,11 @@ export function DailyBillDigest({
         .slice(0, limit);
     }
 
-    if (useSupabase && supabaseBills && supabaseBills.length > 0) {
-      return supabaseBills.map((bill) => ({
-        ...bill,
-        weightTier: getWeightTier(bill.weight_score || 0),
-      }));
-    }
-
     // Nothing from the API means nothing to show. A hardcoded array used to
     // stand in here, so an unreachable backend produced a full digest of
     // invented bills.
     return [];
-  }, [latestRefs, trendingRefs, useSupabase, supabaseBills, category, limit]);
+  }, [latestRefs, trendingRefs, category, limit]);
 
   if (digestBills.length === 0 && isLoading) {
     return (
@@ -372,10 +364,11 @@ export function DailyBillDigest({
 // Compact version for smaller spaces
 export function CompactDailyDigest({ limit = 5 }: { limit?: number }) {
   const router = useRouter();
-  const useSupabase = isSupabaseConfigured();
-  const { data: supabaseBills, isLoading } = useDailyBillDigest(limit);
-  // Same live daily-synced source as Discover
-  const { data: latestRefs } = useLatestReferences('bill', 30);
+  // Same live daily-synced source as Discover. The loading flag used to come
+  // from a Supabase digest query gated on isSupabaseConfigured(), which has
+  // returned a hardcoded false since the client was removed — so the spinner
+  // was driven by a request that never ran.
+  const { data: latestRefs, isLoading } = useLatestReferences('bill', 30);
 
   const digestBills = useMemo(() => {
     const liveBills = (latestRefs?.references ?? []).map(referenceToBill);
@@ -386,15 +379,8 @@ export function CompactDailyDigest({ limit = 5 }: { limit?: number }) {
         .slice(0, limit);
     }
 
-    if (useSupabase && supabaseBills && supabaseBills.length > 0) {
-      return supabaseBills.map((bill) => ({
-        ...bill,
-        weightTier: getWeightTier(bill.weight_score || 0),
-      }));
-    }
-
     return [];
-  }, [latestRefs, useSupabase, supabaseBills, limit]);
+  }, [latestRefs, limit]);
 
   if (digestBills.length === 0 && isLoading) {
     return (

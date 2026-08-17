@@ -36,7 +36,10 @@ export interface ServerPostReference {
   sourceUrl: string | null;
   citizenBrief: string | null;
   votes: { support: number; oppose: number; total: number };
-  userVote: "support" | "oppose" | null;
+  userVote: "support" | "oppose" | null;  /** When the law itself last changed — not when the row was written. */
+  lawChangedAt: string | null;
+  /** Increments with lawChangedAt. One citizen brief per version. */
+  lawVersion: number;
 }
 
 /** A post as returned by GET /api/posts and GET /api/government-references/:id/posts. */
@@ -54,6 +57,14 @@ export interface ServerPost {
   referenceId?: string | null;
   referenceTitle?: string | null;
   reference?: ServerPostReference | null;
+  /**
+   * The law under this post changed after it was written.
+   *
+   * Decided on the server rather than by comparing dates here: web and mobile
+   * each doing their own comparison is two chances to disagree about what
+   * "since" means, on a badge whose whole job is to be trustworthy.
+   */
+  lawUpdatedSincePosting?: boolean;
   media?: {
     id: string;
     type: string;
@@ -143,6 +154,7 @@ export function mapServerPost(post: ServerPost): TimelinePost {
             status: reference?.status,
             category: reference?.category ?? undefined,
             sourceUrl: reference?.sourceUrl ?? undefined,
+            lawUpdatedSincePosting: post.lawUpdatedSincePosting,
           }
         : undefined,
     media: toMedia(post.media),

@@ -20,6 +20,14 @@ export interface Engagement {
 export interface GovReference {
   id: string;
   masterReferenceId: string;
+  /**
+   * The id as printed — "H.R. 4836", "S.Res. 829", "EO 14147", "No. 22-451".
+   *
+   * Computed on the server from the canonical id. Deriving it here instead is
+   * how a resolution reached a card as "SRES.829": every client that formats a
+   * raw id invents its own idea of how Congress prints one.
+   */
+  displayId?: string;
   referenceType: ReferenceType;
   title: string;
   shortTitle: string | null;

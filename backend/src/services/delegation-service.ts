@@ -269,13 +269,19 @@ export async function listEligibleDelegates(limit = 50): Promise<DelegateListing
  */
 export async function computeWeightedTally(
   referenceId: string,
+  /**
+   * The client to read through. Defaults to the shared one; a merge passes its
+   * transaction so the tally is computed from the votes as they will be after
+   * the merge commits, not as they were before it started.
+   */
+  db: Pick<typeof prisma, "governmentReference" | "governmentReferenceVote" | "delegation"> = prisma,
 ): Promise<{ support: number; oppose: number }> {
-  const reference = await prisma.governmentReference.findUnique({
+  const reference = await db.governmentReference.findUnique({
     where: { id: referenceId },
     select: { category: true },
   });
 
-  const votes = await prisma.governmentReferenceVote.findMany({
+  const votes = await db.governmentReferenceVote.findMany({
     where: { governmentReferenceId: referenceId },
     select: { userId: true, position: true },
   });
@@ -288,7 +294,7 @@ export async function computeWeightedTally(
 
   if (voterIds.length > 0) {
     const category = reference?.category ?? null;
-    const delegations = await prisma.delegation.findMany({
+    const delegations = await db.delegation.findMany({
       where: {
         toUserId: { in: voterIds },
         isActive: true,
@@ -322,22 +328,16 @@ export async function computeWeightedTally(
 /**
  * Recompute the weighted tally and persist it on the reference row.
  *
- * supportVotes/opposeVotes hold the PUBLIC tally: real weighted votes plus the
- * reference's seed layer (placeholder numbers that keep cards from looking
- * dead). Everything that displays or sorts by votes reads these columns, so
- * the seed is folded in here — removing it is zeroing the seed and re-running
- * this function.
+ * supportVotes/opposeVotes hold the public tally, and the public tally is now
+ * exactly the real weighted count. It used to have a "seed layer" folded in —
+ * a few thousand invented supporters per record so a new card would not read
+ * 0-0 — which meant every number this platform published was partly fiction.
+ * That layer is gone; see the migration that removed it.
  */
 export async function applyWeightedTally(
   referenceId: string,
 ): Promise<{ support: number; oppose: number }> {
-  const tally = await computeWeightedTally(referenceId);
-  const seed = await prisma.governmentReference.findUnique({
-    where: { id: referenceId },
-    select: { seedSupport: true, seedOppose: true },
-  });
-  const support = tally.support + (seed?.seedSupport ?? 0);
-  const oppose = tally.oppose + (seed?.seedOppose ?? 0);
+  const { support, oppose } = await computeWeightedTally(referenceId);
   await prisma.governmentReference.update({
     where: { id: referenceId },
     data: { supportVotes: support, opposeVotes: oppose },

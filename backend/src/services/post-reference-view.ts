@@ -3,9 +3,15 @@
  * timeline cards render that link as a law card — badge, status, category,
  * source link and the live support/oppose tally with the caller's own position.
  *
- * The post rows only store the reference id and a copy of the title, so this
- * loader batch-fetches the rest in one query (plus one for the caller's votes)
- * and hands back a map keyed by GovernmentReference.id.
+ * READ LIVE, NEVER COPIED. The post row stores a frozen copy of the title from
+ * the moment it was written; this loader ignores it and reads the record. That
+ * is the whole point of a master reference: the law is shared and the post
+ * frames it to one person's timeline, so when the government updates the law,
+ * updating the record updates every post showing it. Nobody has to walk the
+ * posts, and no post is ever edited.
+ *
+ * Batch-fetched in one query (plus one for the caller's votes) and handed back
+ * as a map keyed by GovernmentReference.id.
  */
 import { prisma } from "../prisma";
 import type { PostReference } from "../types";
@@ -38,6 +44,8 @@ export async function loadPostReferenceViews(
         citizenBrief: true,
         supportVotes: true,
         opposeVotes: true,
+        lawChangedAt: true,
+        lawVersion: true,
       },
     }),
     userId
@@ -70,6 +78,11 @@ export async function loadPostReferenceViews(
         total: reference.supportVotes + reference.opposeVotes,
       },
       userVote: position === "support" || position === "oppose" ? position : null,
+      // When the LAW last moved — not when the row was last written. A post
+      // older than this is showing a law that has changed since its author
+      // wrote about it, which is what the badge on the card is for.
+      lawChangedAt: reference.lawChangedAt?.toISOString() ?? null,
+      lawVersion: reference.lawVersion,
     });
   }
 
@@ -84,4 +97,24 @@ export async function loadPostReferenceView(
   if (!referenceId) return null;
   const views = await loadPostReferenceViews([referenceId], userId);
   return views.get(referenceId) ?? null;
+}
+
+/**
+ * Was this post written before the law it points at last changed?
+ *
+ * The badge on a post card. The post itself is never edited — the author's
+ * words stay theirs — but the law underneath moves forward, and a reader
+ * deserves to know that the text being argued about is not the text that was
+ * argued about.
+ *
+ * Computed here, once, rather than in each client: web and mobile each doing
+ * their own date comparison is two chances to disagree about what "before"
+ * means, on a badge whose entire job is to be trustworthy.
+ */
+export function lawMovedSincePost(
+  postCreatedAt: Date,
+  reference: Pick<PostReference, "lawChangedAt"> | null | undefined
+): boolean {
+  if (!reference?.lawChangedAt) return false;
+  return new Date(reference.lawChangedAt).getTime() > postCreatedAt.getTime();
 }

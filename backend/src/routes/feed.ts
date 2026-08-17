@@ -11,7 +11,7 @@ import {
   getTrendingHashtags,
   getDiscoverFeed,
 } from "../services/feed-algorithm";
-import { loadPostReferenceViews } from "../services/post-reference-view";
+import { lawMovedSincePost, loadPostReferenceViews } from "../services/post-reference-view";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -81,10 +81,21 @@ feedRouter.get("/", zValidator("query", feedQuerySchema), async (c) => {
         governmentReferenceId: post.governmentReferenceId,
         referenceType: post.referenceType,
         referenceId: post.referenceId,
-        referenceTitle: post.referenceTitle,
+        // The law as it stands, not the copy frozen when the post was written.
+        // The record is shared; the post frames it to one person's timeline.
+        referenceTitle:
+          (post.governmentReferenceId
+            ? referenceViews.get(post.governmentReferenceId)?.title
+            : null) ?? post.referenceTitle,
         reference: post.governmentReferenceId
           ? referenceViews.get(post.governmentReferenceId) ?? null
           : null,
+        // The law under this post has moved since it was written. The post is
+        // untouched; the card says so.
+        lawUpdatedSincePosting: lawMovedSincePost(
+          post.createdAt,
+          post.governmentReferenceId ? referenceViews.get(post.governmentReferenceId) : null,
+        ),
         metrics: post.metrics,
         feedReason: post.feedReason,
         isLiked: post.isLiked,
@@ -134,10 +145,21 @@ feedRouter.get("/discover", zValidator("query", z.object({
         governmentReferenceId: post.governmentReferenceId,
         referenceType: post.referenceType,
         referenceId: post.referenceId,
-        referenceTitle: post.referenceTitle,
+        // The law as it stands, not the copy frozen when the post was written.
+        // The record is shared; the post frames it to one person's timeline.
+        referenceTitle:
+          (post.governmentReferenceId
+            ? referenceViews.get(post.governmentReferenceId)?.title
+            : null) ?? post.referenceTitle,
         reference: post.governmentReferenceId
           ? referenceViews.get(post.governmentReferenceId) ?? null
           : null,
+        // The law under this post has moved since it was written. The post is
+        // untouched; the card says so.
+        lawUpdatedSincePosting: lawMovedSincePost(
+          post.createdAt,
+          post.governmentReferenceId ? referenceViews.get(post.governmentReferenceId) : null,
+        ),
         metrics: post.metrics,
         feedReason: post.feedReason,
         isLiked: post.isLiked,
