@@ -134,6 +134,10 @@ function env(): Record<string, string> {
     APP_SCHEMES: "civicvoice",
     MEDIA_STORAGE: "local",
     UPLOADS_DIR: TEST_UPLOADS_DIR,
+    // No caching of the schema-state read: a test changes Prisma's ledger and
+    // has to see the next /health reflect it. Production keeps the 30s default,
+    // because the platform polls that endpoint.
+    HEALTH_SCHEMA_TTL_MS: "0",
     // No RESEND_API_KEY on purpose: the send path must throw rather than
     // silently succeed, and one of the tests asserts exactly that.
     //

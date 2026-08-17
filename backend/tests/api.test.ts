@@ -13,6 +13,7 @@
  * Every one of these was silently broken at some point, and nothing noticed.
  */
 
+import { readdirSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import {
   B2B_TEST,
@@ -67,6 +68,75 @@ describe("boot", () => {
     // report a cheerful "ok" while password reset is dead — which is exactly
     // how reset stayed broken in production without anyone noticing.
     expect(body.email.configured).toBe(false);
+  });
+
+  test("health reports whether the database matches the code", async () => {
+    const response = await fetch(`${BASE_URL}/health`);
+    const body = (await response.json()) as {
+      schema: {
+        applied: number;
+        expected: number;
+        latest: string | null;
+        pending: string[];
+        failed: string[];
+        inSync: boolean;
+      };
+    };
+
+    // The test server runs `migrate deploy` before it boots, so this is the
+    // healthy shape: every migration in the build is recorded as finished.
+    expect(body.schema.expected).toBeGreaterThan(0);
+    expect(body.schema.applied).toBe(body.schema.expected);
+    expect(body.schema.pending).toEqual([]);
+    expect(body.schema.failed).toEqual([]);
+    expect(body.schema.inSync).toBe(true);
+
+    // And it names the newest one, so "which schema is this" has an answer
+    // that does not require opening the database.
+    expect(body.schema.latest).toBeTruthy();
+    const onDisk = readdirSync("prisma/migrations", { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(body.schema.latest).toBe(onDisk.at(-1) ?? null);
+    expect(body.schema.expected).toBe(onDisk.length);
+  });
+
+  test("an unapplied migration shows up as pending rather than as ok", async () => {
+    // The failure being pinned: a migration ships in the image and never runs.
+    // Everything else — the commit stamp, the routes, the queue — still looks
+    // perfect, and the first symptom is a 500 from whichever endpoint touches
+    // the missing column.
+    //
+    // Simulated by removing one row from Prisma's ledger rather than by
+    // reshaping the database, so nothing is destroyed and the check under test
+    // is the one that runs in production.
+    const before = await fetch(`${BASE_URL}/health`).then((r) => r.json() as Promise<{
+      schema: { latest: string | null };
+    }>);
+    const victim = before.schema.latest!;
+
+    const removed = await prisma.$queryRaw<{ migration_name: string }[]>`
+      DELETE FROM "_prisma_migrations" WHERE migration_name = ${victim} RETURNING migration_name
+    `;
+    expect(removed.length).toBe(1);
+
+    try {
+      // HEALTH_SCHEMA_TTL_MS=0 in the test environment, so the next request
+      // reads the ledger again rather than the 30s cache production wants.
+      const after = (await fetch(`${BASE_URL}/health`).then((r) => r.json())) as {
+        schema: { pending: string[]; inSync: boolean; applied: number; expected: number };
+      };
+      expect(after.schema.pending).toContain(victim);
+      expect(after.schema.inSync).toBe(false);
+      expect(after.schema.applied).toBe(after.schema.expected - 1);
+    } finally {
+      await prisma.$executeRaw`
+        INSERT INTO "_prisma_migrations"
+          (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+        VALUES (gen_random_uuid()::text, 'restored-by-test', now(), ${victim}, NULL, NULL, now(), 1)
+      `;
+    }
   });
 });
 

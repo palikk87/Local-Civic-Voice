@@ -21,6 +21,7 @@ import { aiRouter } from "./routes/ai";
 import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
+import { schemaState } from "./services/schema-state";
 
 // Import rate limiters
 import {
@@ -88,9 +89,10 @@ app.use("/api/auth/*", authRateLimit);
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 // Health check endpoint with cache and queue stats
-app.get("/health", (c) => {
+app.get("/health", async (c) => {
   const cacheStats = getCacheStats();
   const queueStats = jobQueue.getStats();
+  const schema = await schemaState();
 
   return c.json({
     status: "ok",
@@ -111,6 +113,22 @@ app.get("/health", (c) => {
     version: {
       commit: process.env.GIT_SHA ?? "unknown",
       builtAt: process.env.BUILD_TIME ?? null,
+    },
+    // WHETHER THE DATABASE MATCHES THE CODE.
+    //
+    // The commit above says the right code is running. This says the right
+    // schema is under it, which can be false while everything else looks
+    // healthy — a partially applied migration, a rolled-back one, a database
+    // pointed somewhere else. Nobody clicks a migration, so without this the
+    // first symptom is a 500 from whichever endpoint touches the missing
+    // column.
+    schema: {
+      applied: schema.applied,
+      expected: schema.expected,
+      latest: schema.latest,
+      pending: schema.pending,
+      failed: schema.failed,
+      inSync: schema.reachable && schema.pending.length === 0 && schema.failed.length === 0,
     },
     // Surfaced because an unsent one-time code is otherwise invisible: sign-in
     // and password reset both fail at the moment a user needs them, not at boot.

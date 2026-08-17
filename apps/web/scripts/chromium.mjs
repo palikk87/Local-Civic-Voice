@@ -40,6 +40,37 @@ function scanBrowsersPath() {
   return candidates.find((path) => existsSync(path)) ?? null;
 }
 
+/**
+ * Send the page's API calls to the local stub, wherever the bundle aims them.
+ *
+ * The backend URL is baked in at build time, so a bundle built for CI points at
+ * a host that does not exist and one built locally points at the same origin.
+ * The browser checks stub the API from a local server, and the second case
+ * happened to work while the first timed out waiting for content that could
+ * never arrive — a build-configuration difference showing up as a layout
+ * failure, which is the worst possible disguise for it.
+ *
+ * Intercepting in the browser makes the check independent of how the bundle was
+ * built: every /api/ request, to any host, is answered by the stub.
+ */
+export async function routeApiToLocal(page, base) {
+  const local = new URL(base);
+
+  await page.route("**/api/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.host === local.host) return route.continue();
+
+    const response = await page.request.fetch(`${base}${url.pathname}${url.search}`, {
+      method: request.method(),
+      headers: request.headers(),
+      data: request.postData() ?? undefined,
+      failOnStatusCode: false,
+    });
+    return route.fulfill({ response });
+  });
+}
+
 export async function launchChromium(options = {}) {
   const override = process.env.CHROMIUM_PATH;
   if (override) {

@@ -26,6 +26,8 @@ interface Check {
   cmd: string[];
   /** Why this exists — printed when it fails, so the failure explains itself. */
   guards: string;
+  /** Extra environment, where CI sets something the local default does not. */
+  env?: Record<string, string>;
 }
 
 const CHECKS: Check[] = [
@@ -60,6 +62,11 @@ const CHECKS: Check[] = [
     cwd: "apps/web",
     cmd: ["bun", "run", "build"],
     guards: "the bundle builds, and stamps itself with the commit",
+    // The same backend URL CI builds with. Without it the local build defaults
+    // to same-origin and the browser checks below exercise a bundle nobody
+    // deploys — which is how a check that passed here failed in CI for a
+    // reason that had nothing to do with the thing it measures.
+    env: { VITE_BACKEND_URL: "https://ci.invalid" },
   },
   {
     name: "web render-check",
@@ -134,7 +141,7 @@ for (const check of CHECKS) {
   const run = spawnSync(check.cmd[0]!, check.cmd.slice(1), {
     cwd: check.cwd,
     encoding: "utf8",
-    env: process.env,
+    env: { ...process.env, ...check.env },
   });
   const secs = ((Date.now() - at) / 1000).toFixed(1);
 

@@ -102,6 +102,17 @@ at runtime.
 { "status": "ok", "version": { "commit": "0784f10…", "builtAt": "…" } }
 ```
 
+The same response also says whether the **database** matches the code:
+
+```json
+{ "schema": { "applied": 12, "expected": 12, "latest": "20260817…", "pending": [], "inSync": true } }
+```
+
+`inSync: false` means the container is running the right commit against the
+wrong schema — a migration that shipped and never ran. Nobody clicks a
+migration, so without this the first symptom is a 500 from whichever endpoint
+touches the missing column.
+
 **Website** — a Vite plugin writes `dist/version.json` at build time, from
 `VERCEL_GIT_COMMIT_SHA` or the local git HEAD:
 
