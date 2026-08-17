@@ -178,7 +178,6 @@
   },
   "patchedDependencies": {
     "react-native@0.81.5": "patches/react-native@0.81.5.patch",
-    "@expo/cli@54.0.15": "patches/@expo%2Fcli@54.0.15.patch",
     "@react-native-menu/menu@1.2.2": "patches/@react-native-menu%2Fmenu@1.2.2.patch",
     "expo-asset@12.0.9": "patches/expo-asset@12.0.9.patch",
   },

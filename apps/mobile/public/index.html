@@ -5,14 +5,13 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>%WEB_TITLE%</title>
-    <meta name="description" content="vibecode.dev Generated Project" />
-    <meta name="author" content="vibecode.dev" />
+    <meta name="description" content="Civic Voice — read what your government is actually doing." />
+    <meta name="author" content="Civic Voice" />
     <meta property="og:title" content="%WEB_TITLE%" />
-    <meta property="og:description" content="vibecode.dev Generated Project" />
+    <meta property="og:description" content="Civic Voice — read what your government is actually doing." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/og-base.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@vibecodeapp" />
     <meta name="twitter:image" content="/og-base.png" />
     <!--
       Early error reporter. Must run before the app bundle executes (the bundle
@@ -40,22 +39,15 @@
               errorCount++;
               if (firstMessage === null) firstMessage = msg;
               if (now - loadedAt > 10000) setTimeout(maybeShowFallback, 0);
-              var payload = { type: 'vibecode:error', error: { message: msg, timestamp: now } };
-              if (stack) payload.error.stack = String(stack);
-              var sentToNative = false;
-              try {
-                if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.vibecodeBridge) {
-                  window.webkit.messageHandlers.vibecodeBridge.postMessage(payload);
-                  sentToNative = true;
-                }
-              } catch (e) {}
-              try {
-                if (window.parent && window.parent !== window) {
-                  window.parent.postMessage(payload, '*');
-                } else if (!sentToNative) {
-                  window.postMessage(payload, '*');
-                }
-              } catch (e) {}
+              // Kept on the page. This used to post a 'vibecode:error' payload
+              // to a native bridge and to window.parent with a '*' target
+              // origin — the host platform's telemetry channel, which this app
+              // no longer runs inside, and a wildcard postMessage that any
+              // embedding frame could read. The console is where an error
+              // belongs when there is nowhere it is meant to be sent.
+              if (window.console && window.console.error) {
+                window.console.error('[startup] ' + msg, stack || '');
+              }
             } catch (e) {}
           }
 
@@ -83,10 +75,8 @@
 
           function maybeShowFallback() {
             try {
-              if (document.getElementById('vibecode-error-fallback')) return;
+              if (document.getElementById('startup-error-fallback')) return;
               if (rootMounted() || errorCount === 0) return;
-              // Mirrors the website's WebRuntimeError card
-              // (components/workspace/app-preview/web/web-runtime-error.tsx)
               var dark = false;
               try { dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
               var cardBg = dark ? '#27272a' : '#f4f4f5';
@@ -94,7 +84,7 @@
               var redSub = dark ? 'rgba(248,113,113,0.8)' : 'rgba(220,38,38,0.8)';
 
               var overlay = document.createElement('div');
-              overlay.id = 'vibecode-error-fallback';
+              overlay.id = 'startup-error-fallback';
               overlay.setAttribute('style', 'position:fixed;top:0;left:0;right:0;bottom:0;background:' + (dark ? '#09090b' : '#ffffff') + ';font-family:-apple-system,system-ui,sans-serif;z-index:2147483647;');
 
               var card = document.createElement('div');
@@ -135,7 +125,7 @@
                 try {
                   if (!rootMounted()) return;
                   clearInterval(clearCheck);
-                  var el = document.getElementById('vibecode-error-fallback');
+                  var el = document.getElementById('startup-error-fallback');
                   if (el && el.parentNode) el.parentNode.removeChild(el);
                 } catch (e) {}
               }, 1000);
