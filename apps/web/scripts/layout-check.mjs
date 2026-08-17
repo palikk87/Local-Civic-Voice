@@ -23,7 +23,7 @@
  * overlap": these two buttons are a pair, and a fix that stacked them would
  * pass an overlap test while changing what the panel is.
  */
-import { chromium } from "playwright";
+import { launchChromium } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -106,11 +106,7 @@ const server = createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-// Same pinned binary render-check uses; PLAYWRIGHT_BROWSERS_PATH is set for the
-// environment but the version directory is not on the default search path.
-const browser = await chromium.launch({
-  executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
-});
+const browser = await launchChromium();
 const failures = [];
 
 for (const width of WIDTHS) {

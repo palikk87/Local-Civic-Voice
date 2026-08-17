@@ -17,7 +17,7 @@
  * /api is answered with 503 on purpose: this checks that the app BOOTS, and an
  * unreachable API must not be mistaken for a broken bundle.
  */
-import { chromium } from "playwright";
+import { launchChromium } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -52,7 +52,7 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome" });
+const browser = await launchChromium();
 const problems = [];
 const chunkRequests = new Set();
 
