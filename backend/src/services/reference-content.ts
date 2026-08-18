@@ -20,6 +20,7 @@
 import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
 import { composeBrief, flattenBrief, parseBrief, serializeBrief } from "./citizen-brief";
+import { aiAvailability } from "./ai-generate";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
@@ -64,7 +65,19 @@ async function fetchJson<T>(
       signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) {
-      console.warn(`[RefContent] ${response.status} from ${url.split("?")[0]}`);
+      // A rate limit is not a dead endpoint, and the two must not read the same
+      // in the log. congress.gov runs on api.data.gov, whose ceiling is hourly:
+      // there is no wait short enough to sit out inside a request, so this says
+      // plainly that the key is throttled rather than that the law is missing.
+      if (response.status === 429) {
+        console.error(
+          `[RefContent] RATE LIMITED by ${new URL(url).host}. The key is valid and over its ` +
+            `quota, so text will keep failing until the window resets — this is not a law ` +
+            `without published text.`
+        );
+      } else {
+        console.warn(`[RefContent] ${response.status} from ${url.split("?")[0]}`);
+      }
       return null;
     }
     return (await response.json()) as T;
@@ -156,14 +169,23 @@ export function officialSources(): {
   congress: boolean;
   courtListener: boolean;
   federalRegister: true;
+  briefWriter: boolean;
 } {
+  const ai = aiAvailability();
   return {
     // Bills. Without it there is no legislative text at all.
     congress: !!process.env.CONGRESS_API_KEY,
-    // Supreme Court opinions. Optional — the public page is the fallback.
+    // Supreme Court opinions. NOT optional, and it used to be described here as
+    // if it were: CourtListener answers 401 on the opinion endpoint without a
+    // token and serves a bot check on its public page, so a missing key means
+    // no judicial text at all.
     courtListener: !!process.env.COURTLISTENER_API_KEY,
     // Executive orders. Public API, no key exists to be missing.
     federalRegister: true,
+    // Having the text is half of it. With no model key there is no brief for
+    // any branch, and this endpoint said nothing about that at all — so a
+    // platform-wide brief outage looked from here like three healthy sources.
+    briefWriter: ai.gemini || ai.openai,
   };
 }
 
@@ -219,7 +241,99 @@ function parseBillId(masterReferenceId: string, fallbackCongress: number | null)
   return { type: key.billType as string, number: key.number, congress };
 }
 
-async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
+// ---------------------------------------------------------------------------
+// Legislative — congress.gov
+// ---------------------------------------------------------------------------
+//
+// congress.gov needs a key, gives clean text, and asks one question the other
+// two branches never do: WHICH text? A bill is not one document. HR 1 of the
+// 119th Congress has six of them — introduced, reported, engrossed, placed on
+// calendar, enrolled, public law — and they say materially different things.
+// Serving the wrong one is not a formatting problem; it is briefing a citizen
+// on a draft that was amended before it passed.
+//
+// MEASURED, because the code here assumed the opposite and was wrong:
+// congress.gov returns textVersions NEWEST FIRST.
+//
+//   HR 22 (119th)   2025-04-10 Engrossed in House
+//                   2025-01-03 Introduced in House
+//
+// The chain reversed that list, commented "Newest version last in the API
+// response", and took the introduced text of every bill on the platform.
+//
+// List position is not a stage, though, so it is not trusted either way. HR 1
+// comes back with "Enrolled Bill" first carrying a NULL date, and "Public Law"
+// LAST — neither ordering rule finds the enacted text. The version is chosen by
+// what the version IS.
+
+interface BillTextVersion {
+  date?: string | null;
+  type?: string | null;
+  formats?: Array<{ type?: string; url?: string }>;
+}
+
+/**
+ * How far through Congress this text got. Higher wins.
+ *
+ * The enacted text beats the passed text beats the draft, whatever order the
+ * API lists them in and whatever dates it does or does not attach.
+ */
+function stageOf(versionType: string | null | undefined): number {
+  const type = (versionType ?? "").toLowerCase();
+  if (type.includes("public law")) return 60;
+  if (type.includes("enrolled")) return 50;
+  if (type.includes("engrossed")) return 40;
+  if (type.includes("passed")) return 40;
+  if (type.includes("reported")) return 30;
+  if (type.includes("placed on calendar")) return 25;
+  if (type.includes("referred")) return 20;
+  if (type.includes("introduced")) return 10;
+  return 15;
+}
+
+/** Furthest through Congress first; among equals, the most recent. */
+function byAuthority(a: BillTextVersion, b: BillTextVersion): number {
+  const stage = stageOf(b.type) - stageOf(a.type);
+  if (stage !== 0) return stage;
+  // A null date must not sink a version — "Enrolled Bill" arrives with one.
+  const at = a.date ? Date.parse(a.date) : 0;
+  const bt = b.date ? Date.parse(b.date) : 0;
+  return bt - at;
+}
+
+/** The plain-text rendering, if this version has one. */
+function preferredFormat(version: BillTextVersion): string | null {
+  const formats = version.formats ?? [];
+  const pick =
+    formats.find((f) => (f.type ?? "").toLowerCase().includes("formatted text")) ??
+    formats.find((f) => (f.type ?? "").toLowerCase() === "text") ??
+    // Never a PDF: it downloads as bytes we cannot read, and accepting it would
+    // store a binary blob where the law belongs.
+    formats.find((f) => !(f.type ?? "").toLowerCase().includes("pdf"));
+  return pick?.url ?? null;
+}
+
+/**
+ * The Government Publishing Office stamps four lines of provenance above every
+ * bill, then a run of blank lines:
+ *
+ *   [Congressional Bills 119th Congress]
+ *   [From the U.S. Government Publishing Office]
+ *   [H.R. 22 Engrossed in House (EH)]
+ *   <DOC>
+ *
+ * True, useful to a librarian, and not part of the bill. Off it comes, and the
+ * text starts where the law starts.
+ */
+export function stripGpoHeader(text: string): string {
+  return text
+    .replace(/^\s*(?:\[[^\]\n]*\]\s*\n)+/, "")
+    .replace(/^\s*<DOC>\s*/i, "")
+    .replace(/^(?:[ \t]*\n){2,}/, "")
+    .trim();
+}
+
+export async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
   const apiKey = process.env.CONGRESS_API_KEY;
   const parsed = parseBillId(ref.masterReferenceId, ref.congress);
 
@@ -238,37 +352,47 @@ async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<Tex
   // Source 1: congress.gov text versions — the actual legislative text.
   if (apiKey && parsed) {
     const base = `https://api.congress.gov/v3/bill/${parsed.congress}/${parsed.type}/${parsed.number}`;
-    const data = await fetchJson<{
-      textVersions?: Array<{ formats?: Array<{ type?: string; url?: string }> }>;
-    }>(`${base}/text?format=json&api_key=${apiKey}`, deadlineAt);
+    const data = await fetchJson<{ textVersions?: BillTextVersion[] }>(
+      `${base}/text?format=json&api_key=${apiKey}`,
+      deadlineAt
+    );
 
-    const versions = data?.textVersions ?? [];
-    // Newest version last in the API response; walk backwards for the freshest text.
-    for (const version of [...versions].reverse()) {
-      const formats = version.formats ?? [];
-      const preferred =
-        formats.find((f) => (f.type ?? "").toLowerCase().includes("formatted text")) ??
-        formats.find((f) => (f.type ?? "").toLowerCase().includes("text")) ??
-        formats[0];
-      if (!preferred?.url) continue;
-      const text = await fetchDocumentText(preferred.url, deadlineAt);
-      if (text) return { text, source: "congress.gov/text", url: preferred.url };
+    const versions = [...(data?.textVersions ?? [])].sort(byAuthority);
+    for (const version of versions) {
+      const url = preferredFormat(version);
+      if (!url) continue;
+      const text = await fetchDocumentText(url, deadlineAt);
+      if (text) {
+        const body = stripGpoHeader(text);
+        if (body.length > 200) {
+          console.log(
+            `[RefContent] ${ref.masterReferenceId}: using the "${version.type ?? "unknown"}" text`
+          );
+          return { text: body, source: "congress.gov/text", url };
+        }
+      }
     }
 
-    // Source 2: congress.gov official summaries — CRS plain-English summary of the bill.
+    // Source 2: the CRS summary. A summary is not the law, and it is used only
+    // when no version of the text is published — which is the ordinary state of
+    // a bill in its first days.
     const summaries = await fetchJson<{
       summaries?: Array<{ text?: string; updateDate?: string; actionDate?: string }>;
     }>(`${base}/summaries?format=json&api_key=${apiKey}`, deadlineAt);
 
-    const latestSummary = summaries?.summaries?.[summaries.summaries.length - 1]?.text;
+    // Sorted, not indexed. The last element is the newest summary only if the
+    // API happens to order them that way, and assuming that about textVersions
+    // is what put the introduced text of every bill in front of readers.
+    const latestSummary = [...(summaries?.summaries ?? [])].sort((a, b) => {
+      const at = Date.parse(a.actionDate ?? a.updateDate ?? "") || 0;
+      const bt = Date.parse(b.actionDate ?? b.updateDate ?? "") || 0;
+      return bt - at;
+    })[0]?.text;
+
     if (latestSummary) {
       const text = sanitizeOfficialText(htmlToText(latestSummary));
       if (text.length > 200) {
-        return {
-          text,
-          source: "congress.gov/summaries",
-          url: `${base}/summaries`,
-        };
+        return { text, source: "congress.gov/summaries", url: `${base}/summaries` };
       }
     }
   }
@@ -276,9 +400,18 @@ async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<Tex
   // Source 3: the official congress.gov page for this bill.
   if (ref.sourceUrl) {
     const text = await fetchDocumentText(`${ref.sourceUrl}/text`, deadlineAt);
-    if (text) return { text, source: "congress.gov/page", url: `${ref.sourceUrl}/text` };
+    if (text) {
+      const body = stripGpoHeader(text);
+      if (body.length > 200) {
+        return { text: body, source: "congress.gov/page", url: `${ref.sourceUrl}/text` };
+      }
+    }
   }
 
+  console.warn(
+    `[RefContent] congress.gov has no text for ${ref.masterReferenceId} ` +
+      `(${parsed ? `${parsed.congress}/${parsed.type}/${parsed.number}` : "unparseable id"})`
+  );
   return null;
 }
 
