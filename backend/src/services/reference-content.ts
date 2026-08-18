@@ -21,6 +21,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
 import { composeBrief, flattenBrief, parseBrief, serializeBrief } from "./citizen-brief";
 import { aiAvailability } from "./ai-generate";
+import { webSearchAvailable } from "./web-search";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
@@ -224,6 +225,7 @@ export function officialSources(): {
   courtListener: boolean;
   federalRegister: true;
   briefWriter: boolean;
+  searchGrounding: boolean;
 } {
   const ai = aiAvailability();
   return {
@@ -240,6 +242,18 @@ export function officialSources(): {
     // any branch, and this endpoint said nothing about that at all — so a
     // platform-wide brief outage looked from here like three healthy sources.
     briefWriter: ai.gemini || ai.openai,
+    // Can search understand something that became news this week?
+    //
+    // Without live web grounding the interpretation step runs on the model's
+    // training data alone. That is enough for settled law — a question about
+    // phone privacy still reaches Carpenter v. United States — and not enough
+    // for a ruling or an order from the last few days, which the model has
+    // never heard of and cannot translate into the words the document uses.
+    //
+    // Nothing else reports this, and it is invisible from the outside: search
+    // keeps working, slightly worse, on exactly the queries people ask after
+    // watching the news.
+    searchGrounding: webSearchAvailable(),
   };
 }
 

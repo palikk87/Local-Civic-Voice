@@ -152,4 +152,18 @@ describe("content health", () => {
     expect(configured).toHaveProperty("courtListener");
     expect(configured).toHaveProperty("federalRegister");
   });
+
+  test("says whether search can understand this week's news", async () => {
+    // Without live web grounding, search interprets from the model's training
+    // data alone. Settled law still resolves — a question about phone privacy
+    // reaches Carpenter v. United States either way — but a ruling from the
+    // last few days is a thing the model has never heard of and cannot
+    // translate into the words the document actually uses.
+    //
+    // It fails quietly: search keeps working, slightly worse, on exactly the
+    // queries people type after watching the news. So it is reported.
+    const { configured } = await health();
+    expect(configured).toHaveProperty("searchGrounding");
+    expect(typeof configured.searchGrounding).toBe("boolean");
+  });
 });
