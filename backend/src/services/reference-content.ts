@@ -19,7 +19,7 @@
 
 import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
-import { composeBrief, flattenBrief, serializeBrief } from "./citizen-brief";
+import { composeBrief, flattenBrief, parseBrief, serializeBrief } from "./citizen-brief";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
@@ -565,8 +565,20 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
   // It also makes the other half true. A brief that IS current is never
   // rewritten, however many people open it — not per click, not per user, not
   // per post. Once per version of the law.
+  // PARSED, not merely present — and this is the same question briefState()
+  // answers for the client, so it has to be answered the same way.
+  //
+  // When these two disagreed, the button stopped working entirely. A record
+  // holding a brief written to an EARLIER definition of what a Citizen's Brief
+  // is would satisfy `Boolean(citizenBriefJson)`, so this said "already
+  // current", settled the row as ready, and returned without fetching text or
+  // writing anything. The endpoint then re-read the row, asked briefState(),
+  // which parses — and got "not ready". Press the button, nothing happens.
+  // Press it again, nothing happens. Forever, for every record that had ever
+  // been briefed before.
   const briefIsCurrent =
-    Boolean(current.citizenBriefJson) && current.citizenBriefVersion === current.lawVersion;
+    parseBrief(current.citizenBriefJson) !== null &&
+    current.citizenBriefVersion === current.lawVersion;
   const briefNeeded = force || !briefIsCurrent || textChanged;
   if (!briefNeeded) {
     await markSettled(ref.id, "ready");

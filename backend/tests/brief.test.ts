@@ -20,8 +20,9 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { BASE_URL, prisma, resetData, startServer, stopServer } from "./helpers/server";
-import { ensureReferenceContent, processReferenceBrief } from "../src/services/reference-content";
+import { ensureReferenceContent, hashText, processReferenceBrief } from "../src/services/reference-content";
 import { briefState, releaseAbandonedWork, WORK_TIMEOUT_MS } from "../src/services/brief-state";
+import { parseBrief } from "../src/services/citizen-brief";
 import { mergeReferences } from "../src/services/deduplication-service";
 import { safeInputChars } from "../src/services/ai-generate";
 
@@ -687,5 +688,79 @@ describe("a law too long for one pass", () => {
     expect(row.citizenBriefJson).toBeNull();
     expect(row.contentStatus).toBe("unavailable");
     expect(row.contentStartedAt).toBeNull();
+  });
+});
+
+/**
+ * The button has to work on a record that was briefed before.
+ *
+ * THE DEFECT. Two places asked "does this record already have a usable brief",
+ * and they answered differently. `briefState()` — what the client is told —
+ * PARSED the stored JSON, so a brief written to an earlier definition read as
+ * no brief. The content pipeline only checked the column was non-null, so the
+ * same record read as already current: it settled the row as ready and returned
+ * without fetching text or writing anything.
+ *
+ * The reader pressed Get Citizen Brief and nothing happened. Pressed it again,
+ * nothing happened. For every record that had ever been briefed — which, after
+ * the brief was redefined, was all of them.
+ */
+describe("a record briefed under the old definition", () => {
+  /** The shape briefs used to be stored in: three panels, no format stamp. */
+  const OLD_SHAPE = JSON.stringify({
+    theGoal: "What it does.",
+    theWallet: "What it costs.",
+    theDebate: "Both sides.",
+  });
+
+  test("is rewritten rather than reported as already current", async () => {
+    // The production shape of this record: text already stored, checked
+    // recently, and a brief from before the definition changed. No re-fetch is
+    // due, so nothing else can mask the decision — which is exactly why the
+    // bug was invisible on a fresh record and total on a real one.
+    const law = await record({
+      citizenBrief: "Goal / Wallet / Debate, from the old shape.",
+      citizenBriefJson: OLD_SHAPE,
+      // Matching versions are what made the old check say "nothing to do".
+      citizenBriefVersion: 1,
+      lawVersion: 1,
+      fullText: OFFICIAL_TEXT,
+      fullTextHash: hashText(OFFICIAL_TEXT),
+      sourceCheckedAt: new Date(),
+    });
+
+    // Exactly what pressing the button does.
+    await processReferenceBrief(law.id, false);
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+
+    // A brief the card can actually render, in the current shape.
+    const rewritten = parseBrief(row.citizenBriefJson);
+    expect(rewritten).not.toBeNull();
+    expect(rewritten!.summary).toBe(BRIEF.summary);
+    expect(rewritten!.argumentFor).toBe(BRIEF.argumentFor);
+    expect(rewritten!.argumentAgainst).toBe(BRIEF.argumentAgainst);
+
+    // And the record is settled, so the reader is not left pressing a button
+    // that quietly does nothing.
+    expect(briefState(row)).toBe("ready");
+    expect(row.contentStartedAt).toBeNull();
+  });
+
+  test("the pipeline and the client agree about what counts as a brief", async () => {
+    // The two answers disagreeing IS the bug. Neither may be able to see a
+    // brief the other cannot.
+    const law = await record({
+      citizenBriefJson: OLD_SHAPE,
+      citizenBriefVersion: 1,
+      lawVersion: 1,
+      fullText: OFFICIAL_TEXT,
+      fullTextHash: hashText(OFFICIAL_TEXT),
+      sourceCheckedAt: new Date(),
+    });
+    const before = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+
+    expect(parseBrief(before.citizenBriefJson)).toBeNull();
+    expect(briefState(before)).not.toBe("ready");
   });
 });
