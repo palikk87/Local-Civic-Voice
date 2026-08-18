@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, X, CheckCircle } from "lucide-react";
+import { Search, X, CheckCircle, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { BranchTabs } from "@/components/library/BranchTabs";
 import { LibraryEmptyState } from "@/components/library/LibraryEmptyState";
 import { LibraryResults } from "@/components/library/LibraryResults";
@@ -10,7 +11,6 @@ import {
   CitizensBriefPanel,
   type LibraryShareTarget,
 } from "@/components/library/CitizensBriefPanel";
-import { useDebounce } from "@/hooks/use-debounce";
 import {
   libraryApi,
   congressToSearchResult,
@@ -56,14 +56,30 @@ const PLACEHOLDER: Record<LibraryBranch, string> = {
 
 export default function Library() {
   const [branch, setBranch] = useState<LibraryBranch>("congress");
+
+  // Two pieces of state on purpose: what is in the box, and what was actually
+  // searched for.
+  //
+  // These used to be one, behind a 450ms debounce, so the search ran itself
+  // while you were still typing — results appeared before you had asked for
+  // anything, and changed again every time you paused. Typing is not a request.
+  // `submitted` only moves when a person says go.
   const [query, setQuery] = useState("");
-  const debouncedQuery = useDebounce(query, 450);
-  const enabled = debouncedQuery.trim().length > 1;
+  const [submitted, setSubmitted] = useState("");
+  const enabled = submitted.trim().length > 1;
+
+  const search = useCallback(() => {
+    const next = query.trim();
+    // Nothing to search, and no silent failure either — the button is disabled
+    // and the hint below the box says what is needed.
+    if (next.length < 2) return;
+    setSubmitted(next);
+  }, [query]);
 
   const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ["library", branch, debouncedQuery],
+    queryKey: ["library", branch, submitted],
     queryFn: async (): Promise<{ results: LibraryResult[] }> => {
-      const q = debouncedQuery.trim();
+      const q = submitted.trim();
       if (branch === "congress") return libraryApi.congress(q);
       if (branch === "executive") return libraryApi.executive(q);
       return libraryApi.judicial(q);
@@ -100,7 +116,7 @@ export default function Library() {
   // Clear the open brief when the search or branch changes.
   useEffect(() => {
     setSelectedResult(null);
-  }, [branch, debouncedQuery]);
+  }, [branch, submitted]);
 
   return (
     <AppShell>
@@ -122,31 +138,55 @@ export default function Library() {
 
         <BranchTabs value={branch} onChange={setBranch} />
 
-        {/* Search */}
-        <div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={PLACEHOLDER[branch]}
-              className="h-12 rounded-2xl pl-9 pr-10 text-[15px]"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                aria-label="Clear search"
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
+        {/* Search
+            A real <form>, so Enter submits the way it does in every other search
+            box on the internet. The button and the Enter key are the same one
+            action — there is no path that searches without the person asking. */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            search();
+          }}
+        >
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={PLACEHOLDER[branch]}
+                aria-label={PLACEHOLDER[branch]}
+                enterKeyHint="search"
+                className="h-12 rounded-2xl pl-9 pr-10 text-[15px]"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setSubmitted("");
+                  }}
+                  aria-label="Clear search"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <Button
+              type="submit"
+              disabled={query.trim().length < 2 || loading}
+              className="h-12 rounded-2xl px-6 font-semibold"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Search"}
+            </Button>
           </div>
           <p className="mt-1.5 px-1 text-xs text-muted-foreground">
-            Just type what you're looking for - AI understands everyday language
+            {query.trim().length === 1
+              ? "Type at least two characters."
+              : "Type what you're looking for in everyday language, then press Search."}
           </p>
-        </div>
+        </form>
 
         {/* Results */}
         {enabled ? (
@@ -163,7 +203,16 @@ export default function Library() {
             onOpenJudicial={(item) => setSelectedResult(judicialToSearchResult(item))}
           />
         ) : (
-          <LibraryEmptyState branch={branch} onSuggestionPress={(suggestion) => setQuery(suggestion)} />
+          <LibraryEmptyState
+            branch={branch}
+            onSuggestionPress={(suggestion) => {
+              // Tapping a suggestion is a request, so it searches. Filling the
+              // box and leaving the reader to press Search again is a dead end
+              // dressed up as help.
+              setQuery(suggestion);
+              setSubmitted(suggestion.trim());
+            }}
+          />
         )}
       </div>
 

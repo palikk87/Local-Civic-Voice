@@ -147,7 +147,8 @@ function SearchBar({
 }) {
   return (
     <View className="px-4 mb-4">
-      <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-3 border border-slate-700/50">
+      <View className="flex-row items-center gap-2">
+      <View className="flex-1 flex-row items-center bg-slate-800 rounded-xl px-4 py-3 border border-slate-700/50">
         {isLoading ? (
           <ActivityIndicator size="small" color="#F59E0B" />
         ) : (
@@ -174,8 +175,29 @@ function SearchBar({
           </Pressable>
         )}
       </View>
+
+      {/* The action, visible and pressable. The keyboard's search key does the
+          same thing, but a control you can see beats one you have to know
+          about — and until this existed there was no way to ask at all. */}
+      <Pressable
+        onPress={onSubmit}
+        disabled={value.trim().length < 2 || isLoading}
+        className={`rounded-xl px-5 py-3 ${
+          value.trim().length < 2 || isLoading ? 'bg-amber-500/40' : 'bg-amber-500'
+        }`}
+      >
+        {isLoading ? (
+          <ActivityIndicator size="small" color="#0F172A" />
+        ) : (
+          <Text className="text-slate-900 font-bold text-base">Search</Text>
+        )}
+      </Pressable>
+      </View>
+
       <Text className="text-slate-500 text-xs mt-2 ml-1">
-        Just type what you're looking for - AI understands everyday language
+        {value.trim().length === 1
+          ? 'Type at least two characters.'
+          : "Type what you're looking for in everyday language, then press Search."}
       </Text>
     </View>
   );
@@ -645,56 +667,43 @@ export default function LibraryScreen() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<LibraryTab>('legislative');
   const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedQuery, setDebouncedQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
   const [selectedResult, setSelectedResult] = useState<GovernmentSearchResult | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const createLibraryPost = useTimelineStore((s) => s.createLibraryPost);
 
-  // Debounce search query - auto-search after 500ms of no typing
+  // NO AUTO-SEARCH. This used to run itself 500ms after you stopped typing, so
+  // results appeared before you had asked for anything and changed again on
+  // every pause. Typing is not a request. `submittedQuery` moves only when a
+  // person presses Search or the keyboard's search key.
+  //
+  // Clearing the box does clear the results, because an empty box asking to
+  // still show the last search is its own kind of lie.
   useEffect(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
+    if (searchQuery.trim().length === 0 && submittedQuery !== '') {
+      setSubmittedQuery('');
+      setSelectedResult(null);
     }
+  }, [searchQuery, submittedQuery]);
 
-    if (searchQuery.trim().length >= 2) {
-      debounceTimerRef.current = setTimeout(() => {
-        const trimmedQuery = searchQuery.trim();
-        console.log('Setting debounced query to:', trimmedQuery);
-        setDebouncedQuery(trimmedQuery);
-        setSelectedResult(null); // Clear selected result when search query changes
-      }, 500);
-    } else if (searchQuery.trim().length === 0) {
-      setDebouncedQuery('');
-      setSelectedResult(null); // Clear selected result when search is cleared
-    }
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [searchQuery]);
-
-  // Search query - uses debounced query for auto-search
+  // Runs for a SUBMITTED term only.
   const {
     data: searchResults,
     isLoading: searchLoading,
     error: searchError,
     refetch,
   } = useQuery({
-    queryKey: ['government-search', activeTab, debouncedQuery],
+    queryKey: ['government-search', activeTab, submittedQuery],
     queryFn: async () => {
-      console.log('Executing search for:', activeTab, debouncedQuery);
-      const results = await searchGovernment(activeTab as SearchBranch, debouncedQuery, 20);
+      const results = await searchGovernment(activeTab as SearchBranch, submittedQuery, 20);
       // Deduplicate results by ID before returning
       const uniqueResults = Array.from(
         new Map(results.map(r => [r.id, r])).values()
       );
       return uniqueResults;
     },
-    enabled: debouncedQuery.length >= 2,
+    enabled: submittedQuery.length >= 2,
     staleTime: 0, // Always fetch fresh data - search results should be current
     gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes
     refetchOnWindowFocus: false, // Don't refetch on focus
@@ -718,10 +727,11 @@ export default function LibraryScreen() {
   });
 
   const handleSearch = useCallback(() => {
-    if (searchQuery.trim()) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setDebouncedQuery(searchQuery.trim());
-    }
+    const next = searchQuery.trim();
+    if (next.length < 2) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSubmittedQuery(next);
+    setSelectedResult(null);
   }, [searchQuery]);
 
   const handleTabChange = useCallback((tab: LibraryTab) => {
@@ -796,8 +806,17 @@ export default function LibraryScreen() {
         />
 
         {/* Results / Empty State */}
-        {debouncedQuery.length === 0 ? (
-          <EmptyState activeTab={activeTab} onSuggestionPress={(suggestion) => setSearchQuery(suggestion)} />
+        {submittedQuery.length === 0 ? (
+          <EmptyState
+            activeTab={activeTab}
+            onSuggestionPress={(suggestion) => {
+              // Tapping a suggestion IS the request. Filling the box and leaving
+              // the reader to press Search again is a dead end dressed up as help.
+              setSearchQuery(suggestion);
+              setSubmittedQuery(suggestion.trim());
+              setSelectedResult(null);
+            }}
+          />
         ) : searchError ? (
           <View className="flex-1 items-center justify-center px-8">
             <AlertCircle size={32} color="#EF4444" />

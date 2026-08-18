@@ -14,7 +14,8 @@
     "render-check": "node scripts/render-check.mjs dist",
     "layout-check": "node scripts/layout-check.mjs dist",
     "related-laws-check": "node scripts/related-laws-check.mjs dist",
-    "brief-button-check": "node scripts/brief-button-check.mjs dist"
+    "brief-button-check": "node scripts/brief-button-check.mjs dist",
+    "library-search-check": "node scripts/library-search-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

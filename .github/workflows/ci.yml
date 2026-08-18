@@ -139,6 +139,8 @@ jobs:
         working-directory: apps/web
       - run: bun run brief-button-check
         working-directory: apps/web
+      - run: bun run library-search-check
+        working-directory: apps/web
 
       # The built site must be able to say which commit it is. Without the
       # stamp, deploy-check cannot tell a deploy that happened from one that

@@ -95,6 +95,13 @@ const CHECKS: Check[] = [
       "somewhere — no spinner without an exit",
   },
   {
+    name: "web library-search-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "library-search-check"],
+    guards:
+      "the Library searches when asked and never on its own — typing is not a request",
+  },
+  {
     name: "mobile typecheck",
     cwd: "apps/mobile",
     cmd: ["bun", "run", "typecheck"],
