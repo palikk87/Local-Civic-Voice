@@ -20,7 +20,13 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { BASE_URL, prisma, resetData, startServer, stopServer } from "./helpers/server";
-import { ensureReferenceContent, hashText, processReferenceBrief } from "../src/services/reference-content";
+import {
+  EXTRACTION_FIXED_AT,
+  ensureReferenceContent,
+  hashText,
+  processReferenceBrief,
+  repairStoredExtractions,
+} from "../src/services/reference-content";
 import { briefState, releaseAbandonedWork, WORK_TIMEOUT_MS } from "../src/services/brief-state";
 import { parseBrief } from "../src/services/citizen-brief";
 import { mergeReferences } from "../src/services/deduplication-service";
@@ -781,13 +787,21 @@ describe("a record briefed under the old definition", () => {
  * delivered to every user at once, caused by us fixing our own defect.
  */
 describe("re-extracting text after a retrieval fix", () => {
-  /** A record already holding text and a brief written for it. */
-  async function settled() {
+  /**
+   * A record already holding text and a brief written for it.
+   *
+   * `fullTextAt` is after EXTRACTION_FIXED_AT, so this text was produced by the
+   * current extractors. That matters: text stored BEFORE the fix is protected
+   * from being reported as a change of law, and a fixture without a date would
+   * quietly land in that protected set and stop testing anything.
+   */
+  async function settled(fullTextAt = new Date(EXTRACTION_FIXED_AT.getTime() + 86_400_000)) {
     const row = await record({
       fullText: OFFICIAL_TEXT,
       fullTextHash: hashText(OFFICIAL_TEXT),
       fullTextSource: "congress.gov/text",
       sourceCheckedAt: new Date(),
+      fullTextAt,
       citizenBriefJson: JSON.stringify({ format: 2, ...BRIEF }),
       citizenBriefVersion: 1,
       lawVersion: 1,
@@ -862,5 +876,102 @@ describe("re-extracting text after a retrieval fix", () => {
     expect(after.citizenBriefVersion).toBe(1);
     // Not rewritten, so not paid for again.
     expect(modelCalls).toHaveLength(0);
+  });
+});
+
+/**
+ * The repair runs itself, once, on the deploy that carries the fix.
+ *
+ * A fix that only lands if somebody remembers to press a button afterwards is a
+ * fix that sits unapplied — the same failure mode as a finished change sitting
+ * on a branch nothing deploys.
+ */
+describe("repairing records stored by the old extractor", () => {
+  const BEFORE = new Date(EXTRACTION_FIXED_AT.getTime() - 86_400_000);
+  const AFTER = new Date(EXTRACTION_FIXED_AT.getTime() + 86_400_000);
+
+  async function stored(fullTextAt: Date | null) {
+    return record({
+      fullText: OFFICIAL_TEXT,
+      fullTextHash: hashText(OFFICIAL_TEXT),
+      fullTextSource: "congress.gov/text",
+      sourceCheckedAt: new Date(),
+      citizenBriefJson: JSON.stringify({ format: 2, ...BRIEF }),
+      citizenBriefVersion: 1,
+      lawVersion: 1,
+      contentStatus: "ready",
+      fullTextAt,
+    });
+  }
+
+  test("queues only the records whose text predates the fix", async () => {
+    const old1 = await stored(BEFORE);
+    const never = await stored(null);
+    await stored(AFTER);
+
+    const queued = await repairStoredExtractions();
+    expect(queued).toBe(2);
+
+    // Named rather than counted, so a coincidence cannot pass this.
+    const eligible = await prisma.governmentReference.findMany({
+      where: { OR: [{ fullTextAt: null }, { fullTextAt: { lt: EXTRACTION_FIXED_AT } }] },
+      select: { id: true },
+    });
+    expect(eligible.map((r) => r.id).sort()).toEqual([old1.id, never.id].sort());
+  });
+
+  test("a repaired record is not queued again on the next boot", async () => {
+    // Even when the text comes back identical — nothing was wrong with this
+    // one, but it HAS now been confirmed against the current extractor, and
+    // without recording that it would be re-pulled on every single restart.
+    const row = await stored(BEFORE);
+    stubNetwork({ text: OFFICIAL_TEXT });
+
+    await ensureReferenceContent(row.id, { reextract: true, generateBriefInline: true });
+
+    expect(await repairStoredExtractions()).toBe(0);
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: row.id },
+      select: { fullTextAt: true },
+    });
+    expect(after.fullTextAt!.getTime()).toBeGreaterThan(EXTRACTION_FIXED_AT.getTime());
+  });
+
+  test("a reader who arrives mid-repair cannot trigger a false law-change", async () => {
+    // THE DOOR THE REPAIR PASS DOES NOT COVER. Between the deploy and the
+    // repair reaching this record, opening it runs an ordinary recheck: pulls
+    // the corrected text, sees it differs, and — without this — tells everyone
+    // who shared it that the law changed.
+    const row = await stored(BEFORE);
+    stubNetwork({ text: AMENDED_TEXT });
+
+    await ensureReferenceContent(row.id, { force: true, generateBriefInline: true });
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: row.id },
+      select: { fullText: true, lawVersion: true, lawChangedAt: true },
+    });
+
+    expect(after.fullText).toBe(AMENDED_TEXT);
+    expect(after.lawVersion).toBe(1);
+    expect(after.lawChangedAt).toBeNull();
+    expect(await prisma.notification.count({ where: { type: "law_update" } })).toBe(0);
+  });
+
+  test("and a record already on the current extractor still reports real changes", async () => {
+    // The protection is scoped to text the old extractor produced. It is not a
+    // permanent amnesty on saying the law moved — which would be a far worse
+    // bug than the one it prevents.
+    const row = await stored(AFTER);
+    stubNetwork({ text: AMENDED_TEXT });
+
+    await ensureReferenceContent(row.id, { force: true, generateBriefInline: true });
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: row.id },
+      select: { lawVersion: true, lawChangedAt: true },
+    });
+    expect(after.lawVersion).toBe(2);
+    expect(after.lawChangedAt).not.toBeNull();
   });
 });

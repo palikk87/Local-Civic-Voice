@@ -22,7 +22,7 @@ import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
 import { schemaState } from "./services/schema-state";
-import { officialSources } from "./services/reference-content";
+import { officialSources, repairStoredExtractions } from "./services/reference-content";
 import { releaseAbandonedWork } from "./services/brief-state";
 
 // Import rate limiters
@@ -278,6 +278,28 @@ void releaseAbandonedWork()
     }
   })
   .catch((error) => console.error("[Server] could not release abandoned brief work:", error));
+
+// One-time repair, on the deploy that carries the extraction fix.
+//
+// Records stored before it hold text the old shared extractor produced: an
+// executive order with the Federal Register's cover page above it, a bill at
+// the version introduced rather than the one that passed, a Supreme Court case
+// with no text at all. Re-pulling them says nothing about the law having
+// changed — nobody is notified, no post is badged — because fixing our own
+// extraction is not the government amending anything.
+//
+// Ahead of the government sync on purpose: the sync would otherwise reach some
+// of these records first, through a path that has no idea a repair is due.
+void repairStoredExtractions()
+  .then((queued) => {
+    if (queued > 0) {
+      console.log(
+        `[Server] re-extracting official text for ${queued} record(s) stored before the ` +
+          `retrieval fix — briefs will be rewritten, no law is marked as changed`
+      );
+    }
+  })
+  .catch((error) => console.error("[Server] could not queue the extraction repair:", error));
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
 // SCOTUS cases at boot, then once every 24 hours. The sync itself skips if it

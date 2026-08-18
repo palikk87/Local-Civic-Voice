@@ -27,6 +27,39 @@ import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 import { markSettled, markWorking } from "./brief-state";
 
 const FETCH_TIMEOUT_MS = 15_000;
+
+/**
+ * When the three branch-specific extractors replaced the shared one.
+ *
+ * Any record whose text was last confirmed before this holds text produced by
+ * the broken extraction: an executive order with the Federal Register's cover
+ * page above it, a bill at the version that was introduced rather than the one
+ * that passed, a Supreme Court case with no text at all.
+ *
+ * Two things read this, and both matter:
+ *
+ *   the repair pass   queues exactly those records for re-extraction, once,
+ *                     on the deploy that carries the fix
+ *   lawMoved          refuses to call the difference a change of law, on ANY
+ *                     path, until the record has been re-extracted
+ *
+ * The second is not redundant. Without it, a reader who opens a record in the
+ * minutes between the deploy and the repair reaching that record triggers an
+ * ordinary daily recheck, which pulls the corrected text, sees it differs, and
+ * tells everyone who shared it that the law changed. Same false statement, same
+ * blast radius, through a door the repair pass does not cover.
+ *
+ * `fullTextAt` is the marker rather than `sourceCheckedAt` because it moves
+ * only when text is actually confirmed. A failed pull stamps sourceCheckedAt
+ * and would take a record out of the repair set while leaving the old text on
+ * it — checked, unfixed, and no longer protected.
+ */
+export const EXTRACTION_FIXED_AT = new Date("2026-08-18T00:00:00Z");
+
+/** Was this record's stored text produced by the extraction we replaced? */
+function predatesExtractionFix(fullTextAt: Date | null): boolean {
+  return fullTextAt === null || fullTextAt < EXTRACTION_FIXED_AT;
+}
 /** How long stored text is trusted before we re-compare it against the official source. */
 const SOURCE_RECHECK_MS = 24 * 60 * 60 * 1000;
 
@@ -236,6 +269,7 @@ interface ReferenceRow {
   fullText: string | null;
   fullTextHash: string | null;
   fullTextUrl: string | null;
+  fullTextAt: Date | null;
   citizenBriefJson: string | null;
   sourceCheckedAt: Date | null;
   lawVersion: number;
@@ -918,6 +952,7 @@ const SELECT_FIELDS = {
   fullText: true,
   fullTextHash: true,
   fullTextUrl: true,
+  fullTextAt: true,
   citizenBriefJson: true,
   sourceCheckedAt: true,
   lawVersion: true,
@@ -999,7 +1034,11 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
         // A first pull is not a change. The law did not move; we simply did not
         // have it yet, and badging every post on a record whose text we just
         // fetched for the first time would be a lie told at scale.
-        const lawMoved = textChanged && ref.fullTextHash !== null && !reextract;
+        const lawMoved =
+          textChanged &&
+          ref.fullTextHash !== null &&
+          !reextract &&
+          !predatesExtractionFix(ref.fullTextAt);
 
         // Stored copy is outdated (or absent) — the master reference takes the new text.
         await prisma.governmentReference.update({
@@ -1046,7 +1085,13 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
       } else {
         await prisma.governmentReference.update({
           where: { id: ref.id },
-          data: { sourceCheckedAt: now },
+          data: {
+            sourceCheckedAt: now,
+            // Nothing to fix on this record — but it HAS now been confirmed
+            // against the current extractor, and saying so is what stops the
+            // repair pass queueing it again on every restart forever.
+            ...(reextract ? { fullTextAt: now } : {}),
+          },
         });
       }
     } else {
@@ -1114,6 +1159,35 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
     { referenceId: ref.id, force },
     JobPriority.HIGH
   );
+}
+
+/**
+ * Queue the one-time repair of every record still holding text from the
+ * extraction that was replaced.
+ *
+ * Runs at boot, on the deploy that carries the fix, and then finds nothing ever
+ * again: re-extraction stamps `fullTextAt`, which is what this selects on.
+ *
+ * It is deliberately not an operator's job. The manual endpoint exists too, but
+ * a fix that only works if somebody remembers to press a button afterwards is a
+ * fix that sits unapplied — which is the same failure mode as a finished change
+ * sitting on a branch nothing deploys.
+ */
+export async function repairStoredExtractions(): Promise<number> {
+  const stale = await prisma.governmentReference.findMany({
+    where: {
+      mergedIntoId: null,
+      OR: [{ fullTextAt: null }, { fullTextAt: { lt: EXTRACTION_FIXED_AT } }],
+    },
+    select: { id: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  for (const record of stale) {
+    jobQueue.enqueue(JobType.REEXTRACT_REFERENCE_TEXT, { referenceId: record.id }, JobPriority.LOW);
+  }
+
+  return stale.length;
 }
 
 /** Job-queue entry point: finish the pull and build the brief inline. */
