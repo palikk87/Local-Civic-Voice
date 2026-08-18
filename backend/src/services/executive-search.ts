@@ -105,26 +105,34 @@ export function buildLadder(intent: SearchIntent): Rung[] {
     rungs.push({ term: `"${phrase}"`, label: `phrase "${phrase}"`, weight: 100 });
   }
 
-  // Two phrases together, when we have them: narrower than either alone.
+  // Every phrase in ONE request, joined by OR.
+  //
+  // This was AND, on the reasoning that two phrases together are narrower than
+  // either alone. Measured against the live API, `"childhood vaccine" AND
+  // "immunization schedule"` returns ZERO — the two phrases rarely co-occur in
+  // one document, so the narrowest rung was also an empty one. And because it
+  // led the ladder, it consumed a request and pushed the broad topic rung off
+  // the end of the budget entirely.
+  //
+  // OR is both cheaper and better: one request that reaches every document
+  // matching any phrase in the family, which is what the family is for.
   if (intent.phrases.length >= 2) {
     rungs.unshift({
-      term: `"${intent.phrases[0]}" AND "${intent.phrases[1]}"`,
-      label: `both phrases`,
-      weight: 140,
+      term: intent.phrases.map((p) => `"${p}"`).join(" OR "),
+      label: `any of ${intent.phrases.length} phrases`,
+      weight: 130,
     });
   }
 
-  if (intent.topic) {
-    rungs.push({ term: intent.topic, label: `topic "${intent.topic}"`, weight: 50 });
-  }
-
-  // Never send nothing. If interpretation produced neither a phrase nor a
-  // topic, the reader's own words are still a real query.
-  if (rungs.length === 0) {
-    rungs.push({ term: intent.raw, label: "the query as typed", weight: 50 });
-  }
-
-  return rungs.slice(0, MAX_QUERIES);
+  // The safety net, and it is never optional.
+  //
+  // Interpretation can produce phrases that read plausibly and appear in no
+  // document. When that happens the precise rungs all return nothing, and the
+  // broad query is the only thing standing between the reader and an empty
+  // page — so it is appended AFTER the ladder is trimmed, not before.
+  const precise = rungs.slice(0, Math.max(1, MAX_QUERIES - 1));
+  const broad = intent.topic || intent.raw;
+  return [...precise, { term: broad, label: `topic "${broad}"`, weight: 50 }];
 }
 
 function urlFor(intent: SearchIntent, rung: Rung, perPage: number): string {
@@ -136,9 +144,17 @@ function urlFor(intent: SearchIntent, rung: Rung, perPage: number): string {
   url.searchParams.set("order", "relevance");
   url.searchParams.set("per_page", String(perPage));
 
-  for (const agency of intent.agencies) {
-    url.searchParams.append("conditions[agencies][]", agency);
-  }
+  // NO AGENCY FILTER. It was here and it silently emptied the results.
+  //
+  // Measured: conditions[agencies][] with a name the model produces
+  // ("Department of Health and Human Services") answers HTTP 400, and the API's
+  // own slug ("health-and-human-services-department") answers 0 — presidential
+  // documents are not attributed to agencies in the first place. Applied to
+  // every rung, it turned a working search into an empty one whenever the
+  // interpretation happened to mention a department.
+  //
+  // Agencies stay in the intent because they are good ranking signal; they are
+  // simply never used to filter.
   if (intent.from) url.searchParams.set("conditions[publication_date][gte]", intent.from);
   if (intent.to) url.searchParams.set("conditions[publication_date][lte]", intent.to);
   for (const field of FIELDS) url.searchParams.append("fields[]", field);

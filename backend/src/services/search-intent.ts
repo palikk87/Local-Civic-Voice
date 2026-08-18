@@ -265,6 +265,16 @@ export async function interpretSearch(
     jsonMode: true,
     temperature: 0.1,
     maxCompletionTokens: 500,
+    // A person is watching a spinner. Interpretation that arrives after they
+    // have given up is worse than no interpretation at all, and there is a
+    // real fallback underneath — their own words, searched plainly.
+    //
+    // Both numbers are bounds on the same failure. With no ceiling on either,
+    // live search returned 502 "Application failed to respond" after 36
+    // seconds: the model was still deliberating over a twelve-thousand-token
+    // allowance it had been handed for what is a short extraction.
+    timeoutMs: 8_000,
+    reasoningHeadroom: 1_500,
   });
 
   if (!result.ok) {

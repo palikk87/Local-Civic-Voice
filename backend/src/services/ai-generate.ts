@@ -27,6 +27,28 @@ export interface AIGenerateParams {
    * the historical "free tier first" order.
    */
   provider?: AIProvider;
+  /**
+   * Give up on the provider after this long.
+   *
+   * THERE WAS NO TIMEOUT HERE AT ALL, and it took down live search. A model
+   * given room to reason can spend a long time doing it; with no ceiling the
+   * request simply hung, the search endpoint never answered, and Railway's
+   * edge returned 502 "Application failed to respond" after 36 seconds. The
+   * server was healthy the whole time and the log said nothing, because
+   * nothing had failed — it was still waiting.
+   *
+   * A brief is background work and can afford to wait. A search box cannot.
+   */
+  timeoutMs?: number;
+  /**
+   * Room for the model to think, on top of the answer asked for.
+   *
+   * Defaults to a generous allowance because a truncated brief is worse than a
+   * slow one. Interactive callers pass something smaller: a short JSON
+   * extraction does not need twelve thousand tokens of deliberation, and every
+   * one it is offered is one it may decide to use.
+   */
+  reasoningHeadroom?: number;
 }
 
 export type AIGenerateResult =
@@ -107,9 +129,12 @@ export function providerFor(model: string): AIProvider {
  */
 const REASONING_HEADROOM_TOKENS = 12_000;
 
-function requestBudget(requested: number | undefined): number {
-  return (requested ?? 800) + REASONING_HEADROOM_TOKENS;
+function requestBudget(requested: number | undefined, headroom: number | undefined): number {
+  return (requested ?? 800) + (headroom ?? REASONING_HEADROOM_TOKENS);
 }
+
+/** No ceiling at all is what 502'd live search; this is the default one. */
+const DEFAULT_AI_TIMEOUT_MS = 60_000;
 
 /**
  * A 200 with nothing in it is a failure, and has to be reported as one.
@@ -201,12 +226,13 @@ export function classifyBriefJob(input: { referenceType: string; textChars: numb
 async function generateWithGemini(
   apiKey: string,
   model: string,
-  { system, prompt, maxCompletionTokens, temperature, jsonMode }: AIGenerateParams
+  { system, prompt, maxCompletionTokens, temperature, jsonMode, timeoutMs, reasoningHeadroom }: AIGenerateParams
 ): Promise<{ ok: true; content: string } | { ok: false; error: string; status?: number }> {
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
       method: "POST",
+      signal: AbortSignal.timeout(timeoutMs ?? DEFAULT_AI_TIMEOUT_MS),
       headers: {
         "x-goog-api-key": apiKey,
         "Content-Type": "application/json",
@@ -216,7 +242,7 @@ async function generateWithGemini(
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: temperature ?? 0.7,
-          maxOutputTokens: requestBudget(maxCompletionTokens),
+          maxOutputTokens: requestBudget(maxCompletionTokens, reasoningHeadroom),
           ...(jsonMode ? { responseMimeType: "application/json" } : {}),
         },
       }),
@@ -248,11 +274,12 @@ async function generateWithGemini(
 async function generateWithOpenAI(
   apiKey: string,
   model: string,
-  { system, prompt, maxCompletionTokens, temperature, jsonMode }: AIGenerateParams,
+  { system, prompt, maxCompletionTokens, temperature, jsonMode, timeoutMs, reasoningHeadroom }: AIGenerateParams,
   omitTemperature = false
 ): Promise<{ ok: true; content: string } | { ok: false; error: string; status?: number }> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal: AbortSignal.timeout(timeoutMs ?? DEFAULT_AI_TIMEOUT_MS),
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -263,7 +290,7 @@ async function generateWithOpenAI(
         ...(system ? [{ role: "system", content: system }] : []),
         { role: "user", content: prompt },
       ],
-      max_completion_tokens: requestBudget(maxCompletionTokens),
+      max_completion_tokens: requestBudget(maxCompletionTokens, reasoningHeadroom),
       ...(omitTemperature ? {} : { temperature: temperature ?? 0.7 }),
       ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
@@ -276,7 +303,12 @@ async function generateWithOpenAI(
     // once rather than failing — this keeps new models drop-in compatible.
     if (!omitTemperature && /temperature/i.test(errorText) && /support/i.test(errorText)) {
       console.warn(`[AI] ${model} rejected temperature — retrying without it`);
-      return generateWithOpenAI(apiKey, model, { system, prompt, maxCompletionTokens, jsonMode }, true);
+      return generateWithOpenAI(
+        apiKey,
+        model,
+        { system, prompt, maxCompletionTokens, jsonMode, timeoutMs, reasoningHeadroom },
+        true,
+      );
     }
     return { ok: false, error: errorText, status: response.status };
   }

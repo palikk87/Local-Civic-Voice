@@ -176,7 +176,12 @@ describe("executive search", () => {
 });
 
 describe("the query ladder", () => {
-  test("quotes phrases, most precise rung first", () => {
+  test("joins the phrase family with OR, not AND", () => {
+    // AND was the first version, on the reasoning that two phrases together
+    // are narrower than either alone. Measured against the live API,
+    // `"childhood vaccine" AND "immunization schedule"` returns ZERO: the two
+    // rarely co-occur in one document, so the narrowest rung was an empty one
+    // — and it led the ladder, spending a request to find nothing.
     const intent = {
       ...plainIntent("kids and vaccines", "executive"),
       phrases: ["childhood vaccine", "immunization schedule"],
@@ -185,11 +190,41 @@ describe("the query ladder", () => {
     };
     const ladder = buildLadder(intent);
 
-    // Both phrases together is narrower than either alone, so it leads.
-    expect(ladder[0]!.term).toBe('"childhood vaccine" AND "immunization schedule"');
+    expect(ladder[0]!.term).toBe('"childhood vaccine" OR "immunization schedule"');
+    expect(ladder[0]!.term).not.toContain(" AND ");
     expect(ladder[0]!.weight).toBeGreaterThan(ladder[1]!.weight);
-    // And every rung above the plain topic is quoted.
-    expect(ladder[1]!.term.startsWith('"')).toBe(true);
+  });
+
+  test("the broad topic rung is never trimmed off the end", () => {
+    // THE SAFETY NET, and it is not optional. Interpretation can produce
+    // phrases that read plausibly and appear in no document; when it does,
+    // every precise rung returns nothing and this is the only thing between
+    // the reader and an empty page. It used to be appended before the ladder
+    // was cut to the request budget, so a long phrase list pushed it out.
+    const intent = {
+      ...plainIntent("kids and vaccines", "executive"),
+      phrases: ["one", "two", "three", "four", "five", "six", "seven", "eight"],
+      topic: "childhood vaccine policy",
+      interpreted: true,
+    };
+    const ladder = buildLadder(intent);
+
+    expect(ladder[ladder.length - 1]!.term).toBe("childhood vaccine policy");
+    expect(ladder[ladder.length - 1]!.term).not.toContain('"');
+  });
+
+  test("never filters by agency", () => {
+    // Measured: conditions[agencies][] with a name the model produces answers
+    // HTTP 400, and the API's own slug answers 0 — presidential documents are
+    // not attributed to agencies at all. Applied to every rung it turned a
+    // working search into an empty one whenever the interpretation happened to
+    // name a department.
+    stub({ intent: { ...GOOD_INTENT, agencies: ["Department of Health and Human Services"] } });
+    return searchExecutiveDocuments(QUESTION, 10).then(() => {
+      for (const url of asked) {
+        expect(new URL(url).searchParams.getAll("conditions[agencies][]")).toHaveLength(0);
+      }
+    });
   });
 
   test("never sends an empty query", () => {
@@ -202,4 +237,61 @@ describe("the query ladder", () => {
     expect(ladder).toHaveLength(1);
     expect(ladder[0]!.term).toBe("the thing about the thing");
   });
+});
+
+/**
+ * A search box cannot wait for a model that is still thinking.
+ *
+ * THE OUTAGE THIS PINS. There was no timeout on the model call — none, on any
+ * path. Live judicial search returned 502 "Application failed to respond"
+ * after 36 seconds while the server sat healthy, the queue empty, and the log
+ * silent: nothing had failed, it was still waiting. The model had been handed
+ * a twelve-thousand-token allowance to reason over what is a short JSON
+ * extraction, and was using it.
+ *
+ * Two bounds now, both necessary. A ceiling on how long we wait, and a much
+ * smaller allowance to think with on an interactive path. Underneath both sits
+ * a real fallback: the reader's own words, searched plainly.
+ */
+describe("a slow model does not hang the search", () => {
+  test("interpretation gives up and search still answers", async () => {
+    asked = [];
+    let intentAborted = false;
+
+    globalThis.fetch = (async (
+      input: Parameters<typeof fetch>[0],
+      init?: RequestInit,
+    ) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        // A model that never answers. Without a ceiling this is the 502.
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            intentAborted = true;
+            const timedOut = new Error("The operation timed out.");
+            timedOut.name = "TimeoutError";
+            reject(timedOut);
+          });
+        });
+      }
+
+      if (url.includes("federalregister.gov")) {
+        asked.push(url);
+        return Response.json(rawProse);
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const output = await searchExecutiveDocuments(QUESTION, 10);
+
+    // The request was cut off rather than waited on...
+    expect(intentAborted).toBe(true);
+    // ...and the reader still got a search, run on their own words.
+    expect(output.intent.interpreted).toBe(false);
+    expect(asked.length).toBeGreaterThan(0);
+    expect(output.results.length).toBeGreaterThan(0);
+    // Longer than the 8s ceiling the code enforces, so this measures the
+    // code's timeout rather than the runner's.
+  }, 20_000);
 });
