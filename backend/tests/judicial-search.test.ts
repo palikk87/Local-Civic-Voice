@@ -32,6 +32,7 @@ import { plainIntent } from "../src/services/search-intent";
 import rawProse from "./fixtures/cl-search-raw-prose.json";
 import phraseAllCourts from "./fixtures/cl-search-phrase.json";
 import phraseScotus from "./fixtures/cl-search-phrase-scotus.json";
+import phoneFamily from "./fixtures/cl-search-phone-privacy-family.json";
 
 const realFetch = globalThis.fetch;
 const QUESTION = "can the government make you get a vaccine";
@@ -220,5 +221,105 @@ describe("the judicial ladder", () => {
     expect(scotus).toBeDefined();
     expect(all).toBeDefined();
     expect(scotus!.weight).toBeGreaterThan(all!.weight);
+  });
+});
+
+/**
+ * The bar is a plain Google search.
+ *
+ * Asked "scotus case about cell phone privacy", Google's overview names three
+ * cases: Chatrie v. United States (June 2026, geofence warrants), Carpenter v.
+ * United States (2018, cell-site records) and Riley v. California (2014,
+ * searching a phone on arrest).
+ *
+ * The first version of this search found two of them and buried the third, for
+ * two separate reasons — both fixed here, both provable against the recorded
+ * response in cl-search-phone-privacy-family.json.
+ */
+describe("matching what a plain web search returns", () => {
+  const familyIntent = {
+    topic: "cell phone privacy",
+    // The doctrinal FAMILY, not the single most precise term. Asking only for
+    // "cell site location information" reaches Carpenter and Chatrie and misses
+    // Riley entirely, because Riley is decided under a different doctrine with
+    // different words.
+    phrases: [
+      "cell site location information",
+      "geofence warrant",
+      "search incident to arrest",
+      "cell phone",
+      "digital data",
+    ],
+    terms: ["privacy", "warrant", "fourth amendment"],
+    caseNames: [],
+    bills: [],
+    agencies: [],
+    presidentialOnly: false,
+    from: null,
+    to: null,
+  };
+
+  function stubFamily(): void {
+    asked = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return Response.json({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(familyIntent) }] } }],
+        });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        return Response.json(phoneFamily);
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+  }
+
+  test("all three cases a web search names come back", async () => {
+    stubFamily();
+    const output = await searchJudicialOpinions("scotus case about cell phone privacy", 10);
+    const names = output.results.map((r) => r.case_name);
+
+    expect(names.some((n) => n.includes("Chatrie"))).toBe(true);
+    expect(names.some((n) => n.includes("Carpenter"))).toBe(true);
+    expect(names.some((n) => n.includes("Riley"))).toBe(true);
+  });
+
+  test("this term's ruling is not buried by a landmark's citation count", async () => {
+    // THE DEFECT THIS PINS, and it was mine. Prominence was citation count
+    // alone, defended on the grounds that a 1905 opinion can be today's
+    // controlling law. True, and it buries every ruling handed down this term:
+    //
+    //   Riley v. California   2014, 1,311 citations
+    //   Carpenter v. US       2018, 1,222 citations
+    //   Chatrie v. US         2026,     0 citations
+    //
+    // A case has no citations for exactly the reason it is news. Chatrie is
+    // what a person asking this question today wants, and it finished 40 points
+    // behind. Recency now earns credit on a curve that decays over three years.
+    stubFamily();
+    const output = await searchJudicialOpinions("scotus case about cell phone privacy", 10);
+    const names = output.results.map((r) => r.case_name);
+
+    // Chatrie now leads, ahead of Riley and Carpenter — the same three cases a
+    // plain web search names, in the order it names them. Before this it sat
+    // fourth, behind Birchfield v. North Dakota: a drunk-driving blood-test
+    // case that matched "search incident to arrest" and has had ten years to
+    // accumulate citations.
+    expect(names[0]).toContain("Chatrie");
+    expect(names.findIndex((n) => n.includes("Birchfield"))).toBeGreaterThan(
+      names.findIndex((n) => n.includes("Chatrie")),
+    );
+  });
+
+  test("naming the branch is not part of the topic", async () => {
+    // "scotus case about cell phone privacy" — the first two words say WHERE to
+    // look, not WHAT to look for. Left in the topic, the fallback searches
+    // opinions for the word "scotus", which appears in none of them.
+    const bare = plainIntent("scotus case about cell phone privacy", "judicial");
+    expect(bare.topic).toBe("cell phone privacy");
+    expect(bare.terms).not.toContain("scotus");
+    expect(bare.terms).not.toContain("case");
   });
 });

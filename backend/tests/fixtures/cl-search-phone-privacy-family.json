@@ -1,0 +1,133 @@
+{
+ "count": 88,
+ "results": [
+  {
+   "cluster_id": 2680439,
+   "caseName": "Riley v. Cal. United States",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2014-06-25",
+   "docketNumber": "13-132",
+   "absolute_url": "/opinion/2680439/riley-v-cal-united-states/",
+   "citeCount": 1311,
+   "opinions": [
+    {
+     "id": 2680439,
+     "snippet": "\n\n\n\n   Chief Justice ROBERTS delivered the opinion of the Court.\n  \n\n\n  These two cases raise a common question: whether the police may, without a war"
+    }
+   ]
+  },
+  {
+   "cluster_id": 10881683,
+   "caseName": "Chatrie v. United States",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2026-06-29",
+   "docketNumber": "25-112",
+   "absolute_url": "/opinion/10881683/chatrie-v-united-states/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 11349205,
+     "snippet": "(Slip Opinion)              OCTOBER TERM, 2025                                       1\n\n                                       Syllabus\n\n         NOTE"
+    }
+   ]
+  },
+  {
+   "cluster_id": 4512666,
+   "caseName": "Carpenter v. United States",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2018-06-29",
+   "docketNumber": "16-402",
+   "absolute_url": "/opinion/4512666/carpenter-v-united-states/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 4289919,
+     "snippet": "  Summary\n  6/29/2018 10:04:24 AM\n\n\n  Differences exist between documents.\n\n      New Document:                    Old Document:\n      16-402_new     "
+    }
+   ]
+  },
+  {
+   "cluster_id": 4510032,
+   "caseName": "Carpenter v. United States",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2018-06-22",
+   "docketNumber": "16-402",
+   "absolute_url": "/opinion/4510032/carpenter-v-united-states/",
+   "citeCount": 1222,
+   "opinions": [
+    {
+     "id": 4287285,
+     "snippet": "(Slip Opinion)              OCTOBER TERM, 2017                                       1\n\n                                       Syllabus\n\n         NOTE"
+    }
+   ]
+  },
+  {
+   "cluster_id": 3216497,
+   "caseName": "Birchfield v. N. Dakota. William Robert Bernard",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2016-06-23",
+   "docketNumber": "14–1468; 14–1470; 14–1507.",
+   "absolute_url": "/opinion/3216497/birchfield-v-n-dakota-william-robert-bernard/",
+   "citeCount": 1446,
+   "opinions": [
+    {
+     "id": 3216391,
+     "snippet": "\n\n\n  Justice ALITOdelivered the opinion of the Court.\n \n\n  Drunk drivers take a grisly toll on the Nation's roads, claiming thousands of lives, injuri"
+    }
+   ]
+  },
+  {
+   "cluster_id": 145887,
+   "caseName": "Arizona v. Gant",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2009-04-21",
+   "docketNumber": "07-542",
+   "absolute_url": "/opinion/145887/arizona-v-gant/",
+   "citeCount": 2758,
+   "opinions": [
+    {
+     "id": 9435359,
+     "snippet": "\n*335Justice Stevens\ndelivered the opinion of the Court.\nAfter Rodney Gant was arrested for driving with a suspended license, handcuffed, and locked i"
+    }
+   ]
+  },
+  {
+   "cluster_id": 2769806,
+   "caseName": "T-Mobile South, LLC v. City of Roswell",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2015-01-14",
+   "docketNumber": "13-975",
+   "absolute_url": "/opinion/2769806/t-mobile-south-llc-v-city-of-roswell/",
+   "citeCount": 352,
+   "opinions": [
+    {
+     "id": 9805669,
+     "snippet": "\nJustice SOTOMAYORdelivered the opinion of the Court.\nThe Telecommunications Act of 1996 provides, in relevant part, that \"[a]ny decision by a State o"
+    }
+   ]
+  },
+  {
+   "cluster_id": 4765904,
+   "caseName": "Barr v. American Assn. of Political Consultants, Inc.",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2020-07-06",
+   "docketNumber": "19-631",
+   "absolute_url": "/opinion/4765904/barr-v-american-assn-of-political-consultants-inc/",
+   "citeCount": 262,
+   "opinions": [
+    {
+     "id": 4546251,
+     "snippet": "\n\n\n  B\n \n\n  Plaintiffs next focus on ordinary severability principles. Applying those principles, the question before the Court is whether (i) to inva"
+    }
+   ]
+  }
+ ]
+}

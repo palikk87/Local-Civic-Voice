@@ -185,9 +185,41 @@ function score(
     if (haystack.includes(term.toLowerCase())) relevance += 5;
   }
 
+  // PROMINENCE = long-run weight + being current, and it needs both.
+  //
+  // Citations alone was the first version of this, defended on the grounds
+  // that a 1905 opinion can be today's controlling law. True — and it buries
+  // every ruling handed down this term, because a case has no citations for
+  // the same reason it is news: nobody has had time to cite it yet.
+  //
+  // Measured on the query that exposed it. "cell phone privacy":
+  //   Riley v. California      2014, 1,311 citations
+  //   Carpenter v. US          2018, 1,222 citations
+  //   Chatrie v. US            2026,     0 citations
+  //
+  // Chatrie is the case a person asking that question today most wants, and on
+  // citations it finished behind Birchfield v. North Dakota — a drunk-driving
+  // blood-test case that matched "search incident to arrest" and has had ten
+  // years to be cited.
+  //
+  // So a recent decision earns credit for being recent, decaying over three
+  // years: long enough to carry a ruling until it starts accumulating
+  // citations of its own. The ceiling is set slightly ABOVE the citation
+  // ceiling on purpose. When a court has just decided the exact question
+  // somebody is asking, that ruling IS the answer and a heavily cited
+  // predecessor is context — which is the order a plain web search puts them
+  // in, and the order a citizen expects.
+  //
+  // It can only ever reorder. Currency is prominence: a case still has to have
+  // matched the query to be in the list at all.
   const cites = cluster.citeCount ?? 0;
-  const prominence =
-    (cluster.court_id === "scotus" ? 30 : 0) + Math.min(40, Math.round(Math.log10(cites + 1) * 20));
+  const standing = Math.min(40, Math.round(Math.log10(cites + 1) * 20));
+
+  const filed = Date.parse(result.date_filed || "");
+  const ageYears = Number.isFinite(filed) ? (Date.now() - filed) / (365.25 * 86_400_000) : 99;
+  const currency = ageYears <= 3 ? Math.round(45 * (1 - ageYears / 3)) : 0;
+
+  const prominence = (cluster.court_id === "scotus" ? 30 : 0) + standing + currency;
 
   return relevance + prominence;
 }

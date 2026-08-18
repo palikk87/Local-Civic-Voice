@@ -116,6 +116,11 @@ const FILLER = new Set([
   "legislation", "make", "me", "my", "of", "on", "or", "our", "protect", "protecting", "that",
   "the", "there", "they", "thing", "things", "to", "us", "was", "what", "when", "where",
   "which", "who", "why", "will", "with", "you", "your",
+  // Naming the branch is how a reader says WHERE to look, not WHAT to look
+  // for. Left in, "scotus case about cell phone privacy" searches opinions for
+  // the word "scotus" — which appears in none of them.
+  "case", "cases", "court", "courts", "decision", "justice", "opinion", "order", "orders",
+  "president", "presidential", "ruling", "scotus", "supreme",
 ]);
 
 /**
@@ -181,7 +186,7 @@ function branchInstructions(branch: SearchBranch): string {
     case "judicial":
       return `This search is for SUPREME COURT OPINIONS.
 
-- "phrases": the legal terms of art an opinion would actually contain. This matters more here than anywhere else: a reader asks "can the government make you get a vaccine" and the opinion says "compulsory vaccination". Translate the question into the language of the ruling.
+- "phrases": the legal terms of art an opinion would actually contain, and ALL of the ones that matter. This matters more here than anywhere else, twice over. First, a reader asks "can the government make you get a vaccine" and the opinion says "compulsory vaccination" — translate the question into the language of the ruling. Second, the answer to a citizen's question is usually a LINE of cases decided under different doctrines, so list the vocabulary of each: give the phrases that reach the older landmark AND the ones that reach the recent decision.
 - "caseNames": up to 5 case names the query plausibly refers to, ONLY ones you are confident exist ("Jacobson v. Massachusetts"). Each is checked against CourtListener and dropped if it is not found.
 - Leave "bills", "agencies" and "presidentialOnly" empty.`;
   }
@@ -205,7 +210,14 @@ Return JSON only:
 }
 
 - topic: 2-6 lowercase keywords naming the actual policy subject. Fix spelling ("isreal" -> "israel"). Drop filler and question words. Restate slang or news phrasing in the words an official document would use.
-- phrases: 1-4 SHORT phrases (2-4 words) likely to appear VERBATIM in the official text. These are quoted into the search, so a phrase that never occurs returns nothing — prefer the plain formal term over an elaborate one. [] if you cannot think of a real one.
+- phrases: 2-6 SHORT phrases (2-4 words) likely to appear VERBATIM in the official text. These are quoted into ONE search and combined with OR, so more of them widens the net at no cost — but every one must be wording that really occurs, because a phrase nobody writes contributes nothing.
+
+  GIVE THE WHOLE FAMILY, NOT THE SINGLE BEST TERM. One question usually spans
+  several doctrines and each has its own vocabulary. "cell phone privacy" is
+  "cell site location information" AND "geofence warrant" AND "search incident
+  to arrest" AND "digital data" — four phrases that between them reach every
+  leading case; any one alone reaches a third of them. Naming only the most
+  precise term is the most common way to miss the document a person wanted.
 - terms: 3-8 single keywords for ranking. Include the obvious ones.
 - from / to: "yyyy-mm-dd" ONLY if the user named a time period, else null.
 
@@ -267,7 +279,7 @@ export async function interpretSearch(
     branch,
     raw: query,
     topic: clean(parsed.topic) || fallback.topic,
-    phrases: strings(parsed.phrases, 4),
+    phrases: strings(parsed.phrases, 8),
     // The user's own words are always in the ranking terms. A model that
     // rewrites the topic beyond recognition must not be able to make the thing
     // somebody actually typed count for nothing.
