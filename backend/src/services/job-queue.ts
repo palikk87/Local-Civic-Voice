@@ -13,6 +13,7 @@ export enum JobType {
   SYNC_GOVERNMENT_DATA = "SYNC_GOVERNMENT_DATA",
   GENERATE_REFERENCE_BRIEF = "GENERATE_REFERENCE_BRIEF",
   SYNC_REFERENCE_LINEAGE = "SYNC_REFERENCE_LINEAGE",
+  REEXTRACT_REFERENCE_TEXT = "REEXTRACT_REFERENCE_TEXT",
 }
 
 // Priority levels
@@ -94,6 +95,15 @@ export interface SyncGovernmentDataData {
   trigger: string;
 }
 
+/**
+ * Re-pull one record's official text after a retrieval fix, without saying the
+ * law changed. See the endpoint that queues these for why that distinction is
+ * the whole point.
+ */
+export interface ReextractReferenceTextData {
+  referenceId: string;
+}
+
 export interface GenerateReferenceBriefData {
   referenceId: string;
   force?: boolean;
@@ -123,6 +133,7 @@ export type JobDataMap = {
   [JobType.UPDATE_TRENDING]: UpdateTrendingData;
   [JobType.SYNC_GOVERNMENT_DATA]: SyncGovernmentDataData;
   [JobType.GENERATE_REFERENCE_BRIEF]: GenerateReferenceBriefData;
+  [JobType.REEXTRACT_REFERENCE_TEXT]: ReextractReferenceTextData;
   [JobType.SYNC_REFERENCE_LINEAGE]: SyncReferenceLineageData;
 };
 
@@ -383,6 +394,7 @@ export class JobQueue {
       [JobType.SYNC_GOVERNMENT_DATA]: 0,
     [JobType.SYNC_REFERENCE_LINEAGE]: 0,
       [JobType.GENERATE_REFERENCE_BRIEF]: 0,
+      [JobType.REEXTRACT_REFERENCE_TEXT]: 0,
     };
 
     const jobsByPriority: Record<JobPriority, number> = {

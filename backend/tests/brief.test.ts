@@ -764,3 +764,103 @@ describe("a record briefed under the old definition", () => {
     expect(briefState(before)).not.toBe("ready");
   });
 });
+
+/**
+ * Fixing our own retrieval is not the government amending anything.
+ *
+ * THE HAZARD THIS CLOSES. When a retrieval bug is repaired, every affected
+ * record pulls text that differs from what is stored — and by every ordinary
+ * measure that reads as the law changing. It is not. The Federal Register did
+ * not reissue an order because we stopped storing the page header above it, and
+ * Congress did not re-pass a bill because we stopped serving the introduced
+ * draft of it.
+ *
+ * Left alone, shipping the fix would increment lawVersion on every record,
+ * badge every post that shared one as "updated since this was posted", and
+ * notify everyone who shared it: a false statement about the government,
+ * delivered to every user at once, caused by us fixing our own defect.
+ */
+describe("re-extracting text after a retrieval fix", () => {
+  /** A record already holding text and a brief written for it. */
+  async function settled() {
+    const row = await record({
+      fullText: OFFICIAL_TEXT,
+      fullTextHash: hashText(OFFICIAL_TEXT),
+      fullTextSource: "congress.gov/text",
+      sourceCheckedAt: new Date(),
+      citizenBriefJson: JSON.stringify({ format: 2, ...BRIEF }),
+      citizenBriefVersion: 1,
+      lawVersion: 1,
+      contentStatus: "ready",
+    });
+    return row;
+  }
+
+  test("replaces the text without saying the law moved", async () => {
+    const row = await settled();
+    // The better extraction returns different bytes for the same law.
+    stubNetwork({ text: AMENDED_TEXT });
+
+    await ensureReferenceContent(row.id, { reextract: true, generateBriefInline: true });
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: row.id },
+      select: {
+        fullText: true,
+        lawVersion: true,
+        lawChangedAt: true,
+        citizenBriefJson: true,
+        citizenBriefVersion: true,
+      },
+    });
+
+    // The text is the new one.
+    expect(after.fullText).toBe(AMENDED_TEXT);
+
+    // And nothing anywhere says the law changed.
+    expect(after.lawVersion).toBe(1);
+    expect(after.lawChangedAt).toBeNull();
+    expect(await prisma.notification.count({ where: { type: "law_update" } })).toBe(0);
+
+    // The brief was rewritten, because the one on the record described the old
+    // extraction — and it is pinned to the version the law is still on.
+    expect(parseBrief(after.citizenBriefJson)).not.toBeNull();
+    expect(after.citizenBriefVersion).toBe(1);
+  });
+
+  test("an ordinary re-pull of the same change DOES say the law moved", async () => {
+    // The negative control, in the suite rather than in my shell: without the
+    // flag this is a version bump. That difference is the whole feature.
+    const row = await settled();
+    stubNetwork({ text: AMENDED_TEXT });
+
+    await ensureReferenceContent(row.id, { force: true, generateBriefInline: true });
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: row.id },
+      select: { lawVersion: true, lawChangedAt: true, citizenBriefVersion: true },
+    });
+
+    expect(after.lawVersion).toBe(2);
+    expect(after.lawChangedAt).not.toBeNull();
+    expect(after.citizenBriefVersion).toBe(2);
+  });
+
+  test("a record whose text was already right is left completely alone", async () => {
+    const row = await settled();
+    // Same text back: nothing about this record was broken.
+    stubNetwork({ text: OFFICIAL_TEXT });
+
+    await ensureReferenceContent(row.id, { reextract: true, generateBriefInline: true });
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: row.id },
+      select: { lawVersion: true, citizenBriefVersion: true, citizenBriefJson: true },
+    });
+
+    expect(after.lawVersion).toBe(1);
+    expect(after.citizenBriefVersion).toBe(1);
+    // Not rewritten, so not paid for again.
+    expect(modelCalls).toHaveLength(0);
+  });
+});

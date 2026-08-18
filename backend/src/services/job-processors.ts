@@ -14,10 +14,11 @@ import {
   type UpdateTrendingData,
   type SyncGovernmentDataData,
   type GenerateReferenceBriefData,
+  type ReextractReferenceTextData,
   type SyncReferenceLineageData,
 } from "./job-queue";
 import { syncGovernmentData } from "./government-sync";
-import { processReferenceBrief } from "./reference-content";
+import { ensureReferenceContent, processReferenceBrief } from "./reference-content";
 import { retireStaleCandidates, syncAllLineage, syncLineageFor } from "./reference-lineage";
 import { metricsCache, trendingCache, cacheKey } from "./cache";
 
@@ -404,6 +405,27 @@ async function processGenerateReferenceBrief(data: GenerateReferenceBriefData): 
 }
 
 /**
+ * Re-pull one record's official text after a retrieval fix.
+ *
+ * The text is replaced and the brief is rewritten from it, but lawVersion is
+ * left where it was: fixing our own extraction is not the government amending
+ * anything, and saying otherwise badges every post that shared the record and
+ * notifies everyone who did.
+ *
+ * The brief is written inline here rather than queued behind another job,
+ * because the queue is already the thing running this — and with the whole
+ * pull budgeted generously, CourtListener's five-a-minute ceiling has room to
+ * be waited out.
+ */
+async function processReextractReferenceText(data: ReextractReferenceTextData): Promise<void> {
+  await ensureReferenceContent(data.referenceId, {
+    reextract: true,
+    deadlineMs: 120_000,
+    generateBriefInline: true,
+  });
+}
+
+/**
  * Ask congress.gov which stored records are really the same law.
  *
  * Only "Identical bill" — a Library of Congress analyst's confirmation that two
@@ -431,6 +453,7 @@ export function initializeProcessors(): void {
   jobQueue.registerProcessor(JobType.UPDATE_TRENDING, processUpdateTrending);
   jobQueue.registerProcessor(JobType.SYNC_GOVERNMENT_DATA, processSyncGovernmentData);
   jobQueue.registerProcessor(JobType.GENERATE_REFERENCE_BRIEF, processGenerateReferenceBrief);
+  jobQueue.registerProcessor(JobType.REEXTRACT_REFERENCE_TEXT, processReextractReferenceText);
   jobQueue.registerProcessor(JobType.SYNC_REFERENCE_LINEAGE, processSyncReferenceLineage);
 
   console.log("[JobProcessor] All processors registered successfully");

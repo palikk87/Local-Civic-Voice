@@ -12,7 +12,7 @@ import { purgeMediaObjects } from "../services/media-objects";
 import { mergeReferences } from "../services/deduplication-service";
 import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
-import { JobPriority, enqueueLineageSync } from "../services/job-queue";
+import { JobPriority, JobType, enqueueLineageSync, jobQueue } from "../services/job-queue";
 import { officialSources } from "../services/reference-content";
 
 // ==========================================
@@ -1220,6 +1220,78 @@ adminRouter.delete("/b2b-clients/:id", zValidator("param", idParamSchema), async
   );
 
   return c.json({ success: true, revokedSessions: revoked });
+});
+
+/**
+ * POST /api/admin/reextract-content
+ *
+ * Re-pull official text for every live record, after a retrieval fix.
+ *
+ * WHY THIS IS NOT JUST `force`. When a retrieval bug is repaired, the text that
+ * comes back differs from what is stored for every affected record — and by
+ * every ordinary measure that reads as the law changing. It is not. The Federal
+ * Register did not reissue an order because we stopped storing the page header
+ * above it, and Congress did not re-pass a bill because we stopped serving the
+ * introduced draft of it.
+ *
+ * A plain force would increment lawVersion on all of them, badge every post
+ * that shared one as "updated since this was posted", and notify everyone who
+ * shared it. That is a false statement about the government, delivered to every
+ * user at once, caused by us fixing our own defect.
+ *
+ * So this replaces the text, leaves the version alone, and invalidates the
+ * stored brief — which does have to be rewritten, because a brief written from
+ * the old extraction described a page header rather than a law.
+ *
+ * Superadmin only, and it costs real requests to three government APIs. The
+ * work is queued rather than done in the request: CourtListener allows five
+ * calls a minute, so the judicial branch alone can take longer than any
+ * reasonable HTTP timeout.
+ */
+adminRouter.post("/reextract-content", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Superadmin required." }, { status: 403 });
+  }
+
+  const referenceType = c.req.query("referenceType");
+
+  const records = await prisma.governmentReference.findMany({
+    where: {
+      mergedIntoId: null,
+      ...(referenceType ? { referenceType } : {}),
+    },
+    select: { id: true, masterReferenceId: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  for (const record of records) {
+    jobQueue.enqueue(
+      JobType.REEXTRACT_REFERENCE_TEXT,
+      { referenceId: record.id },
+      JobPriority.LOW
+    );
+  }
+
+  createActivityLog(
+    "reextract_content",
+    session.adminId,
+    session.username,
+    "system",
+    referenceType ?? "all",
+    `Queued re-extraction of official text for ${records.length} record(s)`
+  );
+
+  return c.json({
+    queued: records.length,
+    referenceType: referenceType ?? "all",
+    message:
+      "Official text will be re-pulled and briefs rewritten. No law is marked as changed, " +
+      "so nobody is notified and no post is badged.",
+  });
 });
 
 /**

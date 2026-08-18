@@ -40,6 +40,26 @@ export interface EnsureContentOptions {
    * false → hand the brief to the job queue so the reader isn't kept waiting.
    */
   generateBriefInline?: boolean;
+  /**
+   * This run is fixing OUR extraction, not following the law.
+   *
+   * When a retrieval bug is repaired, every affected record pulls text that
+   * differs from what is stored — and by every ordinary measure that is the law
+   * changing. It is not. The Federal Register did not reissue an order because
+   * we stopped storing the page header above it, and Congress did not re-pass a
+   * bill because we stopped serving the introduced draft of it.
+   *
+   * Treating it as a change would increment lawVersion, badge every post that
+   * shared the record as "updated since this was posted", and notify everyone
+   * who shared it. That is a false statement about the government, sent to
+   * every user at once, caused by us fixing our own defect.
+   *
+   * So under this flag the text is replaced and the version is left alone —
+   * but the stored brief is invalidated, because a brief written from the old
+   * extraction described a page header rather than a law and must not be served
+   * again.
+   */
+  reextract?: boolean;
 }
 
 export type ContentStatus = "ready" | "brief_pending" | "fetching" | "unavailable";
@@ -928,7 +948,12 @@ export async function ensureReferenceContent(
 }
 
 async function runEnsure(referenceId: string, options: EnsureContentOptions): Promise<void> {
-  const { force = false, deadlineMs = 8_000, generateBriefInline = false } = options;
+  const {
+    force = false,
+    deadlineMs = 8_000,
+    generateBriefInline = false,
+    reextract = false,
+  } = options;
   const deadlineAt = Date.now() + deadlineMs;
 
   const ref = (await prisma.governmentReference.findUnique({
@@ -941,7 +966,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
   const textMissing = !ref.fullText;
   const dueForRecheck =
     !ref.sourceCheckedAt || Date.now() - ref.sourceCheckedAt.getTime() > SOURCE_RECHECK_MS;
-  const shouldFetchText = force || textMissing || dueForRecheck;
+  const shouldFetchText = force || reextract || textMissing || dueForRecheck;
 
   let textChanged = false;
   let current = ref;
@@ -974,7 +999,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
         // A first pull is not a change. The law did not move; we simply did not
         // have it yet, and badging every post on a record whose text we just
         // fetched for the first time would be a lie told at scale.
-        const lawMoved = textChanged && ref.fullTextHash !== null;
+        const lawMoved = textChanged && ref.fullTextHash !== null && !reextract;
 
         // Stored copy is outdated (or absent) — the master reference takes the new text.
         await prisma.governmentReference.update({
@@ -987,6 +1012,9 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
             fullTextAt: now,
             sourceCheckedAt: now,
             ...(lawMoved ? { lawChangedAt: now, lawVersion: { increment: 1 } } : {}),
+            // The law is where it was; the brief that described the old
+            // extraction is not usable and must be written again.
+            ...(reextract ? { citizenBriefVersion: null } : {}),
           },
         });
         // Carry the incremented version forward. The brief written below is
@@ -999,6 +1027,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
           fullTextHash: hash,
           fullTextUrl: fetched.url,
           lawVersion: lawMoved ? ref.lawVersion + 1 : ref.lawVersion,
+          ...(reextract ? { citizenBriefVersion: null } : {}),
         };
         console.log(
           `[RefContent] Text ${textMissing ? "pulled" : "refreshed"} for ${ref.masterReferenceId} from ${fetched.source}`
