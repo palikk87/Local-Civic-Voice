@@ -1,0 +1,18 @@
+{
+  "count": "https://www.courtlistener.com/api/rest/v4/opinions/?cluster=9986254&count=on",
+  "results": [
+    {
+      "id": 10452863,
+      "type": "010combined",
+      "ordering_key": null,
+      "plain_text": "(Slip Opinion)              OCTOBER TERM, 2023                                       1\n\n                                       Syllabus\n\n         NOTE: Where it is feasible, a syllabus (headnote) will be released, as is\n       being done in connection with this case, at the time the opinion is issued.\n       The syllabus constitutes no part of the opinion of the Court but has been\n       prepared by the Reporter of Decisions for the convenience of the reader.\n       See United States v. Detroit Timber & Lumber Co., 200 U. S. 321, 337.\n\n\nSUPREME COURT OF THE UNITED STATES\n\n                                       Syllabus\n\n LOPER BRIGHT ENTERPRISES ET AL. v. RAIMONDO,\n       SECRETARY OF COMMERCE, ET AL.\n\nCERTIORARI TO THE UNITED STATES COURT OF APPEALS FOR\n          THE DISTRICT OF COLUMBIA CIRCUIT\n\n    No. 22–451.      Argued January 17, 2024—Decided June 28, 2024*\nThe Court granted certiorari in these cases limited to the question\n  whether Chevron U. S. A. Inc. v. Natural Resources Defense Council,\n  Inc., 467 U. S. 837, should be overruled or clarified. Under the Chev-\n  ron doctrine, courts have sometimes been required to defer to “permis-\n  sible” agency interpretations of the statutes those agencies adminis-\n  ter—even when a reviewing court reads the statute differently. Id., at\n  843. In each case below, the reviewing courts applied Chevron’s frame-\n  work to resolve in ",
+      "html": "",
+      "html_with_citations": "<pre class=\"inline\">(Slip Opinion)              OCTOBER TERM, 2023                                       1\n\n                                       Syllabus\n\n         NOTE: Where it is feasible, a syllabus (headnote) will be released, as is\n       being done in connection with this case, at the time ",
+      "html_lawbox": "",
+      "html_columbia": "",
+      "html_anon_2020": "",
+      "xml_harvard": "",
+      "download_url": "https://www.supremecourt.gov/opinions/23pdf/22-451_7m58.pdf"
+    }
+  ]
+}

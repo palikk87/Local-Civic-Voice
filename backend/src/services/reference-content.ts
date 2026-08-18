@@ -328,50 +328,238 @@ async function fetchExecutiveOrderText(
   return null;
 }
 
-async function fetchScotusText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
-  const apiKey = process.env.COURTLISTENER_API_KEY;
-  const docket = ref.masterReferenceId.replace(/^scotus-/i, "");
-  const authHeaders: Record<string, string> = apiKey ? { Authorization: `Token ${apiKey}` } : {};
+// ---------------------------------------------------------------------------
+// Judicial — CourtListener
+// ---------------------------------------------------------------------------
+//
+// Each branch gets its own retrieval, because each source is built differently
+// and one shared protocol fits none of them. This is the judicial one.
+//
+// WHAT COURTLISTENER ACTUALLY DOES, measured rather than assumed:
+//
+//   /api/rest/v4/search/      answers 200 with NO token
+//   /api/rest/v4/opinions/…   answers 401 with no token
+//   the public courtlistener.com opinion page answers 202 with a ~2KB
+//     bot-check interstitial and no opinion in it
+//
+// So the whole judicial branch stands on COURTLISTENER_API_KEY. Search working
+// without one is a trap: the case is found, the text is refused, and the
+// "fallback" to the public page collects an interstitial that is not a ruling.
+// There is no unauthenticated path to a Supreme Court opinion here, and
+// pretending otherwise is what made this look like an unpublished-text problem.
+//
+// AND IT IS ADDRESSED BY CLUSTER, NOT BY DOCKET NUMBER. A CourtListener
+// "cluster" is one decision; its sub-opinions are the majority, the
+// concurrences and the dissents. The cluster id is already sitting in the
+// sourceUrl we stored at sync time (…/opinion/9986254/loper-bright…/), so the
+// text is one hop away. Re-deriving the case from a docket-number search is a
+// guess we do not need to make — it is kept only for a record whose stored URL
+// predates this and carries no id.
 
-  // Source 1: CourtListener v4 — find the opinion cluster for this docket, then its text.
-  if (apiKey) {
-    const search = await fetchJson<{
-      results?: Array<{ opinions?: Array<{ id?: number }>; id?: number }>;
-    }>(
-      `https://www.courtlistener.com/api/rest/v4/search/?type=o&court=scotus&docket_number=${encodeURIComponent(docket)}`,
-      deadlineAt,
-      authHeaders
-    );
+/** Opinion text, in the order of preference CourtListener actually populates. */
+interface CourtListenerOpinion {
+  id?: number;
+  type?: string;
+  ordering_key?: number | null;
+  plain_text?: string | null;
+  html_with_citations?: string | null;
+  html?: string | null;
+  html_lawbox?: string | null;
+  html_columbia?: string | null;
+  html_anon_2020?: string | null;
+  xml_harvard?: string | null;
+}
 
-    const opinionIds = (search?.results ?? [])
-      .flatMap((result) => result.opinions?.map((o) => o.id) ?? [])
-      .filter((id): id is number => typeof id === "number");
+/**
+ * The best body this opinion carries.
+ *
+ * Modern opinions come through as `plain_text`. Older ones have no plain text
+ * at all and live in one of the markup columns — reading only two of them, as
+ * this used to, drops those cases with no error anywhere.
+ */
+function opinionBody(opinion: CourtListenerOpinion): string {
+  const plain = opinion.plain_text?.trim();
+  if (plain) return sanitizeOfficialText(plain);
 
-    for (const opinionId of opinionIds.slice(0, 3)) {
-      const opinion = await fetchJson<{
-        plain_text?: string | null;
-        html_with_citations?: string | null;
-      }>(`https://www.courtlistener.com/api/rest/v4/opinions/${opinionId}/`, deadlineAt, authHeaders);
-      const raw = opinion?.plain_text || opinion?.html_with_citations;
-      if (raw) {
-        const text = sanitizeOfficialText(htmlToText(raw));
-        if (text.length > 200) {
-          return {
-            text,
-            source: "courtlistener/v4",
-            url: `https://www.courtlistener.com/api/rest/v4/opinions/${opinionId}/`,
-          };
+  const markup =
+    opinion.html_with_citations ||
+    opinion.html ||
+    opinion.html_lawbox ||
+    opinion.html_columbia ||
+    opinion.html_anon_2020 ||
+    opinion.xml_harvard ||
+    "";
+  return markup ? sanitizeOfficialText(htmlToText(markup)) : "";
+}
+
+/**
+ * "030concurrence" → "Concurrence". CourtListener prefixes a sort key to the
+ * type; the digits order the opinions and the word says what each one is.
+ */
+function opinionLabel(type: string | undefined): string {
+  const word = (type ?? "").replace(/^\d+/, "").trim();
+  if (!word || word === "combined") return "Opinion";
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+/**
+ * Every opinion in the decision, joined, labelled, in the court's own order.
+ *
+ * A ruling is not only the majority. The dissent is the strongest statement of
+ * the case against, written by justices who heard the same argument — leaving
+ * it out and then asking for "the argument against" invites the model to invent
+ * one. Concurrences narrow what the holding actually decided. All of it is the
+ * text of the decision, so all of it is what gets stored.
+ */
+function joinOpinions(opinions: CourtListenerOpinion[]): string {
+  return [...opinions]
+    .sort((a, b) => (a.ordering_key ?? 0) - (b.ordering_key ?? 0))
+    .map((opinion) => {
+      const body = opinionBody(opinion);
+      return body ? `## ${opinionLabel(opinion.type)}\n\n${body}` : "";
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** The cluster id CourtListener put in the URL we stored: /opinion/9986254/name/ */
+function clusterIdFrom(sourceUrl: string | null): string | null {
+  return sourceUrl?.match(/courtlistener\.com\/opinion\/(\d+)/)?.[1] ?? null;
+}
+
+/**
+ * CourtListener throttles hard — this account is capped at 5 requests a minute,
+ * and the cap is per minute rather than per day:
+ *
+ *   {"detail":"Request was throttled. Rate limit exceeded: 5/min.
+ *              Expected available in 2 seconds."}
+ *
+ * The generic JSON fetch treats that 429 as a dead endpoint and returns null,
+ * which surfaces to the reader as "no official text is published" for a Supreme
+ * Court opinion that is published, sitting in the API, and two seconds away.
+ * Waiting the number of seconds the API itself names is the entire fix.
+ *
+ * This is also why the judicial fetch asks for the cluster directly instead of
+ * searching first: one request per brief instead of four keeps a page of
+ * readers inside a five-per-minute budget.
+ */
+const COURTLISTENER_THROTTLE_RETRIES = 2;
+
+async function fetchCourtListener<T>(
+  url: string,
+  deadlineAt: number,
+  authHeaders: Record<string, string>
+): Promise<T | null> {
+  for (let attempt = 0; attempt <= COURTLISTENER_THROTTLE_RETRIES; attempt++) {
+    const timeout = withDeadline(deadlineAt);
+    if (timeout <= 0) return null;
+    try {
+      const response = await fetch(url, {
+        headers: { Accept: "application/json", ...authHeaders },
+        signal: AbortSignal.timeout(timeout),
+      });
+
+      if (response.status === 429) {
+        const detail = await response.text();
+        const seconds = Number(detail.match(/available in ([\d.]+) second/i)?.[1] ?? 5);
+        const waitMs = Math.ceil(Math.min(seconds, 30) * 1000) + 500;
+        // Only wait if there is still time left to use the answer.
+        if (attempt === COURTLISTENER_THROTTLE_RETRIES || deadlineAt - Date.now() < waitMs + 2_000) {
+          console.warn(`[RefContent] CourtListener throttled and no time left to wait: ${detail.slice(0, 120)}`);
+          return null;
         }
+        console.warn(`[RefContent] CourtListener throttled — waiting ${Math.round(waitMs / 1000)}s as instructed`);
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        continue;
       }
+
+      if (response.status === 401 || response.status === 403) {
+        console.error(
+          `[RefContent] CourtListener rejected COURTLISTENER_API_KEY with HTTP ${response.status}. ` +
+            `The key is set but not accepted, so no Supreme Court opinion can be read.`
+        );
+        return null;
+      }
+
+      if (!response.ok) {
+        console.warn(`[RefContent] CourtListener ${response.status} from ${url.split("?")[0]}`);
+        return null;
+      }
+
+      return (await response.json()) as T;
+    } catch {
+      return null;
     }
   }
+  return null;
+}
 
-  // Source 2: the public CourtListener page for the case.
-  if (ref.sourceUrl) {
-    const text = await fetchDocumentText(ref.sourceUrl, deadlineAt);
-    if (text) return { text, source: "courtlistener/page", url: ref.sourceUrl };
+async function opinionsInCluster(
+  clusterId: string,
+  deadlineAt: number,
+  authHeaders: Record<string, string>
+): Promise<TextResult | null> {
+  const url = `https://www.courtlistener.com/api/rest/v4/opinions/?cluster=${clusterId}`;
+  const data = await fetchCourtListener<{ results?: CourtListenerOpinion[] }>(
+    url,
+    deadlineAt,
+    authHeaders
+  );
+  const text = joinOpinions(data?.results ?? []);
+  if (text.length <= 200) return null;
+  return {
+    text,
+    source: "courtlistener/cluster",
+    url: `https://www.courtlistener.com/opinion/${clusterId}/`,
+  };
+}
+
+export async function fetchScotusText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
+  const apiKey = process.env.COURTLISTENER_API_KEY;
+
+  if (!apiKey) {
+    console.error(
+      `[RefContent] COURTLISTENER_API_KEY is not set. Every Supreme Court opinion needs it: ` +
+        `CourtListener answers 401 on the opinion endpoint without a token, and its public ` +
+        `page serves a bot check rather than the ruling. ${ref.masterReferenceId} is one of them.`
+    );
+    return null;
   }
 
+  const authHeaders = { Authorization: `Token ${apiKey}` };
+
+  // Source 1: straight to the decision, using the cluster id already in hand.
+  const storedCluster = clusterIdFrom(ref.sourceUrl);
+  if (storedCluster) {
+    const found = await opinionsInCluster(storedCluster, deadlineAt, authHeaders);
+    if (found) return found;
+  }
+
+  // Source 2: no usable id on the record — find the case by its docket number,
+  // then take the cluster the search names and read that.
+  const docket = ref.masterReferenceId.replace(/^scotus-/i, "");
+  const search = await fetchCourtListener<{
+    results?: Array<{ cluster_id?: number }>;
+  }>(
+    `https://www.courtlistener.com/api/rest/v4/search/?type=o&court=scotus&docket_number=${encodeURIComponent(docket)}`,
+    deadlineAt,
+    authHeaders
+  );
+
+  for (const result of (search?.results ?? []).slice(0, 3)) {
+    if (result.cluster_id === undefined) continue;
+    if (String(result.cluster_id) === storedCluster) continue;
+    const found = await opinionsInCluster(String(result.cluster_id), deadlineAt, authHeaders);
+    if (found) return { ...found, source: "courtlistener/docket-search" };
+  }
+
+  // Deliberately no HTML-page fallback. It answers 202 with a bot check, which
+  // is not a ruling, and accepting it would store a placeholder as if it were
+  // the law.
+  console.warn(
+    `[RefContent] CourtListener has no opinion text for ${ref.masterReferenceId} ` +
+      `(cluster ${storedCluster ?? "unknown"}, docket "${docket}")`
+  );
   return null;
 }
 
@@ -524,11 +712,23 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
       const hash = hashText(fetched.text);
       textChanged = hash !== ref.fullTextHash;
 
-      if (textChanged) {
+      // Write whenever the row is not already holding this text — which is not
+      // the same question as whether the text CHANGED.
+      //
+      // A row can carry a hash with no text behind it: the column was cleared,
+      // a write was rolled back, a restore brought the metadata and not the
+      // body. On such a row the fetch succeeds, the hash matches, `textChanged`
+      // is false, and the branch below is skipped — so nothing is ever stored,
+      // the brief is refused for want of text, and the next reader repeats the
+      // whole thing. Permanently unavailable, with the source answering 200
+      // every time.
+      const mustStore = textChanged || !ref.fullText;
+
+      if (mustStore) {
         // A first pull is not a change. The law did not move; we simply did not
         // have it yet, and badging every post on a record whose text we just
         // fetched for the first time would be a lie told at scale.
-        const lawMoved = ref.fullTextHash !== null;
+        const lawMoved = textChanged && ref.fullTextHash !== null;
 
         // Stored copy is outdated (or absent) — the master reference takes the new text.
         await prisma.governmentReference.update({

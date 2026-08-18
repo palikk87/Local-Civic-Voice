@@ -1131,11 +1131,43 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
     return c.json({ state: "working", startedAt: after.contentStartedAt?.toISOString() ?? null });
   }
 
+  // Say which step failed, because these are different problems with different
+  // fixes and only one of them is about the law.
+  //
+  // This endpoint used to answer "the official text isn't published anywhere we
+  // can read yet" for every unavailable outcome, including the case where the
+  // full text was sitting in the row and the writer had failed. Read across a
+  // few records that message says the platform cannot reach the government —
+  // which is how a broken brief writer got reported as a broken source, for all
+  // three branches at once, while every source key was valid and working.
+  //
+  // Asked as a length so a multi-megabyte column never crosses the wire to
+  // answer a yes/no question.
+  const rows = await prisma.$queryRaw<Array<{ chars: number }>>`
+    SELECT COALESCE(LENGTH("fullText"), 0)::int AS chars
+    FROM "GovernmentReference" WHERE "id" = ${referenceId}
+  `;
+  const chars = rows[0]?.chars ?? 0;
+
+  if (chars > 0) {
+    return c.json({
+      state: "unavailable",
+      reason:
+        "We have the official text of this document, but the brief could not be written " +
+        "just now. Nothing is guessed at in the meantime — try again shortly.",
+      step: "brief" as const,
+      textChars: chars,
+      sourceUrl: after.fullTextUrl ?? after.sourceUrl,
+    });
+  }
+
   return c.json({
     state: "unavailable",
     reason:
       "The official text for this document isn't published anywhere we can read yet. " +
       "Rather than guess at what it says, we're not writing a brief.",
+    step: "text" as const,
+    textChars: 0,
     sourceUrl: after.fullTextUrl ?? after.sourceUrl,
   });
 });

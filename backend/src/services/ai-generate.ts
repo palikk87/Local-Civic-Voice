@@ -88,6 +88,48 @@ export function providerFor(model: string): AIProvider {
   return MODEL_SPECS[model]?.provider ?? "openai";
 }
 
+/**
+ * Room the model needs to think in, on top of the answer we asked for.
+ *
+ * THE FAILURE THIS EXISTS FOR. Every current model from both providers reasons
+ * before it writes, and the reasoning is billed against the SAME output budget
+ * as the visible answer. Ask for 1200 tokens and the model can spend all 1200
+ * thinking, then stop: the provider returns 200 OK, finish_reason "length", and
+ * an empty string. The caller sees a successful call with no content, fails to
+ * parse JSON out of nothing, and reports "no official text is published" — for
+ * a bill whose text is sitting in the database.
+ *
+ * That is what "none of the citizen briefs are working" looked like from the
+ * outside, across all three branches at once, with every source key valid.
+ *
+ * So callers state the size of the ANSWER they want and this adds the thinking
+ * room. Unused budget is not billed; a truncated brief is.
+ */
+const REASONING_HEADROOM_TOKENS = 12_000;
+
+function requestBudget(requested: number | undefined): number {
+  return (requested ?? 800) + REASONING_HEADROOM_TOKENS;
+}
+
+/**
+ * A 200 with nothing in it is a failure, and has to be reported as one.
+ *
+ * Returning `ok: true` with an empty string sends the emptiness downstream to
+ * whatever parses the response, where it becomes an unexplained null. Naming it
+ * here does two things: the other provider gets tried, and the log says which
+ * model returned nothing and why it stopped.
+ */
+function emptyCompletion(
+  model: string,
+  finishReason: string | null,
+): { ok: false; error: string; status?: number } {
+  const why =
+    finishReason && /length|max_tokens/i.test(finishReason)
+      ? `it stopped at the output limit (${finishReason}) — the reasoning budget consumed the whole allowance`
+      : `it stopped with finish reason "${finishReason ?? "unknown"}"`;
+  return { ok: false, error: `${model} returned an empty completion: ${why}` };
+}
+
 // ---------------------------------------------------------------------------
 // Classification — decided before the first call, from size and type alone
 // ---------------------------------------------------------------------------
@@ -174,7 +216,7 @@ async function generateWithGemini(
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: temperature ?? 0.7,
-          maxOutputTokens: maxCompletionTokens ?? 800,
+          maxOutputTokens: requestBudget(maxCompletionTokens),
           ...(jsonMode ? { responseMimeType: "application/json" } : {}),
         },
       }),
@@ -188,9 +230,18 @@ async function generateWithGemini(
   }
 
   const data = (await response.json()) as {
-    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string }> };
+      finishReason?: string;
+    }>;
   };
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const candidate = data.candidates?.[0];
+  // Gemini splits a long answer across parts; joining them is not optional.
+  const content = (candidate?.content?.parts ?? [])
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
+  if (!content) return emptyCompletion(model, candidate?.finishReason ?? null);
   return { ok: true, content };
 }
 
@@ -212,7 +263,7 @@ async function generateWithOpenAI(
         ...(system ? [{ role: "system", content: system }] : []),
         { role: "user", content: prompt },
       ],
-      max_completion_tokens: maxCompletionTokens ?? 800,
+      max_completion_tokens: requestBudget(maxCompletionTokens),
       ...(omitTemperature ? {} : { temperature: temperature ?? 0.7 }),
       ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
@@ -231,9 +282,11 @@ async function generateWithOpenAI(
   }
 
   const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   };
-  const content = data.choices?.[0]?.message?.content ?? "";
+  const choice = data.choices?.[0];
+  const content = (choice?.message?.content ?? "").trim();
+  if (!content) return emptyCompletion(model, choice?.finish_reason ?? null);
   return { ok: true, content };
 }
 
@@ -307,6 +360,7 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
     return { ok: false, error: "No AI API key configured on server", status: 503 };
   }
 
+  let lastError: string | null = null;
   const target = params.provider ?? (params.model ? providerFor(params.model) : undefined);
   const order: AIProvider[] = target
     ? [target, target === "gemini" ? "openai" : "gemini"]
@@ -328,12 +382,15 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
 
       const result = await runProvider(provider, key, model, params);
       if (result.ok) return { ok: true, content: result.content, provider, model };
-      if (provider === order[0]) {
-        console.warn(`[AI] ${model} failed — falling back off ${provider}: ${result.error.slice(0, 200)}`);
-      }
+      lastError = `${model}: ${result.error.slice(0, 300)}`;
+      console.warn(`[AI] ${model} failed on ${provider}: ${result.error.slice(0, 300)}`);
     }
 
-    return { ok: false, error: "Failed to generate content", status: 502 };
+    // Carry the provider's own words out of here. "Failed to generate content"
+    // is the sentence that hid an empty-completion bug behind a message about
+    // unpublished laws; whatever actually went wrong belongs in the log and in
+    // the reason the caller reports.
+    return { ok: false, error: lastError ?? "No usable AI provider configured", status: 502 };
   } catch (error) {
     console.error("AI generation error:", error);
     return { ok: false, error: "Network error generating content", status: 502 };
