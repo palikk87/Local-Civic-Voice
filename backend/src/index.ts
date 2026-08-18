@@ -108,13 +108,31 @@ app.get("/health", async (c) => {
     // only way anybody found out was by using the feature and seeing the old
     // behaviour. A backend change nobody clicks could sit undeployed forever.
     //
-    // Baked in at image build (Dockerfile ARG GIT_SHA), so it describes the
-    // code in this container and cannot be faked by the environment.
-    // "unknown" means the image was built without it, which is itself worth
-    // seeing.
+    // Baked in at image build where the builder supplies it (Dockerfile
+    // ARG GIT_SHA), and otherwise taken from whatever the host says it
+    // deployed.
+    //
+    // THE SECOND HALF IS NOT A NICETY. Railway does not pass
+    // RAILWAY_GIT_COMMIT_SHA as a build argument — it sets it as a runtime
+    // variable on the service — so the build arg stayed at its default and
+    // this endpoint reported "unknown" on every deploy. Which meant
+    // deploy-check, the whole point of which is to tell a shipped fix from an
+    // unshipped one, could never answer. The tool built to close that blind
+    // spot was blind, on the only host it actually runs on, and nobody noticed
+    // because "unknown" reads like a minor gap rather than a broken check.
+    //
+    // Build arg first, because it describes the code in THIS container and
+    // cannot be faked. The host variables are a statement of intent rather
+    // than of fact — but a platform saying which commit it deployed is far
+    // better than nothing at all, and it needs no configuration to work.
     version: {
-      commit: process.env.GIT_SHA ?? "unknown",
-      builtAt: process.env.BUILD_TIME ?? null,
+      commit:
+        process.env.GIT_SHA ||
+        process.env.RAILWAY_GIT_COMMIT_SHA ||
+        process.env.RENDER_GIT_COMMIT ||
+        process.env.SOURCE_COMMIT ||
+        "unknown",
+      builtAt: process.env.BUILD_TIME || null,
     },
     // WHETHER THE DATABASE MATCHES THE CODE.
     //

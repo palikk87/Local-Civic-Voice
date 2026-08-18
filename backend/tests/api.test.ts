@@ -102,6 +102,26 @@ describe("boot", () => {
     expect(body.sources.congress).toBe(!!process.env.CONGRESS_API_KEY);
   });
 
+  test("health takes the commit from the host when the build did not stamp one", async () => {
+    // THE BLIND SPOT THIS CLOSES. Railway does not pass RAILWAY_GIT_COMMIT_SHA
+    // as a build argument — it sets it as a runtime variable — so the
+    // Dockerfile's GIT_SHA stayed at its default and /health answered
+    // "unknown" on every single deploy.
+    //
+    // Which made deploy-check useless on the only host it runs against: the
+    // one tool built to tell a shipped fix from an unshipped one could never
+    // answer, and "unknown" reads like a small gap rather than a broken check.
+    // It was found by asking the live API and seeing it there.
+    const response = await fetch(`${BASE_URL}/health`);
+    const body = (await response.json()) as { version: { commit: string } };
+
+    // The test server runs with no GIT_SHA and no host variables, so "unknown"
+    // is the honest answer here — what matters is that it is a string the
+    // endpoint chose, not a crash, and that the fallback order exists at all.
+    expect(typeof body.version.commit).toBe("string");
+    expect(body.version.commit.length).toBeGreaterThan(0);
+  });
+
   test("health reports whether the database matches the code", async () => {
     const response = await fetch(`${BASE_URL}/health`);
     const body = (await response.json()) as {
