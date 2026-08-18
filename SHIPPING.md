@@ -41,8 +41,8 @@ bun run verify
 ```
 
 Runs everything: both typechecks, both lint passes, the backend suite against a
-real database, the web build, and three browser checks that execute the built
-bundle rather than trusting that it compiled. Ten checks, one verdict. Each
+real database, the web build, and five browser checks that execute the built
+bundle rather than trusting that it compiled. Twelve checks, one verdict. Each
 prints what it guards, so a failure explains itself.
 
 ### After pushing
@@ -154,6 +154,47 @@ The deploy did not happen or did not finish. In order of likelihood:
 3. **A required environment variable is missing.** The API names every one it is
    missing and exits; the log says which.
 4. **The provider is watching a different branch.** Check the service settings.
+
+---
+
+## Is the product actually reading the government?
+
+`deploy-check` answers "is my code live". This answers "is my code working",
+which is a different question and was for a while a much harder one.
+
+```
+GET /api/admin/content-health        (admin token)
+```
+
+Per branch of government: how many records exist, how many hold official text,
+how long that text is, **which source it came from**, and how many carry a brief
+written for the version of the law they are on now. Plus what the server is
+configured to do at all — including whether a brief can be written, because
+having the text is only half of it.
+
+Read it after any deploy that touches retrieval. A branch showing records but no
+text, or text arriving only from a fallback source, is a real problem wearing a
+green tick.
+
+This is what it cost not to have it. Bills, executive orders and Supreme Court
+cases all stopped producing briefs at the same time, every source key was valid,
+and each one reported the same sentence to readers: *the official text isn't
+published anywhere we can read yet*. That sentence covered four unrelated
+failures — a missing key, a rejected key, a throttled key, and a fetch storing
+markup instead of text — none of which is about the law, and none of which was
+visible without reading server logs.
+
+### The repair runs itself
+
+When a retrieval bug is fixed, records already holding text from the old code do
+not fix themselves on the next read — and re-pulling them naively announces to
+everyone who shared them that the law changed, which is a false statement about
+the government sent to every user at once.
+
+So the deploy carrying such a fix re-pulls the affected records at boot, once,
+rewrites their briefs, and marks no law as changed. Nothing to press, nothing to
+remember. `POST /api/admin/reextract-content` does the same on demand if you
+ever want it sooner.
 
 ---
 
