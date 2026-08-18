@@ -24,6 +24,7 @@ import { aiAvailability } from "./ai-generate";
 import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
+import { fetchCourtListener } from "./courtlistener";
 import { markSettled, markWorking } from "./brief-state";
 
 const FETCH_TIMEOUT_MS = 15_000;
@@ -727,84 +728,17 @@ function clusterIdFrom(sourceUrl: string | null): string | null {
   return sourceUrl?.match(/courtlistener\.com\/opinion\/(\d+)/)?.[1] ?? null;
 }
 
-/**
- * CourtListener throttles hard — this account is capped at 5 requests a minute,
- * and the cap is per minute rather than per day:
- *
- *   {"detail":"Request was throttled. Rate limit exceeded: 5/min.
- *              Expected available in 2 seconds."}
- *
- * The generic JSON fetch treats that 429 as a dead endpoint and returns null,
- * which surfaces to the reader as "no official text is published" for a Supreme
- * Court opinion that is published, sitting in the API, and two seconds away.
- * Waiting the number of seconds the API itself names is the entire fix.
- *
- * This is also why the judicial fetch asks for the cluster directly instead of
- * searching first: one request per brief instead of four keeps a page of
- * readers inside a five-per-minute budget.
- */
-const COURTLISTENER_THROTTLE_RETRIES = 2;
-
-async function fetchCourtListener<T>(
-  url: string,
-  deadlineAt: number,
-  authHeaders: Record<string, string>
-): Promise<T | null> {
-  for (let attempt = 0; attempt <= COURTLISTENER_THROTTLE_RETRIES; attempt++) {
-    const timeout = withDeadline(deadlineAt);
-    if (timeout <= 0) return null;
-    try {
-      const response = await fetch(url, {
-        headers: { Accept: "application/json", ...authHeaders },
-        signal: AbortSignal.timeout(timeout),
-      });
-
-      if (response.status === 429) {
-        const detail = await response.text();
-        const seconds = Number(detail.match(/available in ([\d.]+) second/i)?.[1] ?? 5);
-        const waitMs = Math.ceil(Math.min(seconds, 30) * 1000) + 500;
-        // Only wait if there is still time left to use the answer.
-        if (attempt === COURTLISTENER_THROTTLE_RETRIES || deadlineAt - Date.now() < waitMs + 2_000) {
-          console.warn(`[RefContent] CourtListener throttled and no time left to wait: ${detail.slice(0, 120)}`);
-          return null;
-        }
-        console.warn(`[RefContent] CourtListener throttled — waiting ${Math.round(waitMs / 1000)}s as instructed`);
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-        continue;
-      }
-
-      if (response.status === 401 || response.status === 403) {
-        console.error(
-          `[RefContent] CourtListener rejected COURTLISTENER_API_KEY with HTTP ${response.status}. ` +
-            `The key is set but not accepted, so no Supreme Court opinion can be read.`
-        );
-        return null;
-      }
-
-      if (!response.ok) {
-        console.warn(`[RefContent] CourtListener ${response.status} from ${url.split("?")[0]}`);
-        return null;
-      }
-
-      return (await response.json()) as T;
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 async function opinionsInCluster(
   clusterId: string,
   deadlineAt: number,
-  authHeaders: Record<string, string>
+  apiKey: string
 ): Promise<TextResult | null> {
   const url = `https://www.courtlistener.com/api/rest/v4/opinions/?cluster=${clusterId}`;
-  const data = await fetchCourtListener<{ results?: CourtListenerOpinion[] }>(
-    url,
+  const data = await fetchCourtListener<{ results?: CourtListenerOpinion[] }>(url, {
     deadlineAt,
-    authHeaders
-  );
+    apiKey,
+    label: "opinion text",
+  });
   const text = joinOpinions(data?.results ?? []);
   if (text.length <= 200) return null;
   return {
@@ -826,12 +760,10 @@ export async function fetchScotusText(ref: ReferenceRow, deadlineAt: number): Pr
     return null;
   }
 
-  const authHeaders = { Authorization: `Token ${apiKey}` };
-
-  // Source 1: straight to the decision, using the cluster id already in hand.
+    // Source 1: straight to the decision, using the cluster id already in hand.
   const storedCluster = clusterIdFrom(ref.sourceUrl);
   if (storedCluster) {
-    const found = await opinionsInCluster(storedCluster, deadlineAt, authHeaders);
+    const found = await opinionsInCluster(storedCluster, deadlineAt, apiKey);
     if (found) return found;
   }
 
@@ -842,14 +774,13 @@ export async function fetchScotusText(ref: ReferenceRow, deadlineAt: number): Pr
     results?: Array<{ cluster_id?: number }>;
   }>(
     `https://www.courtlistener.com/api/rest/v4/search/?type=o&court=scotus&docket_number=${encodeURIComponent(docket)}`,
-    deadlineAt,
-    authHeaders
+    { deadlineAt, apiKey, label: `docket ${docket}` },
   );
 
   for (const result of (search?.results ?? []).slice(0, 3)) {
     if (result.cluster_id === undefined) continue;
     if (String(result.cluster_id) === storedCluster) continue;
-    const found = await opinionsInCluster(String(result.cluster_id), deadlineAt, authHeaders);
+    const found = await opinionsInCluster(String(result.cluster_id), deadlineAt, apiKey);
     if (found) return { ...found, source: "courtlistener/docket-search" };
   }
 

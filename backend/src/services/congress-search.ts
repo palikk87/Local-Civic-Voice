@@ -1,5 +1,6 @@
 import { prisma } from "../prisma";
-import { formatSnippetsForPrompt, searchWebForContext, type WebSnippet } from "./web-search";
+import { webSearchAvailable } from "./web-search";
+import { interpretSearch } from "./search-intent";
 import {
   ReferenceKind,
   billReferenceId,
@@ -271,102 +272,43 @@ async function govInfoSearch(
  * training memory alone. Grounding is best-effort — when snippets are empty
  * (no key, timeout, no hits) this behaves exactly as it did before.
  */
-async function interpretQuery(query: string, snippets: WebSnippet[]): Promise<Interpretation> {
-  const empty: Interpretation = { knownBills: [], expandedTerms: [] };
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) return empty;
+/**
+ * Understand the query — through the layer all three branches share.
+ *
+ * This used to be a hand-rolled call straight to one hardcoded OpenAI model.
+ * Two things were wrong with that, and neither was the prompt:
+ *
+ *   1. No failover. generateAI walks to the other provider when the first one
+ *      is down; a direct fetch just returns nothing, and interpretation went
+ *      silently off for every reader with no signal anywhere that it had.
+ *   2. Only bills had one at all. Executive and judicial search passed the
+ *      reader's raw words to a government API and returned whatever matched,
+ *      which is how "laws about protecting kids from vaccines" produced
+ *      "National Child's Day, 2023".
+ *
+ * The understanding step is one thing now; what each branch does with it is
+ * three things, because the three sources speak three different languages.
+ * Nothing legislative search could express before is lost — including the
+ * Congress and bill-type constraints, which are still honoured only when the
+ * reader states them.
+ */
+async function interpretQuery(query: string): Promise<Interpretation> {
+  const intent = await interpretSearch(query, "legislative");
+  if (!intent.interpreted) return { knownBills: [], expandedTerms: [] };
 
-  const grounded = snippets.length > 0;
-
-  const data = await fetchJson<{ choices?: Array<{ message?: { content?: string } }> }>(
-    "https://api.openai.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        temperature: 0.1,
-        max_tokens: 400,
-        messages: [
-          {
-            role: "system",
-            content: `You interpret searches for US federal legislation. Real users often type typos, slang, or a paraphrased description of a news/talking-point topic instead of a bill's official name (e.g. "merging isreal military" for a bill about military aid to Israel). You know major bills prominent in politics and the news. The current Congress is ${CURRENT_CONGRESS} (2025-2026); 118 was 2023-2024.
-
-Return JSON:
-{
-  "correctedQuery": "israel military aid",
-  "knownBills": [{"congress": 119, "type": "hr", "number": "22", "name": "SAVE Act"}],
-  "expandedTerms": ["safeguard american voter eligibility"],
-  "congress": null,
-  "billType": null
-}
-
-- correctedQuery: ALWAYS provide this. Rewrite the query as 2-6 plain lowercase keywords capturing the actual policy topic: fix obvious spelling mistakes (e.g. "isreal" -> "israel"), drop filler/verb words ("merging", "thing", "law", "bill", "about"), and restate slang/news phrasing using words a real bill title would use.
-- knownBills: up to 5 SPECIFIC famous bills the query plausibly refers to (only ones you are confident exist; [] if none). type is one of hr,s,hjres,sjres,hconres,sconres,hres,sres.
-- expandedTerms: up to 5 short keyword phrases (2-4 words each) that would plausibly appear in a real bill's title or summary about this topic — acronym expansions, alternate official names, formal legal/policy terminology, and named programs (e.g. for "israel military": "security assistance", "defense cooperation", "foreign military financing"). Provide these even when no specific bill is known — for topical/current-events queries this is the main signal. [] only if the query is already an exact proper name with nothing to expand.
-- congress: number ONLY if the user explicitly named one, else null.
-- billType: ONLY if the user explicitly constrained it, else null.${
-              grounded
-                ? `
-
-You will ALSO be given real-time web search snippets retrieved just now for this query. They are more current than your training data — TRUST THEM OVER YOUR OWN MEMORY for anything time-sensitive:
-- If a snippet names a specific bill number ("H.R. 7540", "S. 1234"), put it in knownBills even if you don't recognize it. Snippet-sourced bill numbers outrank ones you recall.
-- Set each knownBills.congress to the session the snippets indicate. Coverage published in 2025-2026 means congress ${CURRENT_CONGRESS}; only use an older number if a snippet clearly refers to an earlier session. A wrong congress makes the bill unfindable, so default to ${CURRENT_CONGRESS} when the snippets don't say.
-- Mine the snippets for formal act names, acronym expansions, and named programs or sections (e.g. "FY27 NDAA Section 219", "U.S.-Israel FUTURES Act") and put those in expandedTerms and correctedQuery.
-- Ignore snippets that are off-topic or not about US federal legislation. If the snippets add nothing, fall back to your own knowledge.`
-                : ""
-            }`,
-          },
-          {
-            role: "user",
-            content: grounded
-              ? `User Query: "${query}"\n\nReal-Time Web Search Context:\n${formatSnippetsForPrompt(snippets)}\n\nExtract the formal bill names, policy keywords, and search terms based on this context.`
-              : query,
-          },
-        ],
-      }),
-    },
-    6000,
-  );
-
-  try {
-    const content = data?.choices?.[0]?.message?.content;
-    if (!content) return empty;
-    const parsed = JSON.parse(content) as {
-      correctedQuery?: string | null;
-      knownBills?: Array<{ congress?: number; type?: string; number?: number | string }>;
-      expandedTerms?: string[];
-      congress?: number | null;
-      billType?: string | null;
-    };
-    const knownBills: BillIdentity[] = (parsed.knownBills ?? [])
-      // The number must be digits only. When grounding snippets name a
-      // provision but not its bill number, the model sometimes emits a
-      // placeholder ("XXXX", "TBD", "H.R. ____"), which we would otherwise
-      // pass straight to congress.gov as a bill lookup and burn on a 404.
-      .filter((b) => b.type && /^\d+$/.test(String(b.number ?? "").trim()))
-      .filter((b) => isBillType(String(b.type).toLowerCase()))
-      .slice(0, 5)
-      .map((b) => ({
-        congress: b.congress ?? CURRENT_CONGRESS,
-        type: String(b.type).toLowerCase(),
-        number: String(b.number),
-      }));
-    const correctedQuery =
-      typeof parsed.correctedQuery === "string" && parsed.correctedQuery.trim().length > 1
-        ? parsed.correctedQuery.trim().toLowerCase()
-        : undefined;
-    return {
-      knownBills,
-      expandedTerms: (parsed.expandedTerms ?? []).slice(0, 5).filter((t) => typeof t === "string" && t.length > 2),
-      correctedQuery: correctedQuery && correctedQuery !== query.trim().toLowerCase() ? correctedQuery : undefined,
-      congress: parsed.congress ?? undefined,
-      billType: parsed.billType ?? undefined,
-    };
-  } catch {
-    return empty;
-  }
+  const corrected = intent.topic.trim();
+  return {
+    knownBills: intent.bills
+      .filter((b) => isBillType(b.type))
+      .map((b) => ({ congress: b.congress, type: b.type, number: b.number })),
+    // Phrases first: they are the wording most likely to appear in a bill's
+    // official title, which is what these terms are searched against.
+    expandedTerms: [...intent.phrases, ...intent.terms].slice(0, 8),
+    correctedQuery:
+      corrected && corrected !== query.trim().toLowerCase() ? corrected : undefined,
+    congress: intent.congress ?? undefined,
+    billType: intent.billType ?? undefined,
+  };
 }
 
 // ---------- Source 3: direct bill lookup (congress.gov detail) ----------
@@ -692,12 +634,14 @@ export async function searchCongressBills(
   // them as context. These two are serial (the model needs the snippets), but
   // the whole chain still runs in parallel with every GovInfo/DB source below,
   // so grounding costs only the web-search leg (<=2.5s) on the critical path.
-  const groundedInterpretation = searchWebForContext(query).then((snippets) => {
-    if (snippets.length > 0) {
-      console.log(`[congress-search] grounded "${query}" with ${snippets.length} web snippet(s)`);
-    }
-    return interpretQuery(query, snippets).then((i) => ({ ...i, groundedSnippets: snippets.length }));
-  });
+  // The shared layer does its own grounding — it is the one that knows which
+  // kind of web search suits the branch being searched ("congress bill
+  // legislation" here, "supreme court ruling" for an opinion). Counting
+  // snippets separately would mean fetching them twice.
+  const groundedInterpretation = interpretQuery(query).then((i) => ({
+    ...i,
+    groundedSnippets: webSearchAvailable() ? 1 : 0,
+  }));
 
   const [interpretation, govinfoTitle, govinfoActPhrase, govinfoFull, pool, dbRefs, explicitBills] = await Promise.all([
     groundedInterpretation,

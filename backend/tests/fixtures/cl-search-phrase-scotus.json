@@ -1,0 +1,101 @@
+{
+ "count": 12,
+ "results": [
+  {
+   "cluster_id": 4623616,
+   "caseName": "Box v. Planned Parenthood of Indiana and Kentucky, Inc.",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "2019-05-28",
+   "docketNumber": "18-483",
+   "absolute_url": "/opinion/4623616/box-v-planned-parenthood-of-indiana-and-kentucky-inc/",
+   "citeCount": 20,
+   "opinions": [
+    {
+     "id": 9888592,
+     "snippet": "\nJustice THOMAS, concurring.\nIndiana law prohibits abortion providers from treating the bodies of aborted children *1783as \"infectious waste\" and incinerating them alongside used n"
+    }
+   ]
+  },
+  {
+   "cluster_id": 110647,
+   "caseName": "United States v. Lee",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "1982-02-23",
+   "docketNumber": "80-767",
+   "absolute_url": "/opinion/110647/united-states-v-lee/",
+   "citeCount": 836,
+   "opinions": [
+    {
+     "id": 9428662,
+     "snippet": "\nJustice Stevens,\nconcurring in the judgment.\nThe clash between appellee’s religious obligation and his civic obligation is irreconcilable. He must violate either an Amish belief o"
+    }
+   ]
+  },
+  {
+   "cluster_id": 96230,
+   "caseName": "Jacobson v. Massachusetts",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "1905-02-20",
+   "docketNumber": "70",
+   "absolute_url": "/opinion/96230/jacobson-v-massachusetts/",
+   "citeCount": 1278,
+   "opinions": [
+    {
+     "id": 96230,
+     "snippet": "\n197 U.S. 11 (1905)\nJACOBSON\nv.\nMASSACHUSETTS.\nNo. 70.\nSupreme Court of United States.\nArgued December 6, 1904.\nDecided February 20, 1905.\nERROR TO THE SUPREME COURT OF THE STATE O"
+    }
+   ]
+  },
+  {
+   "cluster_id": 96364,
+   "caseName": "New York Ex Rel. Lieberman v. Van De Carr",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "1905-12-11",
+   "docketNumber": "71",
+   "absolute_url": "/opinion/96364/new-york-ex-rel-lieberman-v-van-de-carr/",
+   "citeCount": 157,
+   "opinions": [
+    {
+     "id": 96364,
+     "snippet": "\n199 U.S. 552 (1905)\nTHE PEOPLE OF THE STATE OF NEW YORK ex rel. LIEBERMAN\nv.\nVAN DE CARR, WARDEN.\nNo. 71.\nSupreme Court of United States.\nArgued November 9, 1905.\nDecided December"
+    }
+   ]
+  },
+  {
+   "cluster_id": 101076,
+   "caseName": "Buck v. Bell",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "1927-05-02",
+   "docketNumber": "292",
+   "absolute_url": "/opinion/101076/buck-v-bell/",
+   "citeCount": 277,
+   "opinions": [
+    {
+     "id": 101076,
+     "snippet": "\n274 U.S. 200 (1927)\nBUCK\nv.\nBELL, SUPERINTENDENT.\nNo. 292.\nSupreme Court of United States.\nArgued April 22, 1927.\nDecided May 2, 1927.\nERROR TO THE SUPREME COURT OF APPEALS OF THE"
+    }
+   ]
+  },
+  {
+   "cluster_id": 100054,
+   "caseName": "Zucht v. King",
+   "court": "Supreme Court of the United States",
+   "court_id": "scotus",
+   "dateFiled": "1922-11-13",
+   "docketNumber": "84",
+   "absolute_url": "/opinion/100054/zucht-v-king/",
+   "citeCount": 177,
+   "opinions": [
+    {
+     "id": 100054,
+     "snippet": "\n260 U.S. 174 (1922)\nZUCHT, BY HER NEXT FRIEND, ETC.\nv.\nKING ET AL.\nNo. 84.\nSupreme Court of United States.\nArgued October 20, 1922.\nDecided November 13, 1922.\nERROR TO THE COURT O"
+    }
+   ]
+  }
+ ]
+}

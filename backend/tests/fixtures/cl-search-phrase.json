@@ -1,0 +1,85 @@
+{
+ "count": 290,
+ "results": [
+  {
+   "cluster_id": 10840317,
+   "caseName": "Krystle Perry v. Stacy Marteney",
+   "court": "Court of Appeals for the Fourth Circuit",
+   "court_id": "ca4",
+   "dateFiled": "2026-04-08",
+   "docketNumber": "24-2132",
+   "absolute_url": "/opinion/10840317/krystle-perry-v-stacy-marteney/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 11307661,
+     "snippet": "USCA4 Appeal: 24-2132      Doc: 65         Filed: 04/08/2026     Pg: 1 of 38\n\n\n\n\n                                               PUBLISHED\n\n                               UNITED STA"
+    }
+   ]
+  },
+  {
+   "cluster_id": 6469224,
+   "caseName": "Audrey Baker v. Crossroads Academy-Central Street",
+   "court": "Missouri Court of Appeals",
+   "court_id": "moctapp",
+   "dateFiled": "2022-05-17",
+   "docketNumber": "WD84941",
+   "absolute_url": "/opinion/6469224/audrey-baker-v-crossroads-academy-central-street/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 6341335,
+     "snippet": "                                              In the\n                           Missouri Court of Appeals\n                                     Western District\n\n                   "
+    }
+   ]
+  },
+  {
+   "cluster_id": 8442067,
+   "caseName": "Phillips ex rel. B.P. v. City of New York",
+   "court": "Court of Appeals for the Second Circuit",
+   "court_id": "ca2",
+   "dateFiled": "2015-01-07",
+   "docketNumber": "Docket No. 14-2156-cv",
+   "absolute_url": "/opinion/8442067/phillips-ex-rel-bp-v-city-of-new-york/",
+   "citeCount": 121,
+   "opinions": [
+    {
+     "id": 8413267,
+     "snippet": "\nPER CURIAM:\nPlaintiffs brought this action challenging on constitutional grounds New York State’s requirement that all children be vaccinated in order to attend public school. Pla"
+    }
+   ]
+  },
+  {
+   "cluster_id": 2767177,
+   "caseName": "Phillips v. City of New York",
+   "court": "Court of Appeals for the Second Circuit",
+   "court_id": "ca2",
+   "dateFiled": "2015-01-07",
+   "docketNumber": "14-2156-cv",
+   "absolute_url": "/opinion/2767177/phillips-v-city-of-new-york/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 2767177,
+     "snippet": "14‐2156‐cv\nPhillips v. City of New York\n\n\n\n\n                               UNITED STATES COURT OF APPEALS\n                                    FOR THE SECOND CIRCUIT\n\n              "
+    }
+   ]
+  },
+  {
+   "cluster_id": 10882181,
+   "caseName": "Miller v. McDonald",
+   "court": "Court of Appeals for the Second Circuit",
+   "court_id": "ca2",
+   "dateFiled": "2026-06-30",
+   "docketNumber": "24-681",
+   "absolute_url": "/opinion/10882181/miller-v-mcdonald/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 11349704,
+     "snippet": "24-681\nMiller v. McDonald\n\n\n                                       In the\n                     United States Court of Appeals\n                             For the Second Circuit\n  "
+    }
+   ]
+  }
+ ]
+}

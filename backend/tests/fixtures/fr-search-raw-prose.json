@@ -1,0 +1,83 @@
+{
+ "count": 3,
+ "results": [
+  {
+   "title": "National Child's Day, 2023",
+   "type": "Presidential Document",
+   "subtype": "Proclamation",
+   "abstract": null,
+   "publication_date": "2023-11-22",
+   "signing_date": "2023-11-17",
+   "executive_order_number": null,
+   "president": {
+    "identifier": "joe-biden",
+    "name": "Joseph R. Biden Jr."
+   },
+   "agencies": [
+    {
+     "raw_name": "EXECUTIVE OFFICE OF THE PRESIDENT",
+     "name": "Executive Office of the President",
+     "id": 538,
+     "url": "https://www.federalregister.gov/agencies/executive-office-of-the-president",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/538",
+     "parent_id": null,
+     "slug": "executive-office-of-the-president"
+    }
+   ],
+   "html_url": "https://www.federalregister.gov/documents/2023/11/22/2023-25985/national-childs-day-2023",
+   "document_number": "2023-25985"
+  },
+  {
+   "title": "National Child's Day, 2022",
+   "type": "Presidential Document",
+   "subtype": "Proclamation",
+   "abstract": null,
+   "publication_date": "2022-11-23",
+   "signing_date": "2022-11-18",
+   "executive_order_number": null,
+   "president": {
+    "identifier": "joe-biden",
+    "name": "Joseph R. Biden Jr."
+   },
+   "agencies": [
+    {
+     "raw_name": "EXECUTIVE OFFICE OF THE PRESIDENT",
+     "name": "Executive Office of the President",
+     "id": 538,
+     "url": "https://www.federalregister.gov/agencies/executive-office-of-the-president",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/538",
+     "parent_id": null,
+     "slug": "executive-office-of-the-president"
+    }
+   ],
+   "html_url": "https://www.federalregister.gov/documents/2022/11/23/2022-25740/national-childs-day-2022",
+   "document_number": "2022-25740"
+  },
+  {
+   "title": "Addressing the Long-Term Effects of COVID-19",
+   "type": "Presidential Document",
+   "subtype": "Memorandum",
+   "abstract": null,
+   "publication_date": "2022-04-08",
+   "signing_date": "2022-04-05",
+   "executive_order_number": null,
+   "president": {
+    "identifier": "joe-biden",
+    "name": "Joseph R. Biden Jr."
+   },
+   "agencies": [
+    {
+     "raw_name": "EXECUTIVE OFFICE OF THE PRESIDENT",
+     "name": "Executive Office of the President",
+     "id": 538,
+     "url": "https://www.federalregister.gov/agencies/executive-office-of-the-president",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/538",
+     "parent_id": null,
+     "slug": "executive-office-of-the-president"
+    }
+   ],
+   "html_url": "https://www.federalregister.gov/documents/2022/04/08/2022-07756/addressing-the-long-term-effects-of-covid-19",
+   "document_number": "2022-07756"
+  }
+ ]
+}

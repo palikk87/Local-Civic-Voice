@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { searchCongressBills } from "../services/congress-search";
+import { searchExecutiveDocuments } from "../services/executive-search";
+import { searchJudicialOpinions } from "../services/judicial-search";
 import type { CongressSearchResponse, Member, Official } from "../types";
 
 const governmentRouter = new Hono();
@@ -44,42 +46,6 @@ interface CourtListenerResult {
   }>;
   count: number;
   next?: string;
-}
-
-interface FederalRegisterApiResponse {
-  results?: Array<{
-    title?: string;
-    type?: string;
-    subtype?: string;
-    abstract?: string | null;
-    publication_date?: string;
-    signing_date?: string | null;
-    executive_order_number?: string | number | null;
-    president?: { name?: string } | null;
-    agencies?: Array<{ name?: string }>;
-    html_url?: string;
-    document_number?: string;
-  }>;
-  count?: number;
-}
-
-/**
- * CourtListener v4 search response. A result is an opinion CLUSTER: the case
- * metadata sits at the top level and the individual opinions (whose ids address
- * the actual text via /api/rest/v4/opinions/:id/) are nested under `opinions`.
- */
-interface CourtListenerApiResponse {
-  results?: Array<{
-    cluster_id?: number;
-    opinions?: Array<{ id?: number }>;
-    caseName?: string;
-    court?: string;
-    dateFiled?: string;
-    docketNumber?: string;
-    absolute_url?: string;
-  }>;
-  count?: number;
-  next?: string | null;
 }
 
 /**
@@ -162,77 +128,46 @@ governmentRouter.get(
  * EO), signing_date (shown instead of publication date) and subtype (drives the
  * category chip).
  */
-const FEDERAL_REGISTER_FIELDS = [
-  "title",
-  "type",
-  "subtype",
-  "abstract",
-  "publication_date",
-  "signing_date",
-  "executive_order_number",
-  "president",
-  "agencies",
-  "html_url",
-  "document_number",
-];
 governmentRouter.get(
   "/executive/search",
   zValidator("query", searchQuerySchema),
   async (c) => {
-    const { q, limit, offset } = c.req.valid("query");
+    const { q, limit } = c.req.valid("query");
 
     try {
-      // Federal Register API is public and doesn't require an API key
-      const url = new URL("https://www.federalregister.gov/api/v1/documents.json");
-      url.searchParams.set("conditions[term]", q);
-      url.searchParams.set("conditions[type][]", "PRESDOCU");
-      url.searchParams.set("per_page", limit.toString());
-      url.searchParams.set("page", Math.floor(offset / limit + 1).toString());
-      url.searchParams.set("order", "relevance");
-      for (const field of FEDERAL_REGISTER_FIELDS) {
-        url.searchParams.append("fields[]", field);
-      }
+      const output = await searchExecutiveDocuments(q, limit);
 
-      const response = await fetch(url.toString(), {
-        headers: {
-          Accept: "application/json",
-        },
-      });
+      console.log(
+        `[executive-search] "${q}" -> ${output.results.length} shown` +
+          (output.intent.interpreted
+            ? ` | understood as "${output.intent.topic}"` +
+              (output.intent.phrases.length > 0
+                ? ` [${output.intent.phrases.map((p) => `"${p}"`).join(", ")}]`
+                : " [no phrase]")
+            : " | NOT interpreted — searched the words as typed") +
+          ` | ${output.attempted.join("; ")}`,
+      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Federal Register API error:", response.status, errorText);
-        return c.json(
-          { error: "Failed to fetch from Federal Register API", details: errorText },
-          { status: response.status }
-        );
-      }
-
-      const data = (await response.json()) as FederalRegisterApiResponse;
-
-      // Transform the response to a consistent format
       const result: FederalRegisterResult = {
-        results: (data.results || []).map((doc) => ({
-          title: doc.title ?? "",
-          type: doc.type ?? "",
-          subtype: doc.subtype ?? "",
-          // The API returns null for documents with no abstract.
-          abstract: doc.abstract ?? "",
-          publication_date: doc.publication_date ?? "",
-          signing_date: doc.signing_date ?? "",
-          executive_order_number:
-            doc.executive_order_number != null ? String(doc.executive_order_number) : "",
-          president: doc.president?.name ?? "",
-          agencies: (doc.agencies ?? []).map((a) => ({ name: a.name ?? "" })),
-          html_url: doc.html_url ?? "",
-          document_number: doc.document_number ?? "",
+        results: output.results.map((doc) => ({
+          title: doc.title,
+          type: doc.type,
+          subtype: doc.subtype,
+          abstract: doc.abstract,
+          publication_date: doc.publication_date,
+          signing_date: doc.signing_date,
+          executive_order_number: doc.executive_order_number,
+          president: doc.president,
+          agencies: doc.agencies,
+          html_url: doc.html_url,
+          document_number: doc.document_number,
         })),
-        count: data.count || 0,
+        count: output.count,
       };
 
       return c.json(result);
     } catch (error) {
-      console.error("Federal Register API proxy error:", error);
+      console.error("Federal Register search error:", error);
       return c.json(
         { error: "Internal server error while fetching Federal Register data" },
         { status: 500 }
@@ -260,61 +195,42 @@ governmentRouter.get(
   "/judicial/search",
   zValidator("query", searchQuerySchema),
   async (c) => {
-    const { q, limit, offset } = c.req.valid("query");
-    const apiKey = process.env.COURTLISTENER_API_KEY;
+    const { q, limit } = c.req.valid("query");
 
-    if (!apiKey) {
-      return c.json(
-        { error: "CourtListener API key not configured" },
-        { status: 500 }
-      );
+    if (!process.env.COURTLISTENER_API_KEY) {
+      return c.json({ error: "CourtListener API key not configured" }, { status: 500 });
     }
 
     try {
-      const url = new URL("https://www.courtlistener.com/api/rest/v4/search/");
-      url.searchParams.set("q", q);
-      url.searchParams.set("type", "o"); // opinions
-      url.searchParams.set("page_size", limit.toString());
+      const output = await searchJudicialOpinions(q, limit);
 
-      const response = await fetch(url.toString(), {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Token ${apiKey}`,
-        },
-      });
+      console.log(
+        `[judicial-search] "${q}" -> ${output.results.length} shown` +
+          (output.intent.interpreted
+            ? ` | understood as "${output.intent.topic}"` +
+              (output.intent.phrases.length > 0
+                ? ` [${output.intent.phrases.map((p) => `"${p}"`).join(", ")}]`
+                : " [no phrase]")
+            : " | NOT interpreted — searched the words as typed") +
+          ` | ${output.attempted.join("; ")}`,
+      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("CourtListener API error:", response.status, errorText);
-        return c.json(
-          { error: "Failed to fetch from CourtListener API", details: errorText },
-          { status: response.status }
-        );
-      }
-
-      const data = (await response.json()) as CourtListenerApiResponse;
-
-      // Transform the response to a consistent format
       const result: CourtListenerResult = {
-        // v4 ignores page_size and always returns a full page of 20, so the
-        // caller's limit is applied here instead.
-        results: (data.results || []).slice(0, limit).map((cluster) => ({
-          // The opinion id addresses the actual text; fall back to the cluster
-          // id so a result is never left without an identifier.
-          id: cluster.opinions?.find((o) => typeof o.id === "number")?.id ?? cluster.cluster_id ?? 0,
-          case_name: cluster.caseName || "",
-          court: cluster.court || "",
-          date_filed: cluster.dateFiled || "",
-          docket_number: cluster.docketNumber || "",
-          absolute_url: cluster.absolute_url || "",
+        results: output.results.map((item) => ({
+          id: item.id,
+          case_name: item.case_name,
+          court: item.court,
+          date_filed: item.date_filed,
+          docket_number: item.docket_number,
+          absolute_url: item.absolute_url,
         })),
-        count: data.count || 0,
-        next: data.next ?? undefined,
+        count: output.count,
+        next: output.next,
       };
 
       return c.json(result);
     } catch (error) {
-      console.error("CourtListener API proxy error:", error);
+      console.error("CourtListener search error:", error);
       return c.json(
         { error: "Internal server error while fetching CourtListener data" },
         { status: 500 }
@@ -323,16 +239,6 @@ governmentRouter.get(
   }
 );
 
-/**
- * GET /api/government/officials
- *
- * The executive and judicial branches: President, Vice President, the full Cabinet,
- * cabinet-rank officials, senior White House staff, and all nine Supreme Court
- * Justices — plus the departments they head and the presidential line of succession.
- *
- * Serves the Executive / Judicial / Leadership sections of the Government screen on
- * BOTH faucets. Congress comes from /api/representatives.
- */
 governmentRouter.get("/officials", async (c) => {
   const { EXECUTIVE, JUDICIAL, DEPARTMENTS, GOVERNMENT_DATA_META } = await import(
     "../data/federal-government"

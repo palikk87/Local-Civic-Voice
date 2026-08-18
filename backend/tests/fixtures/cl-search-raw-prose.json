@@ -1,0 +1,85 @@
+{
+ "count": 1098,
+ "results": [
+  {
+   "cluster_id": 10740826,
+   "caseName": "Make The Road New York v. Kristi Noem",
+   "court": "Court of Appeals for the D.C. Circuit",
+   "court_id": "cadc",
+   "dateFiled": "2025-11-22",
+   "docketNumber": "25-5320",
+   "absolute_url": "/opinion/10740826/make-the-road-new-york-v-kristi-noem/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 11207411,
+     "snippet": "                  United States Court of Appeals\n                             FOR THE DISTRICT OF COLUMBIA CIRCUIT\n                                      ____________\n\nNo. 25-5320  "
+    }
+   ]
+  },
+  {
+   "cluster_id": 9444579,
+   "caseName": "Jonathan Stickland AND Jackie Schlegel, Texans for Vaccine Freedom, and Texans for Vaccine Choice PAC v. Jackie Schlegel AND Texans for Vaccine Choice",
+   "court": "Texas Court of Appeals, 2nd District (Fort Worth)",
+   "court_id": "txctapp2",
+   "dateFiled": "2023-11-22",
+   "docketNumber": "02-22-00281-CV",
+   "absolute_url": "/opinion/9444579/jonathan-stickland-and-jackie-schlegel-texans-for-vaccine-freedom-and/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 9902404,
+     "snippet": "                         In the\n                    Court of Appeals\n            Second Appellate District of Texas\n                     at Fort Worth\n                 ____________"
+    }
+   ]
+  },
+  {
+   "cluster_id": 9509709,
+   "caseName": "In Re C.J.S., a Child v. the State of Texas",
+   "court": "Texas Court of Appeals, 1st District (Houston)",
+   "court_id": "txctapp1",
+   "dateFiled": "2024-05-31",
+   "docketNumber": "01-22-00396-CV",
+   "absolute_url": "/opinion/9509709/in-re-cjs-a-child-v-the-state-of-texas/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 9976322,
+     "snippet": "Opinion issued May 31, 2024\n\n\n\n\n                                        In The\n\n                                Court of Appeals\n                                       For The\n\n   "
+    }
+   ]
+  },
+  {
+   "cluster_id": 9374652,
+   "caseName": "A. v. Secretary of Health and Human Services",
+   "court": "United States Court of Federal Claims",
+   "court_id": "uscfc",
+   "dateFiled": "2023-02-10",
+   "docketNumber": "16-989",
+   "absolute_url": "/opinion/9374652/a-v-secretary-of-health-and-human-services/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 9370128,
+     "snippet": "                    REDACTED OPINION\n            In the United States Court of Federal Claims\n                                     No. 16-989V\n                               Filed:"
+    }
+   ]
+  },
+  {
+   "cluster_id": 9469205,
+   "caseName": "Thomas Fleming Mabry v. The Board of Professional Responsibility of the Tennessee Supreme Court",
+   "court": "Tennessee Supreme Court",
+   "court_id": "tenn",
+   "dateFiled": "2024-01-25",
+   "docketNumber": "E2022-00945-SC-R3-BP",
+   "absolute_url": "/opinion/9469205/thomas-fleming-mabry-v-the-board-of-professional-responsibility-of-the/",
+   "citeCount": 0,
+   "opinions": [
+    {
+     "id": 9927043,
+     "snippet": "                                                                                       01/25/2024\n                   IN THE SUPREME COURT OF TENNESSEE\n                             "
+    }
+   ]
+  }
+ ]
+}

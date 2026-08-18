@@ -1,0 +1,57 @@
+{
+ "count": 2,
+ "results": [
+  {
+   "title": "Delivering Gold Standard Childhood Vaccine Recommendations for Americans",
+   "type": "Presidential Document",
+   "subtype": "Executive Order",
+   "abstract": null,
+   "publication_date": "2026-08-14",
+   "signing_date": "2026-08-10",
+   "executive_order_number": "14420",
+   "president": {
+    "identifier": "donald-trump",
+    "name": "Donald Trump"
+   },
+   "agencies": [
+    {
+     "raw_name": "EXECUTIVE OFFICE OF THE PRESIDENT",
+     "name": "Executive Office of the President",
+     "id": 538,
+     "url": "https://www.federalregister.gov/agencies/executive-office-of-the-president",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/538",
+     "parent_id": null,
+     "slug": "executive-office-of-the-president"
+    }
+   ],
+   "html_url": "https://www.federalregister.gov/documents/2026/08/14/2026-16730/delivering-gold-standard-childhood-vaccine-recommendations-for-americans",
+   "document_number": "2026-16730"
+  },
+  {
+   "title": "Realigning United States Core Childhood Vaccine Recommendations With Best Practices From Peer, Developed Countries",
+   "type": "Presidential Document",
+   "subtype": "Executive Order",
+   "abstract": null,
+   "publication_date": "2026-06-03",
+   "signing_date": "2026-05-29",
+   "executive_order_number": "14407",
+   "president": {
+    "identifier": "donald-trump",
+    "name": "Donald Trump"
+   },
+   "agencies": [
+    {
+     "raw_name": "EXECUTIVE OFFICE OF THE PRESIDENT",
+     "name": "Executive Office of the President",
+     "id": 538,
+     "url": "https://www.federalregister.gov/agencies/executive-office-of-the-president",
+     "json_url": "https://www.federalregister.gov/api/v1/agencies/538",
+     "parent_id": null,
+     "slug": "executive-office-of-the-president"
+    }
+   ],
+   "html_url": "https://www.federalregister.gov/documents/2026/06/03/2026-11180/realigning-united-states-core-childhood-vaccine-recommendations-with-best-practices-from-peer",
+   "document_number": "2026-11180"
+  }
+ ]
+}
