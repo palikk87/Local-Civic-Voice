@@ -22,6 +22,7 @@ import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
 import { schemaState } from "./services/schema-state";
+import { officialSources } from "./services/reference-content";
 import { releaseAbandonedWork } from "./services/brief-state";
 
 // Import rate limiters
@@ -134,6 +135,12 @@ app.get("/health", async (c) => {
     // Surfaced because an unsent one-time code is otherwise invisible: sign-in
     // and password reset both fail at the moment a user needs them, not at boot.
     email: { configured: isEmailConfigured() },
+    // Which official sources this deployment can actually read. A Citizen's
+    // Brief is written from the law's own text and nothing else, so a missing
+    // key here means every brief for that branch reports "no official text" —
+    // which reads to a user as "this law has nothing published", and is not
+    // what happened.
+    sources: officialSources(),
     cache: {
       caches: cacheStats.caches.map((cache) => ({
         name: cache.name,

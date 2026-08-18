@@ -138,6 +138,35 @@ export function hashText(text: string): string {
   return createHash("sha256").update(text).digest("hex").slice(0, 32);
 }
 
+/**
+ * Which official sources this deployment can actually reach.
+ *
+ * WHY THIS IS SURFACED. "No official text available" is the same sentence
+ * whether the law genuinely has nothing published or the server has no key to
+ * ask with — and the second is an operator problem wearing the first one's
+ * clothes. Without a key, congress.gov answers 403 to every request, every bill
+ * reports no text, and every Citizen's Brief is unavailable. Nothing in the
+ * product said so.
+ *
+ * Reported by GET /health alongside the email configuration, for the same
+ * reason: a credential that is missing fails silently at the moment a reader
+ * needs it, not at boot.
+ */
+export function officialSources(): {
+  congress: boolean;
+  courtListener: boolean;
+  federalRegister: true;
+} {
+  return {
+    // Bills. Without it there is no legislative text at all.
+    congress: !!process.env.CONGRESS_API_KEY,
+    // Supreme Court opinions. Optional — the public page is the fallback.
+    courtListener: !!process.env.COURTLISTENER_API_KEY,
+    // Executive orders. Public API, no key exists to be missing.
+    federalRegister: true,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Source chains — one per reference type, tried in order until one yields text
 // ---------------------------------------------------------------------------
@@ -193,6 +222,18 @@ function parseBillId(masterReferenceId: string, fallbackCongress: number | null)
 async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
   const apiKey = process.env.CONGRESS_API_KEY;
   const parsed = parseBillId(ref.masterReferenceId, ref.congress);
+
+  // Loud, and specific about whose problem it is. This used to fall through to
+  // the generic "no official text available", so a missing key looked exactly
+  // like a law nobody has published — and every bill on the platform reported
+  // the second when the truth was the first.
+  if (!apiKey) {
+    console.error(
+      `[RefContent] CONGRESS_API_KEY is not set. No bill text can be fetched, so every ` +
+        `Citizen's Brief for a bill will report as unavailable. ${ref.masterReferenceId} is ` +
+        `one of them.`,
+    );
+  }
 
   // Source 1: congress.gov text versions — the actual legislative text.
   if (apiKey && parsed) {

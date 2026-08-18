@@ -81,6 +81,27 @@ describe("boot", () => {
     expect(body.email.configured).toBe(false);
   });
 
+  test("health says which official sources it can actually read", async () => {
+    // "No official text available" is the same sentence whether a law has
+    // nothing published or the server has no key to ask with — and the second
+    // is an operator problem wearing the first one's clothes. Without a
+    // congress.gov key every bill reports no text and every Citizen's Brief is
+    // unavailable, and until this existed nothing in the product said so.
+    const response = await fetch(`${BASE_URL}/health`);
+    const body = (await response.json()) as {
+      sources: { congress: boolean; courtListener: boolean; federalRegister: boolean };
+    };
+
+    expect(typeof body.sources.congress).toBe("boolean");
+    expect(typeof body.sources.courtListener).toBe("boolean");
+    // The Federal Register needs no key, so there is none to be missing.
+    expect(body.sources.federalRegister).toBe(true);
+
+    // The test environment sets a congress key, so this reports it. The point
+    // is that the answer tracks configuration rather than being decorative.
+    expect(body.sources.congress).toBe(!!process.env.CONGRESS_API_KEY);
+  });
+
   test("health reports whether the database matches the code", async () => {
     const response = await fetch(`${BASE_URL}/health`);
     const body = (await response.json()) as {
