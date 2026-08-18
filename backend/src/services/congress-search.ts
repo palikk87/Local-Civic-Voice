@@ -47,6 +47,13 @@ export interface RankedBill extends BillIdentity {
   masterReferenceId: string;
   updateDate?: string;
   score: number;
+  /**
+   * The part of the score that came from matching the query, as opposed to the
+   * bill simply being recent or prominent. Always > 0 for a returned result —
+   * if this is ever 0, something reached the reader without matching what they
+   * asked for, which is the defect this field exists to make visible.
+   */
+  relevance: number;
   matchedVia: string[];
   reference: {
     id: string;
@@ -540,22 +547,48 @@ function daysSince(dateStr?: string): number {
   return (Date.now() - t) / 86_400_000;
 }
 
+/**
+ * Two numbers, deliberately kept apart: did this bill match what was asked for,
+ * and how prominent is it.
+ *
+ * THE BUG THIS SPLIT EXISTS FOR. There used to be one score and a `> 10` floor,
+ * and a bill could clear that floor without matching the query at all: being in
+ * the current Congress was +25, updated in the last 60 days +20, arriving from
+ * the recently-updated pool +10, and a leadership bill number (HR/S 1-25) +15.
+ * Seventy points of pure prominence, with a bar at ten. So every search
+ * returned the same handful of freshly-touched headline bills whatever you
+ * typed, and it read exactly like a canned list — because it was one.
+ *
+ * Relevance is earned from the query. Prominence only ORDERS things that
+ * already earned it, and can never admit anything on its own.
+ */
+interface BillScore {
+  /** Matched the query. Zero means this is not a search result. */
+  relevance: number;
+  /** Freshness, legislative progress, community activity. Ordering only. */
+  prominence: number;
+  total: number;
+}
+
 function scoreBill(
   bill: SourceBill & { sources: Set<string>; bestGovinfoTitleRank: number },
   query: string,
   keywords: string[],
   expandedTerms: string[],
   dbRef: DbRef | undefined,
-): number {
+): BillScore {
   const title = (bill.title ?? "").toLowerCase();
   const q = query.toLowerCase().trim();
-  let score = 0;
 
-  if (bill.sources.has("explicit")) score += 200;
-  if (bill.sources.has("known-bill")) score += 80;
+  // ---- Relevance: every point here traces back to what was typed ----------
+  let relevance = 0;
 
-  if (q.length > 2 && title.includes(q)) score += 100;
-  if (title.startsWith(q)) score += 40;
+  // Asked for by name, or named by the interpreter as the bill in question.
+  if (bill.sources.has("explicit")) relevance += 200;
+  if (bill.sources.has("known-bill")) relevance += 80;
+
+  if (q.length > 2 && title.includes(q)) relevance += 100;
+  if (title.startsWith(q)) relevance += 40;
 
   // A bill whose ENTIRE title (or one part of a compound title like
   // "Safeguard American Voter Eligibility Act; SAVE Act") is the query or
@@ -569,45 +602,59 @@ function scoreBill(
       .trim();
     return bare === q || bare === qBare || bare === `${qBare} act`;
   });
-  if (exactTitleHit) score += 110;
+  if (exactTitleHit) relevance += 110;
+
   for (const term of expandedTerms) {
-    if (title.includes(term.toLowerCase())) score += 60;
+    if (title.includes(term.toLowerCase())) relevance += 60;
   }
   if (keywords.length > 0) {
     const matched = keywords.filter((k) => title.includes(k)).length;
-    score += Math.round(50 * (matched / keywords.length));
+    relevance += Math.round(50 * (matched / keywords.length));
   }
 
+  // Found by a search, as opposed to merely being nearby.
   if (bill.sources.has("govinfo-title")) {
-    score += Math.max(0, 30 - 2 * bill.bestGovinfoTitleRank);
+    relevance += Math.max(0, 30 - 2 * bill.bestGovinfoTitleRank);
   }
-  if (bill.sources.has("govinfo-fulltext")) score += 10;
-  if (bill.sources.has("recent")) score += 10;
+  if (bill.sources.has("govinfo-fulltext")) relevance += 10;
+  // The local table was searched by text too, so being returned by it is a
+  // match. Merely HAVING a reference row is not — that is a join, not a hit,
+  // and it is scored as prominence below.
+  if (bill.sources.has("db-reference")) relevance += 25;
 
-  // Prominence: how far the bill advanced (passed a chamber >> introduced)...
-  score += bill.progress ?? 0;
+  // ---- Prominence: ordering only. Never admits anything on its own. ------
+  let prominence = 0;
+
+  // The recently-updated pool is a source of candidates, not evidence of a
+  // match. Whatever made it relevant is already counted above.
+  if (bill.sources.has("recent")) prominence += 10;
+
+  // How far the bill advanced (passed a chamber >> introduced)...
+  prominence += bill.progress ?? 0;
   // ...and leadership-reserved bill numbers (HR 1-25 / S 1-25 are set aside
   // for each party's headline priorities — e.g. HR 22, the SAVE Act).
   const num = parseInt(bill.number, 10);
-  if (!Number.isNaN(num) && num <= 25) score += 15;
+  if (!Number.isNaN(num) && num <= 25) prominence += 15;
 
   const age = Math.min(daysSince(bill.updateDate), daysSince(bill.latestAction?.actionDate));
-  if (age < 60) score += 20;
-  else if (age < 365) score += 10;
+  if (age < 60) prominence += 20;
+  else if (age < 365) prominence += 10;
 
-  // Freshness is part of relevance: a 2009 resolution should never outrank a
-  // sitting-congress bill on the same topic. Anything older than the previous
-  // congress is history, not news.
-  if (bill.congress >= CURRENT_CONGRESS) score += 25;
-  else if (bill.congress === CURRENT_CONGRESS - 1) score += 10;
-  else score -= 80;
+  // A 2009 resolution should never outrank a sitting-congress bill on the same
+  // topic. Anything older than the previous congress is history, not news.
+  if (bill.congress >= CURRENT_CONGRESS) prominence += 25;
+  else if (bill.congress === CURRENT_CONGRESS - 1) prominence += 10;
+  else prominence -= 80;
 
   if (dbRef) {
-    score += 15;
-    score += Math.min(30, dbRef.supportVotes + dbRef.opposeVotes + 2 * dbRef.totalComments + 2 * dbRef.postsCount);
+    prominence += 15;
+    prominence += Math.min(
+      30,
+      dbRef.supportVotes + dbRef.opposeVotes + 2 * dbRef.totalComments + 2 * dbRef.postsCount,
+    );
   }
 
-  return score;
+  return { relevance, prominence, total: relevance + prominence };
 }
 
 // ---------- Main entry point ----------
@@ -788,8 +835,16 @@ export async function searchCongressBills(
       const dbRef = refByMasterId.get(key);
       return { bill, key, dbRef, score: scoreBill(bill, query, combinedKeywords, broadTerms, dbRef) };
     })
-    .filter((r) => r.score > 10) // drop noise-only matches
-    .sort((a, b) => b.score - a.score || daysSince(a.bill.updateDate) - daysSince(b.bill.updateDate));
+    // MUST have matched the query. Prominence orders results; it does not
+    // create them. The old floor was a total of 10, which a bill could clear on
+    // freshness and a low bill number alone — which is why every search
+    // returned the same recently-touched headline bills.
+    .filter((r) => r.score.relevance > 0)
+    .sort(
+      (a, b) =>
+        b.score.total - a.score.total ||
+        daysSince(a.bill.updateDate) - daysSince(b.bill.updateDate),
+    );
 
   // Hydrate the top candidates with congress.gov detail (GovInfo results lack
   // latestAction), then RE-score with real legislative progress so a
@@ -803,11 +858,24 @@ export async function searchCongressBills(
           entry.bill = { ...entry.bill, ...detail, source: entry.bill.source, sourceRank: entry.bill.sourceRank };
         }
       }
-      entry.score += actionProgress(entry.bill.latestAction?.text);
+      // Legislative progress is prominence — a House-passed bill outranks a
+      // same-named introduced one, but it cannot make an irrelevant bill appear.
+      const progress = actionProgress(entry.bill.latestAction?.text);
+      entry.score = {
+        ...entry.score,
+        prominence: entry.score.prominence + progress,
+        total: entry.score.total + progress,
+      };
     }),
   );
   const rescored = [
-    ...ranked.slice(0, hydrateCount).sort((a, b) => b.score - a.score || daysSince(a.bill.updateDate) - daysSince(b.bill.updateDate)),
+    ...ranked
+      .slice(0, hydrateCount)
+      .sort(
+        (a, b) =>
+          b.score.total - a.score.total ||
+          daysSince(a.bill.updateDate) - daysSince(b.bill.updateDate),
+      ),
     ...ranked.slice(hydrateCount),
   ];
 
@@ -822,7 +890,8 @@ export async function searchCongressBills(
     url: congressGovUrl(bill),
     masterReferenceId: key,
     updateDate: bill.updateDate,
-    score,
+    score: score.total,
+    relevance: score.relevance,
     matchedVia: [...bill.sources],
     reference: dbRef
       ? {

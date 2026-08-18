@@ -32,6 +32,18 @@ export const congressSearchResultSchema = z.object({
       postsCount: z.number(),
     })
     .nullable(),
+  /**
+   * Why this result is here.
+   *
+   * `relevance` is the part of the score earned by matching the query, as
+   * opposed to the bill merely being recent or prominent — it is always above
+   * zero for a returned result. `matchedVia` names the sources that found it.
+   * Both were computed and then discarded before the response, which is why
+   * "these look like preloaded results rather than my search" took an
+   * investigation instead of a glance.
+   */
+  relevance: z.number(),
+  matchedVia: z.array(z.string()),
 });
 
 export const congressSearchResponseSchema = z.object({

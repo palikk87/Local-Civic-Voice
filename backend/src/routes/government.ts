@@ -124,6 +124,14 @@ governmentRouter.get(
           url: bill.url,
           masterReferenceId: bill.masterReferenceId,
           reference: bill.reference,
+          // WHY THIS RESULT IS HERE. Both were computed and then thrown away,
+          // which is why "these look like preloaded results rather than my
+          // search" took an investigation instead of a glance. `relevance` is
+          // the part of the score earned by matching the query — it is always
+          // above zero for a returned result — and `matchedVia` names the
+          // sources that found it (govinfo-title, db-reference, recent, ...).
+          relevance: bill.relevance,
+          matchedVia: bill.matchedVia,
         })),
         pagination: {
           count: output.totalMatched,
