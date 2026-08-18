@@ -17,7 +17,12 @@ import { billReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName as claimedBy } from "./reference-names";
 // The one fingerprint for official text. A second implementation here would
 // disagree with that one on every row and report the law as changed nightly.
-import { hashText } from "./reference-content";
+import {
+  hashText,
+  htmlToText,
+  sanitizeOfficialText,
+  stripFederalRegisterFurniture,
+} from "./reference-content";
 import { notifyLawUpdate } from "./notification-service";
 
 const SYNC_COUNT = 10;
@@ -51,15 +56,29 @@ async function fetchJson<T>(url: string, headers: Record<string, string> = {}): 
   }
 }
 
+/**
+ * Official text, cleaned the same way the content pipeline cleans it.
+ *
+ * This used to keep whatever came back verbatim, and what comes back from the
+ * Federal Register's `.txt` URL is not text: it is an <html><head><title>
+ * Federal Register, Volume 91 Issue 156</title> wrapper around a <pre> block.
+ * Sync stored that as the full text of the executive order, so every brief for
+ * an order was written from a page header — and because sync had already put
+ * something in the column, the content pipeline saw text present and never
+ * replaced it.
+ *
+ * Same two functions the reader-facing fetch uses, and the same floor: a
+ * document under 200 characters is an error page, not a law.
+ */
 async function fetchText(url: string): Promise<string | null> {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!response.ok) return null;
-    // Strip NUL/control bytes (GPO raw text embeds them; SQLite cuts strings at NUL).
+    const raw = await response.text();
+    const looksLikeHtml = /<\/?(html|body|div|p|pre)\b/i.test(raw.slice(0, 2_000));
     // Never truncate — official text is stored in its entirety.
-    // eslint-disable-next-line no-control-regex
-    const text = (await response.text()).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
-    return text.length > 0 ? text : null;
+    const text = sanitizeOfficialText(looksLikeHtml ? htmlToText(raw) : raw);
+    return text.length > 200 ? text : null;
   } catch {
     return null;
   }
@@ -303,6 +322,7 @@ interface FederalRegisterListResponse {
     html_url: string;
     document_number: string;
     president?: { name?: string } | null;
+    body_html_url?: string | null;
     raw_text_url?: string | null;
   }>;
 }
@@ -313,7 +333,7 @@ async function syncExecutiveOrders(): Promise<number> {
   url.searchParams.append("conditions[type][]", "PRESDOCU");
   url.searchParams.set("order", "newest");
   url.searchParams.set("per_page", String(SYNC_COUNT));
-  for (const field of ["executive_order_number", "title", "abstract", "signing_date", "publication_date", "html_url", "document_number", "president", "raw_text_url"]) {
+  for (const field of ["executive_order_number", "title", "abstract", "signing_date", "publication_date", "html_url", "document_number", "president", "body_html_url", "raw_text_url"]) {
     url.searchParams.append("fields[]", field);
   }
   const data = await fetchJson<FederalRegisterListResponse>(url.toString());
@@ -330,7 +350,13 @@ async function syncExecutiveOrders(): Promise<number> {
       select: { id: true, fullText: true },
     });
     // Full text is a separate download per order — only fetch it once.
-    const fullText = !existing?.fullText && doc.raw_text_url ? await fetchText(doc.raw_text_url) : null;
+    //
+    // body_html first. It is the order and nothing else; raw_text_url is the
+    // page of the Federal Register the order was printed on, gazette furniture
+    // and all. Whatever comes back has that furniture stripped either way.
+    const textUrl = doc.body_html_url ?? doc.raw_text_url;
+    const fetched = !existing?.fullText && textUrl ? await fetchText(textUrl) : null;
+    const fullText = fetched ? stripFederalRegisterFurniture(fetched, eoNumber) : null;
 
     const presidentName = doc.president?.name;
     const descriptionParts = [

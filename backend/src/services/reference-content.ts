@@ -74,7 +74,7 @@ async function fetchJson<T>(
 }
 
 /** Strip markup so stored "full text" is readable plain text regardless of source format. */
-function htmlToText(input: string): string {
+export function htmlToText(input: string): string {
   return input
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -97,7 +97,7 @@ function htmlToText(input: string): string {
  * and other control bytes. SQLite treats NUL as a string terminator, silently
  * cutting the stored text off at the first one — strip everything but \n and \t.
  */
-function sanitizeOfficialText(text: string): string {
+export function sanitizeOfficialText(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
 }
@@ -282,49 +282,162 @@ async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<Tex
   return null;
 }
 
-async function fetchExecutiveOrderText(
+// ---------------------------------------------------------------------------
+// Executive — Federal Register
+// ---------------------------------------------------------------------------
+//
+// The Federal Register is open: no key, no token, no throttle to negotiate. Its
+// difficulty is a different one — it publishes the same order at three URLs and
+// only one of them is the order.
+//
+// Measured against document 2026-16730 (Executive Order 14420):
+//
+//   raw_text_url       11,224 bytes, and despite the .txt it is HTML: an
+//                      <html><head><title>Federal Register, Volume 91 Issue
+//                      156</title> wrapper around a <pre> block, which then
+//                      opens with the gazette furniture — [[Page 53171]],
+//                      "Vol. 91", "No. 156", "Part XXX", running heads and
+//                      rules — before reaching the order
+//   body_html_url      12,006 bytes that begin "Executive Order 14420 of
+//                      August 10, 2026", the title, and "By the authority
+//                      vested in me as President…". The order, and nothing else
+//   full_text_xml_url  the same content in FR's own tag vocabulary
+//
+// So body_html comes first. The old order tried raw text first, stored the
+// gazette wrapper as the text of the order, and handed a model a page header
+// to write a brief from.
+
+/** The URLs the Federal Register serves one document at, best first. */
+interface FederalRegisterDocument {
+  body_html_url?: string | null;
+  raw_text_url?: string | null;
+  full_text_xml_url?: string | null;
+}
+
+function federalRegisterSources(doc: FederalRegisterDocument | null): string[] {
+  return [doc?.body_html_url, doc?.raw_text_url, doc?.full_text_xml_url].filter(
+    (url): url is string => typeof url === "string" && url.length > 0
+  );
+}
+
+/**
+ * Take the order out of the gazette.
+ *
+ * The raw-text file is a page of the Federal Register, not a document: issue
+ * header, volume and number, part number, printer's rules, and a [[Page NNNNN]]
+ * marker wherever the typesetter broke a page — dropped mid-sentence, so they
+ * corrupt the prose as well as padding it.
+ *
+ * TWO GUARDS, both learned by getting it wrong:
+ *
+ * 1. Only a gazette page is taken apart. The document body served at
+ *    body_html_url carries none of this furniture, and running a cut over it
+ *    would be all risk and no benefit — so a text with no gazette markings is
+ *    returned untouched.
+ *
+ * 2. The cut is made on the order's OWN number. An order that cites an earlier
+ *    one says "Executive Order 14407 of May 29, 2026" in the middle of its own
+ *    text; cutting at the first heading-shaped thing threw away everything
+ *    before that, enacting sentence included. Measured on this document: the
+ *    real heading sits at character 778 and the citation at 1,982, and only the
+ *    number tells them apart.
+ */
+const GAZETTE_MARKERS = /\[\[Page|From the Federal Register Online|Federal Register\s*\/\s*Vol/i;
+/** How far into the text the Federal Register's own front matter can run. */
+const FRONT_MATTER_CHARS = 3_000;
+
+export function stripFederalRegisterFurniture(text: string, eoNumber?: string | null): string {
+  if (!GAZETTE_MARKERS.test(text.slice(0, 4_000))) return text;
+
+  const withoutPageMarks = text
+    .replace(/\[\[Page[^\]]*\]\]/g, " ")
+    .replace(/^\s*-{10,}\s*$/gm, "")
+    .replace(/^\s*_{10,}\s*$/gm, "");
+
+  // Without a number there is nothing safe to cut on, so only the page markers
+  // come off. A wrong cut loses the operative text; a header left in place
+  // costs a few hundred characters of a document the model reads in full.
+  let cut = -1;
+  if (eoNumber) {
+    const heading = new RegExp(`Executive Order ${eoNumber}\\s+of\\s+\\w+`, "g");
+    for (const match of withoutPageMarks.matchAll(heading)) {
+      if (match.index === undefined || match.index > FRONT_MATTER_CHARS) break;
+      cut = match.index;
+    }
+  }
+
+  const body = cut >= 0 ? withoutPageMarks.slice(cut) : withoutPageMarks;
+  return body.replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
+}
+
+async function fetchFederalRegisterText(
+  url: string,
+  deadlineAt: number,
+  eoNumber: string | null
+): Promise<string | null> {
+  const text = await fetchDocumentText(url, deadlineAt);
+  if (!text) return null;
+  const cleaned = stripFederalRegisterFurniture(text, eoNumber);
+  return cleaned.length > 200 ? cleaned : null;
+}
+
+export async function fetchExecutiveOrderText(
   ref: ReferenceRow,
   deadlineAt: number
 ): Promise<TextResult | null> {
-  // Source 1: Federal Register document record → raw text file.
-  // The document number is embedded in the html_url we stored at sync time.
+  // Source 1: the document record, which names every URL it is published at.
+  // The document number is embedded in the html_url stored at sync time.
+  const eoNumber = ref.masterReferenceId.replace(/^eo-/i, "").replace(/\D/g, "") || null;
+
   const docNumber = ref.sourceUrl?.match(/federalregister\.gov\/documents\/[\d/]+\/([\w-]+)/)?.[1];
   if (docNumber) {
-    const doc = await fetchJson<{ raw_text_url?: string | null; body_html_url?: string | null }>(
-      `https://www.federalregister.gov/api/v1/documents/${docNumber}.json?fields[]=raw_text_url&fields[]=body_html_url`,
+    const doc = await fetchJson<FederalRegisterDocument>(
+      `https://www.federalregister.gov/api/v1/documents/${docNumber}.json` +
+        `?fields[]=body_html_url&fields[]=raw_text_url&fields[]=full_text_xml_url`,
       deadlineAt
     );
-    for (const url of [doc?.raw_text_url, doc?.body_html_url]) {
-      if (!url) continue;
-      const text = await fetchDocumentText(url, deadlineAt);
+    for (const url of federalRegisterSources(doc)) {
+      const text = await fetchFederalRegisterText(url, deadlineAt, eoNumber);
       if (text) return { text, source: "federalregister", url };
     }
   }
 
-  // Source 2: search the Federal Register by executive order number.
-  const eoNumber = ref.masterReferenceId.replace(/^eo-/i, "").replace(/\D/g, "");
+  // Source 2: find the order by its number.
+  //
+  // conditions[term] and not conditions[executive_order_number]: the second one
+  // reads like the right filter and the API answers it with HTTP 400. The term
+  // search returns the right document, and the number is checked below rather
+  // than trusted.
   if (eoNumber) {
     const search = await fetchJson<{
-      results?: Array<{ executive_order_number?: string | number | null; raw_text_url?: string | null }>;
+      results?: Array<FederalRegisterDocument & { executive_order_number?: string | number | null }>;
     }>(
-      `https://www.federalregister.gov/api/v1/documents.json?conditions[presidential_document_type]=executive_order&conditions[term]=${eoNumber}&per_page=5&fields[]=executive_order_number&fields[]=raw_text_url`,
+      `https://www.federalregister.gov/api/v1/documents.json` +
+        `?conditions[presidential_document_type]=executive_order&conditions[term]=${eoNumber}` +
+        `&per_page=5&fields[]=executive_order_number&fields[]=body_html_url&fields[]=raw_text_url&fields[]=full_text_xml_url`,
       deadlineAt
     );
     const match = search?.results?.find(
       (r) => String(r.executive_order_number ?? "").replace(/\D/g, "") === eoNumber
     );
-    if (match?.raw_text_url) {
-      const text = await fetchDocumentText(match.raw_text_url, deadlineAt);
-      if (text) return { text, source: "federalregister/search", url: match.raw_text_url };
+    for (const url of federalRegisterSources(match ?? null)) {
+      const text = await fetchFederalRegisterText(url, deadlineAt, eoNumber);
+      if (text) return { text, source: "federalregister/search", url };
     }
   }
 
-  // Source 3: whatever official page we have on file.
+  // Source 3: whatever official page we have on file. Last, because it is a
+  // rendered web page with navigation and related-document links around the
+  // order rather than the order on its own.
   if (ref.sourceUrl) {
-    const text = await fetchDocumentText(ref.sourceUrl, deadlineAt);
+    const text = await fetchFederalRegisterText(ref.sourceUrl, deadlineAt, eoNumber);
     if (text) return { text, source: "source-page", url: ref.sourceUrl };
   }
 
+  console.warn(
+    `[RefContent] Federal Register has no text for ${ref.masterReferenceId} ` +
+      `(document ${docNumber ?? "unknown"}, EO number "${eoNumber}")`
+  );
   return null;
 }
 
