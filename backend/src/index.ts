@@ -290,30 +290,41 @@ void releaseAbandonedWork()
 //
 // Ahead of the government sync on purpose: the sync would otherwise reach some
 // of these records first, through a path that has no idea a repair is due.
-void repairStoredExtractions()
-  .then((queued) => {
-    if (queued > 0) {
-      console.log(
-        `[Server] re-extracting official text for ${queued} record(s) stored before the ` +
-          `retrieval fix — briefs will be rewritten, no law is marked as changed`
-      );
-    }
-  })
-  .catch((error) => console.error("[Server] could not queue the extraction repair:", error));
+//
+// Held back under CIVIC_NO_BACKGROUND_SYNC, which the test harness sets: the
+// repair queues jobs that reach three government APIs, and a suite that starts
+// a server per file would otherwise pull real records into the test database
+// while other files assert on row counts.
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  void repairStoredExtractions()
+    .then((queued) => {
+      if (queued > 0) {
+        console.log(
+          `[Server] re-extracting official text for ${queued} record(s) stored before the ` +
+            `retrieval fix — briefs will be rewritten, no law is marked as changed`
+        );
+      }
+    })
+    .catch((error) => console.error("[Server] could not queue the extraction repair:", error));
+}
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
 // SCOTUS cases at boot, then once every 24 hours. The sync itself skips if it
 // ran successfully within the last 6 hours, so restarts don't hammer the APIs.
 const GOVERNMENT_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
-enqueueGovernmentSync("startup");
-setInterval(() => enqueueGovernmentSync("daily"), GOVERNMENT_SYNC_INTERVAL_MS);
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  enqueueGovernmentSync("startup");
+  setInterval(() => enqueueGovernmentSync("daily"), GOVERNMENT_SYNC_INTERVAL_MS);
+}
 
 // Lineage: ask congress.gov which stored records are really the same law, so
 // two filings of one bill stop splitting the vote count. Daily, and not at
 // boot — the sweep is one request per record against the same key search uses,
 // and a restart loop would spend the hourly budget on nothing.
 const LINEAGE_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
-setInterval(() => enqueueLineageSync("daily"), LINEAGE_SYNC_INTERVAL_MS);
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  setInterval(() => enqueueLineageSync("daily"), LINEAGE_SYNC_INTERVAL_MS);
+}
 
 // Accounts live in Postgres, external to this container, so they survive
 // restarts without any backup/restore protocol here.

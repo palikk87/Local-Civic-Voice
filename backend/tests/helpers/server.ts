@@ -138,6 +138,23 @@ function env(): Record<string, string> {
     // has to see the next /health reflect it. Production keeps the 30s default,
     // because the platform polls that endpoint.
     HEALTH_SCHEMA_TTL_MS: "0",
+    // No outbound background work from the test server.
+    //
+    // The boot sequence enqueues a government sync, and the Federal Register
+    // needs no key — so every server this harness starts began pulling real
+    // executive orders into the test database, asynchronously, while other
+    // files were asserting on row counts. One of those assertions is "a bill
+    // nobody here has stored is left where it is", which fails the moment a
+    // record arrives from anywhere at all.
+    //
+    // It went unnoticed while the counts happened to win the race, and surfaced
+    // in CI as soon as another test file booted another server. A suite whose
+    // result depends on a third-party API being up, and on which side of a
+    // network round-trip an assertion lands, is not measuring the code.
+    //
+    // The boot still runs for real; only the outbound work is held back, and
+    // the tests that cover it call it directly.
+    CIVIC_NO_BACKGROUND_SYNC: "1",
     // No RESEND_API_KEY on purpose: the send path must throw rather than
     // silently succeed, and one of the tests asserts exactly that.
     //

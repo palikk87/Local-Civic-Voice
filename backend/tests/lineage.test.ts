@@ -248,11 +248,24 @@ describe("congress.gov lineage, replayed", () => {
     // fill the database with laws nobody asked about, and a bill nobody on this
     // platform has shared is not splitting anybody's vote.
     const hr1 = await record("hr-1-119", "One Big Beautiful Bill Act");
-
-    const before = await prisma.governmentReference.count();
     const result = await syncLineageFor(hr1.id);
 
-    expect(await prisma.governmentReference.count()).toBe(before);
+    // Named, not counted.
+    //
+    // This asserted a global row count, which any writer anywhere can break —
+    // and one did: the test server enqueues a government sync at boot, the
+    // Federal Register needs no key, and a real executive order landing in the
+    // database mid-assertion failed a test about congress.gov lineage. Green
+    // locally, red in CI, for a reason with nothing to do with the claim.
+    //
+    // The claim is about these bills: hr-1-119 publishes thirty-four
+    // relationships and none of them may become a record here.
+    const related = await prisma.governmentReference.findMany({
+      where: { referenceType: "bill" },
+      select: { masterReferenceId: true },
+    });
+    expect(related.map((r) => r.masterReferenceId)).toEqual(["hr-1-119"]);
+
     expect(result.merged).toBe(0);
     expect(result.queued).toBe(0);
     expect(await prisma.referenceMergeCandidate.count()).toBe(0);
