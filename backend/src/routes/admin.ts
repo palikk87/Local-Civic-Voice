@@ -13,6 +13,7 @@ import { mergeReferences } from "../services/deduplication-service";
 import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
 import { JobPriority, enqueueLineageSync } from "../services/job-queue";
+import { officialSources } from "../services/reference-content";
 
 // ==========================================
 // Type Definitions
@@ -1219,6 +1220,109 @@ adminRouter.delete("/b2b-clients/:id", zValidator("param", idParamSchema), async
   );
 
   return c.json({ success: true, revokedSessions: revoked });
+});
+
+/**
+ * GET /api/admin/content-health
+ *
+ * Is every branch of government actually pulling full text, and is a brief
+ * getting written from it?
+ *
+ * THE QUESTION THIS ANSWERS, which took far too long to answer once. Briefs
+ * stopped working across bills, executive orders and Supreme Court cases at the
+ * same time, every source key was valid, and from the outside all three looked
+ * identical: "the official text isn't published anywhere we can read yet." Four
+ * different failures wear that one sentence — no key, a rejected key, a
+ * throttled key, and a text the fetch stored as markup — and none of them is
+ * about the law.
+ *
+ * So this reports what the real fetch actually did, from what it actually
+ * stored. It runs no requests of its own and walks no parallel copy of the
+ * source chains: a second implementation of three branch-specific fetchers
+ * would drift from them within a week and then confidently report on code
+ * nobody runs. Every number here is the pipeline's own output.
+ *
+ * Per branch: how many records exist, how many hold text, how much text, which
+ * source it came from, and how many carry a brief written for the version of
+ * the law they are on now.
+ */
+adminRouter.get("/content-health", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  try {
+    // One pass, in the database. LENGTH() rather than the column: a branch with
+    // a few hundred opinions in it is hundreds of megabytes of text, and none of
+    // it needs to cross the wire to be counted.
+    const rows = await prisma.$queryRaw<
+      Array<{
+        referenceType: string;
+        records: bigint;
+        withText: bigint;
+        medianChars: number | null;
+        briefsCurrent: bigint;
+      }>
+    >`
+      SELECT
+        "referenceType",
+        COUNT(*)                                                        AS "records",
+        COUNT(*) FILTER (WHERE COALESCE(LENGTH("fullText"), 0) > 200)   AS "withText",
+        PERCENTILE_CONT(0.5) WITHIN GROUP (
+          ORDER BY COALESCE(LENGTH("fullText"), 0)
+        ) FILTER (WHERE COALESCE(LENGTH("fullText"), 0) > 200)          AS "medianChars",
+        COUNT(*) FILTER (
+          WHERE "citizenBriefJson" IS NOT NULL
+            AND "citizenBriefVersion" = "lawVersion"
+        )                                                               AS "briefsCurrent"
+      FROM "GovernmentReference"
+      WHERE "mergedIntoId" IS NULL
+      GROUP BY "referenceType"
+      ORDER BY "referenceType"
+    `;
+
+    // Which source answered. A branch whose text all arrives from a fallback is
+    // working in the sense that something came back, and not in any other sense.
+    const sources = await prisma.$queryRaw<
+      Array<{ referenceType: string; fullTextSource: string | null; count: bigint }>
+    >`
+      SELECT "referenceType", "fullTextSource", COUNT(*) AS "count"
+      FROM "GovernmentReference"
+      WHERE "mergedIntoId" IS NULL AND COALESCE(LENGTH("fullText"), 0) > 200
+      GROUP BY "referenceType", "fullTextSource"
+      ORDER BY "referenceType", COUNT(*) DESC
+    `;
+
+    const branches = rows.map((row) => {
+      const records = Number(row.records);
+      const withText = Number(row.withText);
+      return {
+        referenceType: row.referenceType,
+        records,
+        withText,
+        withoutText: records - withText,
+        medianTextChars: row.medianChars === null ? null : Math.round(row.medianChars),
+        briefsCurrent: Number(row.briefsCurrent),
+        sources: sources
+          .filter((s) => s.referenceType === row.referenceType)
+          .map((s) => ({ source: s.fullTextSource ?? "unrecorded", count: Number(s.count) })),
+      };
+    });
+
+    return c.json({
+      data: {
+        branches,
+        // What the server is configured to be able to do at all. A branch with
+        // no text and no key is a settings problem; a branch with a key and no
+        // text is a real one, and they are not told apart by staring at counts.
+        configured: officialSources(),
+      },
+    });
+  } catch (error) {
+    console.error("Error building content health:", error);
+    return c.json({ error: "Failed to build content health" }, { status: 500 });
+  }
 });
 
 adminRouter.get("/storage-health", async (c) => {
