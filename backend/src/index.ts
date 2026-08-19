@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import "./env";
@@ -125,15 +126,7 @@ app.get("/health", async (c) => {
     // cannot be faked. The host variables are a statement of intent rather
     // than of fact — but a platform saying which commit it deployed is far
     // better than nothing at all, and it needs no configuration to work.
-    version: {
-      commit:
-        process.env.GIT_SHA ||
-        process.env.RAILWAY_GIT_COMMIT_SHA ||
-        process.env.RENDER_GIT_COMMIT ||
-        process.env.SOURCE_COMMIT ||
-        "unknown",
-      builtAt: process.env.BUILD_TIME || null,
-    },
+    version: buildVersion(),
     // WHETHER THE DATABASE MATCHES THE CODE.
     //
     // The commit above says the right code is running. This says the right
@@ -273,6 +266,58 @@ if (storageDriver === "local") {
       },
     });
   });
+}
+
+/**
+ * Which commit is this container running?
+ *
+ * FOUR SOURCES, IN ORDER OF HOW MUCH THEY CAN BE TRUSTED, and every one of them
+ * exists because the ones above it were not enough:
+ *
+ *   1. GIT_SHA — a build argument. Authoritative: it describes the code in this
+ *      image and nothing at runtime can change it. Only set when the builder
+ *      passes it.
+ *
+ *   2. BUILD_COMMIT — a file written into the upload by .github/workflows/
+ *      deploy.yml immediately before `railway up`. This is the one that
+ *      actually works here. `railway up` uploads a tarball of the working
+ *      directory with NO git metadata — .dockerignore excludes .git, and the
+ *      CLI is not a git client — so nothing inside the build can discover its
+ *      own commit, and RAILWAY_GIT_COMMIT_SHA is never set on a CLI deploy. It
+ *      is only populated for deploys Railway makes from a connected repository.
+ *
+ *   3. The host's own variable, for exactly those repository-connected deploys.
+ *
+ *   4. "unknown" — said out loud rather than guessed at.
+ *
+ * WHY ANY OF THIS MATTERS. /health reported "unknown" on every deploy for the
+ * life of this project, which made `deploy-check` unable to answer the one
+ * question it exists for. Five finished commits then sat unshipped for hours
+ * while the product looked broken, and nothing anywhere could say "you are
+ * running old code" — the tool built to catch that was blind, and the fix for
+ * its blindness was in the unshipped pile.
+ */
+function buildVersion(): { commit: string; builtAt: string | null } {
+  const stamped = process.env.GIT_SHA?.trim();
+  if (stamped) return { commit: stamped, builtAt: process.env.BUILD_TIME || null };
+
+  try {
+    const [commit, builtAt] = readFileSync(new URL("../BUILD_COMMIT", import.meta.url), "utf8")
+      .split("\n")
+      .map((line: string) => line.trim());
+    if (commit) return { commit, builtAt: builtAt || null };
+  } catch {
+    // No file: this image was not built by the deploy workflow. Fall through.
+  }
+
+  return {
+    commit:
+      process.env.RAILWAY_GIT_COMMIT_SHA ||
+      process.env.RENDER_GIT_COMMIT ||
+      process.env.SOURCE_COMMIT ||
+      "unknown",
+    builtAt: process.env.BUILD_TIME || null,
+  };
 }
 
 const port = Number(process.env.PORT) || 3000;

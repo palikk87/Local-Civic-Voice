@@ -58,12 +58,15 @@ jobs:
               echo "To let pushes to \`main\` deploy themselves, and to make a failed"
               echo "deploy show up here instead of only inside a dashboard:"
               echo ""
-              echo "1. Railway → your project → **Settings → Tokens** → create a project token"
+              echo "1. Railway → your project → **Settings → Tokens** → create a **project**"
+              echo "   token. It must be a PROJECT token: the CLI reads a workspace or"
+              echo "   account token from \`RAILWAY_API_TOKEN\` instead, so putting one in"
+              echo "   \`RAILWAY_TOKEN\` authenticates as nobody and the deploy fails."
               echo "2. GitHub → this repo → **Settings → Secrets and variables → Actions**"
-              echo "3. **New repository secret**, named \`RAILWAY_TOKEN\`"
-              echo ""
-              echo "Optionally add a repository **variable** \`RAILWAY_SERVICE\` naming the"
-              echo "backend service, if the project has more than one."
+              echo "3. **New repository secret**, named exactly \`RAILWAY_TOKEN\`"
+              echo "4. If the project has more than one service, add a repository"
+              echo "   **variable** \`RAILWAY_SERVICE\` naming the backend one — otherwise"
+              echo "   \`railway up\` stops with \"Multiple services found\"."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "configured=true" >> "$GITHUB_OUTPUT"
@@ -100,6 +103,26 @@ jobs:
         if: steps.token.outputs.configured == 'true'
         with:
           bun-version: "1.3.11"
+
+      - name: Stamp the commit into the upload
+        if: steps.token.outputs.configured == 'true'
+        run: |
+          # THE ONLY WAY THIS BUILD CAN KNOW ITS OWN COMMIT.
+          #
+          # `railway up` uploads a tarball of the working directory. It is not a
+          # git client and backend/.dockerignore excludes .git, so nothing in
+          # the image can discover the commit, and RAILWAY_GIT_COMMIT_SHA is
+          # never set on a CLI deploy — it is populated only for deploys Railway
+          # makes from a repository it is connected to.
+          #
+          # So the commit is written into the upload itself, here, where it is
+          # known. /health reads this file. Without it the version stamp reads
+          # "unknown" forever and deploy-check cannot tell a shipped fix from an
+          # unshipped one — which is exactly how five finished commits sat
+          # unnoticed while the product looked broken.
+          printf '%s\n%s\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > backend/BUILD_COMMIT
+          echo "Stamped backend/BUILD_COMMIT:"
+          cat backend/BUILD_COMMIT
 
       - name: Deploy
         if: steps.token.outputs.configured == 'true'

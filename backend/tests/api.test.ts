@@ -44,12 +44,23 @@ import { generateAdminToken, generateB2BToken } from "../src/session-token";
 import { mkdir, writeFile, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
+/**
+ * The commit stamp the deploy workflow writes into the upload.
+ *
+ * Written BEFORE the server boots, because that is when the real one is
+ * written — into the tarball, before `railway up` sends it.
+ */
+const STAMPED_COMMIT = "abc123def4567890abc123def4567890abc123de";
+const BUILD_COMMIT_FILE = join(process.cwd(), "BUILD_COMMIT");
+
 beforeAll(async () => {
+  await writeFile(BUILD_COMMIT_FILE, `${STAMPED_COMMIT}\n2026-08-19T06:00:00Z\n`);
   await startServer();
 });
 
 afterAll(async () => {
   await stopServer();
+  await rm(BUILD_COMMIT_FILE, { force: true });
 });
 
 beforeEach(async () => {
@@ -102,7 +113,7 @@ describe("boot", () => {
     expect(body.sources.congress).toBe(!!process.env.CONGRESS_API_KEY);
   });
 
-  test("health takes the commit from the host when the build did not stamp one", async () => {
+  test("health reports the commit the deploy stamped into the upload", async () => {
     // THE BLIND SPOT THIS CLOSES. Railway does not pass RAILWAY_GIT_COMMIT_SHA
     // as a build argument — it sets it as a runtime variable — so the
     // Dockerfile's GIT_SHA stayed at its default and /health answered
@@ -113,13 +124,15 @@ describe("boot", () => {
     // answer, and "unknown" reads like a small gap rather than a broken check.
     // It was found by asking the live API and seeing it there.
     const response = await fetch(`${BASE_URL}/health`);
-    const body = (await response.json()) as { version: { commit: string } };
+    const body = (await response.json()) as { version: { commit: string; builtAt: string | null } };
 
-    // The test server runs with no GIT_SHA and no host variables, so "unknown"
-    // is the honest answer here — what matters is that it is a string the
-    // endpoint chose, not a crash, and that the fallback order exists at all.
-    expect(typeof body.version.commit).toBe("string");
-    expect(body.version.commit.length).toBeGreaterThan(0);
+    // Exactly the value written into the working directory before boot — which
+    // is the only route by which a Railway CLI deploy can know its own commit.
+    // `railway up` uploads a tarball with no git metadata (.dockerignore drops
+    // .git, and the CLI is not a git client), so RAILWAY_GIT_COMMIT_SHA is
+    // never set on these deploys and nothing inside the image can discover it.
+    expect(body.version.commit).toBe(STAMPED_COMMIT);
+    expect(body.version.builtAt).toBe("2026-08-19T06:00:00Z");
   });
 
   test("health reports whether the database matches the code", async () => {

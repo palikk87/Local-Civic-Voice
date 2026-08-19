@@ -39,3 +39,4 @@ studio.log
 
 # Where the test harness writes uploads (tests/helpers/server.ts).
 .test-uploads/
+BUILD_COMMIT

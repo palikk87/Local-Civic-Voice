@@ -36,9 +36,15 @@ RUN mkdir -p /data/uploads
 
 # The commit this image was built from, reported by /health.
 #
-# Railway passes RAILWAY_GIT_COMMIT_SHA; any other builder can pass --build-arg
-# GIT_SHA=$(git rev-parse HEAD). Left as "unknown" the health endpoint says so,
-# which is better than silently claiming to be up to date.
+# Any builder can pass --build-arg GIT_SHA=$(git rev-parse HEAD), and that wins
+# where it is set. It is NOT how this project's deploys are stamped, though:
+# `railway up` uploads a tarball with no git metadata (.git is excluded a few
+# lines above, and the CLI is not a git client), so .github/workflows/deploy.yml
+# writes the commit into backend/BUILD_COMMIT before uploading and the server
+# reads that file. See buildVersion() in src/index.ts.
+#
+# Left unset by everything, /health says "unknown" — which is better than
+# silently claiming to be up to date.
 ARG GIT_SHA=unknown
 ARG BUILD_TIME=""
 ENV GIT_SHA=$GIT_SHA
