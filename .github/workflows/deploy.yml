@@ -123,6 +123,45 @@ jobs:
           printf '%s\n%s\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > backend/BUILD_COMMIT
           echo "Stamped backend/BUILD_COMMIT:"
           cat backend/BUILD_COMMIT
+          # Kept as a second route even though the service variable below is the
+          # one that works. It costs nothing, it is the only thing that would
+          # survive a deploy made some other way, and the runtime prefers the
+          # variable over this file anyway.
+
+      - name: Tell the service which commit it is running
+        if: steps.token.outputs.configured == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
+        run: |
+          # A SERVICE VARIABLE, NOT A FILE IN THE UPLOAD.
+          #
+          # The commit was first written into backend/BUILD_COMMIT for the
+          # tarball to carry. It never arrived: /health kept reporting
+          # "unknown" after two separate attempts, including one that removed
+          # the .gitignore entry excluding it. Whatever `railway up` puts in
+          # that archive, this file is not reliably in it.
+          #
+          # So stop depending on the archive. A service variable is set through
+          # the API, is visible to the running container as an ordinary
+          # environment variable, and has nothing to do with what was uploaded.
+          # buildVersion() in backend/src/index.ts reads GIT_SHA before
+          # anything else.
+          #
+          # --skip-deploys because the `up` below is the deploy; without it the
+          # variable change triggers its own, and two builds racing to replace
+          # one container is how a deploy lands older code than the one before.
+          #
+          # Tolerated if it fails: a stamp is diagnostics. It must never be the
+          # reason a working fix does not ship. A failure here leaves /health
+          # saying "unknown", which is the honest answer and exactly what it
+          # said before.
+          bunx --bun @railway/cli@latest variables \
+            --set "GIT_SHA=$GITHUB_SHA" \
+            --set "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --skip-deploys \
+            ${RAILWAY_SERVICE:+--service "$RAILWAY_SERVICE"} \
+            || echo "::warning::Could not set the commit stamp; /health will report \"unknown\" for this deploy."
 
       - name: Deploy
         if: steps.token.outputs.configured == 'true'
