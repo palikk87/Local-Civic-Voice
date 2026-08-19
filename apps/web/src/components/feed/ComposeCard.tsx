@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Search, FileText, X } from "lucide-react";
@@ -29,6 +30,59 @@ export function ComposeCard() {
   const [content, setContent] = useState<string>("");
   const [selected, setSelected] = useState<GovernmentReference | null>(null);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  /**
+   * A law shared from somewhere else on the platform.
+   *
+   * ShareToTimeline resolves whatever a card knows into the canonical record
+   * and sends the reader here with ?share=<id>. The composer attaches it and
+   * leaves the writing to them — the post is theirs, so the words are too.
+   *
+   * The parameter is cleared once it has been used, so a refresh or a back
+   * button does not silently re-attach a law somebody already removed.
+   */
+  const shareId = searchParams.get("share");
+  useEffect(() => {
+    if (!shareId) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/government-references/${encodeURIComponent(shareId)}`,
+          { credentials: "include" },
+        );
+        if (!response.ok) return;
+        const body = (await response.json()) as {
+          reference?: { id: string; title: string; referenceType: string; status?: string; displayId?: string };
+        };
+        const reference = body.reference;
+        if (cancelled || !reference) return;
+
+        setSelected({
+          id: reference.id,
+          type: reference.referenceType as GovernmentReference["type"],
+          title: reference.title,
+          status: reference.status ?? "",
+          ...(reference.displayId ? { identifier: reference.displayId } : {}),
+        });
+      } finally {
+        if (!cancelled) {
+          const next = new URLSearchParams(searchParams);
+          next.delete("share");
+          setSearchParams(next, { replace: true });
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Only the id matters: re-running when the setter identity changes would
+    // re-fetch a law the reader may have just taken off the post.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shareId]);
 
   const createMutation = useMutation({
     mutationFn: () => {

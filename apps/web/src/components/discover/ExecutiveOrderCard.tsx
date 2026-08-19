@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { ThumbsUp, ChevronRight } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { ShareToTimeline } from "@/components/civic/ShareToTimeline";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import type { ExecutiveOrder } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,17 @@ export function ExecutiveOrderCard({
               ({eo.communityVotes.totalVoters.toLocaleString()} votes)
             </span>
           </div>
-          <ChevronRight size={18} color="#64748B" />
+          <div className="flex items-center gap-1">
+            <ShareToTimeline
+              target={{
+                branch: "executive",
+                title: eo.title,
+                ...(eo.eoNumber ? { eoNumber: eo.eoNumber } : {}),
+              }}
+              label=""
+            />
+            <ChevronRight size={18} color="#64748B" />
+          </div>
         </div>
       </div>
     </MotionDiv>

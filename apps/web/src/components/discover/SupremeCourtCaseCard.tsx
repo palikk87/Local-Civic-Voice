@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { ShareToTimeline } from "@/components/civic/ShareToTimeline";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import type { SupremeCourtCase } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,15 @@ export function SupremeCourtCaseCard({
         </p>
 
         <div className="flex items-center justify-between">
+          <ShareToTimeline
+            target={{
+              branch: "judicial",
+              title: scotusCase.caseName,
+              ...(scotusCase.docketNumber ? { docketNumber: scotusCase.docketNumber } : {}),
+            }}
+            label=""
+            className="order-last"
+          />
           <div className="flex items-center">
             <span className="text-sm text-muted-foreground/70">{scotusCase.term} Term</span>
             {scotusCase.outcome ? (

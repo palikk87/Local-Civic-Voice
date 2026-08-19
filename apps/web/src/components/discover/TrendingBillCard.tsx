@@ -2,6 +2,7 @@
 import { useNavigate } from "react-router-dom";
 import { Flame, ThumbsUp, Users } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { ShareToTimeline } from "@/components/civic/ShareToTimeline";
 import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import type { Bill } from "@/lib/mobile/types";
@@ -66,18 +67,24 @@ export function TrendingBillCard({ bill, index }: { bill: Bill; index: number })
               </span>
             </span>
           </div>
-          {userVote ? (
-            <span
-              className={cn(
-                "rounded-full px-2 py-0.5 text-xs",
-                userVote === "yea"
-                  ? "bg-emerald-900/60 text-emerald-400"
-                  : "bg-red-900/60 text-red-400",
-              )}
-            >
-              You voted {userVote}
-            </span>
-          ) : null}
+          <div className="flex items-center gap-1">
+            {userVote ? (
+              <span
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-xs",
+                  userVote === "yea"
+                    ? "bg-emerald-900/60 text-emerald-400"
+                    : "bg-red-900/60 text-red-400",
+                )}
+              >
+                You voted {userVote}
+              </span>
+            ) : null}
+            <ShareToTimeline
+              target={{ branch: "legislative", title: bill.title }}
+              label=""
+            />
+          </div>
         </div>
       </div>
     </MotionDiv>

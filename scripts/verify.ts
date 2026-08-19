@@ -102,6 +102,14 @@ const CHECKS: Check[] = [
       "the Library searches when asked and never on its own — typing is not a request",
   },
   {
+    name: "web share-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "share-check"],
+    guards:
+      "a law can be shared to your own timeline from where you found it, resolved to the " +
+      "master reference, and never posted on your behalf",
+  },
+  {
     name: "mobile typecheck",
     cwd: "apps/mobile",
     cmd: ["bun", "run", "typecheck"],
