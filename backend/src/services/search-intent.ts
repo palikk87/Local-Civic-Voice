@@ -167,7 +167,7 @@ function groundingQuery(query: string, branch: SearchBranch): string {
     case "legislative":
       return `${query} congress bill legislation`;
     case "judicial":
-      return `${query} supreme court ruling opinion`;
+      return `${query} supreme court case ruling`;
   }
 }
 
@@ -178,14 +178,23 @@ function branchInstructions(branch: SearchBranch): string {
       return `This search is for BILLS AND RESOLUTIONS in Congress. The current Congress is ${CURRENT_CONGRESS} (2025-2026); 118 was 2023-2024.
 
 - "bills": up to 5 specific bills the query plausibly refers to, ONLY ones you are confident exist. "type" is one of hr, s, hjres, sjres, hconres, sconres, hres, sres. Each is checked against congress.gov and dropped if it is not real, so a wrong guess costs nothing — but do not pad the list.
+- "congress": a number ONLY if the user named a session themselves, else null. A Congress they did not ask for makes every real bill unfindable.
+- "billType": one of the eight types ONLY if the user constrained it themselves, else null.
 - "phrases": wording that would appear in a bill's official title or summary — acronym expansions ("safeguard american voter eligibility"), formal programme names, statutory terms.
 - Leave "caseNames" empty.`;
-    case "judicial":
-      return `This search is for SUPREME COURT OPINIONS.
 
-- "phrases": the legal terms of art an opinion would actually contain, and ALL of the ones that matter. This matters more here than anywhere else, twice over. First, a reader asks "can the government make you get a vaccine" and the opinion says "compulsory vaccination" — translate the question into the language of the ruling. Second, the answer to a citizen's question is usually a LINE of cases decided under different doctrines, so list the vocabulary of each: give the phrases that reach the older landmark AND the ones that reach the recent decision.
-- "caseNames": up to 5 case names the query plausibly refers to, ONLY ones you are confident exist ("Jacobson v. Massachusetts"). Each is checked against CourtListener and dropped if it is not found.
-- Leave "bills", "agencies" and "presidentialOnly" empty.`;
+    case "judicial":
+      return `This search is for COURT OPINIONS, and your job is to NAME THE CASES.
+
+- "caseNames": the real cases that answer this question — up to 5, most important first. THIS IS THE FIELD THAT MATTERS. Somebody asking about gun rights wants District of Columbia v. Heller and New York State Rifle & Pistol Association v. Bruen; somebody asking about abortion wants Dobbs v. Jackson Women's Health Organization. Name the controlling recent decision AND the older landmark it rests on.
+
+  Give the full case name as reported ("New York State Rifle & Pistol Association v. Bruen"), not a nickname. Every name is looked up and dropped if it is not found, so one you are unsure of costs nothing — but never invent a case to fill the list.
+
+  If web results are given below, take cases from them FIRST. They are more current than you are, and a decision from the last few months is exactly what somebody searching today is asking about.
+
+- "phrases": a BACKUP, used only if the named cases return nothing. Legal terms of art an opinion would really contain ("compulsory vaccination", "undue burden"). Two or three is plenty — do not spend effort here.
+
+- Leave "bills" empty.`;
   }
 }
 
