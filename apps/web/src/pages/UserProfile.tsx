@@ -72,7 +72,7 @@ export default function UserProfile() {
   const { openAuth } = useAuthUI();
   const isSelf = me?.id === id;
 
-  const { data: profile, isLoading } = useQuery({
+  const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["public-user", id],
     queryFn: () => api.get<PublicUser>(`/api/users/${id}`),
     enabled: !!id,
@@ -129,11 +129,34 @@ export default function UserProfile() {
     },
   });
 
-  if (isLoading || !profile) {
+  if (isLoading) {
     return (
       <AppShell>
         <div className="flex justify-center py-24">
           <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  // A DELETED ACCOUNT IS NOT A SLOW ONE.
+  //
+  // This used to fold "no profile" into the loading branch, so a link to an
+  // account that no longer exists spun a loader forever. Nothing was coming.
+  // Say so, and give them somewhere to go.
+  if (isError || !profile) {
+    return (
+      <AppShell>
+        <div className="mx-auto max-w-md py-24 text-center">
+          <h1 className="font-display text-xl font-semibold text-foreground">
+            This account isn&apos;t here
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            The profile may have been deleted, or the link may be wrong.
+          </p>
+          <Button className="mt-6" variant="outline" onClick={() => navigate("/")}>
+            Back to the feed
+          </Button>
         </div>
       </AppShell>
     );

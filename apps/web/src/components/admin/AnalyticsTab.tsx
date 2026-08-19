@@ -40,8 +40,8 @@ function BarChart({
         ))}
       </div>
       <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
-        <span>{data[0]?.date.slice(5)}</span>
-        <span>{data[data.length - 1]?.date.slice(5)}</span>
+        <span>{data[0]?.date?.slice(5)}</span>
+        <span>{data[data.length - 1]?.date?.slice(5)}</span>
       </div>
     </div>
   );
@@ -74,10 +74,10 @@ export function AnalyticsTab() {
       {/* Totals */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {[
-          { label: "Posts this week", value: engagement?.totals.posts ?? 0 },
-          { label: "Comments this week", value: engagement?.totals.comments ?? 0 },
-          { label: "Likes this week", value: engagement?.totals.likes ?? 0 },
-          { label: "Votes this week", value: engagement?.totals.votes ?? 0 },
+          { label: "Posts this week", value: engagement?.totals?.posts ?? 0 },
+          { label: "Comments this week", value: engagement?.totals?.comments ?? 0 },
+          { label: "Likes this week", value: engagement?.totals?.likes ?? 0 },
+          { label: "Votes this week", value: engagement?.totals?.votes ?? 0 },
         ].map((stat) => (
           <div key={stat.label} className="rounded-lg border border-border bg-card p-4">
             <p className="text-sm text-muted-foreground">{stat.label}</p>
@@ -115,19 +115,19 @@ export function AnalyticsTab() {
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">New users this week</p>
           <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-            {growth?.summary.totalNewUsers ?? 0}
+            {growth?.summary?.totalNewUsers ?? 0}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Avg daily active users</p>
           <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-            {growth?.summary.averageActiveUsers ?? 0}
+            {growth?.summary?.averageActiveUsers ?? 0}
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-sm text-muted-foreground">Growth rate</p>
           <p className="mt-1 font-display text-2xl font-semibold text-foreground">
-            {growth?.summary.growthRate ?? "0"}%
+            {growth?.summary?.growthRate ?? "0"}%
           </p>
         </div>
       </div>

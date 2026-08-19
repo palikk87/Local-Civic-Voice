@@ -74,7 +74,7 @@ export default function VotingHistory() {
         lastPage.hasMore ? lastPage.nextCursor : undefined,
     });
 
-  const votes = data?.pages.flatMap((p) => p.votes) ?? [];
+  const votes = data?.pages?.flatMap((p) => p.votes ?? []) ?? [];
   const supportCount = votes.filter((v) => v.position === "support").length;
   const opposeCount = votes.filter((v) => v.position === "oppose").length;
 

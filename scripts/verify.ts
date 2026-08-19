@@ -110,6 +110,14 @@ const CHECKS: Check[] = [
       "master reference, and never posted on your behalf",
   },
   {
+    name: "web every-page-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "every-page-check"],
+    guards:
+      "every route the app mounts paints something and does not crash, signed out and " +
+      "signed in, against a backend that is empty and that says no",
+  },
+  {
     name: "mobile typecheck",
     cwd: "apps/mobile",
     cmd: ["bun", "run", "typecheck"],

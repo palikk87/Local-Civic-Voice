@@ -337,7 +337,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
 
       getTopContributorsForReference: (referenceId, limit = 3) => {
         const record = get().engagementRecords[referenceId];
-        return record?.topContributors.slice(0, limit) ?? [];
+        return record?.topContributors?.slice(0, limit) ?? [];
       },
 
       recalculateTrendingScores: () => {

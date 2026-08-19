@@ -164,7 +164,7 @@ export default function Discover() {
   const filteredBills = useMemo(() => {
     const latestBills = (latestBillsData?.references ?? []).map(referenceToBill);
     const trendingRefBills = (billRefsData?.references ?? []).map(referenceToBill);
-    const apiBills = (apiBillsData?.pages?.flatMap((page) => page.bills) ?? []).map(convertApiBillToLegacy);
+    const apiBills = (apiBillsData?.pages?.flatMap((page) => page.bills ?? []) ?? []).map(convertApiBillToLegacy);
     const seen = new Set<string>();
     const liveBills = [...latestBills, ...trendingRefBills, ...apiBills].filter((bill) => {
       if (seen.has(bill.id)) return false;
@@ -192,7 +192,7 @@ export default function Discover() {
     if (referenceBills.length > 0) return referenceBills.slice(0, 10);
 
     // /api/bills is a second real source, not a fallback to invented content.
-    const apiBills = (apiBillsData?.pages?.flatMap((page) => page.bills) ?? []).map(convertApiBillToLegacy);
+    const apiBills = (apiBillsData?.pages?.flatMap((page) => page.bills ?? []) ?? []).map(convertApiBillToLegacy);
     return apiBills
       .sort((a, b) => b.communityVotes.totalVoters - a.communityVotes.totalVoters)
       .slice(0, 10);

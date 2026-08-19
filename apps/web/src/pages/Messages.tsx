@@ -49,7 +49,7 @@ export default function Messages() {
           </div>
         )}
 
-        {!isLoading && !isError && (data?.results.length ?? 0) === 0 && (
+        {!isLoading && !isError && (data?.results?.length ?? 0) === 0 && (
           <div className="rounded-lg border border-border p-8 text-center">
             <MessageCircle className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 text-sm text-muted-foreground">
@@ -59,7 +59,7 @@ export default function Messages() {
         )}
 
         <ul className="divide-y divide-border">
-          {data?.results.map((conversation) => {
+          {data?.results?.map((conversation) => {
             const other = otherParticipant(conversation, user?.id);
             const preview = conversation.lastMessage;
 

@@ -659,7 +659,7 @@ export default function GovernmentScreen() {
                       <Building2 size={16} color="#3B82F6" />
                       <Text className="ml-1.5 text-xs font-medium text-blue-400">House</Text>
                     </View>
-                    <Text className="text-xl font-bold text-white">{congress?.counts.house ?? 0}</Text>
+                    <Text className="text-xl font-bold text-white">{congress?.counts?.house ?? 0}</Text>
                     <Text className="text-xs text-slate-400">Representatives</Text>
                   </View>
                   <View className="ml-2 flex-1 rounded-xl border border-purple-800/30 bg-purple-900/30 p-3">
@@ -667,7 +667,7 @@ export default function GovernmentScreen() {
                       <Users size={16} color="#8B5CF6" />
                       <Text className="ml-1.5 text-xs font-medium text-purple-400">Senate</Text>
                     </View>
-                    <Text className="text-xl font-bold text-white">{congress?.counts.senate ?? 0}</Text>
+                    <Text className="text-xl font-bold text-white">{congress?.counts?.senate ?? 0}</Text>
                     <Text className="text-xs text-slate-400">Senators</Text>
                   </View>
                 </View>

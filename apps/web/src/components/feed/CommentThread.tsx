@@ -42,7 +42,7 @@ export function CommentThread({ postId }: { postId: string }) {
         lastPage.hasMore ? lastPage.nextCursor : undefined,
     });
 
-  const comments = data?.pages.flatMap((p) => p.comments) ?? [];
+  const comments = data?.pages?.flatMap((p) => p.comments ?? []) ?? [];
 
   return (
     <div className="space-y-4">

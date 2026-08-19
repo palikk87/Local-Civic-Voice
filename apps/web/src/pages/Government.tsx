@@ -208,7 +208,7 @@ export default function Government() {
                       <Building2 className="h-4 w-4 text-blue-500" />
                       <span className="text-xs font-medium text-blue-400">House</span>
                     </div>
-                    <p className="text-xl font-bold text-foreground">{congress?.counts.house ?? 0}</p>
+                    <p className="text-xl font-bold text-foreground">{congress?.counts?.house ?? 0}</p>
                     <p className="text-xs text-muted-foreground">Representatives</p>
                   </div>
                   <div className="rounded-xl border border-purple-800/30 bg-purple-900/30 p-3">
@@ -216,7 +216,7 @@ export default function Government() {
                       <Users className="h-4 w-4 text-purple-500" />
                       <span className="text-xs font-medium text-purple-400">Senate</span>
                     </div>
-                    <p className="text-xl font-bold text-foreground">{congress?.counts.senate ?? 0}</p>
+                    <p className="text-xl font-bold text-foreground">{congress?.counts?.senate ?? 0}</p>
                     <p className="text-xs text-muted-foreground">Senators</p>
                   </div>
                 </div>

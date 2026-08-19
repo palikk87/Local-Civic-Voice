@@ -63,7 +63,7 @@ function ConversationItem({
   if (!otherParticipant) return null;
 
   const lastMessage = conversation.lastMessage;
-  const isOwn = lastMessage?.sender.id === currentUserId;
+  const isOwn = lastMessage?.sender?.id === currentUserId;
   const timeAgo = lastMessage
     ? getRelativeTime(lastMessage.createdAt)
     : getRelativeTime(conversation.createdAt);

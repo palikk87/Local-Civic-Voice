@@ -30,7 +30,7 @@ export default function Saved() {
         lastPage.hasMore ? lastPage.nextCursor : undefined,
     });
 
-  const posts = data?.pages.flatMap((p) => p.posts) ?? [];
+  const posts = data?.pages?.flatMap((p) => p.posts ?? []) ?? [];
 
   return (
     <AppShell>

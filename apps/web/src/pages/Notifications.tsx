@@ -119,7 +119,7 @@ export default function Notifications() {
     },
   });
 
-  const notifications = data?.pages.flatMap((p) => p.notifications) ?? [];
+  const notifications = data?.pages?.flatMap((p) => p.notifications ?? []) ?? [];
 
   return (
     <AppShell>

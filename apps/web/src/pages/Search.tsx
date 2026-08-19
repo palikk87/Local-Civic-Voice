@@ -49,7 +49,7 @@ export default function Search() {
       enabled,
     });
 
-  const references = refData?.pages.flatMap((p) => p.references) ?? [];
+  const references = refData?.pages?.flatMap((p) => p.references ?? []) ?? [];
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;

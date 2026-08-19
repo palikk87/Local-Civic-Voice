@@ -144,6 +144,12 @@ jobs:
       - run: bun run share-check
         working-directory: apps/web
 
+      # Forty-three routes, opened for real, signed out and signed in. This is
+      # the only check that visits a page it was not written to know about: it
+      # reads the route table, so a page added tomorrow is covered tomorrow.
+      - run: bun run every-page-check
+        working-directory: apps/web
+
       # The built site must be able to say which commit it is. Without the
       # stamp, deploy-check cannot tell a deploy that happened from one that
       # did not, and that is precisely how a finished fix sat unshipped.

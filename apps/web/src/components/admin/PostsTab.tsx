@@ -160,7 +160,7 @@ export function PostsTab() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this post?</AlertDialogTitle>
             <AlertDialogDescription>
-              The post by @{deleteTarget?.author.username} will be permanently removed from the
+              The post by @{deleteTarget?.author?.username} will be permanently removed from the
               platform.
             </AlertDialogDescription>
           </AlertDialogHeader>

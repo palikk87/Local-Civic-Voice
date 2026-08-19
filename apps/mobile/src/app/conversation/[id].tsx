@@ -155,7 +155,7 @@ function ConversationContent() {
     }
   }, [messages.length]);
 
-  const otherParticipant = conversation?.participants.find(
+  const otherParticipant = conversation?.participants?.find(
     (p) => p.id !== user?.id
   );
 

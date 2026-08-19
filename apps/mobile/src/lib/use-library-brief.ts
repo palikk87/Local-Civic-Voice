@@ -55,9 +55,9 @@ export function useLibraryBrief(
     retry: false,
   });
 
-  const referenceId = resolve.data?.reference.id ?? null;
+  const referenceId = resolve.data?.reference?.id ?? null;
   const brief = useCitizenBrief(referenceId, {
-    initialState: resolve.data?.reference.briefState ?? "idle",
+    initialState: resolve.data?.reference?.briefState ?? "idle",
   });
 
   return {

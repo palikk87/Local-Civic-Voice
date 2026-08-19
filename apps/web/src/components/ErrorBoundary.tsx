@@ -26,7 +26,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 flex items-center justify-center">
+        // The marker is what the every-page check looks for. A page that
+        // crashes into this boundary still paints text and still fires no
+        // page-level error, so without something to key on it reads as healthy.
+        <div
+          data-error-boundary="true"
+          className="min-h-screen w-full bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900 flex items-center justify-center"
+        >
           <div className="text-center space-y-4">
             <h1 className="text-2xl font-bold text-white">Something went wrong</h1>
             <p className="text-gray-400">Please refresh the page to try again</p>
