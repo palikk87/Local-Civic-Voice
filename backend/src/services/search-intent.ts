@@ -39,7 +39,21 @@
 import { generateAI, parseJsonObject } from "./ai-generate";
 import { formatSnippetsForPrompt, searchWebForContext, type WebSnippet } from "./web-search";
 
-export type SearchBranch = "legislative" | "executive" | "judicial";
+/**
+ * Executive is absent on purpose.
+ *
+ * It had a branch here and removing it was the fix. The Federal Register's own
+ * full-text relevance search is very good at the two or three words people
+ * actually type, so rewriting the query could only move those results — and
+ * when the phrase the model chose occurred in no document, the search returned
+ * nothing at all. Executive search now sends exactly what was typed; see
+ * services/executive-search.ts.
+ *
+ * Legislative and judicial keep an interpreter because their sources need one.
+ * congress.gov has no full-text search over all bills, and a Supreme Court
+ * opinion is written in words no citizen would use for the question it answers.
+ */
+export type SearchBranch = "legislative" | "judicial";
 
 export interface BillLead {
   congress: number;
@@ -65,10 +79,6 @@ export interface SearchIntent {
   bills: BillLead[];
   /** Judicial leads: case names the query plausibly names. Confirmed before use. */
   caseNames: string[];
-  /** Executive: agencies named or implied. */
-  agencies: string[];
-  /** Executive: the user means presidential documents specifically. */
-  presidentialOnly: boolean;
   /** A date window the user asked for, ISO yyyy-mm-dd. */
   from: string | null;
   to: string | null;
@@ -98,8 +108,6 @@ interface ModelIntent {
   terms?: string[];
   bills?: Array<{ congress?: number; type?: string; number?: string | number }>;
   caseNames?: string[];
-  agencies?: string[];
-  presidentialOnly?: boolean;
   from?: string | null;
   to?: string | null;
   congress?: number | null;
@@ -145,8 +153,6 @@ export function plainIntent(query: string, branch: SearchBranch): SearchIntent {
     terms: words,
     bills: [],
     caseNames: [],
-    agencies: [],
-    presidentialOnly: branch === "executive",
     from: null,
     to: null,
     congress: null,
@@ -160,8 +166,6 @@ function groundingQuery(query: string, branch: SearchBranch): string {
   switch (branch) {
     case "legislative":
       return `${query} congress bill legislation`;
-    case "executive":
-      return `${query} executive order presidential`;
     case "judicial":
       return `${query} supreme court ruling opinion`;
   }
@@ -175,14 +179,7 @@ function branchInstructions(branch: SearchBranch): string {
 
 - "bills": up to 5 specific bills the query plausibly refers to, ONLY ones you are confident exist. "type" is one of hr, s, hjres, sjres, hconres, sconres, hres, sres. Each is checked against congress.gov and dropped if it is not real, so a wrong guess costs nothing — but do not pad the list.
 - "phrases": wording that would appear in a bill's official title or summary — acronym expansions ("safeguard american voter eligibility"), formal programme names, statutory terms.
-- Leave "agencies", "caseNames" and "presidentialOnly" empty.`;
-    case "executive":
-      return `This search is for EXECUTIVE ORDERS and other presidential documents in the Federal Register.
-
-- "phrases": the words the order itself would use. Executive orders are written in formal policy language, so the reader's plain phrasing rarely appears verbatim ("kids and vaccines" -> "childhood vaccine", "childhood immunization").
-- "agencies": federal agencies named or clearly implied, in their full official form ("Department of Health and Human Services"), [] if none.
-- "presidentialOnly": true unless the user is plainly asking about ordinary agency rulemaking rather than presidential action.
-- Leave "bills" and "caseNames" empty.`;
+- Leave "caseNames" empty.`;
     case "judicial":
       return `This search is for SUPREME COURT OPINIONS.
 
@@ -203,8 +200,6 @@ Return JSON only:
   "terms": ["vaccine", "children", "immunization", "schedule"],
   "bills": [{"congress": 119, "type": "hr", "number": "22"}],
   "caseNames": ["Jacobson v. Massachusetts"],
-  "agencies": ["Department of Health and Human Services"],
-  "presidentialOnly": true,
   "from": null,
   "to": null
 }
@@ -296,8 +291,6 @@ export async function interpretSearch(
     terms: unique([...strings(parsed.terms, 8), ...fallback.terms]),
     bills: branch === "legislative" ? billLeads(parsed.bills) : [],
     caseNames: branch === "judicial" ? strings(parsed.caseNames, 5) : [],
-    agencies: branch === "executive" ? strings(parsed.agencies, 4) : [],
-    presidentialOnly: branch === "executive" ? parsed.presidentialOnly !== false : false,
     from: isoDate(parsed.from),
     to: isoDate(parsed.to),
     congress:

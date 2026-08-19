@@ -128,43 +128,32 @@ governmentRouter.get(
  * EO), signing_date (shown instead of publication date) and subtype (drives the
  * category chip).
  */
+/**
+ * GET /api/government/executive/search
+ *
+ * A straight proxy to the Federal Register, with the reader's own words.
+ *
+ * There used to be an interpretation layer here that rewrote the query before
+ * sending it. It is gone: the Federal Register's full-text relevance search is
+ * very good at the two or three words people actually type, and a rewrite could
+ * only move those results, never improve them — while returning nothing at all
+ * whenever the phrase it invented did not occur verbatim. See the note at the
+ * top of services/executive-search.ts for the measurements.
+ */
 governmentRouter.get(
   "/executive/search",
   zValidator("query", searchQuerySchema),
   async (c) => {
-    const { q, limit } = c.req.valid("query");
+    const { q, limit, offset } = c.req.valid("query");
 
     try {
-      const output = await searchExecutiveDocuments(q, limit);
-
-      console.log(
-        `[executive-search] "${q}" -> ${output.results.length} shown` +
-          (output.intent.interpreted
-            ? ` | understood as "${output.intent.topic}"` +
-              (output.intent.phrases.length > 0
-                ? ` [${output.intent.phrases.map((p) => `"${p}"`).join(", ")}]`
-                : " [no phrase]")
-            : " | NOT interpreted — searched the words as typed") +
-          ` | ${output.attempted.join("; ")}`,
-      );
+      const output = await searchExecutiveDocuments(q, limit, offset);
+      console.log(`[executive-search] "${q}" -> ${output.count} hit(s), ${output.results.length} shown`);
 
       const result: FederalRegisterResult = {
-        results: output.results.map((doc) => ({
-          title: doc.title,
-          type: doc.type,
-          subtype: doc.subtype,
-          abstract: doc.abstract,
-          publication_date: doc.publication_date,
-          signing_date: doc.signing_date,
-          executive_order_number: doc.executive_order_number,
-          president: doc.president,
-          agencies: doc.agencies,
-          html_url: doc.html_url,
-          document_number: doc.document_number,
-        })),
+        results: output.results,
         count: output.count,
       };
-
       return c.json(result);
     } catch (error) {
       console.error("Federal Register search error:", error);
@@ -176,21 +165,6 @@ governmentRouter.get(
   }
 );
 
-/**
- * GET /api/government/judicial/search
- *
- * Proxy to the CourtListener API for court opinions and cases.
- *
- * Uses v4. v3 is closed to new API keys ("As a new user, you don't have
- * permission to access V3 of the API"), which silently broke judicial search on
- * both faucets. The rest of the backend already speaks v4 — see
- * services/reference-content.ts, which fetches opinion text by the same
- * opinions[].id this route returns.
- *
- * v4 paginates by opaque cursor rather than page number, so `offset` cannot be
- * translated into a request param; the upstream `next` URL is passed through for
- * callers that need the following page.
- */
 governmentRouter.get(
   "/judicial/search",
   zValidator("query", searchQuerySchema),

@@ -43,8 +43,6 @@ const GOOD_INTENT = {
   terms: ["vaccination", "mandate", "police power"],
   caseNames: [],
   bills: [],
-  agencies: [],
-  presidentialOnly: false,
   from: null,
   to: null,
 };
@@ -253,8 +251,6 @@ describe("matching what a plain web search returns", () => {
     terms: ["privacy", "warrant", "fourth amendment"],
     caseNames: [],
     bills: [],
-    agencies: [],
-    presidentialOnly: false,
     from: null,
     to: null,
   };
