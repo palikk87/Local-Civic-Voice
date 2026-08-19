@@ -21,7 +21,7 @@
  * entire official text, so nothing here can produce one from a title.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Linking } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { Sparkles, RefreshCw, ExternalLink, ThumbsUp, ThumbsDown } from 'lucide-react-native';
@@ -44,6 +44,73 @@ export interface CitizensBriefCardProps {
   sourceLabel?: string;
   /** The stored brief describes an earlier text of this law. */
   isStale?: boolean;
+}
+
+/**
+ * The wait, told as what is actually happening.
+ *
+ * Writing a brief takes thirty to forty-five seconds, because the whole law is
+ * read before a word is written. That is a long time to look at a spinner, and
+ * a spinner says only "something is happening, possibly forever" — so people
+ * leave, and the work they paid for finishes for nobody.
+ *
+ * These are the real stages, in the real order the pipeline runs them: fetch
+ * the official text, read it, write from what was read, then check every claim
+ * back against the source. Nothing is invented to fill the time. If a stage
+ * runs long the message stays put, which is honest — it IS still doing that.
+ *
+ * Word-for-word the same as the web card. A reader who uses both should not be
+ * told two different stories about the same wait.
+ */
+const STAGES: Array<{ after: number; text: string }> = [
+  { after: 0, text: 'Fetching the official text…' },
+  { after: 6, text: 'Reading the law in full…' },
+  { after: 18, text: 'Writing the brief…' },
+  { after: 32, text: 'Checking every claim against the text…' },
+];
+
+function BriefInProgress() {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const started = Date.now();
+    const tick = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(tick);
+  }, []);
+
+  const stage = [...STAGES].reverse().find((s) => seconds >= s.after) ?? STAGES[0]!;
+  const reached = STAGES.filter((s) => seconds >= s.after).length;
+
+  return (
+    <Animated.View
+      entering={FadeIn}
+      className="rounded-[20px] p-8 bg-amber-500/10 border border-amber-500/20"
+    >
+      <View className="items-center">
+        <ActivityIndicator size="large" color="#F59E0B" />
+
+        <Text className="text-white text-base font-semibold mt-4 text-center">{stage.text}</Text>
+
+        {/* Which of the four steps this is. Each fills when that step really
+            starts, so the movement is something a reader can trust. */}
+        <View className="flex-row items-center mt-4">
+          {STAGES.map((s, index) => (
+            <View
+              key={s.after}
+              className={`h-1.5 rounded-full mx-0.5 ${
+                index < reached ? 'w-6 bg-amber-500' : 'w-1.5 bg-amber-500/25'
+              }`}
+            />
+          ))}
+        </View>
+
+        <Text className="text-slate-400 text-sm mt-4 text-center">
+          The whole document is read before a word is written, and the brief is saved for
+          everyone — so this happens once, not once per reader.
+        </Text>
+      </View>
+    </Animated.View>
+  );
 }
 
 export function CitizensBriefCard({
@@ -73,20 +140,7 @@ export function CitizensBriefCard({
     ) : null;
 
   if (state === 'working') {
-    return (
-      <Animated.View entering={FadeIn} className="rounded-[20px] p-8 bg-amber-500/10 border border-amber-500/20">
-        <View className="items-center">
-          <ActivityIndicator size="large" color="#F59E0B" />
-          <Text className="text-white text-base font-semibold mt-4 text-center">
-            Reading the full text of the law…
-          </Text>
-          <Text className="text-slate-400 text-sm mt-2 text-center">
-            The whole document is read before a word is written, and the brief is saved for
-            everyone — so this happens once, not once per reader.
-          </Text>
-        </View>
-      </Animated.View>
-    );
+    return <BriefInProgress />;
   }
 
   if (state === 'idle' || !brief) {

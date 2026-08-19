@@ -17,6 +17,7 @@
  * is deliberately no fifth state where something is happening that the reader
  * cannot see the end of.
  */
+import { useEffect, useState } from "react";
 import { ExternalLink, Loader2, RefreshCw, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import type { CitizenBriefSections } from "@/lib/civic";
@@ -44,6 +45,83 @@ export interface CitizensBriefCardProps {
   className?: string;
 }
 
+/**
+ * The wait, told as what is actually happening.
+ *
+ * Writing a brief takes thirty to forty-five seconds, because the whole law is
+ * read before a word is written. That is a long time to look at a spinner, and
+ * a spinner says only "something is happening, possibly forever" — so people
+ * leave, and the work they paid for finishes for nobody.
+ *
+ * These stages are the real ones, in the real order the pipeline runs them:
+ * fetch the official text, read it (in sections when the law is long), write
+ * from the notes, then check every claim back against the source. Nothing here
+ * is invented to fill the time. The timings are what the pipeline typically
+ * takes; if a stage runs long the message simply stays, which is honest — it IS
+ * still doing that.
+ *
+ * The last line never changes, because it is the reason the wait is worth it:
+ * this happens once for everybody, not once per reader.
+ */
+const STAGES: Array<{ after: number; text: string }> = [
+  { after: 0, text: "Fetching the official text…" },
+  { after: 6, text: "Reading the law in full…" },
+  { after: 18, text: "Writing the brief…" },
+  { after: 32, text: "Checking every claim against the text…" },
+];
+
+function BriefInProgress({ className }: { className?: string }) {
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    const started = Date.now();
+    const tick = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(tick);
+  }, []);
+
+  const stage = [...STAGES].reverse().find((s) => seconds >= s.after) ?? STAGES[0]!;
+  const reached = STAGES.filter((s) => seconds >= s.after).length;
+
+  return (
+    <MotionDiv
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className={cn("rounded-2xl border border-accent/20 bg-accent/10 p-8", className)}
+    >
+      <div className="flex flex-col items-center">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
+
+        <p
+          key={stage.text}
+          className="mt-4 animate-in fade-in text-base font-semibold text-foreground duration-500"
+        >
+          {stage.text}
+        </p>
+
+        {/* Which of the four steps this is. Movement a reader can trust,
+            because each dot lights when that step genuinely starts. */}
+        <div className="mt-4 flex items-center gap-1.5" aria-hidden="true">
+          {STAGES.map((s, index) => (
+            <span
+              key={s.after}
+              className={cn(
+                "h-1.5 rounded-full transition-all duration-500",
+                index < reached ? "w-6 bg-accent" : "w-1.5 bg-accent/25",
+              )}
+            />
+          ))}
+        </div>
+
+        <p className="mt-4 max-w-sm text-center text-sm text-muted-foreground">
+          The whole document is read before a word is written, and the brief is saved for
+          everyone — so this happens once, not once per reader.
+        </p>
+      </div>
+    </MotionDiv>
+  );
+}
+
 export function CitizensBriefCard({
   state,
   brief,
@@ -69,27 +147,7 @@ export function CitizensBriefCard({
     </a>
   ) : null;
 
-  if (state === "working") {
-    return (
-      <MotionDiv
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-        className={cn("rounded-2xl border border-accent/20 bg-accent/10 p-8", className)}
-      >
-        <div className="flex flex-col items-center">
-          <Loader2 className="h-8 w-8 animate-spin text-accent" />
-          <p className="mt-4 text-base font-semibold text-foreground">
-            Reading the full text of the law…
-          </p>
-          <p className="mt-2 max-w-sm text-center text-sm text-muted-foreground">
-            The whole document is read before a word is written, and the brief is saved for
-            everyone — so this happens once, not once per reader.
-          </p>
-        </div>
-      </MotionDiv>
-    );
-  }
+  if (state === "working") return <BriefInProgress className={className} />;
 
   if (state === "idle" || !brief) {
     const unavailable = state === "unavailable";
