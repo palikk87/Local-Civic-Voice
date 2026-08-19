@@ -113,6 +113,38 @@ describe("boot", () => {
     expect(body.sources.congress).toBe(!!process.env.CONGRESS_API_KEY);
   });
 
+  test("a request may take longer than ten seconds without the connection dying", async () => {
+    // THE LAUNCH BLOCKER THIS PINS. Bun.serve closes a connection after ten
+    // seconds by default. The Citizen's Brief endpoint does its work inline —
+    // the reader pressed a button and is watching — and is allowed 45 seconds
+    // to read a law and write from it.
+    //
+    // Observed against a real server before this was set:
+    //
+    //   [Bun.serve]: request timed out after 10 seconds
+    //   --> POST /api/government-references/:id/brief 200 13s
+    //
+    // and, at the client, `curl: (52) Empty reply from server`. The server
+    // finished the brief, stored it, and logged a success; the reader's
+    // connection had been dead for three seconds. Nothing reported an error,
+    // because from the server's side nothing failed. That is the whole shape
+    // of the bug — the button simply never worked, silently.
+    //
+    // Asserted as configuration rather than by making a real request take
+    // eleven seconds: the behaviour is Bun's, it is not ours to re-verify, and
+    // an eleven-second test earns nothing over reading the number.
+    // Read from the source rather than imported: importing src/index runs env
+    // validation and boots a second server inside the test process. The risk
+    // being guarded is somebody deleting the line, and reading it catches that.
+    const source = await Bun.file(join(process.cwd(), "src", "index.ts")).text();
+    const configured = source.match(/idleTimeout:\s*(\d+)/)?.[1];
+
+    expect(configured).toBeDefined();
+    // Above the longest request the API deliberately makes: 45s for a brief,
+    // 20s for a judicial search waiting out a CourtListener throttle.
+    expect(Number(configured)).toBeGreaterThanOrEqual(60);
+  });
+
   test("health reports the commit the deploy stamped into the upload", async () => {
     // THE BLIND SPOT THIS CLOSES. Railway does not pass RAILWAY_GIT_COMMIT_SHA
     // as a build argument — it sets it as a runtime variable — so the

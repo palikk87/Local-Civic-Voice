@@ -435,4 +435,28 @@ process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 export default {
   port,
   fetch: app.fetch,
+  /**
+   * How long one request may take before Bun closes the connection.
+   *
+   * BUN'S DEFAULT IS TEN SECONDS, and that silently broke the Citizen's Brief.
+   * The brief endpoint does its work inline — the reader pressed a button and
+   * is watching, so handing it to a queue and asking them to poll adds a
+   * failure mode without adding speed — and it is allowed 45 seconds to read a
+   * law and write from it.
+   *
+   * Bun was cutting the connection at 10. The server carried on, finished the
+   * brief, stored it and logged "200 in 13s"; the reader's connection had been
+   * dead for three seconds by then. From the client it looks like the server
+   * hung up. From the log it looks like a success. Nothing reports an error,
+   * because from the server's point of view nothing failed.
+   *
+   *   [Bun.serve]: request timed out after 10 seconds
+   *   --> POST /api/government-references/:id/brief 200 13s
+   *
+   * Set above the longest request the API deliberately makes: 45s for a brief,
+   * 20s for a judicial search that may wait out a CourtListener throttle. 120
+   * leaves room for a slow model on a long law without letting a genuinely
+   * stuck request hold a connection forever.
+   */
+  idleTimeout: 120,
 };
