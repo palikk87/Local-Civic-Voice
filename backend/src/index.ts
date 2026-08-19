@@ -271,35 +271,46 @@ if (storageDriver === "local") {
 /**
  * Which commit is this container running?
  *
- * FOUR SOURCES, IN ORDER OF HOW MUCH THEY CAN BE TRUSTED, and every one of them
- * exists because the ones above it were not enough:
+ * FOUR SOURCES, MOST TRUSTWORTHY FIRST, and every one exists because the ones
+ * above it are not always available:
  *
  *   1. GIT_SHA — a build argument. Authoritative: it describes the code in this
- *      image and nothing at runtime can change it. Only set when the builder
- *      passes it.
+ *      image and nothing at runtime can change it. Set only when the builder
+ *      passes one.
  *
- *   2. BUILD_COMMIT — a file written into the upload by .github/workflows/
- *      deploy.yml immediately before `railway up`. This is the one that
- *      actually works here. `railway up` uploads a tarball of the working
- *      directory with NO git metadata — .dockerignore excludes .git, and the
- *      CLI is not a git client — so nothing inside the build can discover its
- *      own commit, and RAILWAY_GIT_COMMIT_SHA is never set on a CLI deploy. It
- *      is only populated for deploys Railway makes from a connected repository.
+ *   2. The host's own variable. Present only when the platform genuinely knows,
+ *      which means a deploy it made from a repository it is connected to.
  *
- *   3. The host's own variable, for exactly those repository-connected deploys.
+ *   3. BUILD_COMMIT — a file written into the upload by .github/workflows/
+ *      deploy.yml immediately before `railway up`. This is what actually
+ *      answers on this project's deploys: the CLI uploads a tarball with no git
+ *      metadata (.dockerignore drops .git, and it is not a git client), so
+ *      nothing in the build can discover its own commit and the host variable
+ *      above is never set.
+ *
+ *      Checked AFTER the host variable on purpose. The file is not gitignored —
+ *      it cannot be, or the CLI would refuse to upload it — so a stale one
+ *      could in principle be committed by hand. Anything that actually knows
+ *      the commit should outrank a file that might be left over.
  *
  *   4. "unknown" — said out loud rather than guessed at.
  *
  * WHY ANY OF THIS MATTERS. /health reported "unknown" on every deploy for the
- * life of this project, which made `deploy-check` unable to answer the one
+ * life of this project, which left `deploy-check` unable to answer the one
  * question it exists for. Five finished commits then sat unshipped for hours
- * while the product looked broken, and nothing anywhere could say "you are
- * running old code" — the tool built to catch that was blind, and the fix for
- * its blindness was in the unshipped pile.
+ * while the product looked broken, and nothing could say "you are running old
+ * code" — the tool built to catch that was blind, and the fix for its blindness
+ * was itself in the unshipped pile.
  */
 function buildVersion(): { commit: string; builtAt: string | null } {
   const stamped = process.env.GIT_SHA?.trim();
   if (stamped) return { commit: stamped, builtAt: process.env.BUILD_TIME || null };
+
+  const fromHost =
+    process.env.RAILWAY_GIT_COMMIT_SHA ||
+    process.env.RENDER_GIT_COMMIT ||
+    process.env.SOURCE_COMMIT;
+  if (fromHost) return { commit: fromHost, builtAt: process.env.BUILD_TIME || null };
 
   try {
     const [commit, builtAt] = readFileSync(new URL("../BUILD_COMMIT", import.meta.url), "utf8")
@@ -307,17 +318,10 @@ function buildVersion(): { commit: string; builtAt: string | null } {
       .map((line: string) => line.trim());
     if (commit) return { commit, builtAt: builtAt || null };
   } catch {
-    // No file: this image was not built by the deploy workflow. Fall through.
+    // No file: this image was not built by the deploy workflow.
   }
 
-  return {
-    commit:
-      process.env.RAILWAY_GIT_COMMIT_SHA ||
-      process.env.RENDER_GIT_COMMIT ||
-      process.env.SOURCE_COMMIT ||
-      "unknown",
-    builtAt: process.env.BUILD_TIME || null,
-  };
+  return { commit: "unknown", builtAt: process.env.BUILD_TIME || null };
 }
 
 const port = Number(process.env.PORT) || 3000;

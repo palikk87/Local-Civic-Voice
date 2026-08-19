@@ -39,4 +39,15 @@ studio.log
 
 # Where the test harness writes uploads (tests/helpers/server.ts).
 .test-uploads/
-BUILD_COMMIT
+# BUILD_COMMIT is deliberately NOT ignored.
+#
+# It is written by .github/workflows/deploy.yml immediately before `railway up`
+# and is the only way a deployed container can know its own commit — the CLI
+# uploads a tarball with no git metadata.
+#
+# `railway up` skips anything matching .gitignore, so listing it here (which is
+# what happened, in the same commit that created it) means the workflow writes
+# the file and the CLI silently refuses to upload it. /health then reports
+# "unknown" forever, which is exactly the blind spot the stamp exists to close.
+#
+# Nothing generates it locally, so there is nothing to ignore.
