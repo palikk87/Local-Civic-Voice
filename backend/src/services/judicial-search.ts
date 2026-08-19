@@ -143,6 +143,38 @@ function urlFor(intent: SearchIntent, rung: Rung, perPage: number): string {
   return url.toString();
 }
 
+/**
+ * One decision, one result — however many clusters CourtListener holds for it.
+ *
+ * Observed in live output: a search for phone privacy returned Riley v.
+ * California TWICE, as clusters 8385044 and 8391734. CourtListener stores the
+ * same case more than once — a slip opinion and the bound volume, a corrected
+ * reissue, a second reporter's copy — and deduping by cluster id treats those
+ * as different cases. To a reader it is the same ruling listed twice, pushing
+ * a different case off the page.
+ *
+ * The docket number is the court's own identifier for a case, so it is the key
+ * where there is one. Normalised because the same docket appears as
+ * "No. 13–132." and "13-132": the reporter's prefix, an en dash rather than a
+ * hyphen, a trailing period.
+ */
+function caseKey(cluster: RawCluster): string {
+  const docket = (cluster.docketNumber ?? "")
+    .toLowerCase()
+    .replace(/[\u2010-\u2015]/g, "-")
+    .replace(/^no\.?\s*/, "")
+    .replace(/[^a-z0-9-]/g, "")
+    .trim();
+  if (docket) return `docket:${docket}`;
+
+  // No docket published — fall back to the case name, which is still a better
+  // identity than the cluster id for this purpose.
+  const name = (cluster.caseName ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (name) return `name:${name}`;
+
+  return String(cluster.cluster_id ?? cluster.absolute_url ?? "");
+}
+
 function normalize(cluster: RawCluster, matchedVia: string[]): JudicialResult {
   return {
     id: cluster.opinions?.find((o) => typeof o.id === "number")?.id ?? cluster.cluster_id ?? 0,
@@ -259,7 +291,7 @@ export async function searchJudicialOpinions(
     next ??= page.next ?? undefined;
 
     (page.results ?? []).forEach((raw, rank) => {
-      const key = String(raw.cluster_id ?? raw.absolute_url ?? raw.caseName ?? "");
+      const key = caseKey(raw);
       if (!key) return;
       const existing = found.get(key);
       if (existing) {
@@ -267,6 +299,14 @@ export async function searchJudicialOpinions(
         if (rung.weight > existing.weight) {
           existing.weight = rung.weight;
           existing.rank = rank;
+        }
+        // Two copies of one decision: keep the better-attested one. The bound
+        // volume carries the citations and the slip opinion carries none, and
+        // which of them CourtListener happens to return first is not a fact
+        // about the case.
+        if ((raw.citeCount ?? 0) > (existing.raw.citeCount ?? 0)) {
+          existing.raw = raw;
+          existing.result = normalize(raw, existing.result.matchedVia);
         }
         return;
       }

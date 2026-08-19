@@ -1,0 +1,132 @@
+name: Deploy
+
+# Put the deploy somewhere it can be seen.
+#
+# THE FAILURE THIS EXISTS FOR. Five commits passed CI and sat on `main` for
+# hours while the API served code from four commits earlier. Every check was
+# green, the repository was correct, and the product was unchanged — and from
+# outside those are indistinguishable. It surfaced only because somebody asked
+# the live server what it was running.
+#
+# That is the exact failure `deploy-check` was built to catch, and it could not
+# catch it: the commit stamp read "unknown" on every deploy, so nothing could
+# say "you are running old code". A deploy that happens inside a dashboard
+# leaves no trace anybody else can read, including the person who has to
+# diagnose it.
+#
+# Here, a failed deploy is a red run with a log, next to the CI run that
+# approved it.
+#
+# INERT UNTIL A TOKEN EXISTS. With no RAILWAY_TOKEN secret this job says so and
+# exits green — it never fails a build for a deployment path that has not been
+# set up, and it never becomes a second way to deploy that quietly competes
+# with the first.
+
+on:
+  push:
+    branches: [main]
+  # Deploy the current main by hand, without pushing anything.
+  workflow_dispatch:
+
+concurrency:
+  # One deploy at a time, and a newer push wins. Two builds racing to replace
+  # the same container is how a deploy lands older code than the one before it.
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  railway:
+    name: railway
+    runs-on: ubuntu-latest
+    # Never deploy code that did not pass. `needs` cannot reach across
+    # workflows, so this waits for the CI run on the same commit.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is a deploy token configured?
+        id: token
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Deploy not configured"
+              echo ""
+              echo "No \`RAILWAY_TOKEN\` secret, so this workflow did nothing."
+              echo ""
+              echo "To let pushes to \`main\` deploy themselves, and to make a failed"
+              echo "deploy show up here instead of only inside a dashboard:"
+              echo ""
+              echo "1. Railway → your project → **Settings → Tokens** → create a project token"
+              echo "2. GitHub → this repo → **Settings → Secrets and variables → Actions**"
+              echo "3. **New repository secret**, named \`RAILWAY_TOKEN\`"
+              echo ""
+              echo "Optionally add a repository **variable** \`RAILWAY_SERVICE\` naming the"
+              echo "backend service, if the project has more than one."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Wait for CI on this commit
+        if: steps.token.outputs.configured == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // A deploy that races CI can ship a commit the tests were about to
+            // reject. Poll the CI workflow for this exact sha.
+            const deadline = Date.now() + 15 * 60 * 1000;
+            while (Date.now() < deadline) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'ci.yml',
+                head_sha: context.sha,
+                per_page: 1,
+              });
+              const run = runs.data.workflow_runs[0];
+              if (run && run.status === 'completed') {
+                if (run.conclusion !== 'success') {
+                  core.setFailed(`CI concluded "${run.conclusion}" for ${context.sha}. Not deploying.`);
+                }
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 20000));
+            }
+            core.setFailed('CI did not finish within 15 minutes. Not deploying.');
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.token.outputs.configured == 'true'
+        with:
+          bun-version: "1.3.11"
+
+      - name: Deploy
+        if: steps.token.outputs.configured == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
+        run: |
+          bunx --bun @railway/cli@latest up \
+            --ci \
+            --detach \
+            ${RAILWAY_SERVICE:+--service "$RAILWAY_SERVICE"}
+
+      - name: Say what was deployed
+        if: steps.token.outputs.configured == 'true'
+        run: |
+          {
+            echo "## Deployed"
+            echo ""
+            echo "Commit \`${GITHUB_SHA}\` was sent to Railway."
+            echo ""
+            echo "Railway builds asynchronously, so this succeeding means the build"
+            echo "STARTED. Confirm it finished, and that the running code is this"
+            echo "commit, by asking the API itself:"
+            echo ""
+            echo '```'
+            echo "bun run deploy-check"
+            echo '```'
+            echo ""
+            echo "or open \`/health\` and compare \`version.commit\` to \`${GITHUB_SHA}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

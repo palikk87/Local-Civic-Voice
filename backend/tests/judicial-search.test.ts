@@ -323,3 +323,81 @@ describe("matching what a plain web search returns", () => {
     expect(bare.terms).not.toContain("case");
   });
 });
+
+/**
+ * One decision, one result.
+ *
+ * OBSERVED IN LIVE OUTPUT, not imagined: a search for phone privacy returned
+ * Riley v. California twice — clusters 8385044 and 8391734, the same 2014
+ * ruling. CourtListener stores a case more than once (a slip opinion and the
+ * bound volume, a corrected reissue, a second reporter's copy), so deduping by
+ * cluster id treats one case as two. To a reader it is the same ruling listed
+ * twice, pushing a different case off the page.
+ */
+describe("the same case is never listed twice", () => {
+  /** The two Riley clusters, as CourtListener actually returned them. */
+  const twoCopies = {
+    count: 2,
+    results: [
+      {
+        cluster_id: 8385044,
+        caseName: "Riley v. California",
+        court: "Supreme Court of the United States",
+        court_id: "scotus",
+        dateFiled: "2014-01-17",
+        // Reporter's prefix and an en dash — the same docket, written
+        // differently.
+        docketNumber: "No. 13–132.",
+        absolute_url: "/opinion/8414700/riley-v-california/",
+        citeCount: 0,
+        opinions: [{ id: 8385044, snippet: "cell phone search incident to arrest" }],
+      },
+      {
+        cluster_id: 8391734,
+        caseName: "Riley v. California",
+        court: "Supreme Court of the United States",
+        court_id: "scotus",
+        dateFiled: "2014-06-25",
+        docketNumber: "13-132",
+        absolute_url: "/opinion/2812209/riley-v-california/",
+        citeCount: 1311,
+        opinions: [{ id: 8391734, snippet: "cell phone search incident to arrest" }],
+      },
+    ],
+  };
+
+  function stubCopies(): void {
+    asked = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        return Response.json(twoCopies);
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+  }
+
+  test("two clusters of one ruling collapse to one result", async () => {
+    stubCopies();
+    const output = await searchJudicialOpinions("cell phone privacy", 10);
+
+    const rileys = output.results.filter((r) => r.case_name === "Riley v. California");
+    expect(rileys).toHaveLength(1);
+  });
+
+  test("the better-attested copy is the one kept", async () => {
+    // The bound volume carries the citations; the slip opinion carries none.
+    // Which one CourtListener happens to return first is not a fact about the
+    // case, and keeping the uncited copy would also cost it its prominence.
+    stubCopies();
+    const output = await searchJudicialOpinions("cell phone privacy", 10);
+
+    const riley = output.results.find((r) => r.case_name === "Riley v. California");
+    expect(riley!.date_filed).toBe("2014-06-25");
+    expect(riley!.docket_number).toBe("13-132");
+  });
+});
