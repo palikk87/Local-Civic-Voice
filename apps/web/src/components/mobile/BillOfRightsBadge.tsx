@@ -1,5 +1,8 @@
 // Web port of mobile/src/components/BillOfRightsBadge.tsx
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import type { VoteDetails } from "@/components/civic/PulseBreakdown";
 import {
   Scroll,
   Shield,
@@ -250,22 +253,55 @@ export function DelegationRightIndicator({ canRevoke }: DelegationRightIndicator
   );
 }
 
+/**
+ * A response is only usable if it actually carries the numbers.
+ *
+ * A backend that answers this route with something else — an error envelope, an
+ * empty object, an older deploy that has no such route — must leave the panel
+ * blank, not crash the page it sits on. Checking one field and then reading a
+ * nested one is exactly how the Government page white-screened.
+ */
+function usableVoteDetails(data: unknown): data is VoteDetails {
+  const d = data as VoteDetails | undefined;
+  return (
+    typeof d?.total === "number" &&
+    typeof d?.support?.direct === "number" &&
+    typeof d?.support?.delegated === "number" &&
+    typeof d?.oppose?.direct === "number" &&
+    typeof d?.oppose?.delegated === "number"
+  );
+}
+
 interface TransparencyIndicatorProps {
-  directVotes: number;
-  delegatedVotes: number;
-  totalWeight: number;
+  /** The master reference whose Pulse this describes. */
+  referenceId: string | undefined;
 }
 
 /**
- * Transparency Indicator
- * Shows Article III vote transparency breakdown
+ * Transparency Indicator — Article III, actually honoured.
+ *
+ * THIS PANEL USED TO MAKE ITS NUMBERS UP. Both apps passed it
+ * `totalVoters * 0.85` and `totalVoters * 0.15`: an invented split, printed in
+ * bold under the quote "Every user has the right to see the mathematical path
+ * of a decision". It was the fabrication sitting inside the guarantee against
+ * fabrication, and it would have told a citizen a confident lie about how their
+ * own delegation had been counted.
+ *
+ * It now reads the real breakdown, and shows nothing at all when there is no
+ * record to read — an empty space is honest, an invented ratio is not.
  */
-export function TransparencyIndicator({
-  directVotes,
-  delegatedVotes,
-  totalWeight,
-}: TransparencyIndicatorProps) {
+export function TransparencyIndicator({ referenceId }: TransparencyIndicatorProps) {
   const navigate = useNavigate();
+  const { data } = useQuery({
+    queryKey: ["vote-details", referenceId],
+    queryFn: () => api.get<VoteDetails>(`/api/government-references/${referenceId}/vote-details`),
+    enabled: Boolean(referenceId),
+  });
+
+  if (!usableVoteDetails(data)) return null;
+
+  const direct = data.support.direct + data.oppose.direct;
+  const delegated = data.support.delegated + data.oppose.delegated;
 
   return (
     <button
@@ -282,15 +318,15 @@ export function TransparencyIndicator({
       <div className="flex justify-between">
         <div>
           <p className="text-slate-400 text-xs">Direct</p>
-          <p className="text-white font-bold">{directVotes.toLocaleString()}</p>
+          <p className="text-white font-bold">{direct.toLocaleString()}</p>
         </div>
         <div>
           <p className="text-slate-400 text-xs">Delegated</p>
-          <p className="text-white font-bold">{delegatedVotes.toLocaleString()}</p>
+          <p className="text-white font-bold">{delegated.toLocaleString()}</p>
         </div>
         <div>
           <p className="text-slate-400 text-xs">Total Weight</p>
-          <p className="text-emerald-400 font-bold">{totalWeight.toLocaleString()}</p>
+          <p className="text-emerald-400 font-bold">{data.total.toLocaleString()}</p>
         </div>
       </div>
       <p className="text-emerald-300/60 text-xs mt-2 italic">

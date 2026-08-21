@@ -40,7 +40,11 @@ const CHECKS: Check[] = [
   {
     name: "backend tests",
     cwd: "backend",
-    cmd: ["bun", "test"],
+    // `bun run test`, not `bun test`: the script carries the timeout. Booting
+    // the real server takes about four seconds, and bun's default five-second
+    // budget per hook made that a coin flip — six tests failed here while the
+    // same suite passed when run by hand with a longer one.
+    cmd: ["bun", "run", "test"],
     guards:
       "deletes persist, merges lose nothing, names resolve, briefs are written once, " +
       "and no vote is invented",

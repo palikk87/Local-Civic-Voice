@@ -13,7 +13,7 @@ import {
   addAlias,
   recalculateReferenceStats,
 } from "../services/deduplication-service";
-import { applyWeightedTally } from "../services/delegation-service";
+import { applyWeightedTally, voteBreakdown } from "../services/delegation-service";
 import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
 import { ensureReferenceContent } from "../services/reference-content";
@@ -351,6 +351,35 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       createdAt: ref.createdAt.toISOString(),
     })),
   });
+});
+
+/**
+ * GET /api/government-references/:id/vote-details
+ *
+ * The Pulse, shown as its parts. Bill of Rights III promises every user the
+ * right "to know exactly how many direct votes and delegated weights formed
+ * the Pulse" — before this, the platform published one merged number and there
+ * was no way for anyone, including its operators, to see what it was made of.
+ *
+ * Public, because the same article calls it "a public record within the
+ * platform", and a record you must sign in to read is not one.
+ *
+ * Counts only, never names: Article IV promises anonymity, and a roster of who
+ * voted which way is precisely what that forbids.
+ */
+governmentReferencesRouter.get("/:id/vote-details", async (c) => {
+  const id = c.req.param("id");
+
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id },
+    select: { id: true },
+  });
+  if (!reference) {
+    return c.json({ error: "Reference not found" }, 404);
+  }
+
+  const breakdown = await voteBreakdown(id);
+  return c.json(breakdown);
 });
 
 /**

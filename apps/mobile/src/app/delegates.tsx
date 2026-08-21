@@ -61,11 +61,25 @@ interface DelegatesResponse {
   };
 }
 
+interface ChainLink {
+  id: string;
+  name: string;
+  username: string | null;
+}
+
 interface MyDelegation {
   id: string;
   toUser: { id: string; name: string; username: string | null; image: string | null };
   category: string | null;
   isActive: boolean;
+  /**
+   * Anyone your voice passes to after the person you picked.
+   *
+   * Usually empty. It fills in when your delegate has lent their own voice
+   * onward, which means somebody you never chose ends up speaking for you.
+   * Bill of Rights I calls for transparent delegation chains; this is it.
+   */
+  chain: ChainLink[];
 }
 
 interface EligibilityRequirement {
@@ -84,11 +98,13 @@ function DelegateCard({
   delegate,
   index,
   isDelegatedTo,
+  chain,
   onPress,
 }: {
   delegate: DelegateListing;
   index: number;
   isDelegatedTo: boolean;
+  chain: ChainLink[];
   onPress: () => void;
 }) {
   const router = useRouter();
@@ -167,6 +183,23 @@ function DelegateCard({
             </Text>
           </View>
         </View>
+
+        {isDelegatedTo && chain.length > 0 ? (
+          <View className="mt-3 rounded-xl border border-amber-700/40 bg-amber-900/20 p-3">
+            <Text className="text-amber-100 text-xs leading-5">
+              {delegate.name.split(' ')[0]} has passed their vote on, so your voice currently
+              reaches{' '}
+              <Text className="font-semibold">{chain[chain.length - 1]!.name}</Text>
+              {chain.length > 1
+                ? ` (via ${chain
+                    .slice(0, -1)
+                    .map((link) => link.name)
+                    .join(', ')})`
+                : ''}
+              . Revoke any time.
+            </Text>
+          </View>
+        ) : null}
 
         <View
           className={cn(
@@ -298,6 +331,7 @@ function DelegatesContent() {
         delegate={item}
         index={index}
         isDelegatedTo={delegationsByUser.has(item.id)}
+        chain={delegationsByUser.get(item.id)?.chain ?? []}
         onPress={() => handleSelectDelegate(item)}
       />
     ),

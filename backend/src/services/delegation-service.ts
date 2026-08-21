@@ -262,10 +262,64 @@ export async function listEligibleDelegates(limit = 50): Promise<DelegateListing
 }
 
 /**
- * Weighted tally for one reference: direct votes count 1; each active
- * delegation covering the reference's category adds 1 to the delegate's
- * position, unless the delegator voted directly themselves. When one user
- * delegated to several people, a category-specific delegation beats "all".
+ * How far a lent voice may travel before the chain is abandoned.
+ *
+ * A chain longer than this is far more likely to be a ring of accounts passing
+ * weight around than a citizen who genuinely trusts a friend of a friend of a
+ * friend. Hitting the cap drops that delegator rather than guessing, which
+ * loses one voice — the alternative is inventing one, and the platform's own
+ * rule is that no vote may be fabricated.
+ */
+export const MAX_DELEGATION_DEPTH = 8;
+
+interface DelegationEdge {
+  fromUserId: string;
+  toUserId: string;
+  category: string | null;
+}
+
+/**
+ * Pick the single delegation a user's voice follows for one category.
+ *
+ * A user may lend their voice to several people with different scopes. The
+ * most specific scope wins: a delegation for "healthcare" beats a blanket one,
+ * because the whole point of scoping is to say "trust them on this, not on
+ * everything".
+ */
+function edgeFor(
+  edges: DelegationEdge[] | undefined,
+  category: string | null,
+): DelegationEdge | null {
+  if (!edges || edges.length === 0) return null;
+  const applicable = edges.filter(
+    (e) => e.category === null || e.category === "all" || e.category === category,
+  );
+  if (applicable.length === 0) return null;
+  const specific = applicable.find((e) => e.category !== null && e.category !== "all");
+  return specific ?? applicable[0]!;
+}
+
+/**
+ * Weighted tally for one reference.
+ *
+ * DIRECT VOTES COUNT ONCE. Then every citizen who lent their voice and did not
+ * vote themselves follows their delegation until it reaches somebody who did
+ * vote, and their voice lands on that position.
+ *
+ * THE VOICE TRAVELS THE WHOLE CHAIN. It used to stop after a single hop: if you
+ * delegated to someone who had themselves delegated onward, your voice was
+ * dropped on the floor. Nobody was told. The app promises "transparent
+ * delegation chains" and counts itself the sole record of the public will, so a
+ * silently discarded citizen is the worst failure it has — worse than a wrong
+ * number, because a wrong number can be argued with.
+ *
+ * A voice stops travelling when it reaches someone who voted (it lands there),
+ * when the chain runs out (nobody along it voted — it counts for nothing), when
+ * it revisits an account (a ring — abandoned), or at MAX_DELEGATION_DEPTH.
+ *
+ * A DIRECT VOTE ALWAYS WINS. At every step, a citizen who voted for themselves
+ * keeps their own voice and passes nothing on. That is the Constitution's
+ * "floor, not the ceiling": your delegate speaks for you until you speak.
  */
 export async function computeWeightedTally(
   referenceId: string,
@@ -275,6 +329,14 @@ export async function computeWeightedTally(
    * the merge commits, not as they were before it started.
    */
   db: Pick<typeof prisma, "governmentReference" | "governmentReferenceVote" | "delegation"> = prisma,
+  /**
+   * Every active delegation, already in memory.
+   *
+   * Recomputing many records at once — which is what a single revoke does —
+   * otherwise re-reads the same delegation rows once per record. Passing them
+   * in turns hundreds of identical reads into one.
+   */
+  preloadedEdges?: DelegationEdge[],
 ): Promise<{ support: number; oppose: number }> {
   const reference = await db.governmentReference.findUnique({
     where: { id: referenceId },
@@ -287,42 +349,106 @@ export async function computeWeightedTally(
   });
 
   const positionByVoter = new Map(votes.map((v) => [v.userId, v.position]));
-  const voterIds = [...positionByVoter.keys()];
 
   let support = votes.filter((v) => v.position === "support").length;
   let oppose = votes.filter((v) => v.position === "oppose").length;
 
-  if (voterIds.length > 0) {
-    const category = reference?.category ?? null;
-    const delegations = await db.delegation.findMany({
-      where: {
-        toUserId: { in: voterIds },
-        isActive: true,
-        OR: [{ category: null }, { category: "all" }, ...(category ? [{ category }] : [])],
-      },
-      select: { fromUserId: true, toUserId: true, category: true },
-    });
+  if (positionByVoter.size === 0) return { support, oppose };
 
-    // One weighted vote per delegator: specific category beats "all"; and a
-    // delegator's own direct vote always overrides their delegate.
-    const chosen = new Map<string, { toUserId: string; specific: boolean }>();
-    for (const d of delegations) {
-      if (positionByVoter.has(d.fromUserId)) continue;
-      const specific = d.category !== null && d.category !== "all";
-      const existing = chosen.get(d.fromUserId);
-      if (!existing || (specific && !existing.specific)) {
-        chosen.set(d.fromUserId, { toUserId: d.toUserId, specific });
+  const category = reference?.category ?? null;
+
+  // Every active delegation that could carry a voice on this reference. Read in
+  // one query and walked in memory: a chain walked with a query per hop is a
+  // query per citizen per record, which is the shape that takes a database
+  // down on the day something finally goes viral.
+  const delegations = preloadedEdges
+    ? preloadedEdges.filter(
+        (e) => e.category === null || e.category === "all" || e.category === category,
+      )
+    : await db.delegation.findMany({
+        where: {
+          isActive: true,
+          OR: [{ category: null }, { category: "all" }, ...(category ? [{ category }] : [])],
+        },
+        select: { fromUserId: true, toUserId: true, category: true },
+      });
+
+  const outgoing = new Map<string, DelegationEdge[]>();
+  for (const edge of delegations) {
+    const list = outgoing.get(edge.fromUserId) ?? [];
+    list.push(edge);
+    outgoing.set(edge.fromUserId, list);
+  }
+
+  for (const delegator of outgoing.keys()) {
+    // Spoke for themselves — their voice is already counted above and stays put.
+    if (positionByVoter.has(delegator)) continue;
+
+    const seen = new Set<string>([delegator]);
+    let current = delegator;
+    let landed: string | undefined;
+
+    for (let hop = 0; hop < MAX_DELEGATION_DEPTH; hop += 1) {
+      const edge = edgeFor(outgoing.get(current), category);
+      if (!edge) break;
+      if (seen.has(edge.toUserId)) break;
+
+      seen.add(edge.toUserId);
+      current = edge.toUserId;
+
+      const position = positionByVoter.get(current);
+      if (position) {
+        landed = position;
+        break;
       }
     }
 
-    for (const { toUserId } of chosen.values()) {
-      const position = positionByVoter.get(toUserId);
-      if (position === "support") support++;
-      else if (position === "oppose") oppose++;
-    }
+    if (landed === "support") support++;
+    else if (landed === "oppose") oppose++;
   }
 
   return { support, oppose };
+}
+
+/**
+ * The same tally, split into the parts the Bill of Rights says a citizen may
+ * see: how many voices spoke for themselves, and how many were carried.
+ *
+ * Counts only — never who. Article IV of the Bill of Rights promises anonymity,
+ * and a list of names alongside positions is exactly what it promises not to
+ * publish.
+ */
+export async function voteBreakdown(referenceId: string): Promise<{
+  support: { direct: number; delegated: number; total: number };
+  oppose: { direct: number; delegated: number; total: number };
+  total: number;
+}> {
+  const [direct, weighted] = await Promise.all([
+    prisma.governmentReferenceVote.groupBy({
+      by: ["position"],
+      where: { governmentReferenceId: referenceId },
+      _count: true,
+    }),
+    computeWeightedTally(referenceId),
+  ]);
+
+  const directBy = new Map(direct.map((row) => [row.position, row._count]));
+  const supportDirect = directBy.get("support") ?? 0;
+  const opposeDirect = directBy.get("oppose") ?? 0;
+
+  return {
+    support: {
+      direct: supportDirect,
+      delegated: weighted.support - supportDirect,
+      total: weighted.support,
+    },
+    oppose: {
+      direct: opposeDirect,
+      delegated: weighted.oppose - opposeDirect,
+      total: weighted.oppose,
+    },
+    total: weighted.support + weighted.oppose,
+  };
 }
 
 /**
@@ -336,11 +462,127 @@ export async function computeWeightedTally(
  */
 export async function applyWeightedTally(
   referenceId: string,
+  preloadedEdges?: DelegationEdge[],
 ): Promise<{ support: number; oppose: number }> {
-  const { support, oppose } = await computeWeightedTally(referenceId);
+  const { support, oppose } = await computeWeightedTally(referenceId, prisma, preloadedEdges);
   await prisma.governmentReference.update({
     where: { id: referenceId },
     data: { supportVotes: support, opposeVotes: oppose },
   });
   return { support, oppose };
+}
+
+/**
+ * Every reference whose published tally could move because one delegation edge
+ * appeared or disappeared.
+ *
+ * WHY THIS EXISTS. Granting and revoking used to change nothing anybody could
+ * see. The tally is stored on the reference row, and it was only ever rewritten
+ * when somebody voted, so a citizen who took their voice back stayed counted —
+ * on every card, in every Pulse — until unrelated traffic happened to arrive on
+ * that exact record. The Bill of Rights promises revocation "without delay",
+ * and a delay that ends whenever a stranger votes is not a delay anybody can
+ * predict or wait out.
+ *
+ * The affected records are the ones voted on by anyone the changed edge can
+ * still reach: the new or former delegate, whoever they delegate onward to, and
+ * so on. Nobody upstream needs recomputing — their voice was already flowing
+ * through this edge or was not.
+ */
+export async function referencesAffectedByDelegation(toUserId: string): Promise<string[]> {
+  const reachable = new Set<string>([toUserId]);
+  let frontier = [toUserId];
+
+  for (let hop = 0; hop < MAX_DELEGATION_DEPTH && frontier.length > 0; hop += 1) {
+    const next = await prisma.delegation.findMany({
+      where: { fromUserId: { in: frontier }, isActive: true },
+      select: { toUserId: true },
+    });
+    frontier = next.map((d) => d.toUserId).filter((id) => !reachable.has(id));
+    for (const id of frontier) reachable.add(id);
+  }
+
+  const votes = await prisma.governmentReferenceVote.findMany({
+    where: { userId: { in: [...reachable] } },
+    select: { governmentReferenceId: true },
+    distinct: ["governmentReferenceId"],
+  });
+
+  return votes.map((v) => v.governmentReferenceId);
+}
+
+/**
+ * Re-publish every tally a delegation change touches, so "instant" is instant.
+ *
+ * Called on grant and on revoke. It is deliberately awaited rather than queued:
+ * a citizen who revokes and immediately looks at the record must see their
+ * voice already gone, and a background job makes that a race they would lose
+ * often enough to notice.
+ */
+export async function republishTalliesAfterDelegationChange(toUserId: string): Promise<number> {
+  const referenceIds = await referencesAffectedByDelegation(toUserId);
+  if (referenceIds.length === 0) return 0;
+
+  const edges = await prisma.delegation.findMany({
+    where: { isActive: true },
+    select: { fromUserId: true, toUserId: true, category: true },
+  });
+
+  for (const referenceId of referenceIds) {
+    await applyWeightedTally(referenceId, edges);
+  }
+  return referenceIds.length;
+}
+
+export interface ChainLink {
+  id: string;
+  name: string;
+  username: string | null;
+}
+
+/**
+ * Where a citizen's voice actually ends up.
+ *
+ * A voice now travels the whole chain, which means it can land on somebody the
+ * citizen never chose and has never heard of. The Bill of Rights promises
+ * "transparent delegation chains", and that promise only costs something once
+ * the chain is real: before this, a chain stopped after one hop and there was
+ * nothing to disclose. Now there is, so it is disclosed.
+ *
+ * Returns everyone after the person they picked, in order. Empty means the
+ * chain ends where they chose — the ordinary case.
+ */
+export async function resolveDelegationChain(
+  startUserId: string,
+  category: string | null,
+): Promise<ChainLink[]> {
+  const chain: ChainLink[] = [];
+  const seen = new Set<string>([startUserId]);
+  let current = startUserId;
+
+  for (let hop = 0; hop < MAX_DELEGATION_DEPTH; hop += 1) {
+    const edges = await prisma.delegation.findMany({
+      where: {
+        fromUserId: current,
+        isActive: true,
+        OR: [{ category: null }, { category: "all" }, ...(category ? [{ category }] : [])],
+      },
+      select: {
+        fromUserId: true,
+        toUserId: true,
+        category: true,
+        toUser: { select: { id: true, name: true, username: true } },
+      },
+    });
+
+    const chosen = edgeFor(edges, category);
+    if (!chosen || seen.has(chosen.toUserId)) break;
+
+    const link = edges.find((e) => e.toUserId === chosen.toUserId)!.toUser;
+    chain.push({ id: link.id, name: link.name, username: link.username });
+    seen.add(chosen.toUserId);
+    current = chosen.toUserId;
+  }
+
+  return chain;
 }

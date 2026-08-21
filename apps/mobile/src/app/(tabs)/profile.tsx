@@ -33,7 +33,6 @@ import * as Haptics from 'expo-haptics';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore } from '@/lib/voting-store';
 import { useAuthStore } from '@/lib/auth-store';
-import { useDelegationStore, selectActiveDelegationsCount } from '@/lib/delegation-store';
 import { useAdminStore } from '@/lib/admin-store';
 import { useB2BStore } from '@/lib/b2b-store';
 import { usePermissions, useCurrentUser } from '@/lib/auth/use-civic-auth';
@@ -42,7 +41,8 @@ import { useUserVoteHistory } from '@/lib/hooks';
 import type { Bill, BillCategory } from '@/lib/types';
 import type { VoteWithBill } from '@/lib/database.types';
 import { AuthGate } from '@/components/auth/AuthGate';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api/api';
 import { authClient } from '@/lib/auth/auth-client';
 import * as SecureStore from 'expo-secure-store';
 
@@ -248,7 +248,15 @@ function ProfileContent() {
   // when isSupabaseConfigured() was true, which it has not been since the client
   // was removed — so it always ran disabled and returned nothing.
 
-  const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
+  // The real count, from the server that holds them. This used to read a
+  // device-only store that nothing ever filled, so a citizen who had lent their
+  // voice to three people was told they had none.
+  const { data: myDelegations } = useQuery({
+    queryKey: ['my-delegations'],
+    queryFn: () => api.get<{ activeCount: number }>('/api/delegations/me'),
+    enabled: Boolean(sessionUser),
+  });
+  const activeDelegationsCount = myDelegations?.activeCount ?? 0;
 
   // Portal entry points. The admin tier comes from the separate admin-console
   // session, never from a citizen account — a brand-new signup is `user`, so the

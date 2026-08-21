@@ -6,6 +6,8 @@ import type { auth } from "../auth";
 import {
   checkDelegateEligibility,
   listEligibleDelegates,
+  republishTalliesAfterDelegationChange,
+  resolveDelegationChain,
   DELEGATE_REQUIREMENTS,
 } from "../services/delegation-service";
 
@@ -57,8 +59,20 @@ delegationsRouter.get("/me", async (c) => {
     },
   });
 
+  // Where each lent voice actually ends up. A delegate may have lent their own
+  // voice onward, so the person a citizen chose is not always the person who
+  // ends up speaking for them — and they are entitled to know that.
+  const withChains = await Promise.all(
+    delegations.map(async (delegation) => ({
+      ...formatDelegation(delegation),
+      chain: delegation.isActive
+        ? await resolveDelegationChain(delegation.toUserId, delegation.category)
+        : [],
+    })),
+  );
+
   return c.json({
-    delegations: delegations.map(formatDelegation),
+    delegations: withChains,
     activeCount: delegations.filter((d) => d.isActive).length,
   });
 });
@@ -158,6 +172,10 @@ delegationsRouter.post(
         },
       });
 
+      // The lent voice counts from this moment, not from the next time a
+      // stranger happens to vote on the same record.
+      await republishTalliesAfterDelegationChange(toUserId);
+
       return c.json({ delegation: formatDelegation(delegation) }, 201);
     } catch (err) {
       if (
@@ -191,6 +209,11 @@ delegationsRouter.delete("/:id", async (c) => {
   }
 
   await prisma.delegation.delete({ where: { id } });
+
+  // Bill of Rights I: "instantly revoke ... without delay or penalty". The
+  // published Pulse has to stop counting the borrowed voice before this
+  // request returns.
+  await republishTalliesAfterDelegationChange(delegation.toUserId);
 
   return c.json({ success: true });
 });

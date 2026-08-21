@@ -620,11 +620,7 @@ export default function BillDetail() {
 
           {/* Vote Transparency */}
           <div className="px-4 mb-4">
-            <TransparencyIndicator
-              directVotes={Math.round(bill.communityVotes.totalVoters * 0.85)}
-              delegatedVotes={Math.round(bill.communityVotes.totalVoters * 0.15)}
-              totalWeight={bill.communityVotes.totalVoters}
-            />
+            <TransparencyIndicator referenceId={billRefData?.reference?.id} />
           </div>
 
           {/* News Coverage Carousel */}

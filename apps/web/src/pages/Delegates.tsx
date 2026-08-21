@@ -41,11 +41,25 @@ interface DelegatesResponse {
   };
 }
 
+interface ChainLink {
+  id: string;
+  name: string;
+  username: string | null;
+}
+
 interface MyDelegation {
   id: string;
   toUser: { id: string; name: string; username: string | null; image: string | null };
   category: string | null;
   isActive: boolean;
+  /**
+   * Anyone your voice passes to after the person you picked.
+   *
+   * Usually empty. It fills in when your delegate has lent their own voice
+   * onward, which means somebody you never chose ends up speaking for you.
+   * Bill of Rights I calls for transparent delegation chains; this is it.
+   */
+  chain: ChainLink[];
 }
 
 interface EligibilityRequirement {
@@ -126,9 +140,27 @@ function DelegateCard({
       </div>
 
       {myDelegation ? (
-        <Button className="mt-4 w-full" variant="secondary" disabled={busy} onClick={onRevoke}>
-          Delegating — tap to revoke
-        </Button>
+        <>
+          {myDelegation.chain.length > 0 ? (
+            <p className="mt-4 rounded-lg border border-amber-700/40 bg-amber-900/20 p-3 text-xs leading-relaxed text-amber-100">
+              {delegate.name.split(" ")[0]} has passed their vote on, so your voice currently
+              reaches{" "}
+              <span className="font-semibold">
+                {myDelegation.chain[myDelegation.chain.length - 1]!.name}
+              </span>
+              {myDelegation.chain.length > 1
+                ? ` (via ${myDelegation.chain
+                    .slice(0, -1)
+                    .map((link) => link.name)
+                    .join(", ")})`
+                : ""}
+              . Revoke any time.
+            </p>
+          ) : null}
+          <Button className="mt-4 w-full" variant="secondary" disabled={busy} onClick={onRevoke}>
+            Delegating — tap to revoke
+          </Button>
+        </>
       ) : (
         <Button className="mt-4 w-full" variant="outline" disabled={busy} onClick={onDelegate}>
           Delegate to {delegate.name.split(" ")[0]}

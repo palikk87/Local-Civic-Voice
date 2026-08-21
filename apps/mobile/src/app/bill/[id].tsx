@@ -878,11 +878,7 @@ export default function BillDetailScreen() {
               entering={FadeInDown.delay(130).springify()}
               className="px-4 mb-4"
             >
-              <TransparencyIndicator
-                directVotes={Math.round(bill.communityVotes.totalVoters * 0.85)}
-                delegatedVotes={Math.round(bill.communityVotes.totalVoters * 0.15)}
-                totalWeight={bill.communityVotes.totalVoters}
-              />
+              <TransparencyIndicator referenceId={billRefData?.reference?.id} />
             </Animated.View>
 
             {/* News Coverage Carousel */}

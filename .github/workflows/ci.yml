@@ -99,7 +99,9 @@ jobs:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_test
         run: |
           PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE civicvoice_test;'
-          bun test
+          # `bun run test`, not `bun test`: the script carries the timeout that
+          # the real server's four-second boot needs.
+          bun run test
 
   web:
     name: web

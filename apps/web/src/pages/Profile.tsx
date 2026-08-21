@@ -1,7 +1,7 @@
 // Web port of mobile/src/app/(tabs)/profile.tsx
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Settings,
   ThumbsUp,
@@ -26,10 +26,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore } from "@/lib/mobile/voting-store";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
-import {
-  useDelegationStore,
-  selectActiveDelegationsCount,
-} from "@/lib/mobile/delegation-store";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useUserVoteHistory } from "@/lib/mobile/hooks";
 import { useCurrentUser, usePermissions } from "@/hooks/use-civic-auth";
@@ -222,7 +219,17 @@ export default function Profile() {
   // when isSupabaseConfigured() was true, which it has not been since the client
   // was removed — so it always ran disabled and returned nothing.
 
-  const activeDelegationsCount = useDelegationStore(selectActiveDelegationsCount);
+  // The real count, from the server that holds them.
+  //
+  // This used to read a browser-only store that nothing ever filled, so a
+  // citizen who had lent their voice to three people was told they had none.
+  // The card is the only place most people will look to check.
+  const { data: myDelegations } = useQuery({
+    queryKey: ["my-delegations"],
+    queryFn: () => api.get<{ activeCount: number }>("/api/delegations/me"),
+    enabled: Boolean(sessionUser),
+  });
+  const activeDelegationsCount = myDelegations?.activeCount ?? 0;
 
   // Calculate vote stats
   const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {

@@ -1,6 +1,7 @@
 import { ThumbsUp, ThumbsDown, Loader2, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PublicPulseBar } from "@/components/civic/PublicPulseBar";
+import { PulseBreakdown } from "@/components/civic/PulseBreakdown";
 import { cn } from "@/lib/utils";
 import { supportPct, type GovReferenceDetail, type VotePosition } from "@/lib/civic";
 import { useVote } from "@/hooks/use-vote";
@@ -68,6 +69,10 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
       <div className="mt-2 text-center font-mono text-xs text-muted-foreground">
         {reference.votes.total.toLocaleString()} total votes cast
       </div>
+
+      {/* The exact math the line above promises: how much of this is people
+          speaking for themselves, and how much is voice lent to someone else. */}
+      <PulseBreakdown referenceId={reference.id} className="mt-3" />
 
       {/* Vote actions */}
       <div className="mt-6 grid grid-cols-2 gap-3">
