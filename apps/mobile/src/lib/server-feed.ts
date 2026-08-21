@@ -73,6 +73,16 @@ export interface ServerPost {
   likesCount: number;
   /** Whether the person asking has already liked this. */
   isLiked: boolean;
+  repostsCount?: number;
+  /** Whether the person asking has already passed this on. */
+  isRepostedByMe?: boolean;
+  /** The post this one passes on, when it is a repost. */
+  repostOf?: {
+    id: string;
+    content: string;
+    author: { id: string; displayName: string; username: string; avatar: string };
+    createdAt: string;
+  } | null;
   createdAt: string;
 }
 

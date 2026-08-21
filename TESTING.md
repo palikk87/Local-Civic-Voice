@@ -182,6 +182,26 @@ read.
 
 ---
 
+## Reach: reposting, messages, search, hashtags
+
+`backend/tests/reach.test.ts`. Everything here existed as a fragment before it
+existed as a feature.
+
+- **Reposting.** A repost points at the original, never at another repost, so a
+  post's count is the number of people who passed it on rather than the depth of
+  a game of telephone. A plain repost toggles; a quote does not, because several
+  quotes say different things. It inherits the original's law — a repost about a
+  different bill would be a new post.
+- **Messages notify.** A direct message notified nobody, so it was only ever
+  seen if the recipient happened to open the inbox.
+- **Post search** matches the words written and the title of the law they were
+  written about, because people search for what a law does and the post may
+  never use the word.
+- **Hashtags** are extracted, counted, and have a page. Nothing wrote to the
+  Hashtag table before, so the trending list had always been empty.
+
+---
+
 ## Checking a real database is clean
 
 Run this against production whenever you want the reassurance. It is read-only

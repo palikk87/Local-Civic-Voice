@@ -263,30 +263,26 @@ On by default; it is in notification preferences like any other.
 
 ### Social features that do not exist yet
 
-Built and tested now: following, feeds, posts, likes, comments, replies,
-comment likes, saves, shares, messaging, notifications, search, discovery,
-blocking, muting and reporting.
+Built and tested: following, feeds, posts, likes, comments, replies, comment
+likes, saves, shares, reposting and quoting, messaging with notifications,
+notifications, searching people and posts, hashtags, discovery, blocking,
+muting and reporting.
 
-Not built, in the order a launch would feel them:
+Not built:
 
-- **Reposting / quoting.** `NotificationType.REPOST` and `notifyRepost` exist
-  and nothing calls them, because there is no repost. On a platform whose point
-  is spreading a law to people who have not seen it, this is the largest gap.
 - **Friends.** There is no mutual-consent relationship anywhere — only follows,
-  which are one-directional. Two people who follow each other are friends in
-  effect and nothing names it.
-- **Hashtags you can open.** `Hashtag` and `PostHashtag` are populated and there
-  is a trending list, but no endpoint returns the posts under one, so a tag is
-  not clickable.
-- **Searching posts.** Search finds people only. There is no way to find what
-  was said about a bill except by opening the bill.
+  which are one-directional and need nobody's permission. Two people who follow
+  each other are friends in effect and nothing names it. A real friends feature
+  means a request, an accept, and a decision about what it grants that following
+  does not.
 - **Editing a post.** Deliberate — a post is a public statement attached to a
   law, and the platform's own rule is that no post is ever edited. Worth
   confirming that is still the intent rather than an omission.
-- **Message notifications.** Sending a message notifies nobody, so a direct
-  message is only seen if the recipient opens the inbox.
-
-
+- **A trending-hashtags UI on the web.** The endpoint and the tag pages exist
+  and tags in a post are links; nothing yet shows the ranked list. Mobile has
+  the fetch already.
+- **Pinning a post, muting a thread, and a public list of who blocked whom** —
+  none of these exist and none of them should without a reason.
 
 ### A deleted account keeps voting
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { Bookmark, Heart, MessageCircle, Share2 } from "lucide-react";
+import { Bookmark, Heart, MessageCircle, Repeat2, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
@@ -25,6 +25,35 @@ function branchColor(type: ReferenceType | null): string {
   return "hsl(var(--accent))";
 }
 
+/**
+ * Post text with its hashtags turned into links.
+ *
+ * A tag was plain text everywhere, so the trending list — when it eventually
+ * has anything in it — pointed at nothing a reader could reach.
+ *
+ * Same rules the server files them under: letters, numbers and underscore, and
+ * never all digits, so "ranked #1" stays a sentence rather than becoming a
+ * topic nobody meant to create.
+ */
+function withHashtagLinks(text: string) {
+  const parts = text.split(/(#[A-Za-z0-9_]{1,64})\b/g);
+  return parts.map((part, index) => {
+    if (!part.startsWith("#")) return part;
+    const tag = part.slice(1);
+    if (/^\d+$/.test(tag)) return part;
+    return (
+      <Link
+        key={`${tag}-${index}`}
+        to={`/hashtag/${tag.toLowerCase()}`}
+        className="text-accent hover:underline"
+        onClick={(event) => event.stopPropagation()}
+      >
+        {part}
+      </Link>
+    );
+  });
+}
+
 export function PostCard({ post }: { post: Post }) {
   const { isAuthenticated } = useCurrentUser();
   const { openAuth } = useAuthUI();
@@ -35,6 +64,8 @@ export function PostCard({ post }: { post: Post }) {
   const [liked, setLiked] = useState(post.isLiked ?? false);
   const [likes, setLikes] = useState(post.likesCount);
   const [saved, setSaved] = useState(false);
+  const [reposted, setReposted] = useState(post.isRepostedByMe ?? false);
+  const [reposts, setReposts] = useState(post.repostsCount ?? 0);
 
   const likeMutation = useMutation({
     mutationFn: () => postsApi.like(post.id),
@@ -71,6 +102,30 @@ export function PostCard({ post }: { post: Post }) {
 
   const shareMutation = useMutation({ mutationFn: () => postsApi.share(post.id) });
 
+  const repostMutation = useMutation({
+    mutationFn: () => postsApi.repost(post.repostOf?.id ?? post.id),
+    onSuccess: (result) => {
+      setReposted(Boolean(result?.reposted));
+      setReposts(result?.repostsCount ?? 0);
+    },
+    onError: () => {
+      setReposted((prev) => !prev);
+      setReposts((prev) => prev + (reposted ? 1 : -1));
+      toast.error("Couldn't pass it on");
+    },
+  });
+
+  function handleRepost() {
+    if (!isAuthenticated) {
+      openAuth("Sign in to pass this on");
+      return;
+    }
+    const next = !reposted;
+    setReposted(next);
+    setReposts((prev) => prev + (next ? 1 : -1));
+    repostMutation.mutate();
+  }
+
   function handleSave() {
     if (!isAuthenticated) {
       openAuth("Sign in to save posts");
@@ -102,6 +157,15 @@ export function PostCard({ post }: { post: Post }) {
 
   return (
     <article className="space-y-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-accent/40">
+      {/* Passed on by, above everything: whose timeline this arrived through is
+          the first thing a reader needs, or the post looks misattributed. */}
+      {post.repostOf ? (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Repeat2 className="h-3.5 w-3.5" aria-hidden="true" />
+          {post.author.displayName} passed this on
+        </p>
+      ) : null}
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <Avatar className="h-10 w-10 border border-border">
@@ -140,8 +204,22 @@ export function PostCard({ post }: { post: Post }) {
 
       {/* Content */}
       <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">
-        {post.content}
+        {withHashtagLinks(post.content)}
       </p>
+
+      {post.repostOf ? (
+        <div className="rounded-xl border border-border bg-background/50 p-3">
+          <p className="text-xs font-semibold text-foreground">
+            {post.repostOf.author.displayName}{" "}
+            <span className="font-normal text-muted-foreground">
+              @{post.repostOf.author.username}
+            </span>
+          </p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+            {post.repostOf.content}
+          </p>
+        </div>
+      ) : null}
 
       {/* Actions */}
       <div className="flex items-center gap-6 pt-1 text-muted-foreground">
@@ -168,6 +246,22 @@ export function PostCard({ post }: { post: Post }) {
           <MessageCircle className="h-[18px] w-[18px]" />
           <span className="tabular-nums">{post.commentsCount}</span>
         </Link>
+
+        <button
+          type="button"
+          onClick={handleRepost}
+          className="group flex items-center gap-1.5 text-sm transition-colors hover:text-support"
+          aria-label={reposted ? "Undo repost" : "Repost"}
+          aria-pressed={reposted}
+        >
+          <Repeat2
+            className={cn(
+              "h-[18px] w-[18px] transition-colors",
+              reposted ? "text-support" : "group-hover:text-support",
+            )}
+          />
+          <span className={cn("tabular-nums", reposted ? "text-support" : "")}>{reposts}</span>
+        </button>
 
         <button
           type="button"

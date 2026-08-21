@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { blockExistsBetween } from "../services/relationships";
+import { notifyMessage } from "../services/notification-service";
 import type { auth } from "../auth";
 
 /**
@@ -484,6 +485,15 @@ messagesRouter.post(
         data: { updatedAt: new Date() },
       }),
     ]);
+
+    // Tell them. A message that notifies nobody is only seen if the recipient
+    // happens to open the inbox. Fire-and-forget: the sender should not wait on
+    // somebody else's bell, and a failed notification must not lose the message.
+    for (const other of others) {
+      void notifyMessage(other.userId, user.id, user.name, id, content).catch((error) => {
+        console.error("[Notify] message:", error);
+      });
+    }
 
     return c.json(toMessage(created, null), { status: 201 });
   }

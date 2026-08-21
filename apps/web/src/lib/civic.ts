@@ -183,6 +183,16 @@ export interface Post {
   likesCount: number;
   /** Whether the person asking has already liked this. */
   isLiked?: boolean;
+  repostsCount?: number;
+  /** Whether the person asking has already passed this on. */
+  isRepostedByMe?: boolean;
+  /** The post this one passes on, when it is a repost. */
+  repostOf?: {
+    id: string;
+    content: string;
+    author: PostAuthor;
+    createdAt: string;
+  } | null;
   createdAt: string;
 }
 
@@ -429,7 +439,38 @@ export const postsApi = {
 
   /** Record that a post was passed on. The count is the author's, not ours. */
   share: (id: string) => api.post<{ success: boolean }>(`/api/feed/posts/${id}/share`, {}),
+
+  /**
+   * Pass a post on. With `content` it is a quote — your words above theirs.
+   * Without, pressing it again takes it back.
+   */
+  repost: (id: string, content?: string) =>
+    api.post<{ reposted: boolean; repostId?: string; repostsCount: number }>(
+      `/api/posts/${id}/repost`,
+      content ? { content } : {},
+    ),
+
+  /** Find what people have said, not just who they are. */
+  search: (q: string) =>
+    api.get<{ results: PostSearchResult[] }>(`/api/posts/search?q=${encodeURIComponent(q)}`),
+
+  /** The posts under one tag. */
+  hashtag: (tag: string) =>
+    api.get<{ tag: string; count: number; results: PostSearchResult[] }>(
+      `/api/posts/hashtag/${encodeURIComponent(tag.replace(/^#/, ""))}`,
+    ),
 };
+
+export interface PostSearchResult {
+  id: string;
+  content: string;
+  author: PostAuthor;
+  referenceTitle: string | null;
+  governmentReferenceId: string | null;
+  commentsCount: number;
+  likesCount: number;
+  createdAt: string;
+}
 
 /**
  * Blocking, muting and reporting.

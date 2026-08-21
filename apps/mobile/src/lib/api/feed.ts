@@ -199,3 +199,39 @@ export async function refreshMyCreatorMetrics(): Promise<{ success: boolean; met
   // This endpoint uses the current user's ID from the session
   return api.post<{ success: boolean; metrics: unknown }>('/api/feed/refresh-creator-metrics/me');
 }
+
+/**
+ * Pass a post on. With `content` it is a quote — your words above theirs.
+ * Without, pressing it again takes it back.
+ */
+export function repostPost(postId: string, content?: string) {
+  return api.post<{ reposted: boolean; repostId?: string; repostsCount: number }>(
+    `/api/posts/${postId}/repost`,
+    content ? { content } : {},
+  );
+}
+
+export interface PostSearchResult {
+  id: string;
+  content: string;
+  author: { id: string; displayName: string; username: string; avatar: string };
+  referenceTitle: string | null;
+  governmentReferenceId: string | null;
+  commentsCount: number;
+  likesCount: number;
+  createdAt: string;
+}
+
+/** Find what people have said, not just who they are. */
+export function searchPosts(q: string) {
+  return api.get<{ results: PostSearchResult[] }>(
+    `/api/posts/search?q=${encodeURIComponent(q)}`,
+  );
+}
+
+/** The posts under one tag. */
+export function postsByHashtag(tag: string) {
+  return api.get<{ tag: string; count: number; results: PostSearchResult[] }>(
+    `/api/posts/hashtag/${encodeURIComponent(tag.replace(/^#/, ""))}`,
+  );
+}

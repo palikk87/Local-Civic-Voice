@@ -11,8 +11,10 @@ import {
   notifyPostComment,
   notifyCommentReply,
   notifyMentions,
+  notifyRepost,
 } from "../services/notification-service";
 import { resolvePostReference } from "../services/reference-resolver";
+import { linkHashtags } from "../services/hashtags";
 import {
   lawMovedSincePost,
   loadPostReferenceView,
@@ -121,10 +123,21 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
           height: true,
         },
       },
+      // The post being passed on, so a card can render it inline rather than
+      // making a second request per repost in the page.
+      repostOf: {
+        select: {
+          id: true,
+          content: true,
+          createdAt: true,
+          author: { select: { id: true, name: true, email: true, image: true } },
+        },
+      },
       _count: {
         select: {
           comments: true,
           likes: true,
+          reposts: true,
         },
       },
     },
@@ -156,6 +169,23 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
             select: { postId: true },
           })
         ).map((like) => like.postId)
+      : [],
+  );
+
+  // Which of these you have already passed on. Keyed by the ORIGINAL, so a
+  // repost and the post it came from both show the button as pressed.
+  const repostedByMe = new Set<string>(
+    user
+      ? (
+          await prisma.post.findMany({
+            where: {
+              authorId: user.id,
+              content: "",
+              repostOfId: { in: results.map((post) => post.repostOfId ?? post.id) },
+            },
+            select: { repostOfId: true },
+          })
+        ).flatMap((repost) => (repost.repostOfId ? [repost.repostOfId] : []))
       : [],
   );
 
@@ -202,6 +232,23 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
       commentsCount: post._count.comments,
       likesCount: post._count.likes,
       isLiked: likedByMe.has(post.id),
+      repostsCount: post._count.reposts,
+      isRepostedByMe: repostedByMe.has(post.repostOfId ?? post.id),
+      repostOf: post.repostOf
+        ? {
+            id: post.repostOf.id,
+            content: post.repostOf.content,
+            author: {
+              id: post.repostOf.author.id,
+              displayName: post.repostOf.author.name,
+              username: post.repostOf.author.email.split("@")[0],
+              avatar:
+                post.repostOf.author.image ||
+                `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.repostOf.author.id}`,
+            },
+            createdAt: post.repostOf.createdAt.toISOString(),
+          }
+        : null,
       createdAt: post.createdAt.toISOString(),
     })),
     nextCursor,
@@ -322,6 +369,10 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
     JobPriority.NORMAL
   );
 
+  // File the post's hashtags. Not awaited: the tables behind this are a
+  // convenience for discovery, and the post is the thing that matters.
+  void linkHashtags(post.id, post.content);
+
   // TELL THE PEOPLE WHO FOLLOW YOU.
   //
   // notifyFollowersOfNewPost was written, complete, and called from nowhere.
@@ -376,6 +427,151 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
     },
   }, 201);
 });
+
+// REGISTERED BEFORE "/:id", AND THAT IS LOAD-BEARING.
+//
+// "/api/posts/search" is one path segment, and so is "/api/posts/:id". Declared
+// after it, the parameter route wins and every search is answered as a request
+// for a post whose id is the word "search" — a 404 dressed up as an empty
+// result. Both of these were written at the end of the file first, and both
+// were swallowed exactly that way.
+
+/**
+ * GET /api/posts/search?q=…
+ *
+ * Find what people have said, not just who they are.
+ *
+ * Search found users and nothing else, so the only way to reach a conversation
+ * about a bill was to already know which bill it was about. On a platform whose
+ * subject matter arrives with names nobody uses in conversation — "H.R. 3194",
+ * "Executive Order 14407" — that is a real gap: people search for what a law
+ * DOES, and other people have already written that down.
+ *
+ * Matches the post's own words and the title of the law it is attached to, so
+ * searching "insulin" finds both a post that says insulin and a post about the
+ * bill whose title does.
+ */
+postsRouter.get(
+  "/search",
+  zValidator("query", z.object({ q: z.string().min(1).max(200), limit: z.coerce.number().min(1).max(50).default(20) })),
+  async (c) => {
+    const user = c.get("user");
+    const { q, limit } = c.req.valid("query");
+    const hidden = await hiddenFrom(user?.id);
+
+    const posts = await prisma.post.findMany({
+      where: {
+        AND: [
+          {
+            OR: [
+              { content: { contains: q, mode: "insensitive" } },
+              { referenceTitle: { contains: q, mode: "insensitive" } },
+              { governmentReference: { title: { contains: q, mode: "insensitive" } } },
+              { governmentReference: { masterReferenceId: { contains: q, mode: "insensitive" } } },
+            ],
+          },
+          ...(hidden.length > 0 ? [{ authorId: { notIn: hidden } }] : []),
+        ],
+      },
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        author: { select: { id: true, name: true, email: true, image: true } },
+        governmentReference: { select: { id: true, title: true, masterReferenceId: true } },
+        _count: { select: { comments: true, likes: true } },
+      },
+    });
+
+    return c.json({
+      results: posts.map((post) => ({
+        id: post.id,
+        content: post.content,
+        author: {
+          id: post.author.id,
+          displayName: post.author.name,
+          username: post.author.email.split("@")[0],
+          avatar:
+            post.author.image ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
+        },
+        referenceTitle: post.governmentReference?.title ?? post.referenceTitle,
+        governmentReferenceId: post.governmentReferenceId,
+        commentsCount: post._count.comments,
+        likesCount: post._count.likes,
+        createdAt: post.createdAt.toISOString(),
+      })),
+    });
+  },
+);
+
+/**
+ * GET /api/posts/hashtag/:tag
+ *
+ * The posts under one tag.
+ *
+ * Hashtags have been collected into their own table and ranked into a trending
+ * list since long before this endpoint. There was nowhere for a tag to lead, so
+ * the trending list was a row of words that could not be pressed.
+ */
+postsRouter.get(
+  "/hashtag/:tag",
+  zValidator("query", z.object({ limit: z.coerce.number().min(1).max(50).default(20) })),
+  async (c) => {
+    const user = c.get("user");
+    const { limit } = c.req.valid("query");
+    const tag = c.req.param("tag").replace(/^#/, "").toLowerCase();
+
+    const hashtag = await prisma.hashtag.findUnique({ where: { tag }, select: { id: true } });
+    if (!hashtag) {
+      // An unused tag is not an error — it is a tag nobody has written under
+      // yet, and the page for it should say so rather than break.
+      return c.json({ tag, results: [], count: 0 });
+    }
+
+    const links = await prisma.postHashtag.findMany({
+      where: { hashtagId: hashtag.id },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: { postId: true },
+    });
+
+    const hidden = await hiddenFrom(user?.id);
+    const posts = await prisma.post.findMany({
+      where: {
+        id: { in: links.map((l) => l.postId) },
+        ...(hidden.length > 0 ? { authorId: { notIn: hidden } } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      include: {
+        author: { select: { id: true, name: true, email: true, image: true } },
+        governmentReference: { select: { id: true, title: true } },
+        _count: { select: { comments: true, likes: true } },
+      },
+    });
+
+    return c.json({
+      tag,
+      count: posts.length,
+      results: posts.map((post) => ({
+        id: post.id,
+        content: post.content,
+        author: {
+          id: post.author.id,
+          displayName: post.author.name,
+          username: post.author.email.split("@")[0],
+          avatar:
+            post.author.image ||
+            `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
+        },
+        referenceTitle: post.governmentReference?.title ?? post.referenceTitle,
+        governmentReferenceId: post.governmentReferenceId,
+        commentsCount: post._count.comments,
+        likesCount: post._count.likes,
+        createdAt: post.createdAt.toISOString(),
+      })),
+    });
+  },
+);
 
 /**
  * GET /api/posts/:id
@@ -935,3 +1131,122 @@ postsRouter.post(
 );
 
 export { postsRouter };
+
+/**
+ * POST /api/posts/:id/repost
+ *
+ * Pass somebody else's post on. With `content`, it is a quote — your words
+ * above theirs. Without, it is a plain "here, read this".
+ *
+ * WHY THIS MATTERS ON THIS PLATFORM in particular: the whole premise is getting
+ * a law in front of people who have not seen it. Until now the only way to do
+ * that was to write your own post about the same law, which starts a second
+ * conversation rather than joining the one already happening. `notifyRepost`
+ * has existed since long before this endpoint, called from nowhere.
+ *
+ * A repost inherits the original's law. It cannot be about a different one —
+ * that would be a new post, not a repost.
+ */
+postsRouter.post("/:id/repost", async (c) => {
+  {
+    const user = c.get("user");
+    if (!user) {
+      return c.json({ error: "Authentication required" }, 401);
+    }
+
+    const targetId = c.req.param("id");
+    const target = await prisma.post.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        authorId: true,
+        repostOfId: true,
+        governmentReferenceId: true,
+        referenceType: true,
+        referenceId: true,
+        referenceTitle: true,
+        billId: true,
+      },
+    });
+    if (!target) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    if ((await hiddenFrom(user.id)).includes(target.authorId)) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // NO CHAINS. Reposting a repost points at the original, so a post's repost
+    // count is the number of people who passed it on rather than the depth of a
+    // game of telephone — and the card always has one original to render.
+    const originalId = target.repostOfId ?? target.id;
+    const original =
+      target.repostOfId === null
+        ? target
+        : await prisma.post.findUnique({
+            where: { id: originalId },
+            select: {
+              id: true,
+              authorId: true,
+              governmentReferenceId: true,
+              referenceType: true,
+              referenceId: true,
+              referenceTitle: true,
+              billId: true,
+            },
+          });
+    if (!original) {
+      return c.json({ error: "Post not found" }, 404);
+    }
+
+    // THE BODY IS OPTIONAL. A plain repost is a button with nothing to say, so
+    // it sends nothing — and a validator that demands a body turns that into a
+    // 400 and a repost that silently did not happen. The same shape of bug was
+    // already found once on the share endpoint.
+    const raw = await c.req.json().catch(() => ({}));
+    const parsed = z.object({ content: z.string().max(5000).optional() }).safeParse(raw);
+    if (!parsed.success) {
+      return c.json({ error: "content must be text, up to 5000 characters" }, 400);
+    }
+    const content = (parsed.data.content ?? "").trim();
+
+    // One plain repost per person per post: pressing it again takes it back,
+    // the way the like button does. A quote is a piece of writing, so several
+    // are allowed — they say different things.
+    if (content.length === 0) {
+      const existing = await prisma.post.findFirst({
+        where: { authorId: user.id, repostOfId: originalId, content: "" },
+        select: { id: true },
+      });
+      if (existing) {
+        await prisma.post.delete({ where: { id: existing.id } });
+        const repostsCount = await prisma.post.count({ where: { repostOfId: originalId } });
+        return c.json({ reposted: false, repostsCount });
+      }
+    }
+
+    const created = await prisma.post.create({
+      data: {
+        authorId: user.id,
+        content,
+        repostOfId: originalId,
+        // Inherited, not chosen: a repost is about the law the original is about.
+        governmentReferenceId: original.governmentReferenceId,
+        referenceType: original.referenceType,
+        referenceId: original.referenceId,
+        referenceTitle: original.referenceTitle,
+        billId: original.billId,
+      },
+      select: { id: true },
+    });
+
+    if (original.authorId !== user.id) {
+      void notifyRepost(original.authorId, user.id, user.name, originalId).catch((error) => {
+        console.error("[Notify] repost:", error);
+      });
+    }
+
+    const repostsCount = await prisma.post.count({ where: { repostOfId: originalId } });
+    return c.json({ reposted: true, repostId: created.id, repostsCount }, 201);
+  }
+});

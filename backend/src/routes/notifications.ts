@@ -31,6 +31,7 @@ const preferencesSchema = z.object({
   mentions: z.boolean().optional(),
   follows: z.boolean().optional(),
   reposts: z.boolean().optional(),
+  messages: z.boolean().optional(),
   newFollowerPosts: z.boolean().optional(),
 });
 
@@ -137,6 +138,7 @@ notificationsRouter.get("/preferences", async (c) => {
         mentions: preferences.mentions,
         follows: preferences.follows,
         reposts: preferences.reposts,
+        messages: preferences.messages,
         newFollowerPosts: preferences.newFollowerPosts,
       },
     });
@@ -173,6 +175,7 @@ notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), a
         mentions: updated.mentions,
         follows: updated.follows,
         reposts: updated.reposts,
+        messages: updated.messages,
         newFollowerPosts: updated.newFollowerPosts,
       },
     });

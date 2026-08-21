@@ -49,6 +49,7 @@ const BillDetail = lazy(() => import("./pages/BillDetail"));
 const ExecutiveOrderDetail = lazy(() => import("./pages/ExecutiveOrderDetail"));
 const ScotusDetail = lazy(() => import("./pages/ScotusDetail"));
 const UserProfile = lazy(() => import("./pages/UserProfile"));
+const HashtagPage = lazy(() => import("./pages/HashtagPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const App = () => (
@@ -185,6 +186,7 @@ const App = () => (
               {/* Same path as the mobile route, so a reset link works on either client. */}
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/user/:id" element={<UserProfile />} />
+              <Route path="/hashtag/:tag" element={<HashtagPage />} />
               <Route path="/bill/:id" element={<BillDetail />} />
               <Route path="/executive-order/:id" element={<ExecutiveOrderDetail />} />
               <Route path="/scotus/:id" element={<ScotusDetail />} />

@@ -9,8 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReferenceCard } from "@/components/civic/ReferenceCard";
 import { useDebounce } from "@/hooks/use-debounce";
-import { civicApi, type GovReference } from "@/lib/civic";
+import { civicApi, postsApi, type GovReference, type PostSearchResult } from "@/lib/civic";
 import { api } from "@/lib/api";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 interface SearchResults {
   references: GovReference[];
@@ -50,6 +52,29 @@ export default function Search() {
     });
 
   const references = refData?.pages?.flatMap((p) => p.references ?? []) ?? [];
+
+  // PEOPLE AND POSTS, both of which already had endpoints.
+  //
+  // This screen said "User search — coming soon" over /api/users/search, which
+  // has worked the whole time. And nothing anywhere searched what people had
+  // written, so the only way to reach a conversation about a bill was to know
+  // which bill it was about first.
+  const { data: peopleData, isLoading: peopleLoading } = useQuery({
+    queryKey: ["search-people", debouncedQuery],
+    queryFn: () =>
+      api.get<{ results: UserResult[] }>(
+        `/api/users/search?q=${encodeURIComponent(debouncedQuery)}`,
+      ),
+    enabled,
+  });
+  const people = peopleData?.results ?? [];
+
+  const { data: postData, isLoading: postLoading } = useQuery({
+    queryKey: ["search-posts", debouncedQuery],
+    queryFn: () => postsApi.search(debouncedQuery),
+    enabled,
+  });
+  const posts: PostSearchResult[] = postData?.results ?? [];
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -110,8 +135,11 @@ export default function Search() {
               <TabsTrigger value="references">
                 Legislation
               </TabsTrigger>
+              <TabsTrigger value="posts">
+                Posts
+              </TabsTrigger>
               <TabsTrigger value="users">
-                Users
+                People
               </TabsTrigger>
             </TabsList>
 
@@ -154,13 +182,88 @@ export default function Search() {
               )}
             </TabsContent>
 
+            <TabsContent value="posts" className="mt-6">
+              {postLoading ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-24 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : posts.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border py-20 text-center">
+                  <p className="font-display text-lg text-foreground">Nothing said about this yet</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Searching matches what people wrote and the law they wrote it about.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {posts.map((post) => (
+                    <Link
+                      key={post.id}
+                      to={
+                        post.governmentReferenceId
+                          ? `/reference/${post.governmentReferenceId}`
+                          : "/timeline"
+                      }
+                      className="block rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40"
+                    >
+                      <p className="text-sm font-semibold text-foreground">
+                        {post.author.displayName}{" "}
+                        <span className="font-normal text-muted-foreground">
+                          @{post.author.username}
+                        </span>
+                      </p>
+                      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                        {post.content}
+                      </p>
+                      {post.referenceTitle ? (
+                        <p className="mt-2 truncate text-xs text-muted-foreground">
+                          on {post.referenceTitle}
+                        </p>
+                      ) : null}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
             <TabsContent value="users" className="mt-6">
-              <div className="rounded-xl border border-dashed border-border py-20 text-center">
-                <p className="font-display text-lg text-foreground">User search</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Coming soon
-                </p>
-              </div>
+              {peopleLoading ? (
+                <div className="space-y-3">
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-xl" />
+                  ))}
+                </div>
+              ) : people.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border py-20 text-center">
+                  <p className="font-display text-lg text-foreground">Nobody by that name</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {people.map((person) => (
+                    <Link
+                      key={person.id}
+                      to={`/user/${person.id}`}
+                      className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40"
+                    >
+                      <img
+                        src={person.avatar}
+                        alt=""
+                        className="h-10 w-10 rounded-full border border-border"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-foreground">
+                          {person.displayName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          @{person.username}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         )}

@@ -10,12 +10,14 @@ export const NotificationType = {
   REPOST: "repost",
   NEW_FOLLOWER_POST: "new_follower_post",
   LAW_UPDATED: "law_updated",
+  MESSAGE: "message",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
 
 // Data structure for notification metadata
 export interface NotificationData {
+  conversationId?: string;
   postId?: string;
   commentId?: string;
   fromUserId?: string;
@@ -37,6 +39,7 @@ const preferenceFieldMap: Record<NotificationTypeValue, string> = {
   [NotificationType.REPOST]: "reposts",
   [NotificationType.NEW_FOLLOWER_POST]: "newFollowerPosts",
   [NotificationType.LAW_UPDATED]: "lawUpdates",
+  [NotificationType.MESSAGE]: "messages",
 };
 
 /**
@@ -457,6 +460,7 @@ export async function updateNotificationPreferences(
     mentions: boolean;
     follows: boolean;
     reposts: boolean;
+    messages: boolean;
     newFollowerPosts: boolean;
   }>
 ): Promise<{
@@ -468,6 +472,7 @@ export async function updateNotificationPreferences(
   mentions: boolean;
   follows: boolean;
   reposts: boolean;
+  messages: boolean;
   newFollowerPosts: boolean;
 }> {
   const updated = await prisma.notificationPreference.upsert({
@@ -527,4 +532,33 @@ export async function notifyLawUpdate(
   }
 
   return { notified };
+}
+
+/**
+ * Somebody sent you a message.
+ *
+ * A direct message notified nobody, so it was only ever seen if the recipient
+ * happened to open the inbox — which makes the inbox useless for anything that
+ * matters today.
+ *
+ * The preview is short on purpose. A notification is a nudge to come and read
+ * it, not a way to read it, and the full text lives behind the account it was
+ * sent to.
+ */
+export async function notifyMessage(
+  recipientId: string,
+  senderId: string,
+  senderName: string,
+  conversationId: string,
+  preview: string
+): Promise<{ created: boolean; notification?: { id: string } }> {
+  const trimmed = preview.length > 60 ? `${preview.slice(0, 60)}…` : preview;
+
+  return createNotification(
+    recipientId,
+    NotificationType.MESSAGE,
+    "New message",
+    `${senderName}: ${trimmed}`,
+    { conversationId, fromUserId: senderId, fromUserName: senderName }
+  );
 }

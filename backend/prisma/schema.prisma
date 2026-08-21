@@ -233,9 +233,22 @@ model Post {
   referenceType         String? // bill, executive_order, scotus_case (for backwards compat)
   referenceId           String? // ID of the referenced law/case/order (for backwards compat)
   referenceTitle        String? // Title of the referenced law (for backwards compat)
+  /// The post this one passes on, if it is a repost.
+  ///
+  /// A repost with empty content is a plain "here, read this". A repost with
+  /// content is a quote — the reposter's own words above somebody else's post.
+  /// Both point at the same place, because the difference is what the reposter
+  /// wrote, not what kind of record it is.
+  ///
+  /// Never points at another repost: reposting a repost points at the original,
+  /// so a chain cannot form and a post's repost count is the number of people
+  /// who passed it on rather than the depth of a game of telephone.
+  repostOfId            String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
   comments              Comment[]
+  repostOf              Post?                @relation("Reposts", fields: [repostOfId], references: [id], onDelete: Cascade)
+  reposts               Post[]               @relation("Reposts")
   bill                  Bill?                @relation(fields: [billId], references: [id])
   governmentReference   GovernmentReference? @relation("GovernmentReferencePosts", fields: [governmentReferenceId], references: [id])
   author                User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -250,6 +263,7 @@ model Post {
   @@index([referenceType])
   @@index([referenceId])
   @@index([createdAt])
+  @@index([repostOfId])
 }
 
 model Media {
@@ -567,6 +581,10 @@ model NotificationPreference {
   follows          Boolean @default(true)
   reposts          Boolean @default(true)
   newFollowerPosts Boolean @default(true)
+  /// "Somebody sent you a message." On by default: a direct message that
+  /// notifies nobody is only ever seen if the recipient happens to open the
+  /// inbox, which makes the inbox useless for anything time-sensitive.
+  messages         Boolean @default(true)
   // "A law you shared has been updated." On by default: somebody who put their
   // name to a position on a bill has a stake in knowing the bill moved, and a
   // silent change is how a person ends up standing behind text they never read.
