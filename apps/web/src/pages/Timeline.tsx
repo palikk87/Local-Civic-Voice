@@ -47,6 +47,7 @@ import ShareModal from "@/components/mobile/ShareModal";
 import PostOptionsModal from "@/components/mobile/PostOptionsModal";
 import CommentSection, { parseContentWithMentions } from "@/components/mobile/CommentSection";
 import { castReferenceVote } from "@/lib/mobile/reference-votes";
+import { safetyApi } from "@/lib/civic";
 import { useCurrentUser, useRequireAuth } from "@/hooks/use-civic-auth";
 import GlobalPulseDrawer from "@/components/mobile/GlobalPulseDrawer";
 import { cn } from "@/lib/utils";
@@ -764,19 +765,46 @@ export default function TimelineScreen() {
     }
   };
 
-  const handleReportPost = () => {
+  // THESE USED TO LIE. Each one popped an alert saying the thing had happened —
+  // "you will no longer see posts from this user" — while nothing was recorded
+  // anywhere. Somebody being harassed pressed Block and believed it.
+  //
+  // Each now calls the endpoint, says so only when it succeeded, and says so
+  // plainly when it did not.
+
+  const handleReportPost = (postId: string) => {
     if (!requireAuth("Sign in to report a post.")) return;
-    window.alert("Thank you for helping keep our community safe. This post has been reported for review.");
+    setShowOptionsModal(false);
+    safetyApi
+      .report({ postId, reason: "other" })
+      .then(() => toast.success("Reported", { description: "A moderator will look at this." }))
+      .catch(() => toast.error("Couldn't send the report"));
   };
 
-  const handleBlockUser = () => {
+  const handleBlockUser = (userId: string) => {
     if (!requireAuth("Sign in to block this user.")) return;
-    window.alert("You will no longer see posts from this user. They will not be notified.");
+    setShowOptionsModal(false);
+    safetyApi
+      .block(userId)
+      .then(() => {
+        toast.success("Blocked", {
+          description: "You will not see each other. They are not told.",
+        });
+        void loadFeed();
+      })
+      .catch(() => toast.error("Couldn't block them"));
   };
 
-  const handleMuteUser = () => {
+  const handleMuteUser = (userId: string) => {
     if (!requireAuth("Sign in to mute this user.")) return;
-    window.alert("You will no longer see posts from this user in your feed.");
+    setShowOptionsModal(false);
+    safetyApi
+      .mute(userId)
+      .then(() => {
+        toast.success("Muted", { description: "Their posts will not appear in your feed." });
+        void loadFeed();
+      })
+      .catch(() => toast.error("Couldn't mute them"));
   };
 
   const handleMessages = () => {

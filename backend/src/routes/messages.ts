@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { blockExistsBetween } from "../services/relationships";
 import type { auth } from "../auth";
 
 /**
@@ -236,6 +237,12 @@ messagesRouter.post("/conversations", zValidator("json", createConversationSchem
     return c.json({ error: "Participant not found" }, { status: 404 });
   }
 
+  // A block closes the inbox in both directions, and says the same thing as an
+  // account that is not there.
+  if (await blockExistsBetween(user.id, participantId)) {
+    return c.json({ error: "Participant not found" }, { status: 404 });
+  }
+
   // An existing 1:1 conversation is one the caller is in that the other user is
   // also in. `some` twice rather than an array equality check, so this still
   // finds the thread if group conversations are added later.
@@ -439,6 +446,19 @@ messagesRouter.post(
       return exists
         ? c.json({ error: "Not authorized to send messages in this conversation" }, { status: 403 })
         : c.json({ error: "Conversation not found" }, { status: 404 });
+    }
+
+    // A conversation that predates a block stays visible to both, but nothing
+    // more can be sent through it. Blocking somebody you were already talking to
+    // has to end the conversation, not just hide the next message.
+    const others = await prisma.conversationParticipant.findMany({
+      where: { conversationId: id, userId: { not: user.id } },
+      select: { userId: true },
+    });
+    for (const other of others) {
+      if (await blockExistsBetween(user.id, other.userId)) {
+        return c.json({ error: "This conversation is closed" }, { status: 403 });
+      }
     }
 
     const [created] = await prisma.$transaction([

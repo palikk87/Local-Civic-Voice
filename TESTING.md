@@ -154,6 +154,34 @@ a bug to fix.
 
 ---
 
+## Safety: blocking, muting, reporting
+
+`backend/tests/safety.test.ts`. A block is only as good as its least careful
+query — hiding somebody from the feed while leaving them in search, in a comment
+thread, or reachable by message is the same failure to the person who blocked
+them. So there is one case per surface.
+
+| | Block | Mute |
+|---|---|---|
+| Their posts leave your feed and every list | yes | yes |
+| Their comments leave threads you read | yes | no |
+| They vanish from search and suggestions | yes | no |
+| They can follow, message or reply to you | no | yes |
+| Existing follows severed | both directions | untouched |
+| A delegation between you withdrawn | yes, tally moves at once | no |
+| They are told | never | never |
+
+Nothing anywhere says "you have been blocked". A blocked person's request looks
+exactly like one aimed at an account that does not exist — telling them is an
+invitation to open a second account, and the point of a block is that contact
+stops.
+
+Reports are evidence, never an action: nothing is hidden or removed because
+somebody complained. They queue at `GET /api/admin/reports` for a person to
+read.
+
+---
+
 ## Checking a real database is clean
 
 Run this against production whenever you want the reassurance. It is read-only

@@ -2084,3 +2084,120 @@ adminRouter.post("/reference-merges/refresh", async (c) => {
 
 export { adminRouter };
 export type { AdminUser, AdminSession, BannedUser, ActivityLog, Announcement };
+
+/**
+ * GET /api/admin/reports
+ *
+ * The moderation queue. Reports are evidence, never an action: nothing is
+ * hidden or removed because somebody complained, because a platform that does
+ * that has handed anybody with a grudge a delete button. A person reads these
+ * and decides.
+ *
+ * `?status=open` by default — a queue that shows everything ever filed is one
+ * nobody works through.
+ */
+adminRouter.get("/reports", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  const status = c.req.query("status") ?? "open";
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+
+  const reports = await prisma.report.findMany({
+    where: status === "all" ? {} : { status },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+    include: {
+      reporter: { select: { id: true, name: true, username: true } },
+      reportedUser: { select: { id: true, name: true, username: true, banned: true } },
+    },
+  });
+
+  // The reported content itself, so a moderator can judge without a second trip.
+  const postIds = reports.map((r) => r.postId).filter((id): id is string => Boolean(id));
+  const commentIds = reports.map((r) => r.commentId).filter((id): id is string => Boolean(id));
+
+  const [posts, comments] = await Promise.all([
+    postIds.length
+      ? prisma.post.findMany({
+          where: { id: { in: postIds } },
+          select: {
+            id: true,
+            content: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, username: true, banned: true } },
+          },
+        })
+      : [],
+    commentIds.length
+      ? prisma.comment.findMany({
+          where: { id: { in: commentIds } },
+          select: {
+            id: true,
+            content: true,
+            postId: true,
+            createdAt: true,
+            author: { select: { id: true, name: true, username: true, banned: true } },
+          },
+        })
+      : [],
+  ]);
+
+  const postById = new Map(posts.map((p) => [p.id, p]));
+  const commentById = new Map(comments.map((c2) => [c2.id, c2]));
+
+  return c.json({
+    results: reports.map((r) => ({
+      id: r.id,
+      reason: r.reason,
+      detail: r.detail,
+      status: r.status,
+      createdAt: r.createdAt.toISOString(),
+      reviewedBy: r.reviewedBy,
+      reviewedAt: r.reviewedAt?.toISOString() ?? null,
+      reporter: r.reporter,
+      // Exactly one of these is set; the other two are null.
+      post: r.postId ? postById.get(r.postId) ?? { id: r.postId, deleted: true } : null,
+      comment: r.commentId
+        ? commentById.get(r.commentId) ?? { id: r.commentId, deleted: true }
+        : null,
+      reportedUser: r.reportedUser,
+    })),
+  });
+});
+
+/**
+ * POST /api/admin/reports/:id
+ * Close a report as actioned or dismissed. Whatever the moderator did about the
+ * content — delete it, ban the author, nothing — they did through the existing
+ * tools; this records that the report itself is finished with.
+ */
+adminRouter.post("/reports/:id", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  const body = (await c.req.json().catch(() => ({}))) as { status?: string };
+  if (body.status !== "actioned" && body.status !== "dismissed") {
+    return c.json({ error: "status must be actioned or dismissed" }, { status: 400 });
+  }
+
+  const report = await prisma.report.findUnique({ where: { id: c.req.param("id") } });
+  if (!report) {
+    return c.json({ error: "Report not found" }, { status: 404 });
+  }
+
+  const updated = await prisma.report.update({
+    where: { id: report.id },
+    data: {
+      status: body.status,
+      reviewedBy: session.username,
+      reviewedAt: new Date(),
+    },
+  });
+
+  return c.json({ id: updated.id, status: updated.status });
+});

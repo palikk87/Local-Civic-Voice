@@ -64,6 +64,7 @@ import { castReferenceVote } from '@/lib/reference-votes';
 import CreatePostModal from '@/components/CreatePostModal';
 import ShareModal from '@/components/ShareModal';
 import PostOptionsModal from '@/components/PostOptionsModal';
+import { safetyApi } from '@/lib/api/safety';
 import CommentSection, { parseContentWithMentions } from '@/components/CommentSection';
 import GlobalPulseDrawer from '@/components/GlobalPulseDrawer';
 import { AuthGate } from '@/components/auth/AuthGate';
@@ -866,37 +867,52 @@ function TimelineFeed() {
     );
   };
 
+  // THESE USED TO LIE. Each popped an Alert saying the thing had happened —
+  // "you will no longer see posts from this user" — while nothing was recorded
+  // anywhere. Somebody being harassed pressed Block and believed it.
+  //
+  // Each now calls the endpoint, says so only when it succeeded, and says so
+  // plainly when it did not.
+
   const handleReportPost = (postId: string) => {
-    Alert.alert(
-      'Report Post',
-      'Thank you for helping keep our community safe. This post has been reported for review.',
-      [{ text: 'OK' }]
-    );
+    safetyApi
+      .report({ postId, reason: 'other' })
+      .then(() => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Reported', 'A moderator will look at this.');
+      })
+      .catch(() => Alert.alert("Couldn't send the report", 'Please try again.'));
   };
 
   const handleBlockUser = (userId: string) => {
-    Alert.alert(
-      'Block User',
-      'You will no longer see posts from this user. They will not be notified.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Block',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
+    Alert.alert('Block this person?', 'You will not see each other. They are not told.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Block',
+        style: 'destructive',
+        onPress: () => {
+          safetyApi
+            .block(userId)
+            .then(() => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert('Blocked');
+              void loadFeed();
+            })
+            .catch(() => Alert.alert("Couldn't block them", 'Please try again.'));
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleMuteUser = (userId: string) => {
-    Alert.alert(
-      'User Muted',
-      'You will no longer see posts from this user in your feed.',
-      [{ text: 'OK' }]
-    );
+    safetyApi
+      .mute(userId)
+      .then(() => {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Muted', 'Their posts will not appear in your feed.');
+        void loadFeed();
+      })
+      .catch(() => Alert.alert("Couldn't mute them", 'Please try again.'));
   };
 
   const handleMessages = () => {

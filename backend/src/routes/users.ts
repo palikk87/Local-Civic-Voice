@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { notifyFollow } from "../services/notification-service";
+import { blockExistsBetween, hiddenFrom } from "../services/relationships";
 import type { auth } from "../auth";
 
 type AuthVariables = {
@@ -107,8 +108,18 @@ usersRouter.get("/search", zValidator("query", searchQuerySchema), async (c) => 
     followStatuses = follows.reduce((acc, f) => ({ ...acc, [f.followingId]: true }), {});
   }
 
+  // BLOCKED PEOPLE ARE NOT SEARCHABLE. Filtered after the query rather than
+  // inside it: this one is raw SQL for the ILIKE, and threading a variable-length
+  // exclusion list through a tagged template is the kind of clever that goes
+  // wrong quietly. The cost is that `total` counts rows that are then removed,
+  // which overstates a search page by however many people you have blocked.
+  const hiddenInSearch = await hiddenFrom(currentUser?.id);
+  const visible = hiddenInSearch.length > 0
+    ? usersWithCounts.filter((user) => !hiddenInSearch.includes(user.id))
+    : usersWithCounts;
+
   return c.json({
-    results: usersWithCounts.map((user) => formatUser(user, followStatuses[user.id] ?? false)),
+    results: visible.map((user) => formatUser(user, followStatuses[user.id] ?? false)),
     pagination: {
       total,
       limit,
@@ -136,6 +147,10 @@ usersRouter.get("/discover", zValidator("query", paginationQuerySchema), async (
     });
     excludeIds.push(...following.map((f) => f.followingId));
   }
+
+  // Somebody you blocked, somebody who blocked you, and anybody you muted are
+  // not people to suggest.
+  excludeIds.push(...(await hiddenFrom(currentUser?.id)));
 
   const users = await prisma.user.findMany({
     where: {
@@ -180,7 +195,10 @@ usersRouter.get("/active", zValidator("query", paginationQuerySchema), async (c)
   const { limit, offset } = c.req.valid("query");
   const currentUser = c.get("user");
 
+  const hidden = await hiddenFrom(currentUser?.id);
+
   const users = await prisma.user.findMany({
+    ...(hidden.length > 0 ? { where: { id: { notIn: hidden } } } : {}),
     take: limit,
     skip: offset,
     orderBy: {
@@ -232,7 +250,10 @@ usersRouter.get("/new", zValidator("query", paginationQuerySchema), async (c) =>
   const { limit, offset } = c.req.valid("query");
   const currentUser = c.get("user");
 
+  const hidden = await hiddenFrom(currentUser?.id);
+
   const users = await prisma.user.findMany({
+    ...(hidden.length > 0 ? { where: { id: { notIn: hidden } } } : {}),
     take: limit,
     skip: offset,
     orderBy: { createdAt: "desc" },
@@ -309,6 +330,10 @@ usersRouter.get("/:id", async (c) => {
       },
     });
     isFollowing = !!follow;
+  }
+
+  if (currentUser && (await blockExistsBetween(currentUser.id, user.id))) {
+    return c.json({ error: "User not found" }, 404);
   }
 
   return c.json(formatUser(user, isFollowing));
@@ -448,6 +473,12 @@ usersRouter.post("/:id/follow", async (c) => {
 
   const userToFollow = await prisma.user.findUnique({ where: { id } });
   if (!userToFollow) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  // Neither direction of a block permits a follow, and neither is told which
+  // way it runs — "not found" is what a person who no longer exists looks like.
+  if (await blockExistsBetween(currentUser.id, id)) {
     return c.json({ error: "User not found" }, 404);
   }
 

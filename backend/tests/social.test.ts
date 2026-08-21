@@ -81,6 +81,35 @@ async function notifications(cookie: string) {
 }
 
 /**
+ * Wait for a notification of a given kind, rather than assuming it is instant.
+ *
+ * Every notify* call in the routes is deliberately fire-and-forget — a like
+ * should not make the person who pressed it wait on a write to somebody else's
+ * bell, and a notification that fails must not fail the like. The consequence
+ * is that "did they get told" is a question with a short delay in it, and a
+ * test that reads immediately passes or fails on machine speed. This one did
+ * both, in the same afternoon.
+ */
+async function waitForNotification(
+  cookie: string,
+  type: string,
+  timeoutMs = 5_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if ((await notifications(cookie)).some((n) => n.type === type)) return true;
+    await Bun.sleep(100);
+  }
+  return false;
+}
+
+/** The opposite claim: nothing of this kind arrives, given a moment to. */
+async function noNotification(cookie: string, type: string): Promise<boolean> {
+  await Bun.sleep(600);
+  return !(await notifications(cookie)).some((n) => n.type === type);
+}
+
+/**
  * A record to post about.
  *
  * Every post on this platform is attached to one — the composer requires it,
@@ -198,8 +227,7 @@ describe("following", () => {
 
     // A follow that nobody is told about is the same as no follow at all: the
     // whole point is that somebody now wants to hear from you.
-    const waiting = await notifications(writer.cookie);
-    expect(waiting.some((n) => n.type === "follow")).toBe(true);
+    expect(await waitForNotification(writer.cookie, "follow")).toBe(true);
   });
 
   test("posts from people you follow reach your feed", async () => {
@@ -243,11 +271,11 @@ describe("posts, likes and comments", () => {
     const postId = await postAs(author.cookie, "A post worth liking.");
 
     await api(fan.cookie).post(`/api/posts/${postId}/like`);
-    expect((await notifications(author.cookie)).some((n) => n.type === "like")).toBe(true);
+    expect(await waitForNotification(author.cookie, "like")).toBe(true);
 
     const ownPost = await postAs(fan.cookie, "My own post.");
     await api(fan.cookie).post(`/api/posts/${ownPost}/like`);
-    expect((await notifications(fan.cookie)).some((n) => n.type === "like")).toBe(false);
+    expect(await noNotification(fan.cookie, "like")).toBe(true);
   });
 
   test("commenting appears on the post and tells the author", async () => {
@@ -264,7 +292,7 @@ describe("posts, likes and comments", () => {
       await api(author.cookie).get(`/api/posts/${postId}/comments`),
     );
     expect(comments.comments.some((c) => c.content.includes("quite a lot"))).toBe(true);
-    expect((await notifications(author.cookie)).some((n) => n.type === "comment")).toBe(true);
+    expect(await waitForNotification(author.cookie, "comment")).toBe(true);
   });
 
   test("a reply hangs under its comment and tells the commenter", async () => {
@@ -286,7 +314,7 @@ describe("posts, likes and comments", () => {
     );
     const list = replies.replies ?? replies.comments ?? [];
     expect(list.some((r) => r.content.includes("Answering"))).toBe(true);
-    expect((await notifications(first.cookie)).some((n) => n.type === "reply")).toBe(true);
+    expect(await waitForNotification(first.cookie, "reply")).toBe(true);
   });
 
   test("you can delete your own comment and not somebody else's", async () => {
@@ -316,8 +344,7 @@ describe("posts, likes and comments", () => {
 
     // Following someone is a request to hear from them. If posting reaches
     // nobody's notifications, following is a bookmark with extra steps.
-    const waiting = await notifications(reader.cookie);
-    expect(waiting.some((n) => n.type === "new_follower_post")).toBe(true);
+    expect(await waitForNotification(reader.cookie, "new_follower_post")).toBe(true);
   });
 });
 
@@ -416,6 +443,8 @@ describe("notifications", () => {
     const postId = await postAs(author.cookie, "A post.");
     await api(fan.cookie).post(`/api/posts/${postId}/like`);
 
+    expect(await waitForNotification(author.cookie, "like")).toBe(true);
+
     const before = await json<{ count: number }>(
       await api(author.cookie).get("/api/notifications/unread-count"),
     );
@@ -438,7 +467,7 @@ describe("notifications", () => {
     const postId = await postAs(author.cookie, "A post.");
     await api(fan.cookie).post(`/api/posts/${postId}/like`);
 
-    expect((await notifications(author.cookie)).some((n) => n.type === "like")).toBe(false);
+    expect(await noNotification(author.cookie, "like")).toBe(true);
   });
 
   test("nobody is notified about their own doing", async () => {
@@ -448,6 +477,7 @@ describe("notifications", () => {
     await api(author.cookie).post(`/api/posts/${postId}/like`);
     await api(author.cookie).post(`/api/posts/${postId}/comments`, { content: "Good point, me." });
 
+    await Bun.sleep(600);
     expect(await notifications(author.cookie)).toHaveLength(0);
   });
 });

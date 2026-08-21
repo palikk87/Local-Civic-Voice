@@ -430,3 +430,52 @@ export const postsApi = {
   /** Record that a post was passed on. The count is the author's, not ours. */
   share: (id: string) => api.post<{ success: boolean }>(`/api/feed/posts/${id}/share`, {}),
 };
+
+/**
+ * Blocking, muting and reporting.
+ *
+ * These had a menu in the UI long before they had endpoints, and the handlers
+ * behind it popped an alert saying the thing had happened. Somebody being
+ * harassed pressed Block and was told "you will no longer see posts from this
+ * user" while nothing at all had been recorded.
+ */
+export const safetyApi = {
+  block: (userId: string) =>
+    api.post<{ success: boolean; isBlocked: boolean }>(`/api/safety/blocks/${userId}`),
+  unblock: (userId: string) =>
+    api.delete<{ success: boolean; isBlocked: boolean }>(`/api/safety/blocks/${userId}`),
+  blocks: () => api.get<{ results: SafetyListEntry[] }>("/api/safety/blocks"),
+
+  mute: (userId: string) =>
+    api.post<{ success: boolean; isMuted: boolean }>(`/api/safety/mutes/${userId}`),
+  unmute: (userId: string) =>
+    api.delete<{ success: boolean; isMuted: boolean }>(`/api/safety/mutes/${userId}`),
+  mutes: () => api.get<{ results: SafetyListEntry[] }>("/api/safety/mutes"),
+
+  report: (body: {
+    postId?: string;
+    commentId?: string;
+    userId?: string;
+    reason: ReportReason;
+    detail?: string;
+  }) => api.post<{ success: boolean; reportId: string }>("/api/safety/reports", body),
+
+  relationship: (userId: string) =>
+    api.get<{ isBlocked: boolean; isMuted: boolean; contactClosed: boolean }>(
+      `/api/safety/relationship/${userId}`,
+    ),
+};
+
+export type ReportReason =
+  | "spam"
+  | "harassment"
+  | "hate"
+  | "violence"
+  | "misinformation"
+  | "other";
+
+export interface SafetyListEntry {
+  id: string;
+  user: { id: string; name: string; username: string | null; image: string | null };
+  createdAt: string;
+}

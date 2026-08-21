@@ -16,6 +16,7 @@ import { notificationsRouter } from "./routes/notifications";
 import { mediaRouter } from "./routes/media";
 import { governmentReferencesRouter } from "./routes/government-references";
 import { loginRouter } from "./routes/login";
+import { safetyRouter } from "./routes/safety";
 import { representativesRouter } from "./routes/representatives";
 import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
@@ -203,6 +204,7 @@ app.use("/api/feed/interaction*", async (c, next) => {
 // Routes
 app.route("/api/government", governmentRouter);
 app.route("/api/users", usersRouter);
+app.route("/api/safety", safetyRouter);
 app.route("/api/messages", messagesRouter);
 app.route("/api/admin", adminRouter);
 app.route("/api/b2b", b2bRouter);

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { blockExistsBetween, hiddenFrom } from "../services/relationships";
 import { purgeMediaObjects } from "../services/media-objects";
 import type { auth } from "../auth";
 import {
@@ -75,10 +76,21 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
     return c.json({ posts: [], nextCursor: undefined, hasMore: false });
   }
 
+  // Blocked and muted people do not appear. Asking for one specific author is
+  // still refused if they are hidden — otherwise a block is undone by anyone
+  // who knows how to type a profile URL.
+  const hidden = await hiddenFrom(user?.id);
+  if (resolvedAuthorId && hidden.includes(resolvedAuthorId)) {
+    return c.json({ posts: [], nextCursor: undefined, hasMore: false });
+  }
+
   const posts = await prisma.post.findMany({
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-    ...(resolvedAuthorId ? { where: { authorId: resolvedAuthorId } } : {}),
+    where: {
+      ...(resolvedAuthorId ? { authorId: resolvedAuthorId } : {}),
+      ...(!resolvedAuthorId && hidden.length > 0 ? { authorId: { notIn: hidden } } : {}),
+    },
     orderBy: { createdAt: "desc" },
     include: {
       author: {
@@ -417,6 +429,12 @@ postsRouter.get("/:id", async (c) => {
     return c.json({ error: "Post not found" }, 404);
   }
 
+  // A blocked author's post is gone, not forbidden: "not found" is the same
+  // answer a deleted post gives, and it never tells anybody they were blocked.
+  if ((await hiddenFrom(user?.id)).includes(post.authorId)) {
+    return c.json({ error: "Post not found" }, 404);
+  }
+
   const referenceView = await loadPostReferenceView(post.governmentReferenceId, user?.id ?? null);
 
   return c.json({
@@ -572,9 +590,16 @@ postsRouter.post("/:id/like", async (c) => {
 postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c) => {
   const postId = c.req.param("id");
   const { limit, cursor } = c.req.valid("query");
+  const user = c.get("user");
+
+  const hidden = await hiddenFrom(user?.id);
 
   const comments = await prisma.comment.findMany({
-    where: { postId, parentId: null },
+    where: {
+      postId,
+      parentId: null,
+      ...(hidden.length > 0 ? { authorId: { notIn: hidden } } : {}),
+    },
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     orderBy: { createdAt: "asc" },
@@ -590,6 +615,7 @@ postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c
       _count: {
         select: {
           replies: true,
+          likes: true,
         },
       },
     },
@@ -598,6 +624,19 @@ postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c
   const hasMore = comments.length > limit;
   const results = hasMore ? comments.slice(0, -1) : comments;
   const nextCursor = hasMore ? results[results.length - 1]?.id : undefined;
+
+  // Which of these the reader has liked. The comment UI has drawn a filled or
+  // empty heart from this since long before there was anything to fill it from.
+  const likedComments = new Set<string>(
+    user
+      ? (
+          await prisma.commentLike.findMany({
+            where: { userId: user.id, commentId: { in: results.map((comment) => comment.id) } },
+            select: { commentId: true },
+          })
+        ).map((like) => like.commentId)
+      : [],
+  );
 
   return c.json({
     comments: results.map((comment) => ({
@@ -610,11 +649,54 @@ postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c
         avatar: comment.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.id}`,
       },
       repliesCount: comment._count.replies,
+      likesCount: comment._count.likes,
+      isLiked: likedComments.has(comment.id),
       createdAt: comment.createdAt.toISOString(),
     })),
     nextCursor,
     hasMore,
   });
+});
+
+/**
+ * POST /api/posts/:id/comments/:commentId/like
+ *
+ * Toggles, like the post heart. The comment UI has rendered `isLiked` since
+ * before this endpoint existed, so pressing it changed a local variable and
+ * nothing else — the heart was decoration.
+ */
+postsRouter.post("/:id/comments/:commentId/like", async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const commentId = c.req.param("commentId");
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { id: true, authorId: true, postId: true },
+  });
+  if (!comment || comment.postId !== c.req.param("id")) {
+    return c.json({ error: "Comment not found" }, 404);
+  }
+
+  if (await blockExistsBetween(user.id, comment.authorId)) {
+    return c.json({ error: "Comment not found" }, 404);
+  }
+
+  const existing = await prisma.commentLike.findUnique({
+    where: { commentId_userId: { commentId, userId: user.id } },
+    select: { id: true },
+  });
+
+  if (existing) {
+    await prisma.commentLike.delete({ where: { id: existing.id } });
+  } else {
+    await prisma.commentLike.create({ data: { commentId, userId: user.id } });
+  }
+
+  const likesCount = await prisma.commentLike.count({ where: { commentId } });
+  return c.json({ isLiked: !existing, likesCount });
 });
 
 /**
@@ -729,6 +811,17 @@ postsRouter.post(
     }
 
     const postId = c.req.param("id");
+
+    // You cannot talk to somebody who has blocked you, or to somebody you have
+    // blocked. Silent on which: the reply simply cannot be posted.
+    const postAuthor = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { authorId: true },
+    });
+    if (postAuthor && (await blockExistsBetween(user.id, postAuthor.authorId))) {
+      return c.json({ error: "This post is not accepting replies from you" }, 403);
+    }
+
     const { content, parentId } = c.req.valid("json");
 
     const post = await prisma.post.findUnique({

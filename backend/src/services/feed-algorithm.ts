@@ -1,4 +1,5 @@
 import { prisma } from "../prisma";
+import { hiddenFrom } from "./relationships";
 import { feedCache, userPrefsCache, metricsCache, getCachedOrFetch, cacheKey } from "./cache";
 import { enqueueMetricsUpdate, enqueueCreatorUpdate, enqueueBatchInteractions } from "./job-queue";
 
@@ -354,21 +355,40 @@ export async function getPersonalizedFeed(
     id: { notIn: excludePostIds },
   };
 
+  // BLOCKED AND MUTED PEOPLE DO NOT APPEAR. Applied to the query rather than
+  // the results, so a feed page is never quietly short because half of it was
+  // filtered away after the fact.
+  const hidden = await hiddenFrom(userId);
+
   // Feed type specific filters
   if (feedType === "following" && userPrefs) {
-    whereClause.authorId = { in: userPrefs.followingIds };
+    const following = hidden.length > 0
+      ? userPrefs.followingIds.filter((id: string) => !hidden.includes(id))
+      : userPrefs.followingIds;
+    whereClause.authorId = { in: following };
+  } else if (hidden.length > 0) {
+    whereClause.authorId = { notIn: hidden };
   }
 
   // Reduced fetch limit from 150 to 60 for better performance while maintaining diversity
   const fetchLimit = Math.min(limit * 3, 60);
 
-  // Cache key for base post query (2 min TTL)
-  const postQueryCacheKey = cacheKey("posts", feedType, cursor || "initial", fetchLimit.toString());
-
-  // Try to get cached posts or fetch from DB
-  let posts = feedCache.get(postQueryCacheKey) as typeof rawPosts | undefined;
-
-  const rawPosts = await prisma.post.findMany({
+  // NO CACHE ON THIS QUERY, and there must not be one keyed the way the old one
+  // was.
+  //
+  // It cached the base post page under ("posts", feedType, cursor, limit) — no
+  // user in the key — and served whatever the first caller got to everybody
+  // else for two minutes. That was already wrong for a personalised feed. It
+  // became a leak the moment this query started excluding each reader's blocked
+  // and muted people, because then one person's block would hide a post from
+  // every other reader.
+  //
+  // It also cost nothing to remove: the query below ran unconditionally and the
+  // cached value was used INSTEAD of a result already paid for. The cache saved
+  // no database work at all and only served staler data.
+  //
+  // The per-user feed cache further up (keyed on userId) is untouched and fine.
+  const posts = await prisma.post.findMany({
     where: whereClause,
     take: fetchLimit,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -402,12 +422,6 @@ export async function getPersonalizedFeed(
       },
     },
   });
-
-  if (!posts) {
-    posts = rawPosts;
-    // Cache the base post query for 2 minutes
-    feedCache.set(postQueryCacheKey, posts, 2 * 60 * 1000);
-  }
 
   // Batch load all post metrics in ONE query
   const postIds = posts.map((p) => p.id);
