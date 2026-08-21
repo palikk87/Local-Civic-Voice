@@ -261,6 +261,34 @@ On by default; it is in notification preferences like any other.
 
 ## Still open in the code
 
+### A deleted account keeps voting
+
+`GovernmentReferenceVote.userId` is a plain `String` with no relation to `User`,
+so deleting a user does not delete their votes. They stay in the published tally
+for good — the Pulse keeps counting a person who left.
+
+Seven tables have the same shape: `GovernmentReferenceVote`, `PostLike`,
+`PostSave`, `PostShare`, `UserInteraction`, `UserFeedProfile`, `CreatorMetrics`,
+`Media`. The vote table is the one that matters; the rest inflate engagement
+counts.
+
+The fix is a migration adding the foreign keys with `onDelete: Cascade`. It is
+**not applied**, for two reasons worth a decision rather than a guess:
+
+1. The schema is shared with another project, and a new constraint affects both.
+2. If orphaned rows already exist, the constraint will not build until they are
+   cleared — and clearing them changes published tallies, which is a call for a
+   person to make, not a migration to make quietly.
+
+To find out whether there are any, before deciding:
+
+```sql
+SELECT count(*) FROM "GovernmentReferenceVote" v
+  LEFT JOIN "User" u ON u.id = v."userId" WHERE u.id IS NULL;
+```
+
+
+
 Nothing blocking, and nothing that needs you. Recorded so it is not forgotten:
 
 - **Uploads that were never posted are not collected while their owner exists.**
