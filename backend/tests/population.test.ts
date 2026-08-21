@@ -193,6 +193,54 @@ describe("the test population", () => {
     expect(tally).toEqual({ support: 1 + MAX_DELEGATION_DEPTH, oppose: 0 });
   });
 
+  test("a hundred citizens voting at once leave the tally exactly right", async () => {
+    const everyone = await buildPopulation(prisma, 100);
+    const bill = await reference();
+
+    const { applyWeightedTally, computeWeightedTally } = await import(
+      "../src/services/delegation-service"
+    );
+
+    // A TRIPWIRE, NOT A PROOF, and worth being exact about which.
+    //
+    // Recounting is a read followed by a write, and two of them overlapping can
+    // lose one: the slower request writes a total it worked out before the
+    // faster one changed anything. That really happened — the browser system
+    // check left a record publishing two supporters when one person had voted
+    // and nobody had lent a voice — and applyWeightedTally now holds a row lock
+    // because of it.
+    //
+    // This test does NOT reliably reproduce that interleaving: it passes with
+    // the lock removed. What it does is assert the invariant the lock exists to
+    // protect — the published number equals the real one — under a hundred
+    // simultaneous recounts, which is the shape of traffic that breaks it. The
+    // evidence for the fix is the system check, which reproduced the fault and
+    // stopped showing it.
+    await Promise.all(
+      everyone.map(async (c, i) => {
+        await prisma.governmentReferenceVote.create({
+          data: {
+            governmentReferenceId: bill.id,
+            userId: c.id,
+            position: i % 4 === 0 ? "oppose" : "support",
+          },
+        });
+        await applyWeightedTally(bill.id);
+      }),
+    );
+
+    const stored = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: bill.id },
+      select: { supportVotes: true, opposeVotes: true },
+    });
+    const truth = await computeWeightedTally(bill.id);
+
+    expect(truth).toEqual({ support: 75, oppose: 25 });
+    // The published number and the real one, after a hundred simultaneous
+    // recounts.
+    expect({ support: stored.supportVotes, oppose: stored.opposeVotes }).toEqual(truth);
+  });
+
   test("removing them leaves nothing behind", async () => {
     const everyone = await buildPopulation(prisma, 50);
     const bill = await reference();

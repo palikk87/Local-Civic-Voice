@@ -5,6 +5,7 @@
   "scripts": {
     "verify": "bun scripts/verify.ts",
     "deploy-check": "bun scripts/deploy-check.ts",
-    "branches": "bun scripts/branches.ts"
+    "branches": "bun scripts/branches.ts",
+    "system-check": "cd backend && bun scripts/system-check.ts"
   }
 }

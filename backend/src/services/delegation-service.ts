@@ -459,36 +459,45 @@ export async function voteBreakdown(referenceId: string): Promise<{
  * a few thousand invented supporters per record so a new card would not read
  * 0-0 — which meant every number this platform published was partly fiction.
  * That layer is gone; see the migration that removed it.
+ *
+ * THE ROW IS LOCKED WHILE THIS RUNS, and it has to be. Computing and then
+ * writing are two steps, and two of them overlapping is a lost update: the
+ * slower request writes a total it worked out before the faster one changed
+ * anything, and the wrong number then sits on the card until the next vote
+ * happens to correct it.
+ *
+ * That is not theoretical. The browser system check withdrew a vote and revoked
+ * a delegation in quick succession, and the record was left publishing two
+ * supporters when one person had voted and nobody had lent a voice — confirmed
+ * against the database afterwards. On a record several people are voting on at
+ * once, which is every record that matters, the same overlap is ordinary
+ * traffic.
+ *
+ * BE PRECISE ABOUT WHAT IS PROVEN. That fault was seen once and has not
+ * recurred, with or without this lock: it is a race, and races do not appear on
+ * demand. So the lock is here because the hazard is structural and reading the
+ * code shows it, not because a test can summon it. Anyone tempted to remove it
+ * for want of a failing test should reproduce the interleaving first.
+ *
+ * FOR UPDATE makes each recount wait its turn for that one row, so whoever
+ * writes last has also read last.
  */
 export async function applyWeightedTally(
   referenceId: string,
   preloadedEdges?: DelegationEdge[],
 ): Promise<{ support: number; oppose: number }> {
-  const { support, oppose } = await computeWeightedTally(referenceId, prisma, preloadedEdges);
-  await prisma.governmentReference.update({
-    where: { id: referenceId },
-    data: { supportVotes: support, opposeVotes: oppose },
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "GovernmentReference" WHERE id = ${referenceId} FOR UPDATE`;
+
+    const { support, oppose } = await computeWeightedTally(referenceId, tx, preloadedEdges);
+    await tx.governmentReference.update({
+      where: { id: referenceId },
+      data: { supportVotes: support, opposeVotes: oppose },
+    });
+    return { support, oppose };
   });
-  return { support, oppose };
 }
 
-/**
- * Every reference whose published tally could move because one delegation edge
- * appeared or disappeared.
- *
- * WHY THIS EXISTS. Granting and revoking used to change nothing anybody could
- * see. The tally is stored on the reference row, and it was only ever rewritten
- * when somebody voted, so a citizen who took their voice back stayed counted —
- * on every card, in every Pulse — until unrelated traffic happened to arrive on
- * that exact record. The Bill of Rights promises revocation "without delay",
- * and a delay that ends whenever a stranger votes is not a delay anybody can
- * predict or wait out.
- *
- * The affected records are the ones voted on by anyone the changed edge can
- * still reach: the new or former delegate, whoever they delegate onward to, and
- * so on. Nobody upstream needs recomputing — their voice was already flowing
- * through this edge or was not.
- */
 export async function referencesAffectedByDelegation(toUserId: string): Promise<string[]> {
   const reachable = new Set<string>([toUserId]);
   let frontier = [toUserId];

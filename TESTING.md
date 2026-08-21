@@ -104,6 +104,41 @@ chain deeper than the delegation cap.
 
 ---
 
+## Driving the whole system with them
+
+```bash
+cd backend
+TEST_POPULATION_DATABASE_URL='postgresql://…/civicvoice_population' \
+  bun run system-check
+```
+
+This is the only check that runs the **whole stack**: the real backend, a real
+Postgres, the real built site, and a real browser clicking real buttons. The
+other browser checks serve the built site against a stub, which is right for
+asking "does this page render" and cannot answer "does delegating actually move
+the number".
+
+The citizens do this, in order, and every assertion reads the number back from
+the public API afterwards rather than trusting the screen:
+
+1. sign in through the form
+2. vote on a record — the Pulse moves
+3. a second citizen delegates to the first — the lent voice joins at once
+4. the Pulse reads as direct votes and delegated weight, separately
+5. the second citizen votes for themselves — it overrides their delegate
+6. and does not cost them the delegation
+7. they withdraw their own vote — the weight goes back to the delegate
+8. they revoke — the borrowed voice leaves immediately
+
+It needs `apps/web/dist` built first (`cd apps/web && bun run build`). Set
+`SYSTEM_CHECK_DEBUG=1` to have it print cookies and the session body at each
+sign-in.
+
+Adding a feature to the check means adding a journey to
+`apps/web/scripts/system-check-journeys.mjs` and nothing else.
+
+---
+
 ## Checking a real database is clean
 
 Run this against production whenever you want the reassurance. It is read-only
@@ -134,3 +169,25 @@ For real accounts it is not handled, and it means **a person who deletes their
 account keeps voting**. Their votes stay in every published tally for good.
 Fixing it means adding foreign keys to a schema shared with another project, so
 it is written up rather than done — see the note in `HANDOFF.md`.
+
+
+---
+
+## One fault this found that is not fully closed
+
+The system check once left a record publishing **two** supporters when one
+person had voted and nobody had lent a voice — confirmed against the database
+afterwards.
+
+Recounting is a read followed by a write, and two of them overlapping can lose
+one: the slower request writes a total it worked out before the faster one
+changed anything, and the stale number then sits on the card until the next vote
+happens to correct it. `applyWeightedTally` now holds a row lock (`FOR UPDATE`)
+so that whoever writes last has also read last.
+
+Be precise about what that means: the fault was seen **once** and has not
+recurred, with or without the lock. Races do not appear on demand. The lock is
+there because the hazard is structural and visible in the code, not because a
+test can summon it — the concurrency test in `population.test.ts` passes either
+way and says so in its own comments. Anyone tempted to remove the lock for want
+of a failing test should reproduce the interleaving first.

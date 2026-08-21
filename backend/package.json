@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test --timeout 60000",
     "seed-test-population": "bun run scripts/seed-test-population.ts",
-    "check-no-population": "bun run scripts/check-no-population.ts"
+    "check-no-population": "bun run scripts/check-no-population.ts",
+    "system-check": "bun run scripts/system-check.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
