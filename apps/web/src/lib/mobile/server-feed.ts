@@ -73,6 +73,8 @@ export interface ServerPost {
   }[];
   commentsCount: number;
   likesCount: number;
+  /** Whether the person asking has already liked this. */
+  isLiked: boolean;
   createdAt: string;
 }
 
@@ -163,7 +165,10 @@ export function mapServerPost(post: ServerPost): TimelinePost {
     // inline. The comment sheet is where a thread would be loaded per post.
     comments: [],
     shares: 0,
-    isLiked: false,
+    // The server knows this now. It used to be hardcoded false here, so every
+    // heart in the feed rendered empty however many you had pressed, and the
+    // next tap took away a like you had already made.
+    isLiked: post.isLiked ?? false,
     createdAt: post.createdAt,
     updatedAt: post.createdAt,
   };

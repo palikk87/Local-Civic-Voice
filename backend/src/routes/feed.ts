@@ -420,16 +420,31 @@ feedRouter.post("/posts/:id/save", async (c) => {
  * POST /api/feed/posts/:id/share
  * Track a post share
  */
-feedRouter.post("/posts/:id/share", zValidator("json", z.object({
-  shareType: z.enum(["internal", "external", "dm"]).optional().default("internal"),
-})), async (c) => {
+/**
+ * POST /api/feed/posts/:id/share
+ *
+ * THE BODY IS OPTIONAL. This used to demand one through zValidator, so a plain
+ * POST — which is what a share button most naturally sends, and what any client
+ * that does not care about the share type would send — was rejected with a 400
+ * and the share silently did not happen. The field has a default; requiring the
+ * caller to send it anyway defeats the default.
+ */
+feedRouter.post("/posts/:id/share", async (c) => {
   const user = c.get("user");
   if (!user) {
     return c.json({ error: "Authentication required" }, 401);
   }
 
   const postId = c.req.param("id");
-  const { shareType } = c.req.valid("json");
+
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = z
+    .object({ shareType: z.enum(["internal", "external", "dm"]).optional() })
+    .safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: "shareType must be internal, external or dm" }, 400);
+  }
+  const shareType = parsed.data.shareType ?? "internal";
 
   try {
     await prisma.postShare.create({

@@ -276,6 +276,7 @@ async function main() {
       follower.email,
       leader.name,
       POPULATION_PASSWORD,
+      leader.id,
     ],
     cwd: WEB,
     stdout: "inherit",

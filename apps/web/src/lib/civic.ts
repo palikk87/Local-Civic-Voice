@@ -181,6 +181,8 @@ export interface Post {
   media: unknown[];
   commentsCount: number;
   likesCount: number;
+  /** Whether the person asking has already liked this. */
+  isLiked?: boolean;
   createdAt: string;
 }
 
@@ -421,4 +423,10 @@ export const postsApi = {
   create: (body: CreatePostBody) => api.post<Post>("/api/posts", body),
 
   like: (id: string) => api.post<unknown>(`/api/posts/${id}/like`),
+
+  /** Keep a post. Sending it again takes it back out. */
+  save: (id: string) => api.post<{ saved: boolean }>(`/api/feed/posts/${id}/save`),
+
+  /** Record that a post was passed on. The count is the author's, not ours. */
+  share: (id: string) => api.post<{ success: boolean }>(`/api/feed/posts/${id}/share`, {}),
 };

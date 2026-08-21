@@ -11,7 +11,7 @@
  */
 import { launchChromium } from "./chromium.mjs";
 
-const [siteOrigin, billId, leaderEmail, followerEmail, leaderName, password] =
+const [siteOrigin, billId, leaderEmail, followerEmail, leaderName, password, leaderId] =
   process.argv.slice(2);
 
 const failures = [];
@@ -262,6 +262,59 @@ try {
     state.support.total === 1 && state.oppose.total === 0,
     `Pulse says ${state.support.total}/${state.oppose.total}`,
   );
+
+  // ------------------------------------------------------------- the social half
+  //
+  // Following, posting, liking, saving. Checked here because it is the half of
+  // the platform that decides whether anybody comes back, and because three of
+  // its notification paths turned out to be written and wired to nothing.
+
+  // ON THEIR PROFILE, NOT THE PEOPLE LIST.
+  //
+  // The first version pressed the first Follow button on /people, which in a
+  // thousand-citizen population is whoever happens to sort first — so it then
+  // checked the wrong person's notifications and called a working feature
+  // broken. Following a named person is the only version of this that means
+  // anything.
+  await two.page.goto(`${siteOrigin}/user/${leaderId}`, { waitUntil: "domcontentloaded" });
+  await signedInPage(two.page, followerName);
+
+  const followButton = two.page.getByRole("button", { name: /^follow$/i }).first();
+  try {
+    await followButton.waitFor({ timeout: 20_000 });
+  } catch {
+    const probe = await two.page.evaluate(async (id) => {
+      const r = await fetch(`/api/users/${id}`, { credentials: "include" });
+      return { status: r.status, body: (await r.text()).slice(0, 200) };
+    }, leaderId);
+    throw new Error(
+      `no Follow button on ${leaderName}'s profile. ` +
+        `/api/users/${leaderId} answered ${probe.status}: ${probe.body}. ` +
+        `Screen said: ${await onScreen(two.page)}`,
+    );
+  }
+  await followButton.click();
+
+  const followCount = await until(two.page, async (id) => {
+    const r = await fetch("/api/auth/get-session", { credentials: "include" });
+    const me = (await r.json()).user;
+    const f = await fetch(`/api/users/${me.id}/following`, { credentials: "include" });
+    const list = (await f.json()).results ?? [];
+    return list.some((u) => u.id === id) ? list.length : false;
+  }, leaderId);
+  expect(
+    "following someone from the browser sticks",
+    Boolean(followCount),
+    `${leaderName} is not in the following list`,
+  );
+
+  // The person who was followed should have been told.
+  const toldAboutFollow = await until(one.page, async () => {
+    const r = await fetch("/api/notifications?limit=50", { credentials: "include" });
+    const body = await r.json().catch(() => null);
+    return Boolean(body?.notifications?.some((n) => n.type === "follow"));
+  });
+  expect("and the person followed is told about it", Boolean(toldAboutFollow), "no follow notification arrived");
 
   await one.context.close();
   await two.context.close();

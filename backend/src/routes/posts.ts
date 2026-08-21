@@ -6,6 +6,7 @@ import { purgeMediaObjects } from "../services/media-objects";
 import type { auth } from "../auth";
 import {
   notifyPostLike,
+  notifyFollowersOfNewPost,
   notifyPostComment,
   notifyCommentReply,
   notifyMentions,
@@ -128,6 +129,24 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
     user?.id ?? null
   );
 
+  // WHICH OF THESE YOU HAVE ALREADY LIKED.
+  //
+  // Only /api/feed returned this. Every other list of posts — your own profile,
+  // somebody else's, the web feed, the mobile timeline — is served from here,
+  // and without it every heart rendered empty however many you had pressed. The
+  // first tap then read as a new like and the second took away a like you had
+  // already made.
+  const likedByMe = new Set<string>(
+    user
+      ? (
+          await prisma.postLike.findMany({
+            where: { userId: user.id, postId: { in: results.map((post) => post.id) } },
+            select: { postId: true },
+          })
+        ).map((like) => like.postId)
+      : [],
+  );
+
   return c.json({
     posts: results.map((post) => ({
       id: post.id,
@@ -170,6 +189,7 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
       })),
       commentsCount: post._count.comments,
       likesCount: post._count.likes,
+      isLiked: likedByMe.has(post.id),
       createdAt: post.createdAt.toISOString(),
     })),
     nextCursor,
@@ -289,6 +309,19 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
     { referenceId: reference.id },
     JobPriority.NORMAL
   );
+
+  // TELL THE PEOPLE WHO FOLLOW YOU.
+  //
+  // notifyFollowersOfNewPost was written, complete, and called from nowhere.
+  // Following someone is a request to hear from them, and without this it was a
+  // bookmark with extra steps: a follower learned about a post only if they
+  // happened to scroll past it.
+  //
+  // Not awaited. The composer should not wait on a fan-out, and a notification
+  // that fails is not a reason to lose somebody's post.
+  void notifyFollowersOfNewPost(user.id, user.name, post.id, post.content).catch((error) => {
+    console.error("[Notify] followers of new post:", error);
+  });
 
   // The composer renders the new post immediately, so ship the same law-card
   // payload the feed sends rather than making it wait for a refetch.
@@ -419,6 +452,12 @@ postsRouter.get("/:id", async (c) => {
       })),
       commentsCount: post._count.comments,
       likesCount: post._count.likes,
+      isLiked: user
+        ? (await prisma.postLike.findFirst({
+            where: { postId: post.id, userId: user.id },
+            select: { id: true },
+          })) !== null
+        : false,
       createdAt: post.createdAt.toISOString(),
     },
   });

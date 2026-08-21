@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { notifyFollow } from "../services/notification-service";
 import type { auth } from "../auth";
 
 type AuthVariables = {
@@ -456,6 +457,16 @@ usersRouter.post("/:id/follow", async (c) => {
         followerId: currentUser.id,
         followingId: id,
       },
+    });
+
+    // TELL THEM. notifyFollow was written and called from nowhere, so being
+    // followed was a silent event — the one social action whose entire point is
+    // that the other person finds out.
+    //
+    // Not awaited: a follow that succeeded must not be reported as failed
+    // because the notification did not write.
+    void notifyFollow(id, currentUser.id, currentUser.name).catch((error) => {
+      console.error("[Notify] follow:", error);
     });
 
     return c.json({

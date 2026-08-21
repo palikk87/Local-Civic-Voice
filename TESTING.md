@@ -139,6 +139,21 @@ Adding a feature to the check means adding a journey to
 
 ---
 
+## The social side
+
+`backend/tests/social.test.ts` covers it, over real HTTP: following, feeds,
+posting, liking, commenting, replying, deleting, saving, sharing, messaging,
+notifications, search and discovery. None of it had a test before.
+
+**There are no "friends" on this platform.** There is no mutual-consent
+relationship and no friend request — the only tie between two people is a
+follow, which is one-directional and needs nobody's permission. Two people who
+follow each other are, in effect, friends, but nothing in the schema or the UI
+calls them that. If mutual friendship is wanted, it is a feature to build, not
+a bug to fix.
+
+---
+
 ## Checking a real database is clean
 
 Run this against production whenever you want the reassurance. It is read-only
