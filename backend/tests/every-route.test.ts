@@ -174,6 +174,8 @@ describe("every mounted route", () => {
     const writes = routes.filter((r) => r.method !== "GET");
     const unguarded: string[] = [];
 
+    const validatedBeforeAuth: string[] = [];
+
     for (const route of writes) {
       const key = `${route.method} ${route.path}`;
       if (PUBLIC_WRITES.has(key)) continue;
@@ -190,9 +192,35 @@ describe("every mounted route", () => {
       if (response.status >= 200 && response.status < 300) {
         unguarded.push(`${key} — answered ${response.status} with no session`);
       }
+
+      // A 400 means the request never reached the handler: the body validator
+      // rejected it first. That IS a refusal — nothing was written — but it is
+      // not proof the handler checks for a session, because the handler never
+      // ran. An endpoint that validates before it authenticates would look
+      // identical here whether or not it has an auth check at all.
+      if (response.status === 400) validatedBeforeAuth.push(key);
     }
 
     expect(unguarded).toEqual([]);
+
+    // Not a failure — a list, printed so the gap is visible rather than silent.
+    // Closing it properly means a valid body per endpoint, which is a fixture
+    // per endpoint, which is the hand-written list this test exists to avoid.
+    //
+    // CHECKED BY HAND on 2026-08-22, all eighteen, each with a body its
+    // validator accepts and no session: every one refused, sixteen with 401 and
+    // two more with a 400 from a deeper check. The only 2xx came from the two
+    // B2B login endpoints, which is what signing in is. So this is a hole in
+    // the test, not in the product — but it is a hole that would hide a real
+    // one, which is why it prints.
+    if (validatedBeforeAuth.length > 0) {
+      console.log(
+        `\n${validatedBeforeAuth.length} write endpoint(s) answered 400 to an empty body, so ` +
+          `their auth check was never reached by this test:\n  ` +
+          validatedBeforeAuth.join("\n  ") +
+          `\n`,
+      );
+    }
   }, 120_000);
 
   test("no error leaks the machinery behind it", async () => {
