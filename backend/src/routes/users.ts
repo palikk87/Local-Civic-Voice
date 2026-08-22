@@ -336,7 +336,17 @@ usersRouter.get("/:id", async (c) => {
     return c.json({ error: "User not found" }, 404);
   }
 
-  return c.json(formatUser(user, isFollowing));
+  // Friendship here is a mutual follow and nothing more — see the friends route
+  // for why that is named rather than invented.
+  const followsBack =
+    currentUser && isFollowing
+      ? (await prisma.follow.findFirst({
+          where: { followerId: user.id, followingId: currentUser.id },
+          select: { id: true },
+        })) !== null
+      : false;
+
+  return c.json({ ...formatUser(user, isFollowing), isFriend: followsBack });
 });
 
 /**
@@ -672,3 +682,79 @@ usersRouter.patch("/me", zValidator("json", z.object({
 });
 
 export { usersRouter };
+
+/**
+ * GET /api/users/:id/friends
+ *
+ * The people who follow each other.
+ *
+ * THIS PLATFORM HAS NO FRIEND REQUESTS, and this does not add any. There is one
+ * relationship in the schema — a follow — and it is one-directional and needs
+ * nobody's permission. Two people who both follow each other are friends in
+ * every practical sense and nothing named it, so somebody looking for their
+ * friends had two lists to cross-reference by hand.
+ *
+ * Naming an existing relationship is not the same as building mutual consent.
+ * If a friendship should mean something a mutual follow does not — a request to
+ * accept, a private tier, a thing only friends can see — that is a feature with
+ * a decision in it, and it is written up rather than guessed at.
+ */
+usersRouter.get("/:id/friends", zValidator("query", paginationQuerySchema), async (c) => {
+  const id = c.req.param("id");
+  const { limit, offset } = c.req.valid("query");
+  const currentUser = c.get("user");
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+  if (!user) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  // Everyone they follow who follows them back, minus anyone hidden from the
+  // person asking.
+  const hidden = await hiddenFrom(currentUser?.id);
+  const theyFollow = await prisma.follow.findMany({
+    where: { followerId: id },
+    select: { followingId: true },
+  });
+  const candidateIds = theyFollow
+    .map((f) => f.followingId)
+    .filter((candidate) => !hidden.includes(candidate));
+
+  if (candidateIds.length === 0) {
+    return c.json({ results: [], pagination: { total: 0, limit, offset, hasMore: false } });
+  }
+
+  const mutual = await prisma.follow.findMany({
+    where: { followerId: { in: candidateIds }, followingId: id },
+    select: { followerId: true },
+  });
+  const friendIds = mutual.map((f) => f.followerId);
+
+  const friends = await prisma.user.findMany({
+    where: { id: { in: friendIds } },
+    take: limit,
+    skip: offset,
+    orderBy: { name: "asc" },
+    include: {
+      _count: { select: { followers: true, following: true, votes: true } },
+    },
+  });
+
+  let followStatuses: Record<string, boolean> = {};
+  if (currentUser) {
+    const follows = await prisma.follow.findMany({
+      where: { followerId: currentUser.id, followingId: { in: friends.map((f) => f.id) } },
+    });
+    followStatuses = follows.reduce((acc, f) => ({ ...acc, [f.followingId]: true }), {});
+  }
+
+  return c.json({
+    results: friends.map((f) => formatUser(f, followStatuses[f.id] ?? false)),
+    pagination: {
+      total: friendIds.length,
+      limit,
+      offset,
+      hasMore: offset + limit < friendIds.length,
+    },
+  });
+});

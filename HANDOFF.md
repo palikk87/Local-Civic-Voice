@@ -270,11 +270,17 @@ muting and reporting.
 
 Not built:
 
-- **Friends.** There is no mutual-consent relationship anywhere — only follows,
-  which are one-directional and need nobody's permission. Two people who follow
-  each other are friends in effect and nothing names it. A real friends feature
-  means a request, an accept, and a decision about what it grants that following
-  does not.
+- **Friend requests.** Friendship is now *named* — two people who follow each
+  other are friends, there is a count on the profile and a list at
+  `/api/users/:id/friends` — but it is still only a mutual follow. There is no
+  request to accept, no private tier, and nothing a friend can see that a
+  follower cannot.
+
+  That is naming an existing relationship, not building mutual consent. If a
+  friendship should grant something, that is a product decision with a real
+  design in it: what does it unlock, can you be unfriended without being
+  unfollowed, does a request expire. Left for a person to decide rather than
+  guessed at.
 - **Editing a post.** Deliberate — a post is a public statement attached to a
   law, and the platform's own rule is that no post is ever edited. Worth
   confirming that is still the intent rather than an omission.

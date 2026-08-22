@@ -34,6 +34,8 @@ interface PublicUser {
   following: number;
   votesCount: number;
   isFollowing: boolean;
+  /** You follow each other. This platform has no friend request. */
+  isFriend?: boolean;
 }
 
 interface UserPost {
@@ -78,6 +80,14 @@ export default function UserProfile() {
     queryFn: () => api.get<PublicUser>(`/api/users/${id}`),
     enabled: !!id,
   });
+
+  const { data: friendsData } = useQuery({
+    queryKey: ["friends", id],
+    queryFn: () =>
+      api.get<{ pagination: { total: number } }>(`/api/users/${id}/friends?limit=1`),
+    enabled: !!id,
+  });
+  const friendCount = friendsData?.pagination.total ?? 0;
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ["public-user-posts", id],
@@ -210,6 +220,12 @@ export default function UserProfile() {
 
           <div className="mt-4 flex gap-8">
             <div className="flex flex-col items-center">
+              <span className="text-lg font-bold text-white">{friendCount}</span>
+              {/* Friends here are the people who follow each other. There is no
+                  friend request on this platform — see the friends route. */}
+              <span className="text-sm text-slate-400">Friends</span>
+            </div>
+            <div className="flex flex-col items-center">
               <span className="text-lg font-bold text-white">{profile.followers}</span>
               <span className="text-sm text-slate-400">Followers</span>
             </div>
@@ -241,7 +257,7 @@ export default function UserProfile() {
                 {profile.isFollowing ? (
                   <>
                     <UserMinus className="mr-1.5 h-4 w-4" />
-                    Unfollow
+                    {profile.isFriend ? "Friends" : "Unfollow"}
                   </>
                 ) : (
                   <>

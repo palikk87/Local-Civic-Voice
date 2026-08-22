@@ -244,6 +244,75 @@ describe("following", () => {
   });
 });
 
+describe("friends", () => {
+  test("two people who follow each other are friends", async () => {
+    const one = await person("one");
+    const two = await person("two");
+
+    await api(one.cookie).post(`/api/users/${two.userId}/follow`);
+
+    // One-directional so far. Following somebody is not a friendship, and this
+    // platform has no request to accept — see the friends route for why that is
+    // named rather than invented.
+    let friends = await json<{ results: unknown[] }>(
+      await api(one.cookie).get(`/api/users/${one.userId}/friends`),
+    );
+    expect(friends.results).toHaveLength(0);
+
+    await api(two.cookie).post(`/api/users/${one.userId}/follow`);
+
+    friends = await json<{ results: Array<{ id: string }> }>(
+      await api(one.cookie).get(`/api/users/${one.userId}/friends`),
+    );
+    expect((friends.results as Array<{ id: string }>).map((f) => f.id)).toEqual([two.userId]);
+  });
+
+  test("the profile says so", async () => {
+    const one = await person("one");
+    const two = await person("two");
+
+    await api(one.cookie).post(`/api/users/${two.userId}/follow`);
+    let profile = await json<{ isFriend?: boolean }>(
+      await api(one.cookie).get(`/api/users/${two.userId}`),
+    );
+    expect(profile.isFriend).toBe(false);
+
+    await api(two.cookie).post(`/api/users/${one.userId}/follow`);
+    profile = await json<{ isFriend?: boolean }>(
+      await api(one.cookie).get(`/api/users/${two.userId}`),
+    );
+    expect(profile.isFriend).toBe(true);
+  });
+
+  test("unfollowing ends the friendship", async () => {
+    const one = await person("one");
+    const two = await person("two");
+
+    await api(one.cookie).post(`/api/users/${two.userId}/follow`);
+    await api(two.cookie).post(`/api/users/${one.userId}/follow`);
+    await api(two.cookie).del(`/api/users/${one.userId}/follow`);
+
+    const friends = await json<{ results: unknown[] }>(
+      await api(one.cookie).get(`/api/users/${one.userId}/friends`),
+    );
+    expect(friends.results).toHaveLength(0);
+  });
+
+  test("somebody you blocked is not among your friends", async () => {
+    const one = await person("one");
+    const two = await person("two");
+
+    await api(one.cookie).post(`/api/users/${two.userId}/follow`);
+    await api(two.cookie).post(`/api/users/${one.userId}/follow`);
+    await api(one.cookie).post(`/api/safety/blocks/${two.userId}`);
+
+    const friends = await json<{ results: unknown[] }>(
+      await api(one.cookie).get(`/api/users/${one.userId}/friends`),
+    );
+    expect(friends.results).toHaveLength(0);
+  });
+});
+
 describe("posts, likes and comments", () => {
   test("liking a post counts once and can be taken back", async () => {
     const author = await person("author");
