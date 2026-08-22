@@ -74,6 +74,15 @@ async function asCitizen(email) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
 
+  // A request that never completes shows up in the app as "Failed to fetch" and
+  // nowhere else. Chromium in this sandbox also inherits a proxy, so a request
+  // to 127.0.0.1 can fail at the tunnel rather than at the server — which looks
+  // identical from inside the page.
+  const networkFailures = [];
+  page.on("requestfailed", (request) => {
+    networkFailures.push(`${request.method()} ${request.url()} — ${request.failure()?.errorText}`);
+  });
+
   await page.goto(`${siteOrigin}/auth`, { waitUntil: "domcontentloaded" });
 
   // By id, not by input type: the sign-in field is type="text", because it
@@ -91,7 +100,12 @@ async function asCitizen(email) {
   });
 
   if (!signedIn) {
-    throw new Error(`${email} could not sign in. Screen said: ${await onScreen(page)}`);
+    const apiFailures = networkFailures.filter((f) => f.includes("/api/"));
+    throw new Error(
+      `${email} could not sign in. ` +
+        `Network: ${apiFailures.slice(-3).join(" | ") || "no failed API requests"}. ` +
+        `Screen said: ${await onScreen(page)}`,
+    );
   }
 
   if (process.env.SYSTEM_CHECK_DEBUG) {

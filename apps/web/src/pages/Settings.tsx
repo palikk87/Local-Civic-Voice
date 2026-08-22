@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
+import { BlockedAndMuted } from "@/components/settings/BlockedAndMuted";
 
 interface NotificationPreferences {
   likes: boolean;
@@ -16,6 +17,7 @@ interface NotificationPreferences {
   mentions: boolean;
   follows: boolean;
   reposts: boolean;
+  messages: boolean;
   newFollowerPosts: boolean;
 }
 
@@ -28,6 +30,7 @@ export default function Settings() {
     mentions: true,
     follows: true,
     reposts: true,
+    messages: true,
     newFollowerPosts: true,
   });
 
@@ -78,6 +81,7 @@ export default function Settings() {
       mentions: value,
       follows: value,
       reposts: value,
+      messages: value,
       newFollowerPosts: value,
     };
     setPreferences(next);
@@ -111,6 +115,8 @@ export default function Settings() {
           </div>
         ) : (
           <>
+            <BlockedAndMuted />
+
             <div className="rounded-lg border border-border bg-card p-6">
               <h2 className="font-semibold text-foreground">Notifications</h2>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -120,6 +126,19 @@ export default function Settings() {
               <Separator className="my-4" />
 
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-foreground">Messages</p>
+                    <p className="text-sm text-muted-foreground">
+                      When someone sends you a message
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences.messages}
+                    onCheckedChange={() => togglePreference("messages")}
+                  />
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-foreground">Likes</p>

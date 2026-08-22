@@ -425,6 +425,18 @@ export const useTimelineStore = create<TimelineState>()(
       },
 
       likeComment: (postId, commentId) => {
+        // TELL THE SERVER. This changed a value in this browser and nothing
+        // else: the heart filled for you, emptied on refresh, and nobody else
+        // ever saw it. The endpoint exists now, so the local flip below is an
+        // optimistic echo of a real write rather than the whole feature.
+        void fetch(`/api/posts/${postId}/comments/${commentId}/like`, {
+          method: "POST",
+          credentials: "include",
+        }).catch(() => {
+          // The optimistic flip stands until the next load corrects it. A
+          // failed like is not worth interrupting somebody to say so.
+        });
+
         set((state) => ({
           posts: state.posts.map((p) =>
             p.id === postId

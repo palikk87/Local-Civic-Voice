@@ -239,6 +239,28 @@ async function main() {
   }
   ok("the population is present", `${await countPopulation(prisma)} citizens`);
 
+  // BUILD THE SITE HERE, rather than using whatever is in dist.
+  //
+  // The bundle bakes its backend URL in at build time, and `bun run verify`
+  // builds with https://ci.invalid on purpose so the other browser checks
+  // exercise the shape CI ships. This check needs the same-origin build, and it
+  // silently got the other one — every request left the page for a host that
+  // does not exist, and the app reported it as "Failed to fetch" on the sign-in
+  // form. A check that depends on who built last is a check that passes or
+  // fails on the order somebody ran two commands in.
+  console.log("Building the site for this check (same-origin)…");
+  const build = spawn({
+    cmd: ["bun", "run", "build"],
+    cwd: WEB,
+    env: { ...process.env, VITE_BACKEND_URL: "" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if ((await build.exited) !== 0) {
+    throw new Error(`the web build failed: ${await new Response(build.stderr).text()}`);
+  }
+  ok("the site is built against this backend");
+
   await startBackend();
   ok("the backend is up", BACKEND_ORIGIN);
 

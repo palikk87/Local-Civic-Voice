@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
 import { api } from "@/lib/api";
+import { safetyApi } from "@/lib/civic";
 
 interface PublicUser {
   id: string;
@@ -268,6 +269,83 @@ export default function UserProfile() {
                 <ShieldCheck className="mr-1.5 h-4 w-4" />
                 {myDelegation ? "Revoke delegation" : "Delegate"}
               </Button>
+            </div>
+          ) : null}
+
+          {/* BLOCK, MUTE AND REPORT FROM HERE.
+              These were only ever reachable from a post's menu, so somebody who
+              had never posted could not be blocked at all — which is precisely
+              the person most likely to need blocking. */}
+          {!isSelf ? (
+            <div className="mt-3 flex w-full max-w-sm items-center justify-center gap-4 text-xs">
+              <button
+                type="button"
+                className="text-slate-400 underline-offset-2 hover:text-white hover:underline"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    openAuth("Sign in to mute people.");
+                    return;
+                  }
+                  safetyApi
+                    .mute(id!)
+                    .then(() =>
+                      toast.success("Muted", {
+                        description: "Their posts will not appear in your feed.",
+                      }),
+                    )
+                    .catch(() => toast.error("Couldn't mute them"));
+                }}
+              >
+                Mute
+              </button>
+
+              <button
+                type="button"
+                className="text-slate-400 underline-offset-2 hover:text-white hover:underline"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    openAuth("Sign in to report people.");
+                    return;
+                  }
+                  safetyApi
+                    .report({ userId: id!, reason: "other" })
+                    .then(() =>
+                      toast.success("Reported", {
+                        description: "A moderator will look at this.",
+                      }),
+                    )
+                    .catch(() => toast.error("Couldn't send the report"));
+                }}
+              >
+                Report
+              </button>
+
+              <button
+                type="button"
+                className="text-oppose underline-offset-2 hover:underline"
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    openAuth("Sign in to block people.");
+                    return;
+                  }
+                  if (
+                    !window.confirm(
+                      "Block this person? You will not see each other, and any follows or delegations between you end. They are not told.",
+                    )
+                  ) {
+                    return;
+                  }
+                  safetyApi
+                    .block(id!)
+                    .then(() => {
+                      toast.success("Blocked");
+                      navigate("/people");
+                    })
+                    .catch(() => toast.error("Couldn't block them"));
+                }}
+              >
+                Block
+              </button>
             </div>
           ) : null}
         </div>
