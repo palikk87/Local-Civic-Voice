@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { VotePanel } from "@/components/civic/VotePanel";
+import { OtherSide } from "@/components/civic/OtherSide";
+import { PulseHistory } from "@/components/civic/PulseHistory";
 import { CommentThread } from "@/components/feed/CommentThread";
 import {
   ReferenceTypeBadge,
@@ -223,6 +225,12 @@ export default function ReferenceDetail() {
             {/* Vote sidebar */}
             <aside className="xl:sticky xl:top-20">
               <VotePanel reference={reference} />
+
+              {/* Only this platform can do either of these: every post is
+                  attached to a government record, and every position on that
+                  record is known. */}
+              <PulseHistory referenceId={reference.id} />
+              <OtherSide referenceId={reference.id} />
             </aside>
           </div>
         )}

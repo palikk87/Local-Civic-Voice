@@ -202,6 +202,44 @@ existed as a feature.
 
 ---
 
+## What this platform can do that others cannot
+
+Four features that fall straight out of the premise — every post attached to a
+government record, and votes that can be lent — and are covered by
+`backend/tests/position-record.test.ts` and `backend/tests/other-side.test.ts`.
+
+**Receipts for a lent voice.** Liquid democracy is sold as convenience and then
+goes quiet: you are told how many delegations you have made, never what was done
+with them. Each receipt names the record, the position taken in your name, and
+who actually cast it — which is not always the person you chose, because a voice
+travels the chain. Derived from the same walk that produces the tally, never
+recorded separately, so the receipts cannot describe a count nobody published.
+
+**A citizen's record.** Every position, kept forever, with the version of the
+law it was taken on. Append-only: changing your mind adds a row and never erases
+one, and "changed my mind" is shown rather than buried. A change of mind means
+crossing sides — withdrawing is its own act, and re-affirming after a withdrawal
+is somebody returning to where they were.
+
+**"The text moved."** You backed this in March; it has been amended twice since.
+Nothing is ever withdrawn automatically, because silence is not a change of mind
+and a platform that decides what your silence meant has taken the position for
+you.
+
+**The other side.** Not an algorithm and not a curated panel. Every post is
+attached to a record and every position on it is known, so the other side is
+literally the people who voted the opposite way on this exact bill and wrote
+about it — ordered by how much people engaged with the argument, not how much
+they liked it. Shows nothing until you have taken a position yourself; without
+one there is no "other" side, and picking one for you is the thing being
+avoided.
+
+**How opinion moved.** Readable only because positions are kept as events. The
+day the text changed is marked, because on this platform the amendment is
+usually the answer to what turned it.
+
+---
+
 ## Checking a real database is clean
 
 Run this against production whenever you want the reassurance. It is read-only

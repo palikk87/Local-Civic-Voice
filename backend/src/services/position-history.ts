@@ -236,3 +236,74 @@ export async function positionsNeedingReview(userId: string, limit = 20) {
       },
     }));
 }
+
+export interface PulsePoint {
+  /** Day, as an ISO date. */
+  date: string;
+  support: number;
+  oppose: number;
+  /** True when the law's text changed on this day. */
+  lawChanged: boolean;
+}
+
+/**
+ * How opinion on one record moved, day by day.
+ *
+ * ONLY POSSIBLE BECAUSE THE LEDGER EXISTS. The vote table holds one row per
+ * person, overwritten — from it you can compute today's Pulse and nothing else.
+ * The question everybody actually asks about a contested bill is when opinion
+ * turned and what turned it, and that was unanswerable here until positions
+ * started being kept as events rather than as a current state.
+ *
+ * Marked with the day the text changed, because on this platform that is
+ * usually the answer. A bill is amended and support moves; a line about it in
+ * the news does not show up in the data, but the amendment does, and it is the
+ * thing that actually changed what people were agreeing to.
+ *
+ * BUILT FROM WHAT PEOPLE DID, not from a model. Each day carries the running
+ * total of positions held at the end of it — a person who backed a bill in
+ * March and never revisited it is still counted in April, because they are.
+ */
+export async function pulseOverTime(referenceId: string): Promise<PulsePoint[]> {
+  const [events, reference] = await Promise.all([
+    prisma.positionEvent.findMany({
+      where: { governmentReferenceId: referenceId },
+      orderBy: { createdAt: "asc" },
+      select: { userId: true, position: true, createdAt: true },
+    }),
+    prisma.governmentReference.findUnique({
+      where: { id: referenceId },
+      select: { lawChangedAt: true },
+    }),
+  ]);
+
+  if (events.length === 0) return [];
+
+  const changedOn = reference?.lawChangedAt
+    ? reference.lawChangedAt.toISOString().slice(0, 10)
+    : null;
+
+  // Walk forward, keeping each person's current position. A day's numbers are
+  // the state at the end of that day, so a person who has not revisited a
+  // position still holds it.
+  const held = new Map<string, string>();
+  const byDay = new Map<string, { support: number; oppose: number }>();
+
+  for (const event of events) {
+    if (event.position === "withdrawn") held.delete(event.userId);
+    else held.set(event.userId, event.position);
+
+    const day = event.createdAt.toISOString().slice(0, 10);
+    let support = 0;
+    let oppose = 0;
+    for (const position of held.values()) {
+      if (position === "support") support += 1;
+      else if (position === "oppose") oppose += 1;
+    }
+    byDay.set(day, { support, oppose });
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, counts]) => ({ date, ...counts, lawChanged: date === changedOn }));
+}

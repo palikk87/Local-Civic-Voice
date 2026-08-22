@@ -14,7 +14,8 @@ import {
   recalculateReferenceStats,
 } from "../services/deduplication-service";
 import { applyWeightedTally, voteBreakdown } from "../services/delegation-service";
-import { recordPosition } from "../services/position-history";
+import { pulseOverTime, recordPosition } from "../services/position-history";
+import { hiddenFrom } from "../services/relationships";
 import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
 import { ensureReferenceContent } from "../services/reference-content";
@@ -1295,3 +1296,132 @@ governmentReferencesRouter.get("/search/duplicates", zValidator("query", z.objec
 });
 
 export { governmentReferencesRouter };
+
+/**
+ * GET /api/government-references/:id/other-side
+ *
+ * What people who landed on the opposite side of this actually wrote.
+ *
+ * NOT AN ALGORITHM, AND NOT A FEED. Every other platform's answer to "show me
+ * the other side" is either an engagement model that learns outrage travels
+ * furthest, or a curated panel somebody chose. Both end up selecting for the
+ * worst version of the other argument, because that is what performs and what
+ * is easy to argue against.
+ *
+ * This can do something none of them can: every post here is attached to a
+ * government record, and every citizen's position on that record is known. So
+ * "the other side" is not inferred from what somebody clicks or guessed from
+ * their words — it is the set of people who voted the opposite way on this
+ * exact bill and then wrote about it. No model, no guess, no ranking by heat.
+ *
+ * Ordered by the comment count on the post: the ones people actually engaged
+ * with, rather than the ones that provoked the most likes. A post nobody
+ * replied to is not the strongest case for anything.
+ */
+governmentReferencesRouter.get("/:id/other-side", async (c) => {
+  const referenceId = c.req.param("id");
+  const user = c.get("user");
+  const limit = Math.min(Number(c.req.query("limit") ?? 5), 20);
+
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { id: true },
+  });
+  if (!reference) {
+    return c.json({ error: "Reference not found" }, 404);
+  }
+
+  // Which way the reader went. Without a position of their own there is no
+  // "other" side to show them — so they are told that rather than shown a
+  // side picked for them.
+  const mine = user
+    ? await prisma.governmentReferenceVote.findUnique({
+        where: { governmentReferenceId_userId: { governmentReferenceId: referenceId, userId: user.id } },
+        select: { position: true },
+      })
+    : null;
+
+  if (!user || !mine) {
+    return c.json({
+      yourPosition: null,
+      otherPosition: null,
+      results: [],
+      reason: "take-a-position-first",
+    });
+  }
+
+  const otherPosition = mine.position === "support" ? "oppose" : "support";
+
+  const theirVotes = await prisma.governmentReferenceVote.findMany({
+    where: { governmentReferenceId: referenceId, position: otherPosition },
+    select: { userId: true },
+  });
+  if (theirVotes.length === 0) {
+    return c.json({ yourPosition: mine.position, otherPosition, results: [], reason: "nobody-yet" });
+  }
+
+  const hidden = await hiddenFrom(user.id);
+  const authorIds = theirVotes.map((v) => v.userId).filter((id) => !hidden.includes(id));
+
+  const posts = await prisma.post.findMany({
+    where: {
+      governmentReferenceId: referenceId,
+      authorId: { in: authorIds },
+      // A repost carries somebody else's words; the other side should be in
+      // their own.
+      repostOfId: null,
+      content: { not: "" },
+    },
+    orderBy: [{ comments: { _count: "desc" } }, { createdAt: "desc" }],
+    take: limit,
+    include: {
+      author: { select: { id: true, name: true, email: true, image: true } },
+      _count: { select: { comments: true, likes: true } },
+    },
+  });
+
+  return c.json({
+    yourPosition: mine.position,
+    otherPosition,
+    results: posts.map((post) => ({
+      id: post.id,
+      content: post.content,
+      author: {
+        id: post.author.id,
+        displayName: post.author.name,
+        username: post.author.email.split("@")[0],
+        avatar:
+          post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
+      },
+      commentsCount: post._count.comments,
+      likesCount: post._count.likes,
+      createdAt: post.createdAt.toISOString(),
+    })),
+    reason: posts.length === 0 ? "nobody-wrote" : null,
+  });
+});
+
+/**
+ * GET /api/government-references/:id/pulse-history
+ *
+ * When opinion on this moved, and whether the text moved with it.
+ *
+ * The vote table can only ever say what the Pulse is now. This says what it
+ * was, which is the question people actually ask about a contested bill — and
+ * it marks the day the law changed, because on this platform that is usually
+ * the answer.
+ */
+governmentReferencesRouter.get("/:id/pulse-history", async (c) => {
+  const referenceId = c.req.param("id");
+
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { id: true },
+  });
+  if (!reference) {
+    return c.json({ error: "Reference not found" }, 404);
+  }
+
+  const points = await pulseOverTime(referenceId);
+  return c.json({ points, count: points.length });
+});
