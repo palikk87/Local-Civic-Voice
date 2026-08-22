@@ -295,6 +295,10 @@ have a shared public record to compute it from:
 - **A delegate's agreement with you**, on the delegate directory, before you
   hand anything over. Null below three shared records rather than a
   flattering percentage.
+- **An onboarding that starts from positions, not popularity.** `/start` asks a
+  new account about the records the room is most split on, then shows the
+  people who agreed with them and the people who did not — both lists, always,
+  and nobody at all until three positions are in.
 
 Not built:
 
@@ -426,7 +430,11 @@ read the law live instead of a copy frozen when they were written. A brief is
 generated once per version of the law and reused by everyone after. And no
 number this platform publishes is invented.
 
-There are 399 tests across 22 files, and each one was verified by breaking the
+A post has an address (`/post/:id` on both clients), an account can be edited
+after the day it was made, and media attached to a post resolves to a URL a
+browser can actually load — none of which were true a day ago.
+
+There are 420 tests across 24 files, and each one was verified by breaking the
 thing it covers and watching it fail. That includes the two paths that used to be excused as
 "needs a real API call": the auto-merge runs against congress.gov responses
 recorded from the live API and replayed offline, and the brief pipeline runs end
