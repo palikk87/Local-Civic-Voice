@@ -590,6 +590,11 @@ model NotificationPreference {
   // name to a position on a bill has a stake in knowing the bill moved, and a
   // silent change is how a person ends up standing behind text they never read.
   lawUpdates       Boolean @default(true)
+  /// "Somebody voted in your name." On by default, and it should stay that
+  /// way: a delegation the delegator never hears about is a voice given away
+  /// rather than lent, and this platform's Constitution says political power
+  /// here is only ever borrowed. Borrowed means you are told when it is used.
+  voiceUsed        Boolean @default(true)
   user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 

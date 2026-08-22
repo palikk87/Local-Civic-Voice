@@ -18,7 +18,13 @@ export type NotificationType =
   | 'mention'
   | 'follow'
   | 'repost'
-  | 'new_follower_post';
+  | 'new_follower_post'
+  // The backend has been sending these three for a while and this union did
+  // not know about them, which is how the notifications screen came to look up
+  // an icon that was not there and crash on a plain direct message.
+  | 'message'
+  | 'law_updated'
+  | 'voice_used';
 
 export interface Notification {
   id: string;
@@ -27,7 +33,21 @@ export interface Notification {
   body: string;
   isRead: boolean;
   createdAt: string;
-  // Reference data for navigation
+  /**
+   * What the notification points at.
+   *
+   * THIS IS WHAT THE SERVER ACTUALLY SENDS. The two fields below it were
+   * invented by an early mock and the backend has never set either of them,
+   * which is why tapping a notification on this phone went nowhere at all.
+   */
+  data?: {
+    conversationId?: string;
+    postId?: string;
+    commentId?: string;
+    governmentReferenceId?: string;
+    fromUserId?: string;
+  } | null;
+  // Legacy shape, still read as a fallback so an older payload is not dropped.
   referenceId?: string;
   referenceType?: 'post' | 'comment' | 'user' | 'bill';
   // Actor who triggered the notification
@@ -47,6 +67,9 @@ export interface NotificationPreferences {
   follows: boolean;
   reposts: boolean;
   newFollowerPosts: boolean;
+  messages: boolean;
+  lawUpdates: boolean;
+  voiceUsed: boolean;
 }
 
 interface NotificationState {
@@ -74,123 +97,10 @@ const defaultPreferences: NotificationPreferences = {
   follows: true,
   reposts: true,
   newFollowerPosts: true,
+  messages: true,
+  lawUpdates: true,
+  voiceUsed: true,
 };
-
-// Mock notifications for development
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    type: 'like',
-    title: 'New Like',
-    body: 'Sarah Chen liked your post about the Infrastructure Bill',
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(), // 5 min ago
-    referenceId: 'post-1',
-    referenceType: 'post',
-    actor: {
-      id: 'user-1',
-      displayName: 'Sarah Chen',
-      username: 'sarahchen',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-    },
-  },
-  {
-    id: '2',
-    type: 'comment',
-    title: 'New Comment',
-    body: 'Marcus Johnson commented: "Great analysis on this bill!"',
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 min ago
-    referenceId: 'post-2',
-    referenceType: 'post',
-    actor: {
-      id: 'user-2',
-      displayName: 'Marcus Johnson',
-      username: 'marcusj',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-    },
-  },
-  {
-    id: '3',
-    type: 'follow',
-    title: 'New Follower',
-    body: 'Emily Rodriguez started following you',
-    isRead: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-    referenceId: 'user-3',
-    referenceType: 'user',
-    actor: {
-      id: 'user-3',
-      displayName: 'Emily Rodriguez',
-      username: 'emilyr',
-      avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-    },
-  },
-  {
-    id: '4',
-    type: 'mention',
-    title: 'You were mentioned',
-    body: 'David Kim mentioned you in a comment',
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // 5 hours ago
-    referenceId: 'post-3',
-    referenceType: 'comment',
-    actor: {
-      id: 'user-4',
-      displayName: 'David Kim',
-      username: 'davidk',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-    },
-  },
-  {
-    id: '5',
-    type: 'repost',
-    title: 'Your post was shared',
-    body: 'Lisa Wang reposted your analysis of the Climate Bill',
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // 1 day ago
-    referenceId: 'post-4',
-    referenceType: 'post',
-    actor: {
-      id: 'user-5',
-      displayName: 'Lisa Wang',
-      username: 'lisaw',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-    },
-  },
-  {
-    id: '6',
-    type: 'reply',
-    title: 'New Reply',
-    body: 'James Wilson replied to your comment',
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), // 2 days ago
-    referenceId: 'post-5',
-    referenceType: 'comment',
-    actor: {
-      id: 'user-6',
-      displayName: 'James Wilson',
-      username: 'jamesw',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-    },
-  },
-  {
-    id: '7',
-    type: 'new_follower_post',
-    title: 'New Post',
-    body: 'Anna Martinez posted about the Education Reform Act',
-    isRead: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // 3 days ago
-    referenceId: 'post-6',
-    referenceType: 'post',
-    actor: {
-      id: 'user-7',
-      displayName: 'Anna Martinez',
-      username: 'annam',
-      avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-    },
-  },
-];
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
@@ -206,7 +116,6 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      // Try API first, fall back to mock data
       const response = await api.get<{ notifications: Notification[]; unreadCount: number }>(
         '/api/notifications'
       );
@@ -216,12 +125,18 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         isLoading: false,
       });
     } catch {
-      // Use mock data in development/when API unavailable
-      const unreadCount = mockNotifications.filter((n) => !n.isRead).length;
+      // AN UNREACHABLE BACKEND SHOWS NOTHING, NOT SOMETHING.
+      //
+      // This used to fall back to seven invented notifications — named
+      // strangers who had liked posts that do not exist, with an unread badge
+      // to match. On a platform whose whole claim is that everything traces to
+      // a real record, a fabricated bell is the worst possible failure state:
+      // it is indistinguishable from the truth to the person reading it.
       set({
-        notifications: mockNotifications,
-        unreadCount,
+        notifications: [],
+        unreadCount: 0,
         isLoading: false,
+        error: 'Could not load notifications',
       });
     }
   },

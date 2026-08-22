@@ -11,6 +11,7 @@ export const NotificationType = {
   NEW_FOLLOWER_POST: "new_follower_post",
   LAW_UPDATED: "law_updated",
   MESSAGE: "message",
+  VOICE_USED: "voice_used",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
@@ -27,6 +28,8 @@ export interface NotificationData {
   /** The master reference whose law moved, for a law_updated notification. */
   governmentReferenceId?: string;
   masterReferenceId?: string;
+  /** The position cast in somebody's name, for a voice_used notification. */
+  position?: string;
 }
 
 // Preference field mapping for notification types
@@ -40,6 +43,7 @@ const preferenceFieldMap: Record<NotificationTypeValue, string> = {
   [NotificationType.NEW_FOLLOWER_POST]: "newFollowerPosts",
   [NotificationType.LAW_UPDATED]: "lawUpdates",
   [NotificationType.MESSAGE]: "messages",
+  [NotificationType.VOICE_USED]: "voiceUsed",
 };
 
 /**
@@ -462,6 +466,8 @@ export async function updateNotificationPreferences(
     reposts: boolean;
     messages: boolean;
     newFollowerPosts: boolean;
+    lawUpdates: boolean;
+    voiceUsed: boolean;
   }>
 ): Promise<{
   id: string;
@@ -474,6 +480,8 @@ export async function updateNotificationPreferences(
   reposts: boolean;
   messages: boolean;
   newFollowerPosts: boolean;
+  lawUpdates: boolean;
+  voiceUsed: boolean;
 }> {
   const updated = await prisma.notificationPreference.upsert({
     where: { userId },
@@ -561,4 +569,64 @@ export async function notifyMessage(
     `${senderName}: ${trimmed}`,
     { conversationId, fromUserId: senderId, fromUserName: senderName }
   );
+}
+
+/**
+ * Somebody voted in your name.
+ *
+ * THE HALF OF LIQUID DEMOCRACY THAT IS ALWAYS MISSING. Delegation is sold as
+ * convenience — lend your vote to somebody who follows this more closely than
+ * you do — and the lending is the last you ever hear of it. Every
+ * implementation of this idea shows you a count of delegations you have made
+ * and never once tells you what was done with them.
+ *
+ * A voice you are not told about is a voice you gave away rather than lent.
+ * This platform's Constitution says political power here is "never won, only
+ * borrowed", and borrowed means you find out at the moment it is used, while
+ * you can still do something about it — a direct vote overrides a delegate, so
+ * this notification is also the undo.
+ *
+ * One per person per record. A delegate who changes their mind twice does not
+ * get to fill somebody's notifications; the newest one replaces the old.
+ */
+export async function notifyVoiceUsed(
+  voterId: string,
+  voterName: string,
+  governmentReferenceId: string,
+  referenceTitle: string,
+  position: string
+): Promise<{ notified: number }> {
+  const { whoseVoiceLandedOn } = await import("./delegation-service");
+  const lentTheirVoice = await whoseVoiceLandedOn(voterId, governmentReferenceId);
+  if (lentTheirVoice.length === 0) return { notified: 0 };
+
+  const verb = position === "support" ? "backed" : "opposed";
+  const title = "Your voice was used";
+  const body =
+    `${voterName} ${verb} ${referenceTitle} in your name. ` +
+    "Vote yourself and yours counts instead.";
+
+  // Replace rather than stack. Somebody whose delegate is going back and forth
+  // needs to know where the voice sits now, not to read the history of it in
+  // their notifications.
+  await prisma.notification.deleteMany({
+    where: {
+      userId: { in: lentTheirVoice },
+      type: NotificationType.VOICE_USED,
+      data: { contains: `"governmentReferenceId":"${governmentReferenceId}"` },
+    },
+  });
+
+  let notified = 0;
+  for (const userId of lentTheirVoice) {
+    const result = await createNotification(userId, NotificationType.VOICE_USED, title, body, {
+      governmentReferenceId,
+      fromUserId: voterId,
+      fromUserName: voterName,
+      position,
+    });
+    if (result.created) notified += 1;
+  }
+
+  return { notified };
 }

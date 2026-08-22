@@ -20,6 +20,8 @@ import {
   Repeat2,
   FileText,
   Bell,
+  MessageSquare,
+  UserCheck,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -88,6 +90,32 @@ const preferenceItems: PreferenceConfig[] = [
     description: 'When someone you follow posts',
     icon: FileText,
     color: '#EC4899',
+  },
+  {
+    key: 'messages',
+    title: 'Messages',
+    description: 'When someone sends you a message',
+    icon: MessageSquare,
+    color: '#0EA5E9',
+  },
+  // These two were written by the backend and could not be turned off by
+  // anybody: they were missing from the request schema and from both settings
+  // screens. A preference the product uses but nobody can change is worse than
+  // no preference at all.
+  {
+    key: 'lawUpdates',
+    title: 'A law you shared changed',
+    description: 'When the government amends text you put your name to',
+    icon: FileText,
+    color: '#F59E0B',
+  },
+  {
+    key: 'voiceUsed',
+    title: 'Your voice was used',
+    description:
+      'When somebody you delegated to votes in your name. Leaving this on is how you find out in time to vote for yourself instead.',
+    icon: UserCheck,
+    color: '#F59E0B',
   },
 ];
 
@@ -214,6 +242,9 @@ function NotificationSettingsContent() {
       follows: true,
       reposts: true,
       newFollowerPosts: true,
+      messages: true,
+      lawUpdates: true,
+      voiceUsed: true,
     };
 
     setLocalPreferences(allEnabled);
@@ -242,6 +273,9 @@ function NotificationSettingsContent() {
       follows: false,
       reposts: false,
       newFollowerPosts: false,
+      messages: false,
+      lawUpdates: false,
+      voiceUsed: false,
     };
 
     setLocalPreferences(allDisabled);

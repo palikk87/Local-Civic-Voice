@@ -747,3 +747,89 @@ export async function voiceReceipts(
 
   return receipts;
 }
+
+/**
+ * Everybody whose voice lands on this voter for this record.
+ *
+ * The reverse of the walk `computeWeightedTally` does. That one starts at a
+ * citizen and follows their delegation forward until it reaches somebody who
+ * voted; this starts at the person who voted and works backwards to find every
+ * citizen the vote was cast for.
+ *
+ * WHY IT HAS TO BE THE REVERSE OF THE SAME RULE, not an approximation: the
+ * people this returns are about to be told "your voice was used". Telling
+ * somebody that when it was not, or failing to tell somebody when it was, is
+ * worse than saying nothing at all — it makes the receipts a story rather than
+ * a record. So it respects the same three things the tally does: the most
+ * specific category wins, a direct vote stops the chain dead, and a ring is
+ * abandoned rather than followed.
+ */
+export async function whoseVoiceLandedOn(
+  voterId: string,
+  referenceId: string,
+): Promise<string[]> {
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { category: true },
+  });
+  if (!reference) return [];
+
+  const category = reference.category;
+  const landed: string[] = [];
+  const seen = new Set<string>([voterId]);
+  let frontier = [voterId];
+
+  for (let depth = 0; depth < MAX_DELEGATION_DEPTH && frontier.length > 0; depth += 1) {
+    const incoming = await prisma.delegation.findMany({
+      where: { toUserId: { in: frontier }, isActive: true },
+      select: { fromUserId: true },
+    });
+
+    const candidates = [...new Set(incoming.map((d) => d.fromUserId))].filter(
+      (id) => !seen.has(id),
+    );
+    if (candidates.length === 0) break;
+
+    // A candidate may have lent their voice to several people with different
+    // scopes. Only the edge that actually wins for this record counts, so
+    // somebody who delegated healthcare to A and everything else to B is not
+    // told their voice was used when B votes on a healthcare bill.
+    const theirEdges = await prisma.delegation.findMany({
+      where: { fromUserId: { in: candidates }, isActive: true },
+      select: { fromUserId: true, toUserId: true, category: true },
+    });
+    const edgesByUser = new Map<string, DelegationEdge[]>();
+    for (const edge of theirEdges) {
+      const list = edgesByUser.get(edge.fromUserId) ?? [];
+      list.push(edge);
+      edgesByUser.set(edge.fromUserId, list);
+    }
+
+    const onThisPath = candidates.filter((id) => {
+      const winner = edgeFor(edgesByUser.get(id), category);
+      return winner !== null && frontier.includes(winner.toUserId);
+    });
+    if (onThisPath.length === 0) break;
+
+    // A DIRECT VOTE STOPS THE CHAIN DEAD. Somebody who voted for themselves
+    // kept their own voice, so nothing was cast in their name — and nobody
+    // delegating to them reaches this voter either, because their voice lands
+    // on that person instead.
+    const spokeForThemselves = new Set(
+      (
+        await prisma.governmentReferenceVote.findMany({
+          where: { governmentReferenceId: referenceId, userId: { in: onThisPath } },
+          select: { userId: true },
+        })
+      ).map((v) => v.userId),
+    );
+
+    const carried = onThisPath.filter((id) => !spokeForThemselves.has(id));
+    for (const id of onThisPath) seen.add(id);
+
+    landed.push(...carried);
+    frontier = carried;
+  }
+
+  return landed;
+}

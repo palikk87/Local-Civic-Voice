@@ -19,6 +19,8 @@ interface NotificationPreferences {
   reposts: boolean;
   messages: boolean;
   newFollowerPosts: boolean;
+  lawUpdates: boolean;
+  voiceUsed: boolean;
 }
 
 export default function Settings() {
@@ -32,6 +34,8 @@ export default function Settings() {
     reposts: true,
     messages: true,
     newFollowerPosts: true,
+    lawUpdates: true,
+    voiceUsed: true,
   });
 
   // The backend answers with { preferences: {...} } and takes PUT — same call the
@@ -83,6 +87,8 @@ export default function Settings() {
       reposts: value,
       messages: value,
       newFollowerPosts: value,
+      lawUpdates: value,
+      voiceUsed: value,
     };
     setPreferences(next);
     saveMutation.mutate(next);
@@ -227,6 +233,37 @@ export default function Settings() {
                   <Switch
                     checked={preferences.newFollowerPosts}
                     onCheckedChange={() => togglePreference("newFollowerPosts")}
+                  />
+                </div>
+
+                {/* Both of these were written by the backend and could not be
+                    turned off by anybody: they were missing from the request
+                    schema and from this screen. A preference the product uses
+                    but nobody can change is worse than no preference. */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-foreground">A law you shared changed</p>
+                    <p className="text-sm text-muted-foreground">
+                      When the government amends text you put your name to
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences.lawUpdates}
+                    onCheckedChange={() => togglePreference("lawUpdates")}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-foreground">Your voice was used</p>
+                    <p className="text-sm text-muted-foreground">
+                      When somebody you delegated to votes in your name. Leaving this on is how
+                      you find out in time to vote for yourself instead.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences.voiceUsed}
+                    onCheckedChange={() => togglePreference("voiceUsed")}
                   />
                 </div>
               </div>

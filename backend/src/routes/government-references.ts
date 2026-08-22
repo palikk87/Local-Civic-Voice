@@ -15,6 +15,7 @@ import {
 } from "../services/deduplication-service";
 import { applyWeightedTally, voteBreakdown } from "../services/delegation-service";
 import { pulseOverTime, recordPosition, turningPoints } from "../services/position-history";
+import { notifyVoiceUsed } from "../services/notification-service";
 import { hiddenFrom } from "../services/relationships";
 import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
@@ -777,6 +778,21 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
   // Recalculate and persist WEIGHTED vote counts: each vote carries the
   // voter's own voice plus any active delegations covering this category.
   const tally = await applyWeightedTally(referenceId);
+
+  // TELL THE PEOPLE WHOSE VOICE THIS JUST CARRIED, at the moment it happens
+  // and while they can still override it. Not on a withdrawal: that releases
+  // their voice back down the chain rather than spending it, and "your
+  // delegate stopped voting" is not a thing anybody needs pushed at them.
+  // Not awaited — a vote must not fail because a notification did.
+  if (voteAction !== "removed") {
+    void notifyVoiceUsed(
+      user.id,
+      user.name,
+      referenceId,
+      reference.title,
+      newPosition,
+    ).catch((error) => console.error("[Voice] could not notify delegators", error));
+  }
 
   return c.json({
     vote: voteAction === "removed" ? null : { position: newPosition },

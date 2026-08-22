@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCircle2, MessageCircle, Heart, UserPlus, Share2, Mail, Scale } from "lucide-react";
+import { Bell, CheckCircle2, MessageCircle, Heart, UserPlus, Share2, Mail, Scale, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,25 @@ import { api } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 
+interface NotificationPayload {
+  conversationId?: string;
+  postId?: string;
+  governmentReferenceId?: string;
+  fromUserId?: string;
+}
+
 interface Notification {
   id: string;
   type: string;
   title: string;
   body: string;
-  data?: string;
+  /**
+   * The payload, which the server sends as an OBJECT and older builds of this
+   * page assumed was a JSON string. `JSON.parse` on an object stringifies it
+   * to "[object Object]" and throws, so every notification silently became a
+   * dead end — the whole list looked like it simply did not link anywhere.
+   */
+  data?: NotificationPayload | string | null;
   isRead: boolean;
   createdAt: string;
 }
@@ -43,6 +56,10 @@ function getNotificationIcon(type: string) {
       return <Mail className="h-5 w-5 text-sky-500" />;
     case "law_updated":
       return <Scale className="h-5 w-5 text-amber-500" />;
+    // Somebody voted in your name. The row links to the record, which is where
+    // the undo is: a direct vote overrides a delegate.
+    case "voice_used":
+      return <Users className="h-5 w-5 text-amber-500" />;
     default:
       return <Bell className="h-5 w-5 text-muted-foreground" />;
   }
@@ -59,14 +76,12 @@ function getNotificationIcon(type: string) {
  * page down — an unreadable payload just means this row is not a link.
  */
 function destinationOf(notification: Notification): string | null {
-  let data: {
-    conversationId?: string;
-    postId?: string;
-    governmentReferenceId?: string;
-    fromUserId?: string;
-  };
+  let data: NotificationPayload;
   try {
-    data = notification.data ? JSON.parse(notification.data) : {};
+    data =
+      typeof notification.data === "string"
+        ? (JSON.parse(notification.data) as NotificationPayload)
+        : notification.data ?? {};
   } catch {
     return null;
   }

@@ -22,6 +22,9 @@ import {
   Bell,
   Settings,
   CheckCheck,
+  Mail,
+  Scale,
+  Users,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
@@ -58,7 +61,21 @@ const notificationIcons: Record<NotificationType, { icon: typeof Heart; color: s
   follow: { icon: UserPlus, color: '#22C55E' },
   repost: { icon: Repeat2, color: '#06B6D4' },
   new_follower_post: { icon: FileText, color: '#EC4899' },
+  message: { icon: Mail, color: '#0EA5E9' },
+  law_updated: { icon: Scale, color: '#F59E0B' },
+  // Somebody voted in your name. The row leads to the record, which is where
+  // the undo is: a direct vote overrides a delegate.
+  voice_used: { icon: Users, color: '#F59E0B' },
 };
+
+/**
+ * A type this build has never heard of still has to render.
+ *
+ * The map used to be read straight into `.icon`, so a notification kind added
+ * on the server — or an older app talking to a newer backend — took the whole
+ * screen down rather than showing a bell.
+ */
+const FALLBACK_ICON = { icon: Bell, color: '#94A3B8' };
 
 // Single notification item
 function NotificationItem({
@@ -70,7 +87,7 @@ function NotificationItem({
   index: number;
   onPress: () => void;
 }) {
-  const iconConfig = notificationIcons[notification.type];
+  const iconConfig = notificationIcons[notification.type] ?? FALLBACK_ICON;
   const IconComponent = iconConfig.icon;
 
   return (
@@ -184,11 +201,33 @@ function NotificationsContent() {
       markAsRead(notification.id);
     }
 
-    // Navigate based on reference type
+    // WHERE IT LEADS. The payload the server sends comes first; the
+    // referenceType fields below it were invented by an early mock and the
+    // backend has never set them, so every tap here used to do nothing.
+    const data = notification.data;
+    if (data?.conversationId) {
+      router.push(`/conversation/${data.conversationId}`);
+      return;
+    }
+    // A record: for a voice_used notification this is also the undo, because a
+    // direct vote overrides a delegate.
+    if (data?.governmentReferenceId) {
+      router.push(`/bill/${data.governmentReferenceId}`);
+      return;
+    }
+    if (data?.postId) {
+      router.push('/(tabs)/timeline');
+      return;
+    }
+    if (data?.fromUserId) {
+      router.push(`/user/${data.fromUserId}`);
+      return;
+    }
+
+    // Older payloads, kept so nothing already stored is dropped.
     if (notification.referenceType === 'user' && notification.referenceId) {
       router.push(`/user/${notification.referenceId}`);
     } else if (notification.referenceType === 'post' && notification.referenceId) {
-      // For now, navigate to timeline - could add post detail screen later
       router.push('/(tabs)/timeline');
     } else if (notification.referenceType === 'bill' && notification.referenceId) {
       router.push(`/bill/${notification.referenceId}`);

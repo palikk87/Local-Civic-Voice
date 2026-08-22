@@ -33,6 +33,12 @@ const preferencesSchema = z.object({
   reposts: z.boolean().optional(),
   messages: z.boolean().optional(),
   newFollowerPosts: z.boolean().optional(),
+  // Both of these existed on the model and in the notification service and
+  // could never be turned off, because they were missing from this schema and
+  // from both handlers below. A preference the product writes to but nobody
+  // can change is worse than no preference at all.
+  lawUpdates: z.boolean().optional(),
+  voiceUsed: z.boolean().optional(),
 });
 
 /**
@@ -140,6 +146,8 @@ notificationsRouter.get("/preferences", async (c) => {
         reposts: preferences.reposts,
         messages: preferences.messages,
         newFollowerPosts: preferences.newFollowerPosts,
+        lawUpdates: preferences.lawUpdates,
+        voiceUsed: preferences.voiceUsed,
       },
     });
   } catch (error) {
@@ -177,6 +185,8 @@ notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), a
         reposts: updated.reposts,
         messages: updated.messages,
         newFollowerPosts: updated.newFollowerPosts,
+        lawUpdates: updated.lawUpdates,
+        voiceUsed: updated.voiceUsed,
       },
     });
   } catch (error) {
