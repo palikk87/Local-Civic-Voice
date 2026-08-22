@@ -268,6 +268,34 @@ likes, saves, shares, reposting and quoting, messaging with notifications,
 notifications, searching people and posts, hashtags, discovery, blocking,
 muting and reporting.
 
+Also built, and this is the half no other platform has, because none of them
+have a shared public record to compute it from:
+
+- **Your record.** Every position you have ever taken, on which version of the
+  text, and why if you said. Kept as events rather than as a current state, so
+  reconsidering adds to the record instead of erasing it.
+- **The review queue.** "You backed this in March, it has been amended since,
+  still with it?" Nothing is ever withdrawn for you: silence is not a change
+  of mind.
+- **Who changed their mind.** Per record, who crossed sides, which way, why,
+  and whether the government had amended the text between their two positions.
+  Everywhere else a change of mind is a screenshot-ready liability; here it is
+  the most useful sentence on the page.
+- **The other side.** The people who voted the opposite way on this exact
+  record and then wrote about it. Not inferred from clicks, not a curated
+  panel — a matter of record.
+- **Common ground.** On any profile: what the two of you have both taken a
+  position on, split into agreements and disagreements. Both halves always,
+  because showing only the agreements is a matchmaker for the echo chamber.
+- **Where you stand alone.** Not a score. The positions where fewest people
+  are with you, measured against direct votes only.
+- **Delegation receipts, and a notification the moment your voice is used.**
+  Named delegate, position, record, and the chain if it travelled past the
+  person you chose — arriving while a direct vote can still override it.
+- **A delegate's agreement with you**, on the delegate directory, before you
+  hand anything over. Null below three shared records rather than a
+  flattering percentage.
+
 Not built:
 
 - **Friend requests.** Friendship is now *named* — two people who follow each
@@ -284,9 +312,6 @@ Not built:
 - **Editing a post.** Deliberate — a post is a public statement attached to a
   law, and the platform's own rule is that no post is ever edited. Worth
   confirming that is still the intent rather than an omission.
-- **A trending-hashtags UI on the web.** The endpoint and the tag pages exist
-  and tags in a post are links; nothing yet shows the ranked list. Mobile has
-  the fetch already.
 - **Pinning a post, muting a thread, and a public list of who blocked whom** —
   none of these exist and none of them should without a reason.
 
@@ -401,8 +426,8 @@ read the law live instead of a copy frozen when they were written. A brief is
 generated once per version of the law and reused by everyone after. And no
 number this platform publishes is invented.
 
-There are 147 tests, and each one was verified by breaking the thing it covers
-and watching it fail. That includes the two paths that used to be excused as
+There are 399 tests across 22 files, and each one was verified by breaking the
+thing it covers and watching it fail. That includes the two paths that used to be excused as
 "needs a real API call": the auto-merge runs against congress.gov responses
 recorded from the live API and replayed offline, and the brief pipeline runs end
 to end with the model answered at the network boundary — the classifier, the
