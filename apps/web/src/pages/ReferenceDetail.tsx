@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator";
 import { VotePanel } from "@/components/civic/VotePanel";
 import { OtherSide } from "@/components/civic/OtherSide";
 import { PulseHistory } from "@/components/civic/PulseHistory";
+import { TurningPoints } from "@/components/civic/TurningPoints";
 import { CommentThread } from "@/components/feed/CommentThread";
 import {
   ReferenceTypeBadge,
@@ -230,6 +231,7 @@ export default function ReferenceDetail() {
                   attached to a government record, and every position on that
                   record is known. */}
               <PulseHistory referenceId={reference.id} />
+              <TurningPoints referenceId={reference.id} />
               <OtherSide referenceId={reference.id} />
             </aside>
           </div>

@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "../prisma";
+import { hiddenFrom } from "./relationships";
 
 export type Position = "support" | "oppose" | "withdrawn";
 
@@ -411,5 +412,155 @@ export async function standing(userId: string, minimumVoices = 3): Promise<Stand
       .filter((e) => !e.withMajority)
       .sort((a, b) => a.agreementPct - b.agreementPct)
       .slice(0, 10),
+  };
+}
+
+export interface TurningPoint {
+  id: string;
+  user: { id: string; displayName: string; username: string; avatar: string };
+  from: "support" | "oppose";
+  to: "support" | "oppose";
+  reason: string | null;
+  /** The version of the text they were reading when they moved. */
+  lawVersion: number;
+  /** True when the government had changed the text between their two positions. */
+  afterTextChanged: boolean;
+  createdAt: string;
+}
+
+export interface TurningPoints {
+  results: TurningPoint[];
+  /** Every recorded crossing on this record, not just the page above. */
+  toSupport: number;
+  toOppose: number;
+  total: number;
+  /** People, not crossings — somebody who moved twice is one person. */
+  people: number;
+  /** Crossings that followed a change in the text of the law. */
+  afterTextChanged: number;
+}
+
+/**
+ * Who changed their mind on this law, which way, and what they said about it.
+ *
+ * NO OTHER PLATFORM CAN SHOW THIS, and most are built so it can never be
+ * shown. Elsewhere a change of mind is a liability: the old post is still
+ * there, screenshot-ready, and the safe move is to never say anything you
+ * might have to walk back. The incentive that produces is the one everybody
+ * complains about — people defending a position long after they stopped
+ * believing it, because moving costs more than being wrong.
+ *
+ * This platform can invert that, because a position here is attached to a
+ * government record and the record knows when its own text changed. So a
+ * crossing is not a gotcha, it is evidence: the bill was amended and some
+ * number of people read the new text and moved. That is the single most
+ * useful thing a citizen can know about a contested bill, and it is invisible
+ * everywhere else.
+ *
+ * Public, like the positions themselves. Filtered only for the people the
+ * reader has blocked or muted.
+ */
+export async function turningPoints(
+  referenceId: string,
+  viewerId: string | null | undefined,
+  limit = 10,
+): Promise<TurningPoints> {
+  const hidden = await hiddenFrom(viewerId);
+
+  const crossings = await prisma.positionEvent.findMany({
+    where: {
+      governmentReferenceId: referenceId,
+      isChange: true,
+      ...(hidden.length > 0 ? { userId: { notIn: hidden } } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, userId: true, position: true, reason: true, lawVersion: true, createdAt: true },
+  });
+
+  if (crossings.length === 0) {
+    return { results: [], toSupport: 0, toOppose: 0, total: 0, people: 0, afterTextChanged: 0 };
+  }
+
+  const page = crossings.slice(0, limit);
+  const everyMover = [...new Set(crossings.map((row) => row.userId))];
+  const pageUserIds = [...new Set(page.map((row) => row.userId))];
+
+  // THE PREVIOUS SIDE'S VERSION, not this one's. "They moved after the text
+  // changed" is a claim about the gap between two positions, and the event
+  // alone cannot answer it — an event on version 3 says nothing about whether
+  // the person's earlier position was also taken on version 3.
+  const [priorEvents, users] = await Promise.all([
+    prisma.positionEvent.findMany({
+      where: {
+        governmentReferenceId: referenceId,
+        userId: { in: everyMover },
+        position: { in: ["support", "oppose"] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { userId: true, lawVersion: true, createdAt: true },
+    }),
+    prisma.user.findMany({
+      where: { id: { in: pageUserIds } },
+      select: { id: true, name: true, email: true, image: true },
+    }),
+  ]);
+
+  const byUser = new Map<string, { id: string; name: string; email: string; image: string | null }>(
+    users.map((u) => [u.id, u]),
+  );
+
+  function versionBefore(userId: string, at: Date): number | null {
+    let found: number | null = null;
+    for (const event of priorEvents) {
+      if (event.userId !== userId) continue;
+      if (event.createdAt >= at) break;
+      found = event.lawVersion;
+    }
+    return found;
+  }
+
+  const results: TurningPoint[] = [];
+  for (const row of page) {
+    const user = byUser.get(row.userId);
+    if (!user) continue; // Account deleted between the two queries.
+
+    const to = row.position === "support" ? "support" : "oppose";
+    const previousVersion = versionBefore(row.userId, row.createdAt);
+
+    results.push({
+      id: row.id,
+      user: {
+        id: user.id,
+        displayName: user.name,
+        username: user.email.split("@")[0] ?? user.id,
+        avatar: user.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
+      },
+      // A crossing is binary and isChange is only ever set on one, so the side
+      // they left is the side they did not land on.
+      from: to === "support" ? "oppose" : "support",
+      to,
+      reason: row.reason,
+      lawVersion: row.lawVersion,
+      afterTextChanged: previousVersion !== null && row.lawVersion > previousVersion,
+      createdAt: row.createdAt.toISOString(),
+    });
+  }
+
+  // Counted over every crossing, so the headline does not change when
+  // somebody asks for a shorter page.
+  const afterTextChangedTotal = crossings.filter(
+    (row) => {
+      const previous = versionBefore(row.userId, row.createdAt);
+      return previous !== null && row.lawVersion > previous;
+    },
+  ).length;
+
+  return {
+    results,
+    toSupport: crossings.filter((r) => r.position === "support").length,
+    toOppose: crossings.filter((r) => r.position === "oppose").length,
+    total: crossings.length,
+    people: new Set(crossings.map((r) => r.userId)).size,
+    afterTextChanged: afterTextChangedTotal,
   };
 }

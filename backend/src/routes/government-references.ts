@@ -14,7 +14,7 @@ import {
   recalculateReferenceStats,
 } from "../services/deduplication-service";
 import { applyWeightedTally, voteBreakdown } from "../services/delegation-service";
-import { pulseOverTime, recordPosition } from "../services/position-history";
+import { pulseOverTime, recordPosition, turningPoints } from "../services/position-history";
 import { hiddenFrom } from "../services/relationships";
 import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
@@ -1424,4 +1424,29 @@ governmentReferencesRouter.get("/:id/pulse-history", async (c) => {
 
   const points = await pulseOverTime(referenceId);
   return c.json({ points, count: points.length });
+});
+
+/**
+ * GET /api/government-references/:id/turning-points
+ *
+ * Who changed their mind on this, which way, and why.
+ *
+ * Registered after the export above for the same reason the rest of this file
+ * is: these are static suffixes on `/:id`, and Hono matches in registration
+ * order, so they must never move below a bare `/:id` handler.
+ */
+governmentReferencesRouter.get("/:id/turning-points", async (c) => {
+  const referenceId = c.req.param("id");
+  const user = c.get("user");
+  const limit = Math.min(Number(c.req.query("limit") ?? 10), 50);
+
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { id: true },
+  });
+  if (!reference) {
+    return c.json({ error: "Reference not found" }, 404);
+  }
+
+  return c.json(await turningPoints(referenceId, user?.id ?? null, limit));
 });

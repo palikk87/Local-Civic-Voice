@@ -385,3 +385,205 @@ describe("where you stand", () => {
     expect(mine.mostAlone).toHaveLength(0);
   });
 });
+
+/** Who moved on this law, which way, and what they said about it. */
+async function turning(referenceId: string, cookie?: string, limit?: number) {
+  const response = await fetch(
+    `${BASE_URL}/api/government-references/${referenceId}/turning-points${
+      limit ? `?limit=${limit}` : ""
+    }`,
+    { headers: freshClientHeaders(cookie ? { cookie } : {}) },
+  );
+  return (await response.json()) as {
+    results: Array<{
+      user: { id: string; displayName: string };
+      from: string;
+      to: string;
+      reason: string | null;
+      lawVersion: number;
+      afterTextChanged: boolean;
+    }>;
+    toSupport: number;
+    toOppose: number;
+    total: number;
+    people: number;
+    afterTextChanged: number;
+  };
+}
+
+/** The crossings are written after the vote responds, so wait for them. */
+async function crossingsSettled(referenceId: string, expected: number, cookie?: string) {
+  const deadline = Date.now() + 5_000;
+  let latest = await turning(referenceId, cookie);
+  while (latest.total < expected && Date.now() < deadline) {
+    await Bun.sleep(100);
+    latest = await turning(referenceId, cookie);
+  }
+  return latest;
+}
+
+describe("who changed their mind", () => {
+  test("a crossing is reported with the side left and the side taken", async () => {
+    const mover = await citizen("mover");
+    const bill = await law("A bill about insulin pricing");
+
+    await vote(mover.cookie, bill.id, "support");
+    await vote(mover.cookie, bill.id, "oppose", "The pricing cap was stripped out");
+
+    const moved = await crossingsSettled(bill.id, 1);
+    expect(moved.total).toBe(1);
+    expect(moved.people).toBe(1);
+    expect(moved.toOppose).toBe(1);
+    expect(moved.toSupport).toBe(0);
+    expect(moved.results[0]).toMatchObject({
+      from: "support",
+      to: "oppose",
+      reason: "The pricing cap was stripped out",
+    });
+    expect(moved.results[0]!.user.id).toBe(mover.userId);
+  });
+
+  test("a first position is not a change of mind", async () => {
+    const person = await citizen("firsttimer");
+    const bill = await law();
+
+    await vote(person.cookie, bill.id, "support");
+    await settled(person.cookie, person.userId, 1);
+
+    expect((await turning(bill.id)).total).toBe(0);
+  });
+
+  test("voting the same way twice is not a change of mind", async () => {
+    const person = await citizen("steady");
+    const bill = await law();
+
+    await vote(person.cookie, bill.id, "support");
+    await vote(person.cookie, bill.id, "support");
+    await settled(person.cookie, person.userId, 2);
+
+    expect((await turning(bill.id)).total).toBe(0);
+  });
+
+  test("moving after the government amended the text is marked as such", async () => {
+    const mover = await citizen("reader");
+    const bill = await law();
+
+    await vote(mover.cookie, bill.id, "support");
+    await settled(mover.cookie, mover.userId, 1);
+
+    // The government changes the bill under them.
+    await prisma.governmentReference.update({
+      where: { id: bill.id },
+      data: { lawVersion: 2, lawChangedAt: new Date() },
+    });
+
+    await vote(mover.cookie, bill.id, "oppose", "Read the amended text");
+
+    const moved = await crossingsSettled(bill.id, 1);
+    expect(moved.afterTextChanged).toBe(1);
+    expect(moved.results[0]).toMatchObject({ afterTextChanged: true, lawVersion: 2 });
+  });
+
+  test("moving while the text stood still is not blamed on the text", async () => {
+    const mover = await citizen("persuaded");
+    const bill = await law();
+
+    await vote(mover.cookie, bill.id, "support");
+    await vote(mover.cookie, bill.id, "oppose");
+
+    const moved = await crossingsSettled(bill.id, 1);
+    expect(moved.afterTextChanged).toBe(0);
+    expect(moved.results[0]!.afterTextChanged).toBe(false);
+  });
+
+  test("counts cover every crossing even when the page is short", async () => {
+    const bill = await law();
+    const movers = [
+      await citizen("crowd-a"),
+      await citizen("crowd-b"),
+      await citizen("crowd-c"),
+    ];
+
+    for (const person of movers) {
+      await vote(person.cookie, bill.id, "support");
+      await vote(person.cookie, bill.id, "oppose");
+    }
+
+    const moved = await crossingsSettled(bill.id, 3);
+    const short = await turning(bill.id, undefined, 1);
+
+    expect(short.results).toHaveLength(1);
+    expect(short.total).toBe(3);
+    expect(short.people).toBe(3);
+    expect(short.toOppose).toBe(3);
+    expect(moved.total).toBe(3);
+  });
+
+  test("somebody who moved twice is one person, two crossings", async () => {
+    const wobbler = await citizen("wobbler");
+    const bill = await law();
+
+    await vote(wobbler.cookie, bill.id, "support");
+    await vote(wobbler.cookie, bill.id, "oppose");
+    await vote(wobbler.cookie, bill.id, "support");
+
+    const moved = await crossingsSettled(bill.id, 2);
+    expect(moved.total).toBe(2);
+    expect(moved.people).toBe(1);
+    expect(moved.toSupport).toBe(1);
+    expect(moved.toOppose).toBe(1);
+  });
+
+  test("withdrawing and coming back is not a change of mind", async () => {
+    const person = await citizen("returner");
+    const bill = await law();
+
+    await vote(person.cookie, bill.id, "support");
+    await vote(person.cookie, bill.id, "support"); // Toggles the vote off.
+    await vote(person.cookie, bill.id, "support");
+    await settled(person.cookie, person.userId, 3);
+
+    expect((await turning(bill.id)).total).toBe(0);
+  });
+
+  test("a blocked person's change of mind is not shown to the person who blocked them", async () => {
+    const reader = await citizen("reader");
+    const blocked = await citizen("blocked");
+    const bill = await law();
+
+    await vote(blocked.cookie, bill.id, "support");
+    await vote(blocked.cookie, bill.id, "oppose");
+    await crossingsSettled(bill.id, 1);
+
+    // Negative control: visible before the block, so the assertion below is
+    // about the block rather than about the crossing never being recorded.
+    const before = await turning(bill.id, reader.cookie);
+    expect(before.total).toBe(1);
+
+    const blockResponse = await fetch(`${BASE_URL}/api/safety/blocks/${blocked.userId}`, {
+      method: "POST",
+      headers: freshClientHeaders({ cookie: reader.cookie }),
+    });
+    expect(blockResponse.status).toBe(200);
+
+    const after = await turning(bill.id, reader.cookie);
+    expect(after.total).toBe(0);
+    expect(after.results).toHaveLength(0);
+  });
+
+  test("a law nobody has moved on says so rather than failing", async () => {
+    const bill = await law();
+    const quiet = await turning(bill.id);
+
+    expect(quiet).toMatchObject({ total: 0, people: 0, afterTextChanged: 0 });
+    expect(quiet.results).toEqual([]);
+  });
+
+  test("a made-up law is a 404, not an empty answer", async () => {
+    const response = await fetch(
+      `${BASE_URL}/api/government-references/does-not-exist/turning-points`,
+      { headers: freshClientHeaders({}) },
+    );
+    expect(response.status).toBe(404);
+  });
+});
