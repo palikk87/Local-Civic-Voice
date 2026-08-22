@@ -595,3 +595,155 @@ export async function resolveDelegationChain(
 
   return chain;
 }
+
+export interface VoiceReceipt {
+  referenceId: string;
+  masterReferenceId: string;
+  title: string;
+  referenceType: string;
+  /** The position cast in your name. */
+  position: string;
+  /** Who actually cast it — not always the person you chose. */
+  castBy: { id: string; name: string; username: string | null };
+  /** The person you lent it to, if the chain went further than them. */
+  lentTo: { id: string; name: string; username: string | null } | null;
+  /** Everyone between the person you chose and the person who spoke. */
+  through: ChainLink[];
+  castAt: string;
+}
+
+/**
+ * EVERY TIME SOMEBODY ELSE SPOKE IN YOUR NAME.
+ *
+ * This is the thing liquid democracy is usually missing. Delegation is sold as
+ * convenience — lend your vote to somebody who follows this more closely than
+ * you do — and then the lending is the last you ever hear of it. You are told a
+ * number of delegations you have made, never a list of what was done with them.
+ *
+ * A voice you cannot audit is a voice you have given away rather than lent, and
+ * this platform's own Constitution says political power here is "never won, only
+ * borrowed". Borrowed means you get to see the receipts.
+ *
+ * DERIVED, NOT RECORDED. There is no ledger of delegated votes and there must
+ * not be one: a second store of who-spoke-for-whom would drift from the rule
+ * that actually produces the tally, and then the receipts would describe a
+ * count nobody published. This walks the same chain computeWeightedTally walks,
+ * for one person, and reports what it finds. If the tally is right, these are
+ * right, because they are the same walk.
+ */
+export async function voiceReceipts(
+  userId: string,
+  limit = 50,
+): Promise<VoiceReceipt[]> {
+  const delegations = await prisma.delegation.findMany({
+    where: { fromUserId: userId, isActive: true },
+    select: {
+      toUserId: true,
+      category: true,
+      toUser: { select: { id: true, name: true, username: true } },
+    },
+  });
+  if (delegations.length === 0) return [];
+
+  // Records this person has already spoken on themselves. A direct vote always
+  // overrides a delegate, so nothing was cast in their name on these.
+  const ownVotes = await prisma.governmentReferenceVote.findMany({
+    where: { userId },
+    select: { governmentReferenceId: true },
+  });
+  const spokenFor = new Set(ownVotes.map((v) => v.governmentReferenceId));
+
+  // Everyone the chain could reach from each person they lent a voice to.
+  const reachable = new Map<string, { root: string; hops: number }>();
+  for (const delegation of delegations) {
+    let current = delegation.toUserId;
+    const seen = new Set<string>([userId, current]);
+    reachable.set(current, { root: delegation.toUserId, hops: 0 });
+
+    for (let hop = 1; hop < MAX_DELEGATION_DEPTH; hop += 1) {
+      const onward = await prisma.delegation.findMany({
+        where: {
+          fromUserId: current,
+          isActive: true,
+          OR: [
+            { category: null },
+            { category: "all" },
+            ...(delegation.category ? [{ category: delegation.category }] : []),
+          ],
+        },
+        select: { fromUserId: true, toUserId: true, category: true },
+      });
+      const edge = edgeFor(onward, delegation.category ?? null);
+      if (!edge || seen.has(edge.toUserId)) break;
+      seen.add(edge.toUserId);
+      current = edge.toUserId;
+      if (!reachable.has(current)) {
+        reachable.set(current, { root: delegation.toUserId, hops: hop });
+      }
+    }
+  }
+
+  const speakerIds = [...reachable.keys()];
+  const votes = await prisma.governmentReferenceVote.findMany({
+    where: { userId: { in: speakerIds }, governmentReferenceId: { notIn: [...spokenFor] } },
+    orderBy: { updatedAt: "desc" },
+    take: limit * 2,
+    select: {
+      userId: true,
+      position: true,
+      updatedAt: true,
+      governmentReference: {
+        select: { id: true, masterReferenceId: true, title: true, referenceType: true, category: true },
+      },
+    },
+  });
+
+  const speakers = new Map(
+    (
+      await prisma.user.findMany({
+        where: { id: { in: speakerIds } },
+        select: { id: true, name: true, username: true },
+      })
+    ).map((u) => [u.id, u]),
+  );
+
+  const byDelegate = new Map(delegations.map((d) => [d.toUserId, d]));
+  const receipts: VoiceReceipt[] = [];
+  const counted = new Set<string>();
+
+  for (const vote of votes) {
+    const reference = vote.governmentReference;
+    if (counted.has(reference.id)) continue;
+
+    const route = reachable.get(vote.userId);
+    if (!route) continue;
+
+    // A category delegation only carries on records in that category.
+    const delegation = byDelegate.get(route.root)!;
+    const scoped = delegation.category && delegation.category !== "all";
+    if (scoped && reference.category !== delegation.category) continue;
+
+    counted.add(reference.id);
+    const speaker = speakers.get(vote.userId);
+    if (!speaker) continue;
+
+    receipts.push({
+      referenceId: reference.id,
+      masterReferenceId: reference.masterReferenceId,
+      title: reference.title,
+      referenceType: reference.referenceType,
+      position: vote.position,
+      castBy: speaker,
+      lentTo: route.hops > 0 ? delegation.toUser : null,
+      through:
+        route.hops > 0
+          ? await resolveDelegationChain(delegation.toUserId, delegation.category ?? null)
+          : [],
+      castAt: vote.updatedAt.toISOString(),
+    });
+
+    if (receipts.length >= limit) break;
+  }
+
+  return receipts;
+}

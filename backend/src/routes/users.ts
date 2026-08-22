@@ -4,6 +4,11 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { notifyFollow } from "../services/notification-service";
 import { blockExistsBetween, hiddenFrom } from "../services/relationships";
+import {
+  positionHistory,
+  positionSummary,
+  positionsNeedingReview,
+} from "../services/position-history";
 import type { auth } from "../auth";
 
 type AuthVariables = {
@@ -757,4 +762,65 @@ usersRouter.get("/:id/friends", zValidator("query", paginationQuerySchema), asyn
       hasMore: offset + limit < friendIds.length,
     },
   });
+});
+
+/**
+ * GET /api/users/:id/positions
+ *
+ * A citizen's record: every position they have taken, newest first, with the
+ * version of the law it was taken on.
+ *
+ * PUBLIC ON PURPOSE. This platform asks people to take public positions on
+ * public business. A position you can take back invisibly is not a public
+ * position, it is a poll answer — and a Pulse built from poll answers is not
+ * the thing the Constitution here says it is. Article IV of the Bill of Rights
+ * promises anonymity for personal data, not for what somebody chose to say in
+ * public about a law.
+ */
+usersRouter.get("/:id/positions", async (c) => {
+  const id = c.req.param("id");
+  const currentUser = c.get("user");
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+  if (!user) {
+    return c.json({ error: "User not found" }, 404);
+  }
+  if (currentUser && (await blockExistsBetween(currentUser.id, id))) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 100);
+  const cursor = c.req.query("cursor") || undefined;
+
+  const [history, summary] = await Promise.all([
+    positionHistory(id, limit, cursor),
+    positionSummary(id),
+  ]);
+
+  return c.json({ ...history, summary });
+});
+
+/**
+ * GET /api/users/me/positions/review
+ *
+ * Positions this person took on a version of a law that has since changed.
+ *
+ * The reason this exists: a tally built from positions taken on text that no
+ * longer exists is a number about nothing, and the only person who can fix any
+ * given one of them is the person who took it. So they get asked — "you backed
+ * this in March, it has been amended since, still with it?" — rather than being
+ * left standing behind wording they never read.
+ *
+ * Nothing is withdrawn automatically. Silence is not a change of mind, and a
+ * platform that decides on your behalf what your silence meant has taken the
+ * position for you.
+ */
+usersRouter.get("/me/positions/review", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const results = await positionsNeedingReview(currentUser.id);
+  return c.json({ results, count: results.length });
 });

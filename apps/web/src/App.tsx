@@ -50,6 +50,8 @@ const ExecutiveOrderDetail = lazy(() => import("./pages/ExecutiveOrderDetail"));
 const ScotusDetail = lazy(() => import("./pages/ScotusDetail"));
 const UserProfile = lazy(() => import("./pages/UserProfile"));
 const HashtagPage = lazy(() => import("./pages/HashtagPage"));
+const MyRecord = lazy(() => import("./pages/MyRecord"));
+const PositionReview = lazy(() => import("./pages/PositionReview"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const App = () => (
@@ -187,6 +189,8 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/user/:id" element={<UserProfile />} />
               <Route path="/hashtag/:tag" element={<HashtagPage />} />
+              <Route path="/record" element={<MyRecord />} />
+              <Route path="/record/review" element={<PositionReview />} />
               <Route path="/bill/:id" element={<BillDetail />} />
               <Route path="/executive-order/:id" element={<ExecutiveOrderDetail />} />
               <Route path="/scotus/:id" element={<ScotusDetail />} />

@@ -71,6 +71,7 @@ model User {
   mutesReceived          Mute[]                    @relation("Muted")
   reportsFiled           Report[]                  @relation("Reporter")
   reportsAbout           Report[]                  @relation("ReportedUser")
+  positionEvents         PositionEvent[]
 }
 
 model AdminSession {
@@ -670,6 +671,7 @@ model GovernmentReference {
   mergedFrom        GovernmentReference[]     @relation("MergedReferences")
   posts             Post[]                    @relation("GovernmentReferencePosts")
   votes             GovernmentReferenceVote[]
+  positionEvents    PositionEvent[]
   names             ReferenceName[]
   candidatesAsLeft  ReferenceMergeCandidate[] @relation("MergeCandidateLeft")
   candidatesAsRight ReferenceMergeCandidate[] @relation("MergeCandidateRight")
@@ -938,4 +940,43 @@ model Report {
   @@index([reporterId])
   @@index([postId])
   @@index([reportedUserId])
+}
+
+/// One moment a person took a position, kept forever.
+///
+/// GovernmentReferenceVote holds where somebody stands NOW: one row per person
+/// per record, overwritten when they change their mind. That is the right shape
+/// for a tally and the wrong shape for a record of a citizen, because it means
+/// the platform cannot answer the question a citizen most wants answered about
+/// themselves — what did I say, and when, and about which version of the law.
+///
+/// This is append-only. Nothing here is ever updated or deleted while the
+/// account exists. Changing your mind adds a row; it does not erase one.
+///
+/// WHY THE LAW VERSION IS ON IT. The text under a position moves. Somebody who
+/// backed a bill in March did not back what it says in August, and treating
+/// those as the same position is how a person ends up publicly behind text they
+/// never read. Storing the version the position was taken on is what makes
+/// "this law has changed since you backed it" answerable at all.
+model PositionEvent {
+  id                    String   @id @default(cuid())
+  userId                String
+  governmentReferenceId String
+  /// support, oppose, or withdrawn
+  position              String
+  /// GovernmentReference.lawVersion at the moment this was taken.
+  lawVersion            Int      @default(1)
+  /// Why they changed their mind, when they chose to say. Never required —
+  /// a reason people are forced to give is a reason people invent.
+  reason                String?
+  /// True when this position replaced an earlier one on the same record.
+  isChange              Boolean  @default(false)
+  createdAt             DateTime @default(now())
+
+  user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  governmentReference GovernmentReference @relation(fields: [governmentReferenceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([governmentReferenceId])
+  @@index([userId, governmentReferenceId])
 }

@@ -11,6 +11,7 @@ import {
   LogOut,
   Newspaper,
   MessageCircle,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { Seal } from "@/components/civic/Seal";
@@ -37,6 +38,9 @@ const NAV: NavItem[] = [
   { to: "/people", label: "People", icon: Users },
   { to: "/messages", label: "Messages", icon: MessageCircle, capability: "viewMessages" },
   { to: "/government", label: "Government", icon: Landmark },
+  // Where you stood, and what was said in your name. Behind the same
+  // capability as the profile: it is a signed-in view of yourself.
+  { to: "/record", label: "My record", icon: Scale, capability: "viewProfile" },
   { to: "/profile", label: "Profile", icon: User, capability: "viewProfile" },
 ];
 

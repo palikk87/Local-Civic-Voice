@@ -8,6 +8,7 @@ import {
   listEligibleDelegates,
   republishTalliesAfterDelegationChange,
   resolveDelegationChain,
+  voiceReceipts,
   DELEGATE_REQUIREMENTS,
 } from "../services/delegation-service";
 
@@ -219,3 +220,34 @@ delegationsRouter.delete("/:id", async (c) => {
 });
 
 export { delegationsRouter };
+
+/**
+ * GET /api/delegations/receipts
+ *
+ * Every time somebody else spoke in your name.
+ *
+ * Liquid democracy is normally sold as convenience and then goes quiet: you are
+ * told how many delegations you have made, never what was done with them. This
+ * platform's Constitution says political power here is "never won, only
+ * borrowed" — and borrowed means you get the receipts.
+ *
+ * Each row names the record, the position taken, and who actually cast it,
+ * which is not always the person you chose: a voice travels the chain, so it
+ * can land with somebody you have never heard of. That is exactly the case
+ * worth showing, and the reason to show it.
+ */
+delegationsRouter.get("/receipts", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 100);
+  const results = await voiceReceipts(currentUser.id, limit);
+
+  return c.json({
+    results,
+    // How many of these were cast by somebody other than the person they chose.
+    carriedOnward: results.filter((r) => r.lentTo !== null).length,
+  });
+});

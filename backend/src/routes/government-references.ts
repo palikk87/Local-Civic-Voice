@@ -14,6 +14,7 @@ import {
   recalculateReferenceStats,
 } from "../services/deduplication-service";
 import { applyWeightedTally, voteBreakdown } from "../services/delegation-service";
+import { recordPosition } from "../services/position-history";
 import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
 import { ensureReferenceContent } from "../services/reference-content";
@@ -110,6 +111,12 @@ const updateReferenceSchema = z.object({
 
 const voteSchema = z.object({
   position: z.enum(["support", "oppose"]),
+  /**
+   * Why, when somebody chooses to say — usually when they are changing their
+   * mind. Never required: a reason people are forced to give is a reason people
+   * invent, and an invented reason is worse than none.
+   */
+  reason: z.string().max(500).optional(),
 });
 
 const mergeSchema = z.object({
@@ -700,7 +707,7 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
   }
 
   let referenceId = c.req.param("id");
-  const { position } = c.req.valid("json");
+  const { position, reason: reasonGiven } = c.req.valid("json");
 
   const reference = await prisma.governmentReference.findUnique({
     where: { id: referenceId },
@@ -756,6 +763,16 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
     });
   }
 
+  // KEEP THE RECORD. The vote row holds where they stand now; this remembers
+  // that they took the position at all, on which version of the text, and why
+  // if they said. Not awaited — a vote must not fail because its history did.
+  void recordPosition({
+    userId: user.id,
+    referenceId,
+    position: voteAction === "removed" ? "withdrawn" : newPosition,
+    reason: reasonGiven,
+  });
+
   // Recalculate and persist WEIGHTED vote counts: each vote carries the
   // voter's own voice plus any active delegations covering this category.
   const tally = await applyWeightedTally(referenceId);
@@ -795,6 +812,8 @@ governmentReferencesRouter.delete("/:id/vote", async (c) => {
   } catch {
     // Vote doesn't exist, that's okay
   }
+
+  void recordPosition({ userId: user.id, referenceId, position: "withdrawn" });
 
   // Recalculate and persist WEIGHTED vote counts (delegations included)
   const tally = await applyWeightedTally(referenceId);

@@ -399,6 +399,45 @@ try {
     expect("and the post can be found by searching for it", searched >= 1, `search found ${searched}`);
   }
 
+  // ------------------------------------------------- the citizen's own record
+  //
+  // The two things this platform asks people to care about and could not answer
+  // about them: what did I say, and what was said in my name.
+
+  const myRecord = await until(one.page, async () => {
+    const me = (await (await fetch("/api/auth/get-session", { credentials: "include" })).json())
+      .user;
+    const r = await fetch(`/api/users/${me.id}/positions`, { credentials: "include" });
+    const body = await r.json().catch(() => null);
+    return body && body.results.length > 0 ? body : false;
+  });
+  expect(
+    "the position taken in this run is on the citizen's record",
+    Boolean(myRecord),
+    "the record stayed empty after voting",
+  );
+
+  if (myRecord) {
+    expect(
+      "and the record knows which version of the law it was about",
+      typeof myRecord.results[0].lawVersion === "number" &&
+        myRecord.summary.total >= 1,
+      `summary was ${JSON.stringify(myRecord.summary)}`,
+    );
+  }
+
+  const receipts = await two.page.evaluate(async () => {
+    const r = await fetch("/api/delegations/receipts?limit=100", { credentials: "include" });
+    return r.json().catch(() => null);
+  });
+  expect(
+    "a lent voice comes with receipts",
+    // The follower revoked earlier in this run, so the honest answer here is an
+    // empty list from a working endpoint rather than a failure.
+    receipts !== null && Array.isArray(receipts.results),
+    `receipts answered ${JSON.stringify(receipts)?.slice(0, 80)}`,
+  );
+
   // ------------------------------------------------------------- blocking
   //
   // The safety feature that used to pop an alert claiming it had worked.

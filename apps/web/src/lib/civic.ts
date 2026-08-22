@@ -520,3 +520,73 @@ export interface SafetyListEntry {
   user: { id: string; name: string; username: string | null; image: string | null };
   createdAt: string;
 }
+
+/**
+ * A citizen's record, and the receipts for a lent voice.
+ *
+ * Both answer questions this platform asks people to care about and could not
+ * answer about itself: what did I say, and what was said in my name.
+ */
+export interface PositionRecord {
+  id: string;
+  position: string;
+  reason: string | null;
+  isChange: boolean;
+  lawVersion: number;
+  lawMovedSince: boolean;
+  createdAt: string;
+  reference: {
+    id: string;
+    masterReferenceId: string;
+    title: string;
+    referenceType: string;
+    lawVersion: number;
+  };
+}
+
+export interface PositionSummary {
+  total: number;
+  support: number;
+  oppose: number;
+  withdrawn: number;
+  changesOfMind: number;
+  standingOnOldText: number;
+}
+
+export interface PositionNeedingReview {
+  position: string;
+  takenAt: string;
+  takenOnVersion: number;
+  nowAtVersion: number;
+  lawChangedAt: string | null;
+  reference: { id: string; masterReferenceId: string; title: string; referenceType: string };
+}
+
+export interface VoiceReceipt {
+  referenceId: string;
+  masterReferenceId: string;
+  title: string;
+  referenceType: string;
+  position: string;
+  castBy: { id: string; name: string; username: string | null };
+  lentTo: { id: string; name: string; username: string | null } | null;
+  through: Array<{ id: string; name: string; username: string | null }>;
+  castAt: string;
+}
+
+export const recordApi = {
+  positions: (userId: string, cursor?: string) =>
+    api.get<{ results: PositionRecord[]; nextCursor: string | null; summary: PositionSummary }>(
+      `/api/users/${userId}/positions${cursor ? `?cursor=${cursor}` : ""}`,
+    ),
+
+  /** Positions taken on a version of a law that has since moved on. */
+  needingReview: () =>
+    api.get<{ results: PositionNeedingReview[]; count: number }>(
+      "/api/users/me/positions/review",
+    ),
+
+  /** Every time somebody else spoke in your name. */
+  receipts: () =>
+    api.get<{ results: VoiceReceipt[]; carriedOnward: number }>("/api/delegations/receipts"),
+};

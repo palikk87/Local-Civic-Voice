@@ -417,6 +417,130 @@ describe("liquid democracy", () => {
     expect(mine.delegations[0]!.chain).toEqual([]);
   });
 
+  test("you can see every time somebody spoke in your name", async () => {
+    const leader = await citizen("leader");
+    const follower = await citizen("follower");
+    await makeEligible(leader.userId);
+
+    const first = await reference();
+    const second = await reference();
+    await delegate(follower.cookie, leader.userId);
+
+    await vote(leader.cookie, first.id, "support");
+    await vote(leader.cookie, second.id, "oppose");
+
+    const receipts = (await (
+      await fetch(`${BASE_URL}/api/delegations/receipts?limit=100`, {
+        headers: freshClientHeaders({ cookie: follower.cookie }),
+      })
+    ).json()) as { results: Array<{ referenceId: string; position: string; castBy: { id: string } }> };
+
+    // A voice you cannot audit is a voice you gave away rather than lent.
+    //
+    // Asserted by naming the records rather than counting them: the leader also
+    // has the twenty votes that earned their eligibility, and those were cast
+    // in this person's name too. That is not noise in the fixture — it is the
+    // feature. Somebody who lends their voice inherits their delegate's whole
+    // record from that moment, and a receipt that hid twenty of twenty-two
+    // would be the exact omission this exists to fix.
+    const mine = new Map(receipts.results.map((r) => [r.referenceId, r]));
+    expect(mine.get(first.id)?.position).toBe("support");
+    expect(mine.get(second.id)?.position).toBe("oppose");
+    expect(receipts.results.every((r) => r.castBy.id === leader.userId)).toBe(true);
+  });
+
+  test("a record you voted on yourself is not on the receipt", async () => {
+    const leader = await citizen("leader");
+    const follower = await citizen("follower");
+    await makeEligible(leader.userId);
+
+    const bill = await reference();
+    await delegate(follower.cookie, leader.userId);
+    await vote(leader.cookie, bill.id, "support");
+    await vote(follower.cookie, bill.id, "oppose");
+
+    // Nobody spoke for them here — they spoke for themselves.
+    const receipts = (await (
+      await fetch(`${BASE_URL}/api/delegations/receipts?limit=100`, {
+        headers: freshClientHeaders({ cookie: follower.cookie }),
+      })
+    ).json()) as { results: Array<{ referenceId: string }> };
+    expect(receipts.results.some((r) => r.referenceId === bill.id)).toBe(false);
+  });
+
+  test("the receipt names who actually spoke, even down a chain", async () => {
+    const top = await citizen("top");
+    const middle = await citizen("middle");
+    const bottom = await citizen("bottom");
+    await makeEligible(top.userId);
+    await makeEligible(middle.userId);
+
+    const bill = await reference();
+    await delegate(bottom.cookie, middle.userId);
+    await delegate(middle.cookie, top.userId);
+    await vote(top.cookie, bill.id, "support");
+
+    const receipts = (await (
+      await fetch(`${BASE_URL}/api/delegations/receipts?limit=100`, {
+        headers: freshClientHeaders({ cookie: bottom.cookie }),
+      })
+    ).json()) as {
+      results: Array<{ referenceId: string; castBy: { id: string }; lentTo: { id: string } | null }>;
+      carriedOnward: number;
+    };
+
+    // THE CASE THAT MATTERS. bottom chose middle. top spoke. Being told "you
+    // have one delegation" hides that entirely, and it is the one fact a person
+    // would act on.
+    const receipt = receipts.results.find((r) => r.referenceId === bill.id);
+    expect(receipt?.castBy.id).toBe(top.userId);
+    expect(receipt?.lentTo?.id).toBe(middle.userId);
+    expect(receipts.carriedOnward).toBeGreaterThan(0);
+  });
+
+  test("a category delegation only shows what it actually carried", async () => {
+    const leader = await citizen("leader");
+    const follower = await citizen("follower");
+    await makeEligible(leader.userId);
+
+    const health = await reference("healthcare");
+    const defense = await reference("defense");
+    await delegate(follower.cookie, leader.userId, "healthcare");
+
+    await vote(leader.cookie, health.id, "support");
+    await vote(leader.cookie, defense.id, "support");
+
+    const receipts = (await (
+      await fetch(`${BASE_URL}/api/delegations/receipts`, {
+        headers: freshClientHeaders({ cookie: follower.cookie }),
+      })
+    ).json()) as { results: Array<{ referenceId: string }> };
+
+    const seen = receipts.results.map((r) => r.referenceId);
+    expect(seen).toContain(health.id);
+    expect(seen).not.toContain(defense.id);
+  });
+
+  test("revoking stops the receipts, because it stops the lending", async () => {
+    const leader = await citizen("leader");
+    const follower = await citizen("follower");
+    await makeEligible(leader.userId);
+
+    const bill = await reference();
+    const created = (await (await delegate(follower.cookie, leader.userId)).json()) as {
+      delegation: { id: string };
+    };
+    await vote(leader.cookie, bill.id, "support");
+    await revoke(follower.cookie, created.delegation.id);
+
+    const receipts = (await (
+      await fetch(`${BASE_URL}/api/delegations/receipts?limit=100`, {
+        headers: freshClientHeaders({ cookie: follower.cookie }),
+      })
+    ).json()) as { results: unknown[] };
+    expect(receipts.results).toHaveLength(0);
+  });
+
   test("an ineligible account cannot be lent a voice", async () => {
     const newcomer = await citizen("newcomer");
     const follower = await citizen("follower");

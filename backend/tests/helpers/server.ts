@@ -338,15 +338,38 @@ export async function resetData(): Promise<void> {
   //
   // The one thing tests do change is lastAccessAt, written on each login. No
   // test reads it, and it is overwritten rather than accumulated.
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      "Session", "Account", "Verification",
-      "GovernmentReferenceVote", "ReferenceMergeCandidate", "ReferenceName", "GovernmentReference",
-      "Message", "ConversationParticipant", "Conversation",
-      "AdminSession", "B2BSession", "AdminActivityLog", "Announcement",
-      "User"
-    RESTART IDENTITY CASCADE
-  `);
+  // RETRIED, BECAUSE THE SERVER IS STILL WORKING.
+  //
+  // Several writes are deliberately fire-and-forget — a notification, a
+  // hashtag, a record of the position somebody just took — so a request can
+  // return while its side effects are still in flight. TRUNCATE wants a lock
+  // nobody else holds, and one of those writes holding a row lock is a
+  // deadlock: Postgres kills one of the two, and the loser is whichever this
+  // test happened to be.
+  //
+  // Not a product bug. In production nothing truncates. It is a consequence of
+  // resetting a live server's database between tests, and the fix belongs here.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        TRUNCATE TABLE
+          "Session", "Account", "Verification",
+          "GovernmentReferenceVote", "ReferenceMergeCandidate", "ReferenceName", "GovernmentReference",
+          "Message", "ConversationParticipant", "Conversation",
+          "AdminSession", "B2BSession", "AdminActivityLog", "Announcement",
+          "User"
+        RESTART IDENTITY CASCADE
+      `);
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      // 40P01 deadlock, 40001 serialization failure, P2010 raw-query wrapper.
+      const contended =
+        code === "P2010" || code === "40P01" || code === "40001" || String(error).includes("deadlock");
+      if (!contended || attempt === 4) throw error;
+      await Bun.sleep(100 * (attempt + 1));
+    }
+  }
 }
 
 /**

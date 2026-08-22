@@ -3,7 +3,7 @@
 // Data: GET /api/users/:id, GET /api/posts?authorId=:id, POST /api/users/:id/follow,
 // POST /api/delegations (server enforces earned delegate eligibility).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Calendar,
@@ -233,10 +233,15 @@ export default function UserProfile() {
               <span className="text-lg font-bold text-white">{profile.following}</span>
               <span className="text-sm text-slate-400">Following</span>
             </div>
-            <div className="flex flex-col items-center">
+            <Link to={`/record?user=${id}`} className="flex flex-col items-center">
               <span className="text-lg font-bold text-white">{profile.votesCount}</span>
-              <span className="text-sm text-slate-400">Votes</span>
-            </div>
+              {/* A citizen's positions are public. That is the premise: this
+                  platform asks for public positions on public business, and a
+                  position nobody can look up is a poll answer. */}
+              <span className="text-sm text-slate-400 underline-offset-2 hover:underline">
+                Positions
+              </span>
+            </Link>
           </div>
 
           {/* Actions */}
