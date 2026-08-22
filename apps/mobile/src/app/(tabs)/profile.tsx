@@ -27,6 +27,7 @@ import {
   Scroll,
   BookOpen,
   BarChart3,
+  Scale,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -580,6 +581,34 @@ function ProfileContent() {
                   <ChevronRight size={20} color="#FCA5A5" />
                 </View>
               </LinearGradient>
+            </Pressable>
+          </View>
+
+          {/* Your record — the platform could not answer this about its own
+              users until now. Sits above delegation because what was said in
+              your name is the reason to go and check who is saying it. */}
+          <View className="px-4 mb-6">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/record');
+              }}
+              className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50"
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-12 h-12 rounded-full bg-slate-700/60 items-center justify-center mr-3">
+                    <Scale size={24} color="#F59E0B" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-white font-semibold text-lg">Your record</Text>
+                    <Text className="text-slate-400 text-sm">
+                      Every position you have taken, and everything said in your name
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={20} color="#F59E0B" />
+              </View>
             </Pressable>
           </View>
 

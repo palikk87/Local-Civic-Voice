@@ -63,6 +63,11 @@ import {
 import { calculateRepresentationGap } from '@/lib/representation-gap';
 import { PulseGap } from '@/components/PulseGap';
 import { CitizensBriefCard } from '@/components/CitizensBrief';
+import {
+  TurningPointsPanel,
+  OtherSidePanel,
+  PulseHistoryPanel,
+} from '@/components/CivicPanels';
 import { NewsReelCarousel } from '@/components/NewsReelCarousel';
 import { TransparencyIndicator, ArticleBadge } from '@/components/BillOfRightsBadge';
 import type { Bill, Representative } from '@/lib/types';
@@ -872,6 +877,18 @@ export default function BillDetailScreen() {
                 />
               </Animated.View>
             )}
+
+            {/* The three things only this platform can show: who crossed
+                sides and why, what the other side actually wrote, and when
+                opinion moved relative to the text moving. Web parity. */}
+            <Animated.View
+              entering={FadeInDown.delay(127).springify()}
+              className="px-4"
+            >
+              <TurningPointsPanel referenceId={billRefData?.reference?.id} />
+              <OtherSidePanel referenceId={billRefData?.reference?.id} />
+              <PulseHistoryPanel referenceId={billRefData?.reference?.id} />
+            </Animated.View>
 
             {/* Vote Transparency - Article III Compliance */}
             <Animated.View
