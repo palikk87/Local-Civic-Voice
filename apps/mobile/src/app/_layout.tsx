@@ -29,6 +29,7 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="executive-order/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="scotus/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="record" options={{ headerShown: false }} />
+        <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
         <Stack.Screen name="delegates" options={{ headerShown: false }} />
         <Stack.Screen name="messages" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />

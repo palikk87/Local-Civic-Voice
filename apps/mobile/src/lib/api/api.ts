@@ -26,6 +26,54 @@ const request = async <T>(
   return response.json();
 };
 
+export interface UploadedMediaResponse {
+  id: string;
+  type: string;
+  url: string;
+  thumbnailUrl: string | null;
+}
+
+/**
+ * Upload one file and get back what the server stored.
+ *
+ * SEPARATE FROM `request` because multipart must not carry a JSON
+ * content-type, and because the body is FormData rather than a string.
+ *
+ * It exists at all because every caller was writing its own — against a
+ * RELATIVE url, which on a phone has no origin to resolve against, so the
+ * upload could never have reached the API. Each of them then fell back to
+ * passing the local `file://` path off as an uploaded URL, which no other
+ * device can load.
+ */
+export async function uploadMedia(file: {
+  uri: string;
+  name: string;
+  type: string;
+}): Promise<UploadedMediaResponse> {
+  const body = new FormData();
+  body.append("file", file as unknown as Blob);
+
+  const response = await fetch(`${baseUrl}/api/media/upload`, {
+    method: "POST",
+    body: body as unknown as BodyInit,
+    credentials: "include",
+    // Content-Type is deliberately unset: the runtime has to add the multipart
+    // boundary itself, and naming the type by hand omits it.
+    headers: { Cookie: authClient.getCookie() },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Upload failed" }));
+    throw new Error(error.error || "Upload failed");
+  }
+
+  const result = (await response.json()) as { media?: UploadedMediaResponse };
+  if (!result.media?.url) {
+    throw new Error("Upload returned no file");
+  }
+  return result.media;
+}
+
 export const api = {
   get: <T>(url: string) => request<T>(url),
   post: <T>(url: string, body?: unknown) =>

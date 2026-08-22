@@ -28,6 +28,7 @@ import {
   BookOpen,
   BarChart3,
   Scale,
+  Pencil,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
@@ -384,6 +385,19 @@ function ProfileContent() {
               ) : (
                 <LogOut size={20} color="#EF4444" />
               )}
+            </Pressable>
+            {/* Editing an account was impossible: the endpoint existed and
+                nothing but the signup form ever called it, so a name was
+                whatever it was on the day the account was made. */}
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/edit-profile');
+              }}
+              accessibilityLabel="Edit profile"
+              className="bg-slate-800 p-2 rounded-full mr-2"
+            >
+              <Pencil size={20} color="#64748B" />
             </Pressable>
             <Pressable
               onPress={handleOpenSettings}

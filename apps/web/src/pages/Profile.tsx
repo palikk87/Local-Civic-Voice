@@ -20,8 +20,10 @@ import {
   BookOpen,
   BarChart3,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { EditProfileDialog } from "@/components/profile/EditProfileDialog";
 import { AppShell } from "@/components/layout/AppShell";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore } from "@/lib/mobile/voting-store";
@@ -205,6 +207,7 @@ export default function Profile() {
   const mockSignOut = useAuthStore((s) => s.signOut);
   const queryClient = useQueryClient();
   const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
+  const [editing, setEditing] = useState<boolean>(false);
 
   const user = mockUser ?? (sessionUser ? authUserFromSession(sessionUser) : null);
 
@@ -331,6 +334,16 @@ export default function Profile() {
               ) : (
                 <LogOut size={20} color="#EF4444" />
               )}
+            </button>
+            {/* Editing an account was impossible: the endpoint existed and
+                nothing but the signup form ever called it, so a name was
+                whatever it was on the day the account was made. */}
+            <button
+              onClick={() => setEditing(true)}
+              className="bg-slate-800 p-2 rounded-full transition hover:bg-slate-700"
+              aria-label="Edit profile"
+            >
+              <Pencil size={20} color="#64748B" />
             </button>
             <button
               onClick={() => navigate("/settings")}
@@ -625,6 +638,18 @@ export default function Profile() {
           </div>
         </div>
       </div>
+
+      <EditProfileDialog
+        open={editing}
+        onOpenChange={setEditing}
+        profile={{
+          displayName: user.displayName,
+          username: user.username,
+          bio: user.bio,
+          location: user.location,
+          avatar: user.avatar,
+        }}
+      />
     </AppShell>
   );
 }

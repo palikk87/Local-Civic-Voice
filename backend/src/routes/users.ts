@@ -650,7 +650,14 @@ usersRouter.patch("/me", zValidator("json", z.object({
   username: z.string().min(1).max(30).regex(/^[a-z0-9_]+$/, "lowercase letters, numbers and underscores only").optional(),
   bio: z.string().max(500).optional(),
   location: z.string().max(100).optional(),
-  image: z.string().url().optional(),
+  // http(s) ONLY. z.url() accepts file:// and any other scheme, and a
+  // `file:///var/mobile/.../IMG_0042.jpg` avatar stores cleanly and then
+  // renders as a broken image on every device except the one that set it.
+  image: z
+    .string()
+    .url()
+    .refine((value) => /^https?:\/\//i.test(value), "must be an http(s) URL")
+    .optional(),
 })), async (c) => {
   const currentUser = c.get("user");
   if (!currentUser) {

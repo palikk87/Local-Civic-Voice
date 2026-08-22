@@ -19,6 +19,7 @@ import { useTimelineStore, type TaggedUser } from "@/lib/mobile/timeline-store";
 import { useSignedInIdentity } from "@/lib/mobile/signed-in-identity";
 import type { User } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 import ReferenceSearchModal, {
   type GovernmentReference,
   type ReferenceType,
@@ -153,45 +154,43 @@ export default function CreatePostModal({
     setShowReferenceSearch(false);
   };
 
-  const uploadMediaToServer = async (item: MediaItem): Promise<UploadedMedia | null> => {
-    try {
-      const formData = new FormData();
-      if (item.file) {
-        formData.append("file", item.file, item.file.name);
-      }
-      formData.append("type", item.type);
-
-      const response = await fetch("/api/media/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          id: data.id,
-          uri: data.url,
-          type: item.type,
-          thumbnailUrl: data.thumbnailUrl,
-        };
-      }
-
-      // Fallback: use local URI as mock upload
-      return {
-        id: `media-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        uri: item.uri,
-        type: item.type,
-        thumbnailUrl: item.type === "video" ? item.uri : undefined,
-      };
-    } catch {
-      // Fallback on error
-      return {
-        id: `media-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        uri: item.uri,
-        type: item.type,
-        thumbnailUrl: item.type === "video" ? item.uri : undefined,
-      };
+  /**
+   * Send one picked file to the server and return what it stored.
+   *
+   * TWO THINGS WERE WRONG HERE. The request went to a bare relative path, so
+   * it hit the web origin rather than the API — which is a different host in
+   * every deployed configuration — and it read `data.url` from a response the
+   * server sends as `{ media: { url } }`. Both failures landed in the same
+   * catch, which handed back a made-up id and the local blob: URL as if it
+   * were an uploaded file. The post then carried a picture that existed only
+   * in the author's own tab, and nothing said so.
+   *
+   * A failed upload is a failed upload now. The caller stops and says why.
+   */
+  const uploadMediaToServer = async (item: MediaItem): Promise<UploadedMedia> => {
+    const formData = new FormData();
+    if (item.file) {
+      formData.append("file", item.file, item.file.name);
     }
+
+    const response = await api.raw("/api/media/upload", { method: "POST", body: formData });
+    if (!response.ok) {
+      throw new Error("Upload failed");
+    }
+
+    const result = (await response.json()) as {
+      media?: { id: string; url: string; thumbnailUrl: string | null };
+    };
+    if (!result.media?.url) {
+      throw new Error("Upload returned no file");
+    }
+
+    return {
+      id: result.media.id,
+      uri: result.media.url,
+      type: item.type,
+      thumbnailUrl: result.media.thumbnailUrl ?? undefined,
+    };
   };
 
   const handlePickImage = (e: ChangeEvent<HTMLInputElement>) => {
@@ -234,12 +233,15 @@ export default function CreatePostModal({
       let uploadedMediaIds: string[] = [];
       if (mediaItems.length > 0) {
         setIsUploadingMedia(true);
-        const uploadPromises = mediaItems.map((item) => uploadMediaToServer(item));
-        const results = await Promise.all(uploadPromises);
-        const successful = results.filter((r): r is UploadedMedia => r !== null);
-        setUploadedMedia(successful);
-        uploadedMediaIds = successful.map((m) => m.id);
-        setIsUploadingMedia(false);
+        // No partial success. A post that quietly loses one of four pictures
+        // is worse than one that refuses to publish and says why.
+        try {
+          const uploaded = await Promise.all(mediaItems.map(uploadMediaToServer));
+          setUploadedMedia(uploaded);
+          uploadedMediaIds = uploaded.map((m) => m.id);
+        } finally {
+          setIsUploadingMedia(false);
+        }
       }
 
       // Publish to the server. Both paths attach the post to the selected

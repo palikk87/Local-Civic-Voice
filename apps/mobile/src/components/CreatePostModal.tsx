@@ -35,6 +35,7 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideInUp } from 'react-native-
 import { useTimelineStore, type TaggedUser } from '@/lib/timeline-store';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
+import { uploadMedia } from '@/lib/api/api';
 import ReferenceSearchModal, {
   type GovernmentReference,
   type ReferenceType,
@@ -173,55 +174,30 @@ export default function CreatePostModal({
     setShowReferenceSearch(false);
   };
 
-  const uploadMediaToServer = async (item: MediaItem): Promise<UploadedMedia | null> => {
-    try {
-      // Create form data for upload
-      const formData = new FormData();
-      const filename = item.uri.split('/').pop() ?? 'media';
-      const match = /\.(\w+)$/.exec(filename);
-      const mimeType = item.type === 'video' ? 'video/mp4' : `image/${match?.[1] ?? 'jpeg'}`;
+  /**
+   * Send one picked file to the server and return what it stored.
+   *
+   * THIS USED TO BE UNABLE TO WORK AND HID IT. The fetch went to a RELATIVE
+   * url, which on a phone has no origin to resolve against, so it always
+   * threw — and the catch handed back a made-up id with the local `file://`
+   * path as the media URL. The post then shipped with a picture only the
+   * author's own handset could load, and nothing anywhere said so.
+   *
+   * A failed upload is now a failed upload. The caller stops and says so.
+   */
+  const uploadMediaToServer = async (item: MediaItem): Promise<UploadedMedia> => {
+    const filename = item.uri.split('/').pop() ?? 'media';
+    const match = /\.(\w+)$/.exec(filename);
+    const mimeType = item.type === 'video' ? 'video/mp4' : `image/${match?.[1] ?? 'jpeg'}`;
 
-      formData.append('file', {
-        uri: item.uri,
-        name: filename,
-        type: mimeType,
-      } as unknown as Blob);
-      formData.append('type', item.type);
+    const stored = await uploadMedia({ uri: item.uri, name: filename, type: mimeType });
 
-      const response = await fetch('/api/media/upload', {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return {
-          id: data.id,
-          uri: data.url,
-          type: item.type,
-          thumbnailUrl: data.thumbnailUrl,
-        };
-      }
-
-      // Fallback: use local URI as mock upload
-      return {
-        id: `media-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        uri: item.uri,
-        type: item.type,
-        thumbnailUrl: item.type === 'video' ? item.uri : undefined,
-      };
-    } catch {
-      // Fallback on error
-      return {
-        id: `media-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        uri: item.uri,
-        type: item.type,
-        thumbnailUrl: item.type === 'video' ? item.uri : undefined,
-      };
-    }
+    return {
+      id: stored.id,
+      uri: stored.url,
+      type: item.type,
+      thumbnailUrl: stored.thumbnailUrl ?? undefined,
+    };
   };
 
   const pickImage = async () => {
@@ -318,12 +294,15 @@ export default function CreatePostModal({
       let uploadedMediaIds: string[] = [];
       if (mediaItems.length > 0) {
         setIsUploadingMedia(true);
-        const uploadPromises = mediaItems.map((item) => uploadMediaToServer(item));
-        const results = await Promise.all(uploadPromises);
-        const successful = results.filter((r): r is UploadedMedia => r !== null);
-        setUploadedMedia(successful);
-        uploadedMediaIds = successful.map((m) => m.id);
-        setIsUploadingMedia(false);
+        // No partial success. A post that quietly loses one of four pictures
+        // is worse than one that refuses to publish and says why.
+        try {
+          const uploaded = await Promise.all(mediaItems.map(uploadMediaToServer));
+          setUploadedMedia(uploaded);
+          uploadedMediaIds = uploaded.map((m) => m.id);
+        } finally {
+          setIsUploadingMedia(false);
+        }
       }
 
       // Publish to the server. Both paths attach the post to the selected
