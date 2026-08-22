@@ -290,6 +290,35 @@ Not built:
 - **Pinning a post, muting a thread, and a public list of who blocked whom** —
   none of these exist and none of them should without a reason.
 
+### The Representation Gap needs data nobody has fetched yet
+
+The most compelling thing this app could say is "the people here said 73%
+oppose; the House passed it 218-210; here is how your representative voted."
+The UI for it exists — `PulseGap`, and an "Official Vote" block on the bill
+page — and neither has ever rendered for a real record, because
+`referenceToBill` never sets `officialVotes` and nothing in the schema stores a
+roll call.
+
+Nothing is fabricated: the blocks are conditional and simply do not appear. But
+the feature is absent rather than broken, and it is the one most worth building.
+
+What it needs:
+
+1. A `RollCall` table — chamber, congress, session, roll number, date, question,
+   yea/nay/present/not-voting, and the bill it belongs to.
+2. A fetch against congress.gov. The v3 API exposes House roll calls at
+   `/house-vote` and per-bill actions at `/bill/{congress}/{type}/{number}/actions`,
+   which is where the vote references appear. **Unverified** — this environment
+   has no `CONGRESS_API_KEY`, so the shape was never confirmed against a real
+   response, and it should be recorded as a fixture the way every other
+   government fetch in this repo is before anything is built on it.
+3. Member-level votes, to answer "how did MY representative vote". That is the
+   half that makes it personal, and the half most likely to be a separate
+   request per roll call.
+
+Do not build it from `government-data.ts`. Those `officialVotes` numbers are
+hardcoded fixtures from the original prototype and are not real.
+
 ### A deleted account keeps voting
 
 `GovernmentReferenceVote.userId` is a plain `String` with no relation to `User`,

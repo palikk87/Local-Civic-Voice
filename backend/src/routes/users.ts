@@ -8,6 +8,7 @@ import {
   positionHistory,
   positionSummary,
   positionsNeedingReview,
+  standing,
 } from "../services/position-history";
 import type { auth } from "../auth";
 
@@ -823,4 +824,22 @@ usersRouter.get("/me/positions/review", async (c) => {
 
   const results = await positionsNeedingReview(currentUser.id);
   return c.json({ results, count: results.length });
+});
+
+/**
+ * GET /api/users/me/standing
+ *
+ * Where you stand relative to everyone else, including — especially — the
+ * records where you are most alone.
+ *
+ * A mirror, not a score. The count of agreements is context; the positions
+ * where somebody is in a minority of one are the ones worth knowing you hold.
+ */
+usersRouter.get("/me/standing", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  return c.json(await standing(currentUser.id));
 });

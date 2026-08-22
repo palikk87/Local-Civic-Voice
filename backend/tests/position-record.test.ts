@@ -292,3 +292,96 @@ describe("standing on old text", () => {
     expect(review.count).toBe(0);
   });
 });
+
+describe("where you stand", () => {
+  async function crowd(size: number, referenceId: string, position: string) {
+    for (let i = 0; i < size; i += 1) {
+      const person = await citizen("crowd");
+      await vote(person.cookie, referenceId, position);
+    }
+  }
+
+  test("it counts agreement and disagreement honestly", async () => {
+    const person = await citizen("person");
+    const popular = await law("A bill most people back");
+    const lonely = await law("A bill almost nobody backs");
+
+    await vote(person.cookie, popular.id, "support");
+    await crowd(4, popular.id, "support");
+
+    await vote(person.cookie, lonely.id, "support");
+    await crowd(4, lonely.id, "oppose");
+
+    const mine = (await (
+      await fetch(`${BASE_URL}/api/users/me/standing`, {
+        headers: freshClientHeaders({ cookie: person.cookie }),
+      })
+    ).json()) as {
+      measured: number;
+      withMajority: number;
+      inMinority: number;
+      mostAlone: Array<{ reference: { id: string }; agreementPct: number }>;
+    };
+
+    expect(mine).toMatchObject({ measured: 2, withMajority: 1, inMinority: 1 });
+    expect(mine.mostAlone[0]!.reference.id).toBe(lonely.id);
+    expect(mine.mostAlone[0]!.agreementPct).toBe(20);
+  });
+
+  test("a record two people voted on proves nothing and is left out", async () => {
+    const person = await citizen("person");
+    const other = await citizen("other");
+    const bill = await law();
+
+    await vote(person.cookie, bill.id, "support");
+    await vote(other.cookie, bill.id, "oppose");
+
+    // Telling somebody they are in a minority of two is noise dressed as
+    // insight.
+    const mine = (await (
+      await fetch(`${BASE_URL}/api/users/me/standing`, {
+        headers: freshClientHeaders({ cookie: person.cookie }),
+      })
+    ).json()) as { measured: number };
+    expect(mine.measured).toBe(0);
+  });
+
+  test("a delegated landslide does not decide what the majority thinks", async () => {
+    const person = await citizen("person");
+    const leader = await citizen("leader");
+    const bill = await law();
+
+    await vote(person.cookie, bill.id, "support");
+    await vote(leader.cookie, bill.id, "oppose");
+    await crowd(2, bill.id, "support");
+
+    // Give the opposing voice a large delegated weight. The published tally
+    // moves; the mirror does not, because one well-followed delegate should not
+    // decide what "most people think" looks like to one citizen.
+    await prisma.governmentReference.update({
+      where: { id: bill.id },
+      data: { opposeVotes: 900 },
+    });
+
+    const mine = (await (
+      await fetch(`${BASE_URL}/api/users/me/standing`, {
+        headers: freshClientHeaders({ cookie: person.cookie }),
+      })
+    ).json()) as { withMajority: number; inMinority: number };
+
+    expect(mine).toMatchObject({ withMajority: 1, inMinority: 0 });
+  });
+
+  test("somebody who has taken no position is not told where they stand", async () => {
+    const person = await citizen("person");
+
+    const mine = (await (
+      await fetch(`${BASE_URL}/api/users/me/standing`, {
+        headers: freshClientHeaders({ cookie: person.cookie }),
+      })
+    ).json()) as { measured: number; mostAlone: unknown[] };
+
+    expect(mine.measured).toBe(0);
+    expect(mine.mostAlone).toHaveLength(0);
+  });
+});

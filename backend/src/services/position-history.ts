@@ -307,3 +307,109 @@ export async function pulseOverTime(referenceId: string): Promise<PulsePoint[]> 
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, counts]) => ({ date, ...counts, lawChanged: date === changedOn }));
 }
+
+export interface StandingEntry {
+  reference: {
+    id: string;
+    masterReferenceId: string;
+    title: string;
+    referenceType: string;
+  };
+  yourPosition: string;
+  support: number;
+  oppose: number;
+  /** Share of the Pulse that agrees with them, 0-100. */
+  agreementPct: number;
+  withMajority: boolean;
+}
+
+export interface Standing {
+  /** Records where enough people have spoken for "majority" to mean anything. */
+  measured: number;
+  withMajority: number;
+  inMinority: number;
+  /** The ones where they are most alone. */
+  mostAlone: StandingEntry[];
+}
+
+/**
+ * Where this person stands relative to everyone else.
+ *
+ * A CIVIC MIRROR, NOT A SCORE. It would be easy to make this flattering — a
+ * percentage that goes up, a badge for agreeing with people. That is what an
+ * engagement product would build, and it would teach exactly the wrong lesson:
+ * that being with the majority is the goal.
+ *
+ * So the useful half is the uncomfortable half. It surfaces the records where
+ * somebody is most alone, because those are the positions worth knowing you
+ * hold — the ones where you should either find the argument for the other side
+ * or be certain of your own. The count of agreements is there for context and
+ * is not the point.
+ *
+ * MEASURED AGAINST DIRECT VOTES ONLY, deliberately. The published tally folds
+ * in delegated weight, which means one well-followed delegate can swing what
+ * "the majority" appears to be. For a mirror held up to one person, the honest
+ * comparison is against other people who spoke for themselves.
+ */
+export async function standing(userId: string, minimumVoices = 3): Promise<Standing> {
+  const mine = await prisma.governmentReferenceVote.findMany({
+    where: { userId, position: { in: ["support", "oppose"] } },
+    select: {
+      position: true,
+      governmentReference: {
+        select: { id: true, masterReferenceId: true, title: true, referenceType: true },
+      },
+    },
+  });
+  if (mine.length === 0) {
+    return { measured: 0, withMajority: 0, inMinority: 0, mostAlone: [] };
+  }
+
+  const referenceIds = mine.map((v) => v.governmentReference.id);
+  const grouped = await prisma.governmentReferenceVote.groupBy({
+    by: ["governmentReferenceId", "position"],
+    where: { governmentReferenceId: { in: referenceIds } },
+    _count: true,
+  });
+
+  const counts = new Map<string, { support: number; oppose: number }>();
+  for (const row of grouped) {
+    const entry = counts.get(row.governmentReferenceId) ?? { support: 0, oppose: 0 };
+    if (row.position === "support") entry.support = row._count;
+    else if (row.position === "oppose") entry.oppose = row._count;
+    counts.set(row.governmentReferenceId, entry);
+  }
+
+  const entries: StandingEntry[] = [];
+  for (const vote of mine) {
+    const tally = counts.get(vote.governmentReference.id);
+    if (!tally) continue;
+
+    const total = tally.support + tally.oppose;
+    // Below the threshold "the majority" is one or two people, and telling
+    // somebody they are in a minority of three is noise dressed as insight.
+    if (total < minimumVoices) continue;
+
+    const agreeing = vote.position === "support" ? tally.support : tally.oppose;
+    const agreementPct = Math.round((agreeing / total) * 100);
+
+    entries.push({
+      reference: vote.governmentReference,
+      yourPosition: vote.position,
+      support: tally.support,
+      oppose: tally.oppose,
+      agreementPct,
+      withMajority: agreeing * 2 > total,
+    });
+  }
+
+  return {
+    measured: entries.length,
+    withMajority: entries.filter((e) => e.withMajority).length,
+    inMinority: entries.filter((e) => !e.withMajority).length,
+    mostAlone: entries
+      .filter((e) => !e.withMajority)
+      .sort((a, b) => a.agreementPct - b.agreementPct)
+      .slice(0, 10),
+  };
+}

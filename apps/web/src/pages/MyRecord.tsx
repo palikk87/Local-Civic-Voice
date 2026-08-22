@@ -117,6 +117,14 @@ export default function MyRecord() {
     enabled: isMine && Boolean(user?.id),
   });
 
+  // Where they stand relative to everyone else. Only for their own record: a
+  // mirror is for the person holding it.
+  const { data: standing } = useQuery({
+    queryKey: ["standing"],
+    queryFn: recordApi.standing,
+    enabled: isMine && Boolean(user?.id),
+  });
+
   const summary = data?.summary;
 
   return (
@@ -172,7 +180,41 @@ export default function MyRecord() {
           </Link>
         ) : null}
 
-        {receipts && receipts.results.length > 0 ? (
+        {isMine && Array.isArray(standing?.mostAlone) && standing.mostAlone.length > 0 ? (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h2 className="text-sm font-semibold uppercase tracking-institutional text-accent">
+              Where you stand alone
+            </h2>
+            {/* NOT A SCORE. The flattering version of this — a percentage that
+                goes up for agreeing with people — would teach that being with
+                the majority is the goal. The useful half is the uncomfortable
+                half: the positions worth being certain about. */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              You are with most people on {standing.withMajority} of {standing.measured}. These are
+              the ones where you are not.
+            </p>
+
+            <ul className="mt-3 space-y-2">
+              {standing.mostAlone.slice(0, 5).map((entry) => (
+                <li key={entry.reference.id} className="text-sm">
+                  <Link
+                    to={`/reference/${entry.reference.id}`}
+                    className="text-foreground hover:underline"
+                  >
+                    {entry.reference.title}
+                  </Link>
+                  <span className="text-muted-foreground">
+                    {" — you "}
+                    {entry.yourPosition === "support" ? "backed" : "opposed"} it, with{" "}
+                    <span className="font-mono">{entry.agreementPct}%</span> of the room
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {isMine && Array.isArray(receipts?.results) && receipts.results.length > 0 ? (
           <div className="rounded-xl border border-border bg-card p-4">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-institutional text-accent">
               <Users className="h-4 w-4" aria-hidden="true" />
@@ -229,7 +271,7 @@ export default function MyRecord() {
               <Skeleton key={i} className="h-24 w-full rounded-xl" />
             ))}
           </div>
-        ) : (data?.results.length ?? 0) === 0 ? (
+        ) : !Array.isArray(data?.results) || data.results.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border py-20 text-center">
             <p className="font-display text-lg text-foreground">
               {isMine ? "You have not taken a position yet" : "No positions yet"}
@@ -242,7 +284,7 @@ export default function MyRecord() {
           </div>
         ) : (
           <ul className="space-y-3">
-            {data!.results.map((entry) => (
+            {data.results.map((entry) => (
               <PositionRow key={entry.id} entry={entry} />
             ))}
           </ul>

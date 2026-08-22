@@ -589,4 +589,23 @@ export const recordApi = {
   /** Every time somebody else spoke in your name. */
   receipts: () =>
     api.get<{ results: VoiceReceipt[]; carriedOnward: number }>("/api/delegations/receipts"),
+
+  /** Where you stand relative to everyone else, including where you are alone. */
+  standing: () => api.get<Standing>("/api/users/me/standing"),
 };
+
+export interface StandingEntry {
+  reference: { id: string; masterReferenceId: string; title: string; referenceType: string };
+  yourPosition: string;
+  support: number;
+  oppose: number;
+  agreementPct: number;
+  withMajority: boolean;
+}
+
+export interface Standing {
+  measured: number;
+  withMajority: number;
+  inMinority: number;
+  mostAlone: StandingEntry[];
+}
