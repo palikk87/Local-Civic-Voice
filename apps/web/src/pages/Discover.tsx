@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { MotionDiv } from "@/components/civic/Motion";
 import { DiscoverTabSelector, type DiscoverTab } from "@/components/discover/DiscoverTabSelector";
 import { TrendingBillCard } from "@/components/discover/TrendingBillCard";
+import { TrendingHashtags } from "@/components/discover/TrendingHashtags";
 import { ExecutiveOrderCard } from "@/components/discover/ExecutiveOrderCard";
 import { SupremeCourtCaseCard } from "@/components/discover/SupremeCourtCaseCard";
 import { GovernmentBranchSection } from "@/components/discover/GovernmentBranchSection";
@@ -292,6 +293,12 @@ export default function Discover() {
                     {categoryLabels[cat]}
                   </button>
                 ))}
+              </div>
+
+              {/* What people are tagging their posts with. Renders nothing when
+                  there are no tags — an empty panel reads as broken. */}
+              <div className="mb-6">
+                <TrendingHashtags />
               </div>
 
               {/* Trending Bills */}
