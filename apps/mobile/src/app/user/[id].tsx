@@ -30,6 +30,7 @@ import { api } from '@/lib/api/api';
 import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/cn';
+import { CommonGroundPanel } from '@/components/CivicPanels';
 
 interface PublicUser {
   id: string;
@@ -291,6 +292,13 @@ export default function UserProfileScreen() {
                 </View>
               ) : null}
             </View>
+
+            {/* Where the two of you actually agree — and where you do not.
+                Above their timeline: knowing you are with somebody on three
+                records changes how their posts read. */}
+            {isSelf ? null : (
+              <CommonGroundPanel userId={id} name={profile.displayName} />
+            )}
 
             {/* Their timeline */}
             <View className="px-4">

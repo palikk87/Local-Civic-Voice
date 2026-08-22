@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
 import { api } from "@/lib/api";
 import { safetyApi } from "@/lib/civic";
+import { CommonGround } from "@/components/civic/CommonGround";
 
 interface PublicUser {
   id: string;
@@ -370,6 +371,11 @@ export default function UserProfile() {
             </div>
           ) : null}
         </div>
+
+        {/* Where the two of you actually agree — and where you do not. Sits
+            above their timeline: knowing you are with somebody on three
+            records changes how their posts read. */}
+        {isSelf ? null : <CommonGround userId={id!} name={profile.displayName} />}
 
         {/* Their timeline */}
         <div className="px-4 pb-8">

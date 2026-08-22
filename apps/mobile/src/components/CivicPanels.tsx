@@ -14,7 +14,7 @@ import React from 'react';
 import { View, Text, Image, Pressable } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { ArrowLeftRight, FileDiff, Scale, TrendingUp } from 'lucide-react-native';
+import { ArrowLeftRight, FileDiff, Handshake, Scale, TrendingUp } from 'lucide-react-native';
 
 import { api } from '@/lib/api/api';
 
@@ -266,6 +266,92 @@ export function PulseHistoryPanel({ referenceId }: { referenceId?: string | null
           ? '✳ marks the day the text changed.'
           : 'The text has not changed since the first position was taken.'}
       </Text>
+    </View>
+  );
+}
+
+interface SharedPosition {
+  reference: { id: string; masterReferenceId: string; title: string; referenceType: string };
+  yourPosition: string;
+  theirPosition: string;
+}
+
+interface CommonGroundResponse {
+  shared: number;
+  agreed: number;
+  disagreed: number;
+  agreements: SharedPosition[];
+  disagreements: SharedPosition[];
+}
+
+/**
+ * Where you and this person actually agree, and where you do not.
+ *
+ * Not a compatibility score. Everywhere else this is inferred from clicks and
+ * comes back as a similarity number, which sorts people into groups. Here both
+ * of you took public positions on the same government records, so the overlap
+ * is a matter of record rather than a prediction.
+ *
+ * BOTH LISTS, ALWAYS. Showing only the agreements would introduce somebody to
+ * the parts of a stranger they already like and hide the rest.
+ */
+export function CommonGroundPanel({ userId, name }: { userId?: string | null; name: string }) {
+  const { data } = useQuery({
+    queryKey: ['common-ground', userId],
+    queryFn: () => api.get<CommonGroundResponse>(`/api/users/${userId}/common-ground`),
+    enabled: Boolean(userId),
+    retry: false,
+  });
+
+  if (typeof data?.shared !== 'number' || data.shared === 0) return null;
+
+  const firstName = name.split(' ')[0] || name;
+
+  const column = (
+    label: string,
+    tone: string,
+    entries: SharedPosition[],
+    describe: (entry: SharedPosition) => string,
+  ) => (
+    <View className="mt-3">
+      <Text className={`text-xs font-semibold uppercase tracking-wider ${tone}`}>{label}</Text>
+      {entries.length === 0 ? (
+        <Text className="text-slate-500 text-sm mt-1">Nothing yet.</Text>
+      ) : (
+        entries.map((entry) => (
+          <Pressable
+            key={entry.reference.id}
+            onPress={() => router.push(`/bill/${entry.reference.id}`)}
+            className="mt-1"
+          >
+            <Text className="text-slate-200 text-sm">{entry.reference.title}</Text>
+            <Text className="text-slate-500 text-xs">{describe(entry)}</Text>
+          </Pressable>
+        ))
+      )}
+    </View>
+  );
+
+  return (
+    <View className="mx-4 mb-4 bg-slate-800/60 rounded-xl p-4 border border-slate-700/40">
+      <View className="flex-row items-center">
+        <Handshake size={16} color="#F59E0B" />
+        <Text className="text-amber-500 text-xs font-semibold uppercase tracking-wider ml-2">
+          Common ground
+        </Text>
+      </View>
+
+      <Text className="text-slate-300 text-sm mt-2">
+        You and {firstName} have both taken a position on {data.shared} record
+        {data.shared === 1 ? '' : 's'}. You agree on {data.agreed} and disagree on {data.disagreed}.
+      </Text>
+
+      {column('You agree', 'text-emerald-400', data.agreements, (entry) =>
+        `Both ${entry.yourPosition === 'support' ? 'backed it' : 'opposed it'}`,
+      )}
+      {column('You disagree', 'text-rose-400', data.disagreements, (entry) =>
+        `You ${entry.yourPosition === 'support' ? 'backed it' : 'opposed it'}`,
+      )}
     </View>
   );
 }

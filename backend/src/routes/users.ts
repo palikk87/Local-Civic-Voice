@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { notifyFollow } from "../services/notification-service";
 import { blockExistsBetween, hiddenFrom } from "../services/relationships";
+import { commonGround } from "../services/common-ground";
 import {
   positionHistory,
   positionSummary,
@@ -842,4 +843,34 @@ usersRouter.get("/me/standing", async (c) => {
   }
 
   return c.json(await standing(currentUser.id));
+});
+
+
+/**
+ * GET /api/users/:id/common-ground
+ *
+ * What this person and the reader have both taken a position on, split into
+ * the ones they agree about and the ones they do not.
+ *
+ * Both halves, always. A version that returned only the agreements would be a
+ * matchmaker for the echo chamber — it would introduce somebody to the parts
+ * of a stranger they already like and hide the rest.
+ */
+usersRouter.get("/:id/common-ground", async (c) => {
+  const id = c.req.param("id");
+  const currentUser = c.get("user");
+  if (!currentUser) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+  if (!user) {
+    return c.json({ error: "User not found" }, 404);
+  }
+  // A block is never revealed as a block, here or anywhere else.
+  if (await blockExistsBetween(currentUser.id, id)) {
+    return c.json({ error: "User not found" }, 404);
+  }
+
+  return c.json(await commonGround(currentUser.id, id));
 });
