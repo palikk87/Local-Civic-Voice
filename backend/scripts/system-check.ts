@@ -251,8 +251,23 @@ async function main() {
   ok("citizen 1 has earned delegate eligibility");
 
   const bill = await subject();
+
+  // START FROM THE SAME PLACE EVERY TIME.
+  //
+  // The journeys act on a database that is not reset between runs, so anything
+  // they leave behind is state the next run starts in. A follow left over from
+  // the previous run turned the profile's Follow button into Unfollow, and the
+  // check reported a working feature as broken because it could not find a
+  // button that was never going to be there.
   await prisma.governmentReferenceVote.deleteMany({ where: { governmentReferenceId: bill.id } });
   await prisma.delegation.deleteMany({ where: { fromUserId: follower.id } });
+  await prisma.follow.deleteMany({
+    where: { OR: [{ followerId: follower.id }, { followerId: leader.id }] },
+  });
+  await prisma.block.deleteMany({
+    where: { OR: [{ blockerId: follower.id }, { blockerId: leader.id }] },
+  });
+  await prisma.post.deleteMany({ where: { repostOfId: { not: null }, authorId: follower.id } });
   await prisma.governmentReference.update({
     where: { id: bill.id },
     data: { supportVotes: 0, opposeVotes: 0 },

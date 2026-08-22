@@ -177,6 +177,9 @@ export function mapServerPost(post: ServerPost): TimelinePost {
     // heart in the feed rendered empty however many you had pressed, and the
     // next tap took away a like you had already made.
     isLiked: post.isLiked ?? false,
+    repostsCount: post.repostsCount ?? 0,
+    isRepostedByMe: post.isRepostedByMe ?? false,
+    repostOf: post.repostOf ?? null,
     createdAt: post.createdAt,
     updatedAt: post.createdAt,
   };

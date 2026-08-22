@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCircle2, MessageCircle, Heart, UserPlus, Share2 } from "lucide-react";
+import { Bell, CheckCircle2, MessageCircle, Heart, UserPlus, Share2, Mail, Scale } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,13 +39,49 @@ function getNotificationIcon(type: string) {
     case "share":
     case "repost":
       return <Share2 className="h-5 w-5 text-purple-500" />;
+    case "message":
+      return <Mail className="h-5 w-5 text-sky-500" />;
+    case "law_updated":
+      return <Scale className="h-5 w-5 text-amber-500" />;
     default:
       return <Bell className="h-5 w-5 text-muted-foreground" />;
   }
 }
 
+/**
+ * Where a notification leads.
+ *
+ * They led nowhere at all: the list showed the text and a tick to mark it read,
+ * so "somebody sent you a message" was a dead end you had to act on by
+ * navigating somewhere else yourself and finding it again.
+ *
+ * The payload is stored as a JSON string, and a malformed one must not take the
+ * page down — an unreadable payload just means this row is not a link.
+ */
+function destinationOf(notification: Notification): string | null {
+  let data: {
+    conversationId?: string;
+    postId?: string;
+    governmentReferenceId?: string;
+    fromUserId?: string;
+  };
+  try {
+    data = notification.data ? JSON.parse(notification.data) : {};
+  } catch {
+    return null;
+  }
+
+  if (data.conversationId) return `/conversation/${data.conversationId}`;
+  if (data.governmentReferenceId) return `/reference/${data.governmentReferenceId}`;
+  if (data.postId) return `/timeline`;
+  if (data.fromUserId) return `/user/${data.fromUserId}`;
+  return null;
+}
+
 function NotificationItem({ notification }: { notification: Notification }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const destination = destinationOf(notification);
 
   const markAsReadMutation = useMutation({
     mutationFn: () =>
@@ -55,9 +92,29 @@ function NotificationItem({ notification }: { notification: Notification }) {
     },
   });
 
+  function open() {
+    if (!notification.isRead) markAsReadMutation.mutate();
+    if (destination) navigate(destination);
+  }
+
   return (
     <div
+      role={destination ? "link" : undefined}
+      tabIndex={destination ? 0 : undefined}
+      onClick={destination ? open : undefined}
+      onKeyDown={
+        destination
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                open();
+              }
+            }
+          : undefined
+      }
       className={`flex items-start gap-4 rounded-lg border p-4 transition-colors ${
+        destination ? "cursor-pointer hover:border-accent/50" : ""
+      } ${
         notification.isRead
           ? "border-border bg-card/50"
           : "border-accent/30 bg-accent/5"
@@ -79,7 +136,10 @@ function NotificationItem({ notification }: { notification: Notification }) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => markAsReadMutation.mutate()}
+          onClick={(event) => {
+            event.stopPropagation();
+            markAsReadMutation.mutate();
+          }}
           disabled={markAsReadMutation.isPending}
           className="mt-1"
         >

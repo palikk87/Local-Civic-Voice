@@ -108,6 +108,17 @@ export interface TimelinePost {
   comments: TimelineComment[];
   shares: number;
   isLiked: boolean;
+  /** How many people have passed this on. */
+  repostsCount?: number;
+  /** Whether the person reading has already passed it on. */
+  isRepostedByMe?: boolean;
+  /** The post this one passes on, when it is a repost. */
+  repostOf?: {
+    id: string;
+    content: string;
+    author: { id: string; displayName: string; username: string; avatar: string };
+    createdAt: string;
+  } | null;
 
   // Timestamps
   createdAt: string;

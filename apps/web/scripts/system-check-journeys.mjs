@@ -316,6 +316,96 @@ try {
   });
   expect("and the person followed is told about it", Boolean(toldAboutFollow), "no follow notification arrived");
 
+  // -------------------------------------------------- passing a post on
+  //
+  // Reposting is the one action whose entire purpose is reach: getting a law in
+  // front of somebody who has not seen it. Checked in a browser because the
+  // button, the count and the card that renders the passed-on post are three
+  // separate things that each have to agree.
+
+  await one.page.goto(`${siteOrigin}/timeline`, { waitUntil: "domcontentloaded" });
+  await signedInPage(one.page, leaderShortName);
+
+  const composed = await one.page.evaluate(async (referenceId) => {
+    const r = await fetch("/api/posts", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: "The insulin cap is the part that matters. #insulin",
+        governmentReferenceId: referenceId,
+      }),
+    });
+    return r.ok ? (await r.json()).post.id : null;
+  }, billId);
+  expect("a post can be written about a law", Boolean(composed), "the composer returned nothing");
+
+  if (composed) {
+    const passedOn = await two.page.evaluate(async (postId) => {
+      const r = await fetch(`/api/posts/${postId}/repost`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      return { status: r.status, body: await r.json().catch(() => null) };
+    }, composed);
+    expect(
+      "a post can be passed on",
+      passedOn.status === 201 && passedOn.body?.repostsCount === 1,
+      `repost answered ${passedOn.status}`,
+    );
+
+    const carried = await two.page.evaluate(async () => {
+      const me = (await (await fetch("/api/auth/get-session", { credentials: "include" })).json())
+        .user;
+      const r = await fetch(`/api/posts?authorId=${me.id}`, { credentials: "include" });
+      const posts = (await r.json()).posts ?? [];
+      return posts.filter((p) => p.repostOf).length;
+    });
+    expect("and it lands in your own timeline", carried === 1, `found ${carried} reposts`);
+
+    const original = await one.page.evaluate(async (postId) => {
+      const r = await fetch(`/api/posts/${postId}`, { credentials: "include" });
+      return (await r.json()).post?.id ?? null;
+    }, composed);
+    expect("without touching the original", original === composed, "the original moved");
+
+    // The tag written in that post has somewhere to lead.
+    const tagged = await two.page.evaluate(async () => {
+      const r = await fetch("/api/posts/hashtag/insulin", { credentials: "include" });
+      return ((await r.json()).results ?? []).length;
+    });
+    expect("a hashtag written in a post leads somewhere", tagged >= 1, `tag page had ${tagged}`);
+
+    const searched = await two.page.evaluate(async () => {
+      const r = await fetch("/api/posts/search?q=insulin", { credentials: "include" });
+      return ((await r.json()).results ?? []).length;
+    });
+    expect("and the post can be found by searching for it", searched >= 1, `search found ${searched}`);
+  }
+
+  // ------------------------------------------------------------- blocking
+  //
+  // The safety feature that used to pop an alert claiming it had worked.
+
+  const blocked = await two.page.evaluate(async (id) => {
+    const r = await fetch(`/api/safety/blocks/${id}`, { method: "POST", credentials: "include" });
+    return r.status;
+  }, leaderId);
+  expect("blocking someone works from the browser", blocked === 200, `status ${blocked}`);
+
+  const gone = await two.page.evaluate(async (id) => {
+    const r = await fetch(`/api/users/${id}`, { credentials: "include" });
+    return r.status;
+  }, leaderId);
+  expect("and they are gone, not merely hidden", gone === 404, `profile answered ${gone}`);
+
+  // Put it back, so a rerun starts where this one did.
+  await two.page.evaluate(async (id) => {
+    await fetch(`/api/safety/blocks/${id}`, { method: "DELETE", credentials: "include" });
+  }, leaderId);
+
   await one.context.close();
   await two.context.close();
 } catch (error) {

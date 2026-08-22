@@ -65,6 +65,7 @@ import CreatePostModal from '@/components/CreatePostModal';
 import ShareModal from '@/components/ShareModal';
 import PostOptionsModal from '@/components/PostOptionsModal';
 import { safetyApi } from '@/lib/api/safety';
+import { repostPost } from '@/lib/api/feed';
 import CommentSection, { parseContentWithMentions } from '@/components/CommentSection';
 import GlobalPulseDrawer from '@/components/GlobalPulseDrawer';
 import { AuthGate } from '@/components/auth/AuthGate';
@@ -237,6 +238,31 @@ function PostCard({
       likeScale.value = withSpring(1);
     });
     likePost(post.id);
+  };
+
+  // PASSING A POST ON. The one action whose entire purpose is reach: getting a
+  // law in front of somebody who has not seen it. There was no way to do it but
+  // to write your own post about the same law, which starts a second
+  // conversation rather than joining the one already happening.
+  const [reposted, setReposted] = useState(post.isRepostedByMe ?? false);
+  const [reposts, setReposts] = useState(post.repostsCount ?? 0);
+
+  const handleRepost = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const next = !reposted;
+    setReposted(next);
+    setReposts((prev: number) => prev + (next ? 1 : -1));
+
+    repostPost(post.repostOf?.id ?? post.id)
+      .then((result) => {
+        setReposted(Boolean(result?.reposted));
+        setReposts(result?.repostsCount ?? 0);
+      })
+      .catch(() => {
+        setReposted(!next);
+        setReposts((prev: number) => prev + (next ? -1 : 1));
+        Alert.alert("Couldn't pass it on", 'Please try again.');
+      });
   };
 
   const castVote = (vote: 'support' | 'oppose') => {
@@ -658,6 +684,14 @@ function PostCard({
         >
           <MessageCircle size={18} color="#64748B" />
           <Text className="ml-1.5 text-slate-400 text-sm">Reply</Text>
+        </Pressable>
+
+        {/* Repost */}
+        <Pressable onPress={handleRepost} className="flex-row items-center mr-6">
+          <Repeat2 size={18} color={reposted ? '#22C55E' : '#64748B'} />
+          <Text className={cn('ml-1.5 text-sm', reposted ? 'text-emerald-500' : 'text-slate-400')}>
+            {reposts > 0 ? reposts : ''}
+          </Text>
         </Pressable>
 
         {/* Share */}
