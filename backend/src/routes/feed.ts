@@ -10,6 +10,7 @@ import {
   getSimilarUsers,
   getTrendingHashtags,
   getDiscoverFeed,
+  getRankingFactors,
 } from "../services/feed-algorithm";
 import { lawMovedSincePost, loadPostReferenceViews } from "../services/post-reference-view";
 
@@ -110,6 +111,23 @@ feedRouter.get("/", zValidator("query", feedQuerySchema), async (c) => {
     return c.json({ error: "Failed to fetch feed" }, 500);
   }
 });
+
+/**
+ * GET /api/feed/ranking
+ *
+ * Every factor that decides what this feed shows, and every factor that is
+ * forbidden from deciding it.
+ *
+ * Constitution Article III, Section 1 requires the ranking logic to be
+ * publicly auditable, and Bill of Rights Article II lists transparent ranking
+ * factors as a principle. Until now the only thing any screen could show was a
+ * hardcoded object asserting the algorithm was clean — which was not derived
+ * from the ranker and could not have contradicted it.
+ *
+ * Open to everybody, signed in or not. An audit somebody has to hold an
+ * account to run is not a public audit.
+ */
+feedRouter.get("/ranking", (c) => c.json(getRankingFactors()));
 
 /**
  * GET /api/feed/discover

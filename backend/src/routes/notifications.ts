@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { forgetCachedFeeds } from "../services/relationships";
 import { z } from "zod";
 import type { auth } from "../auth";
 import {
@@ -39,6 +40,10 @@ const preferencesSchema = z.object({
   // can change is worse than no preference at all.
   lawUpdates: z.boolean().optional(),
   voiceUsed: z.boolean().optional(),
+  /** Not a notification — the reader's own switch for the other-side floor. */
+  showOtherSide: z.boolean().optional(),
+  /** Not a notification either — Bill of Rights Article IV. */
+  voteAnonymously: z.boolean().optional(),
 });
 
 /**
@@ -148,6 +153,8 @@ notificationsRouter.get("/preferences", async (c) => {
         newFollowerPosts: preferences.newFollowerPosts,
         lawUpdates: preferences.lawUpdates,
         voiceUsed: preferences.voiceUsed,
+        showOtherSide: preferences.showOtherSide,
+        voteAnonymously: preferences.voteAnonymously,
       },
     });
   } catch (error) {
@@ -175,6 +182,12 @@ notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), a
 
   try {
     const updated = await updateNotificationPreferences(user.id, preferences);
+
+    // showOtherSide changes how the feed is assembled, and the feed keeps a
+    // per-reader cached response. Without this, turning it off left the
+    // reserved slots in place until the cache expired — a setting that does
+    // not appear to work is a setting nobody trusts.
+    forgetCachedFeeds(user.id);
     return c.json({
       preferences: {
         likes: updated.likes,
@@ -187,6 +200,8 @@ notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), a
         newFollowerPosts: updated.newFollowerPosts,
         lawUpdates: updated.lawUpdates,
         voiceUsed: updated.voiceUsed,
+        showOtherSide: updated.showOtherSide,
+        voteAnonymously: updated.voteAnonymously,
       },
     });
   } catch (error) {

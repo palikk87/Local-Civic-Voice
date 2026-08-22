@@ -70,7 +70,9 @@ function invalidateReferenceQueries(referenceId: string): void {
  */
 export async function castReferenceVote(
   referenceId: string,
-  position: ReferencePosition
+  position: ReferencePosition,
+  /** Bill of Rights Article IV — withhold the name, never the voice. */
+  anonymous = false
 ): Promise<ReferenceVoteResult | null> {
   const votingStore = useVotingStore.getState();
   const timelineStore = useTimelineStore.getState();
@@ -88,7 +90,9 @@ export async function castReferenceVote(
   try {
     const result = await api.post<ReferenceVoteResult>(
       `/api/government-references/${referenceId}/vote`,
-      { position }
+      // Article IV: the anonymous option travels with the vote when the
+      // citizen asked for it. The tally is blind to it either way.
+      anonymous ? { position, anonymous: true } : { position }
     );
 
     // Reconcile with the authoritative answer.

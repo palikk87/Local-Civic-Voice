@@ -595,6 +595,29 @@ model NotificationPreference {
   /// rather than lent, and this platform's Constitution says political power
   /// here is only ever borrowed. Borrowed means you are told when it is used.
   voiceUsed        Boolean @default(true)
+  /// NOT A NOTIFICATION — a ranking choice, kept here because this is where a
+  /// citizen's feed preferences already live.
+  ///
+  /// Bill of Rights Article II says only the verifiable weight of Liquid
+  /// Democracy should decide prominence. The feed reserves up to a fifth of
+  /// itself for people who voted the opposite way on a record you also voted
+  /// on, and however good the intent, that is the platform prioritising a
+  /// segment by viewpoint. Article II does not leave room for the platform to
+  /// make that call — but it does say the platform is "a neutral conduit for
+  /// human intent", and a citizen choosing it for themselves is human intent.
+  /// So it is a switch, disclosed, and the platform never touches it.
+  showOtherSide    Boolean @default(true)
+  /// Bill of Rights Article IV: vote anonymously by default.
+  ///
+  /// Applied by the server when a vote does not say either way, so the right
+  /// is exercisable from every surface that can cast a vote rather than only
+  /// the ones that grew a toggle. A single request can still override it in
+  /// both directions.
+  ///
+  /// Off by default. Anonymity has to be chosen — a platform that quietly
+  /// anonymised everybody would be making the choice for them just as surely
+  /// as one that never offered it.
+  voteAnonymously  Boolean @default(false)
   user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
@@ -795,6 +818,16 @@ model GovernmentReferenceVote {
   governmentReferenceId String
   userId                String
   position              String // support, oppose
+  /// Bill of Rights Article IV names an anonymous voting option as a right,
+  /// and there was no such column: every position was attributable to a named
+  /// account, permanently and publicly.
+  ///
+  /// THE VOTE STILL COUNTS. It is carried into the Pulse exactly like any
+  /// other, including through delegation — anonymity withholds the NAME, never
+  /// the voice. Article I's promise that the Pulse is the aggregate of verified
+  /// citizens and Article IV's promise of anonymity are only compatible if the
+  /// tally is blind to this flag, so it is.
+  isAnonymous           Boolean             @default(false)
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
   governmentReference   GovernmentReference @relation(fields: [governmentReferenceId], references: [id], onDelete: Cascade)
@@ -976,6 +1009,10 @@ model PositionEvent {
   reason                String?
   /// True when this position replaced an earlier one on the same record.
   isChange              Boolean  @default(false)
+  /// Carried from the vote. The record is kept either way — a citizen can
+  /// always read their own history — but an anonymous position is withheld
+  /// from every surface that would attach their name to it for somebody else.
+  isAnonymous           Boolean  @default(false)
   createdAt             DateTime @default(now())
 
   user                User                @relation(fields: [userId], references: [id], onDelete: Cascade)

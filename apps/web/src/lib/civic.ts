@@ -410,8 +410,18 @@ export const civicApi = {
   refreshReferenceContent: (id: string) =>
     api.post<{ status: string }>(`/api/government-references/${id}/refresh-content`),
 
-  vote: (id: string, position: VotePosition) =>
-    api.post<VoteResponse>(`/api/government-references/${id}/vote`, { position }),
+  /**
+   * Bill of Rights Article IV: the anonymous option.
+   *
+   * The vote counts either way — an anonymous position is carried into the
+   * Pulse exactly like any other. What is withheld is the citizen's name, on
+   * every surface that would otherwise attach it to this position.
+   */
+  vote: (id: string, position: VotePosition, anonymous = false) =>
+    api.post<VoteResponse>(`/api/government-references/${id}/vote`, {
+      position,
+      ...(anonymous ? { anonymous: true } : {}),
+    }),
 
   removeVote: (id: string) =>
     api.delete<VoteResponse>(`/api/government-references/${id}/vote`),
@@ -533,6 +543,8 @@ export interface PositionRecord {
   reason: string | null;
   isChange: boolean;
   lawVersion: number;
+  /** Only ever true on your own record — see Bill of Rights Article IV. */
+  isAnonymous: boolean;
   lawMovedSince: boolean;
   createdAt: string;
   reference: {

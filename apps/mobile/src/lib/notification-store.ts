@@ -70,6 +70,10 @@ export interface NotificationPreferences {
   messages: boolean;
   lawUpdates: boolean;
   voiceUsed: boolean;
+  /** Not a notification — Bill of Rights Article II, the reader's own switch. */
+  showOtherSide: boolean;
+  /** Not a notification — Bill of Rights Article IV. */
+  voteAnonymously: boolean;
 }
 
 interface NotificationState {
@@ -100,6 +104,8 @@ const defaultPreferences: NotificationPreferences = {
   messages: true,
   lawUpdates: true,
   voiceUsed: true,
+  showOtherSide: true,
+  voteAnonymously: false,
 };
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({

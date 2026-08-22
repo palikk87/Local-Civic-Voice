@@ -29,6 +29,8 @@ export async function recordPosition(input: {
   referenceId: string;
   position: Position;
   reason?: string | null;
+  /** Bill of Rights Article IV — carried from the vote. */
+  isAnonymous?: boolean;
 }): Promise<void> {
   try {
     const [reference, previous] = await Promise.all([
@@ -69,6 +71,7 @@ export async function recordPosition(input: {
           previous !== null &&
           input.position !== "withdrawn" &&
           previous.position !== input.position,
+        isAnonymous: input.isAnonymous === true,
       },
     });
   } catch (error) {
@@ -82,6 +85,8 @@ export interface PositionRecord {
   reason: string | null;
   isChange: boolean;
   lawVersion: number;
+  /** True when this was taken anonymously. Only ever sent to its own author. */
+  isAnonymous: boolean;
   createdAt: string;
   /** True when the law has moved since this position was taken. */
   lawMovedSince: boolean;
@@ -106,9 +111,17 @@ export async function positionHistory(
   userId: string,
   limit = 50,
   cursor?: string,
+  /**
+   * Who is reading. A citizen always sees their own record in full, including
+   * the positions they took anonymously — Article IV shields them from other
+   * people, not from themselves. Anybody else gets the public record only.
+   */
+  viewerId?: string | null,
 ): Promise<{ results: PositionRecord[]; nextCursor: string | null }> {
+  const isOwner = viewerId === userId;
+
   const rows = await prisma.positionEvent.findMany({
-    where: { userId },
+    where: { userId, ...(isOwner ? {} : { isAnonymous: false }) },
     orderBy: { createdAt: "desc" },
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
@@ -135,6 +148,7 @@ export async function positionHistory(
       reason: row.reason,
       isChange: row.isChange,
       lawVersion: row.lawVersion,
+      isAnonymous: row.isAnonymous,
       createdAt: row.createdAt.toISOString(),
       // The text under this position has moved on since it was taken.
       lawMovedSince: row.governmentReference.lawVersion > row.lawVersion,
@@ -165,9 +179,18 @@ export interface PositionSummary {
  * reconsidering is the correct response to new information — and hiding it is
  * what produces a public that cannot admit error.
  */
-export async function positionSummary(userId: string): Promise<PositionSummary> {
+export async function positionSummary(
+  userId: string,
+  /** Who is reading — see positionHistory. */
+  viewerId?: string | null,
+): Promise<PositionSummary> {
+  const isOwner = viewerId === userId;
+
+  // MUST MATCH WHAT THE LIST SHOWS. A summary counting twelve positions above
+  // a list of eight tells a stranger there are four hidden ones and roughly
+  // what they were — which is the fact Article IV is protecting.
   const rows = await prisma.positionEvent.findMany({
-    where: { userId },
+    where: { userId, ...(isOwner ? {} : { isAnonymous: false }) },
     select: {
       position: true,
       isChange: true,
@@ -467,6 +490,11 @@ export async function turningPoints(
 ): Promise<TurningPoints> {
   const hidden = await hiddenFrom(viewerId);
 
+  // EVERY crossing, anonymous ones included. Article IV withholds the person,
+  // never the movement: filtering anonymous crossings out of the counts would
+  // let anonymity quietly change the published picture of how opinion moved on
+  // a bill, which is the opposite of what the article promises. The names are
+  // withheld a few lines down, when the page is built.
   const crossings = await prisma.positionEvent.findMany({
     where: {
       governmentReferenceId: referenceId,
@@ -474,14 +502,24 @@ export async function turningPoints(
       ...(hidden.length > 0 ? { userId: { notIn: hidden } } : {}),
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true, userId: true, position: true, reason: true, lawVersion: true, createdAt: true },
+    select: {
+      id: true,
+      userId: true,
+      position: true,
+      reason: true,
+      lawVersion: true,
+      createdAt: true,
+      isAnonymous: true,
+    },
   });
 
   if (crossings.length === 0) {
     return { results: [], toSupport: 0, toOppose: 0, total: 0, people: 0, afterTextChanged: 0 };
   }
 
-  const page = crossings.slice(0, limit);
+  // Only the crossings that can carry a name reach the page. An anonymous one
+  // is counted in every total above and shown to nobody.
+  const page = crossings.filter((row) => !row.isAnonymous).slice(0, limit);
   const everyMover = [...new Set(crossings.map((row) => row.userId))];
   const pageUserIds = [...new Set(page.map((row) => row.userId))];
 

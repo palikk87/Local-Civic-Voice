@@ -21,6 +21,8 @@ interface NotificationPreferences {
   newFollowerPosts: boolean;
   lawUpdates: boolean;
   voiceUsed: boolean;
+  showOtherSide: boolean;
+  voteAnonymously: boolean;
 }
 
 export default function Settings() {
@@ -36,6 +38,8 @@ export default function Settings() {
     newFollowerPosts: true,
     lawUpdates: true,
     voiceUsed: true,
+    showOtherSide: true,
+    voteAnonymously: false,
   });
 
   // The backend answers with { preferences: {...} } and takes PUT — same call the
@@ -89,6 +93,12 @@ export default function Settings() {
       newFollowerPosts: value,
       lawUpdates: value,
       voiceUsed: value,
+      // Deliberately NOT swept by enable-all / disable-all. These two are a
+      // ranking choice and a privacy right, not notification noise, and a
+      // button labelled "turn everything off" must not silently anonymise
+      // somebody or reshape their feed.
+      showOtherSide: preferences.showOtherSide,
+      voteAnonymously: preferences.voteAnonymously,
     };
     setPreferences(next);
     saveMutation.mutate(next);
@@ -264,6 +274,56 @@ export default function Settings() {
                   <Switch
                     checked={preferences.voiceUsed}
                     onCheckedChange={() => togglePreference("voiceUsed")}
+                  />
+                </div>
+              </div>
+
+              <Separator className="my-6" />
+
+              <div className="space-y-4">
+                <div>
+                  <h3 className="font-medium text-foreground">Your voice and your feed</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Two rights the Bill of Rights gives you, and neither is a notification.
+                  </p>
+                </div>
+
+                {/* BILL OF RIGHTS ARTICLE IV. The article lists an anonymous
+                    voting option as a right of the people, and there was no
+                    such thing until now: every position was attributable to a
+                    named account, permanently and publicly. */}
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <p className="font-medium text-foreground">Vote anonymously</p>
+                    <p className="text-sm text-muted-foreground">
+                      Your vote still counts in the Pulse exactly as it would otherwise — including
+                      through anyone who delegated to you. What is withheld is your name: nobody
+                      can see which way you went. You will still see your own record in full.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences.voteAnonymously}
+                    onCheckedChange={() => togglePreference("voteAnonymously")}
+                  />
+                </div>
+
+                {/* BILL OF RIGHTS ARTICLE II. Reserving part of a feed by
+                    viewpoint is the platform deciding prominence, which
+                    Article II does not leave room for — but it also calls the
+                    platform a neutral conduit for human intent, and a citizen
+                    choosing this for themselves is human intent. */}
+                <div className="flex items-center justify-between">
+                  <div className="pr-4">
+                    <p className="font-medium text-foreground">Show me the other side</p>
+                    <p className="text-sm text-muted-foreground">
+                      Keeps up to a fifth of your feed for people who voted the opposite way to you
+                      on a law you both voted on, marked so you know why it is there. It is added
+                      to your feed, never swapped in — you never see less of what you came for.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={preferences.showOtherSide}
+                    onCheckedChange={() => togglePreference("showOtherSide")}
                   />
                 </div>
               </div>

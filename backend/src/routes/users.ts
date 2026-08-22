@@ -802,8 +802,11 @@ usersRouter.get("/:id/positions", async (c) => {
   const cursor = c.req.query("cursor") || undefined;
 
   const [history, summary] = await Promise.all([
-    positionHistory(id, limit, cursor),
-    positionSummary(id),
+    // The viewer is passed so a citizen sees their own anonymous positions and
+    // nobody else does — Article IV shields them from other people, not from
+    // themselves.
+    positionHistory(id, limit, cursor, currentUser?.id ?? null),
+    positionSummary(id, currentUser?.id ?? null),
   ]);
 
   return c.json({ ...history, summary });

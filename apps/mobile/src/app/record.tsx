@@ -12,6 +12,7 @@ import {
   ArrowLeft,
   AlertTriangle,
   Check,
+  EyeOff,
   RefreshCw,
   Scale,
   ThumbsDown,
@@ -29,6 +30,8 @@ interface PositionRecord {
   position: string;
   reason: string | null;
   isChange: boolean;
+  /** Only ever true on your own record — Bill of Rights Article IV. */
+  isAnonymous: boolean;
   lawVersion: number;
   createdAt: string;
   lawMovedSince: boolean;
@@ -184,6 +187,15 @@ function PositionRow({ entry }: { entry: PositionRecord }) {
             <View className="flex-row items-center bg-amber-500/20 rounded-full px-2 py-0.5 ml-2">
               <RefreshCw size={10} color="#F59E0B" />
               <Text className="text-amber-500 text-[10px] font-medium ml-1">Changed my mind</Text>
+            </View>
+          ) : null}
+
+          {/* Only ever reaches your own record. Article IV shields you from
+              other people, not from yourself. */}
+          {entry.isAnonymous ? (
+            <View className="flex-row items-center bg-slate-700/60 rounded-full px-2 py-0.5 ml-2">
+              <EyeOff size={10} color="#94A3B8" />
+              <Text className="text-slate-400 text-[10px] font-medium ml-1">Anonymous</Text>
             </View>
           ) : null}
         </View>

@@ -14,8 +14,19 @@ const ALGORITHM_CONFIG = {
 
   // Time decay - AGGRESSIVE to prevent stale content
   RECENCY_HALF_LIFE_HOURS: 12, // Reduced from 24 - content decays faster
-  VIRAL_DETECTION_WINDOW_HOURS: 1,
-  VIRAL_THRESHOLD_MULTIPLIER: 5,
+
+  // BILL OF RIGHTS ARTICLE II. The two multipliers that used to live here —
+  // a 2x for engagement VELOCITY inside the first hour and a 1.5x for a high
+  // engagement RATE — are gone, and must not come back.
+  //
+  // Velocity is the canonical outrage signal. A post that collects reactions
+  // fastest in its first hour is, on a platform about contested legislation,
+  // usually the angriest one available; doubling its score is the precise
+  // mechanic Article II names when it says no algorithm shall "amplify one
+  // voice over another based on outrage". Nothing about them was neutral, and
+  // the compliance flag that was supposed to gate them never applied to this
+  // file at all.
+  VIRAL_DETECTION_WINDOW_HOURS: 1, // Kept for CLASSIFICATION only — see below.
 
   // Personalization weights
   FOLLOWING_BOOST: 50,
@@ -29,6 +40,14 @@ const ALGORITHM_CONFIG = {
   MAX_POSTS_PER_AUTHOR: 2,
   ENGAGEMENT_SATURATION_THRESHOLD: 500, // Posts with >500 engagement get diminishing returns
   ENGAGEMENT_SATURATION_FACTOR: 0.5, // 50% penalty for saturated posts
+
+  // A HARD CEILING ON WHAT REACTIONS CAN BUY.
+  //
+  // Article II: "only the verifiable weight of Liquid Democracy shall
+  // determine the prominence of an idea." Engagement is kept as a tiebreaker
+  // because a post nobody answered is weaker evidence than one people argued
+  // with — but it is capped so it can never outrank the civic weight below.
+  ENGAGEMENT_MAX_CONTRIBUTION: 40,
 
   // Creator influence
   HIGH_FOLLOWER_THRESHOLD: 100,
@@ -56,7 +75,88 @@ const ALGORITHM_CONFIG = {
   // the public record of what people actually voted on.
   POSITION_MATCH_BOOST: 60, // A post about a record this reader took a side on.
   OTHER_SIDE_RATIO: 0.2, // A FLOOR of the feed from people who voted the other way.
+
+  // THE VERIFIABLE WEIGHT OF LIQUID DEMOCRACY, which Article II says is the
+  // only thing that should decide prominence.
+  //
+  // On this platform that has a precise meaning: the published tally on the
+  // record a post is attached to — direct votes plus everything delegation
+  // carried into them. A post about a bill four thousand citizens have taken a
+  // position on is more prominent than one about a bill nobody has read, and
+  // that ordering comes from the Pulse rather than from a reaction count.
+  //
+  // Logarithmic so the tenth voice matters more than the ten-thousandth: this
+  // ranks by how much of the electorate has engaged with the RECORD, not by
+  // raw size, and it cannot be bought with volume.
+  CIVIC_WEIGHT_PER_DECADE: 45,
+  CIVIC_WEIGHT_MAX: 180,
 };
+
+/**
+ * THE RANKING, IN PUBLIC.
+ *
+ * Constitution Article III, Section 1: "The logic used to calculate the Pulse,
+ * the Trust Scores, and the Magnification of Leaders must be publicly
+ * auditable." Bill of Rights Article II lists "Transparent ranking factors" as
+ * a principle.
+ *
+ * Neither was true. The only thing any screen could show was
+ * getAlgorithmCompliance(), a hardcoded object in the client bundle that
+ * asserted `engagementBait: false` and was never derived from anything — it
+ * could not have detected engagement bait if the ranker had been made of it,
+ * and it did not apply to this file at all.
+ *
+ * This returns the numbers actually in use, read off the same object the
+ * scorer reads, so an audit is a request rather than a code review.
+ */
+export function getRankingFactors() {
+  return {
+    /** What decides prominence, in the order they matter. */
+    factors: [
+      {
+        name: "Civic weight of the record",
+        detail:
+          "The published tally on the law a post is about — direct votes plus everything delegation carried into them. Logarithmic, so the tenth voice counts for more than the ten-thousandth.",
+        maximum: ALGORITHM_CONFIG.CIVIC_WEIGHT_MAX,
+        basis: "liquid-democracy",
+      },
+      {
+        name: "You took a position on this record",
+        detail: "You are on public record with a side on this exact law.",
+        maximum: ALGORITHM_CONFIG.POSITION_MATCH_BOOST,
+        basis: "liquid-democracy",
+      },
+      {
+        name: "Someone you follow",
+        detail: "You chose to follow this author.",
+        maximum: ALGORITHM_CONFIG.FOLLOWING_BOOST,
+        basis: "your-choice",
+      },
+      {
+        name: "Recency",
+        detail: `Exponential decay, half-life ${ALGORITHM_CONFIG.RECENCY_HALF_LIFE_HOURS} hours.`,
+        maximum: null,
+        basis: "time",
+      },
+      {
+        name: "Replies and reactions",
+        detail:
+          "A tiebreaker only, hard-capped so it can never outrank the civic weight above it.",
+        maximum: ALGORITHM_CONFIG.ENGAGEMENT_MAX_CONTRIBUTION,
+        basis: "engagement",
+      },
+    ],
+    /** Named so their absence is auditable too. */
+    forbidden: [
+      "Engagement velocity (how fast a post collects reactions)",
+      "Paid promotion or any commercial placement",
+      "Outrage, sentiment, or predicted emotional response",
+      "Anything the platform's operators can set per-account",
+    ],
+    recencyHalfLifeHours: ALGORITHM_CONFIG.RECENCY_HALF_LIFE_HOURS,
+    engagementCap: ALGORITHM_CONFIG.ENGAGEMENT_MAX_CONTRIBUTION,
+  };
+}
 
 interface FeedItem {
   id: string;
@@ -267,7 +367,9 @@ export async function calculatePostScore(
       (excessEngagement * ALGORITHM_CONFIG.ENGAGEMENT_SATURATION_FACTOR);
   }
 
-  score += engagementScore;
+  // CAPPED. Article II keeps reactions as a tiebreaker and nothing more; the
+  // civic weight below is what decides prominence.
+  score += Math.min(engagementScore, ALGORITHM_CONFIG.ENGAGEMENT_MAX_CONTRIBUTION);
 
   // 2. Recency Score (AGGRESSIVE exponential decay)
   const recencyMultiplier = Math.pow(0.5, postAge / ALGORITHM_CONFIG.RECENCY_HALF_LIFE_HOURS);
@@ -281,24 +383,21 @@ export async function calculatePostScore(
     isFresh = true;
   }
 
-  // 4. RISING CONTENT DETECTION - Identify content gaining momentum
+  // 4. RISING CONTENT — CLASSIFICATION ONLY, NO LONGER A MULTIPLIER.
+  //
+  // The flag still exists because the feed interleaves fresh, rising and
+  // regular posts for variety, and that mixing is worth keeping. What is gone
+  // is the 1.5x it used to apply to the score, and the 2x that a high
+  // engagement VELOCITY in the first hour used to apply on top of it.
+  //
+  // Velocity is the outrage signal. On a platform about contested legislation
+  // the post gathering reactions fastest in its first hour is reliably the
+  // angriest one on offer, and multiplying its score is exactly what Bill of
+  // Rights Article II forbids: amplifying one voice over another on the
+  // strength of outrage rather than the verifiable weight of Liquid Democracy.
   if (postAge < ALGORITHM_CONFIG.RISING_CONTENT_WINDOW_HOURS && postAge > 0) {
     const views = post.metrics?.viewCount || 1;
-    const engagementRate = engagementScore / views;
-
-    if (engagementRate >= ALGORITHM_CONFIG.RISING_ENGAGEMENT_THRESHOLD) {
-      score *= 1.5; // 50% boost for rising content
-      reason = "Rising";
-      isRising = true;
-    }
-  }
-
-  // 5. Viral Detection (within first hour)
-  if (postAge <= ALGORITHM_CONFIG.VIRAL_DETECTION_WINDOW_HOURS && postAge > 0) {
-    const engagementVelocity = engagementScore / Math.max(postAge, 0.1);
-    if (engagementVelocity > ALGORITHM_CONFIG.VIRAL_THRESHOLD_MULTIPLIER) {
-      score *= 2;
-      reason = "Trending now";
+    if (engagementScore / views >= ALGORITHM_CONFIG.RISING_ENGAGEMENT_THRESHOLD) {
       isRising = true;
     }
   }
@@ -365,6 +464,34 @@ export async function calculatePostScore(
     score *= ALGORITHM_CONFIG.SAME_CATEGORY_PENALTY;
   }
 
+  // 11. THE VERIFIABLE WEIGHT OF LIQUID DEMOCRACY.
+  //
+  // Article II names this as the ONLY thing that should decide how prominent
+  // an idea is, and on this platform it has an exact meaning: the published
+  // tally on the record the post is attached to — direct votes plus everything
+  // delegation carried into them. This is now the largest term in the score,
+  // which is the whole point. A post is prominent because citizens engaged
+  // with the LAW it is about, not because it collected reactions.
+  //
+  // A post attached to no record gets nothing here rather than a default.
+  // Inventing a civic weight for something with no government record behind it
+  // is the drift into fiction Constitution Article III, Section 3 exists to
+  // prevent.
+  const civicVoices =
+    (post.governmentReference?.supportVotes ?? 0) + (post.governmentReference?.opposeVotes ?? 0);
+  if (civicVoices > 0) {
+    // Logarithmic: the tenth voice on a record counts for more than the
+    // ten-thousandth, so prominence tracks how much of the electorate has
+    // engaged rather than raw size, and cannot be bought with volume.
+    score += Math.min(
+      Math.log10(civicVoices + 1) * ALGORITHM_CONFIG.CIVIC_WEIGHT_PER_DECADE,
+      ALGORITHM_CONFIG.CIVIC_WEIGHT_MAX,
+    );
+    if (reason === "Recommended") {
+      reason = "Citizens are voting on this";
+    }
+  }
+
   // 12. THE TWO SIGNALS ONLY THIS PLATFORM HAS.
   //
   // A post about a record this reader has taken a public side on is relevant
@@ -406,8 +533,18 @@ export async function getPersonalizedFeed(
   let userPrefs: UserPreferences | null = null;
   let userViewHistory: Map<string, number> = new Map();
 
+  // The reader's own switch for the other-side floor below. Absent row means
+  // the default, which is on.
+  let wantsOtherSide = true;
+
   if (userId) {
     userPrefs = await getUserPreferences(userId);
+
+    const feedPrefs = await prisma.notificationPreference.findUnique({
+      where: { userId },
+      select: { showOtherSide: true },
+    });
+    wantsOtherSide = feedPrefs?.showOtherSide ?? true;
 
     // Get user's view history for restorative algorithm
     const viewInteractions = await prisma.userInteraction.findMany({
@@ -491,6 +628,12 @@ export async function getPersonalizedFeed(
           category: true,
         },
       },
+      // The published Liquid Democracy tally on the record this post is
+      // about. Article II makes this the deciding factor in the ranking, so
+      // it is loaded with the page rather than fetched once per post.
+      governmentReference: {
+        select: { supportVotes: true, opposeVotes: true },
+      },
       _count: {
         select: {
           comments: true,
@@ -507,7 +650,11 @@ export async function getPersonalizedFeed(
   // a fact on the public record — no model, no inference from clicks, and
   // nothing any other feed can compute.
   const otherSidePostIds = new Set<string>();
-  if (userPrefs && Object.keys(userPrefs.positions).length > 0) {
+  // A reader who has turned this off gets none of it: no reserved slots below,
+  // and no "voted the other way" label either. Labelling somebody's post by
+  // viewpoint after they declined the feature is still the platform annotating
+  // by viewpoint, which is the thing Article II is uneasy about.
+  if (wantsOtherSide && userPrefs && Object.keys(userPrefs.positions).length > 0) {
     const candidates = posts.filter(
       (post) =>
         post.governmentReferenceId && userPrefs!.positions[post.governmentReferenceId],
@@ -521,6 +668,10 @@ export async function getPersonalizedFeed(
             in: [...new Set(candidates.map((p) => p.governmentReferenceId as string))],
           },
           position: { in: ["support", "oppose"] },
+          // ARTICLE IV. The badge on this post says "voted the other way",
+          // which announces how a named person voted. Only positions somebody
+          // put their name to can carry it.
+          isAnonymous: false,
         },
         select: { userId: true, governmentReferenceId: true, position: true },
       });
@@ -721,7 +872,15 @@ export async function getPersonalizedFeed(
       }
     }
 
-    // THE OTHER SIDE IS A FLOOR, NOT A TAX.
+    // THE OTHER SIDE IS A FLOOR, NOT A TAX — AND IT IS THE READER'S CHOICE.
+    //
+    // Article II says only the verifiable weight of Liquid Democracy should
+    // decide prominence, and a platform reserving a fifth of the feed by
+    // viewpoint is the platform deciding prominence, however good the intent.
+    // Article II also calls the platform "a neutral conduit for human intent":
+    // a citizen choosing this for themselves is human intent, the platform
+    // choosing it for them is not. So it reads a switch they own, and if they
+    // have turned it off nothing here runs at all.
     //
     // Up to a fifth of the feed is reserved for people who took the opposite
     // position on a record this reader also voted on. It is added rather than
@@ -732,7 +891,9 @@ export async function getPersonalizedFeed(
     // are on public record disagreeing about the same bill, which is the only
     // reason a platform can do this honestly at all — every other "see the
     // other side" feature is a guess about somebody's politics.
-    const otherSideSlots = Math.floor(limit * ALGORITHM_CONFIG.OTHER_SIDE_RATIO);
+    const otherSideSlots = wantsOtherSide
+      ? Math.floor(limit * ALGORITHM_CONFIG.OTHER_SIDE_RATIO)
+      : 0;
     if (otherSideSlots > 0) {
       const alreadyIn = new Set(finalFeed.map((p) => p.id));
       const waiting = allScoredPosts

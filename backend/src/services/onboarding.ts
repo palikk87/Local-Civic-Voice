@@ -174,11 +174,15 @@ export async function neighbours(
 
   // Everybody who has voted on any of the same records. Scoped to the reader's
   // own records so this stays one indexed query however large the platform is.
+  // ARTICLE IV. Somebody who voted anonymously has said they do not want that
+  // position attached to their name, and introducing them to a stranger as
+  // "agrees with you on four records" attaches it as firmly as a byline would.
   const others = await prisma.governmentReferenceVote.findMany({
     where: {
       governmentReferenceId: { in: referenceIds },
       userId: { not: userId },
       position: { in: ["support", "oppose"] },
+      isAnonymous: false,
     },
     select: { userId: true },
   });

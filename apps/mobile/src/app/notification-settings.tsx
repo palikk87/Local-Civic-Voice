@@ -22,6 +22,8 @@ import {
   Bell,
   MessageSquare,
   UserCheck,
+  EyeOff,
+  Scale,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -116,6 +118,27 @@ const preferenceItems: PreferenceConfig[] = [
       'When somebody you delegated to votes in your name. Leaving this on is how you find out in time to vote for yourself instead.',
     icon: UserCheck,
     color: '#F59E0B',
+  },
+  // BILL OF RIGHTS ARTICLE IV. The article lists an anonymous voting option as
+  // a right of the people and there was no such thing until now.
+  {
+    key: 'voteAnonymously',
+    title: 'Vote anonymously',
+    description:
+      'Your vote still counts in the Pulse exactly as it would otherwise, including through anyone who delegated to you. What is withheld is your name. You still see your own record in full.',
+    icon: EyeOff,
+    color: '#8B5CF6',
+  },
+  // BILL OF RIGHTS ARTICLE II. Reserving part of a feed by viewpoint is the
+  // platform deciding prominence; a citizen choosing it for themselves is the
+  // human intent Article II says the platform should be a conduit for.
+  {
+    key: 'showOtherSide',
+    title: 'Show me the other side',
+    description:
+      'Keeps up to a fifth of your feed for people who voted the opposite way to you on a law you both voted on, marked so you know why. Added to your feed, never swapped in.',
+    icon: Scale,
+    color: '#EF4444',
   },
 ];
 
@@ -245,6 +268,12 @@ function NotificationSettingsContent() {
       messages: true,
       lawUpdates: true,
       voiceUsed: true,
+      // Deliberately NOT swept by enable-all / disable-all. A ranking choice
+      // and a privacy right are not notification noise, and a button labelled
+      // "turn everything off" must not silently anonymise somebody or reshape
+      // their feed.
+      showOtherSide: localPreferences.showOtherSide,
+      voteAnonymously: localPreferences.voteAnonymously,
     };
 
     setLocalPreferences(allEnabled);
@@ -276,6 +305,12 @@ function NotificationSettingsContent() {
       messages: false,
       lawUpdates: false,
       voiceUsed: false,
+      // Deliberately NOT swept by enable-all / disable-all. A ranking choice
+      // and a privacy right are not notification noise, and a button labelled
+      // "turn everything off" must not silently anonymise somebody or reshape
+      // their feed.
+      showOtherSide: localPreferences.showOtherSide,
+      voteAnonymously: localPreferences.voteAnonymously,
     };
 
     setLocalPreferences(allDisabled);

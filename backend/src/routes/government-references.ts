@@ -120,6 +120,15 @@ const voteSchema = z.object({
    * invent, and an invented reason is worse than none.
    */
   reason: z.string().max(500).optional(),
+  /**
+   * Bill of Rights Article IV: the anonymous voting option.
+   *
+   * The vote counts either way — an anonymous position is carried into the
+   * Pulse exactly like any other, including through delegation. What is
+   * withheld is the citizen's NAME, on every surface that would otherwise
+   * attach it to this position for somebody else to read.
+   */
+  anonymous: z.boolean().optional(),
 });
 
 const mergeSchema = z.object({
@@ -710,7 +719,17 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
   }
 
   let referenceId = c.req.param("id");
-  const { position, reason: reasonGiven } = c.req.valid("json");
+  const { position, reason: reasonGiven, anonymous } = c.req.valid("json");
+
+  // ARTICLE IV. The request decides when it says so, in either direction;
+  // otherwise the citizen's standing preference does. Applied here rather than
+  // in each client so the right works from every surface that can cast a vote,
+  // instead of only the ones that grew a toggle.
+  const standing = await prisma.notificationPreference.findUnique({
+    where: { userId: user.id },
+    select: { voteAnonymously: true },
+  });
+  const isAnonymous = anonymous ?? standing?.voteAnonymously ?? false;
 
   const reference = await prisma.governmentReference.findUnique({
     where: { id: referenceId },
@@ -751,7 +770,7 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
       // Different vote - update it
       await prisma.governmentReferenceVote.update({
         where: { id: existingVote.id },
-        data: { position },
+        data: { position, isAnonymous },
       });
       voteAction = "updated";
     }
@@ -762,6 +781,7 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
         governmentReferenceId: referenceId,
         userId: user.id,
         position,
+        isAnonymous,
       },
     });
   }
@@ -774,6 +794,7 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
     referenceId,
     position: voteAction === "removed" ? "withdrawn" : newPosition,
     reason: reasonGiven,
+    isAnonymous,
   });
 
   // Recalculate and persist WEIGHTED vote counts: each vote carries the
@@ -1369,8 +1390,16 @@ governmentReferencesRouter.get("/:id/other-side", async (c) => {
 
   const otherPosition = mine.position === "support" ? "oppose" : "support";
 
+  // ARTICLE IV. "The other side" names people by the way they voted, so it can
+  // only be built from positions somebody put their name to. An anonymous
+  // voter who also wrote a post is reachable through the post like anybody
+  // else; what this must not do is announce how they voted.
   const theirVotes = await prisma.governmentReferenceVote.findMany({
-    where: { governmentReferenceId: referenceId, position: otherPosition },
+    where: {
+      governmentReferenceId: referenceId,
+      position: otherPosition,
+      isAnonymous: false,
+    },
     select: { userId: true },
   });
   if (theirVotes.length === 0) {

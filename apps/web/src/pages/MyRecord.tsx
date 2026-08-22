@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
+  EyeOff,
   RefreshCw,
   Scale,
   ThumbsDown,
@@ -56,6 +57,16 @@ function PositionRow({ entry }: { entry: PositionRecord }) {
               <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
                 <RefreshCw className="h-3 w-3" />
                 Changed my mind
+              </span>
+            ) : null}
+
+            {/* Only ever reaches your own record. Article IV shields a citizen
+                from other people, not from themselves — you can always read
+                back what you did, and this says which of it carries your name. */}
+            {entry.isAnonymous ? (
+              <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                <EyeOff className="h-3 w-3" />
+                Anonymous
               </span>
             ) : null}
           </p>

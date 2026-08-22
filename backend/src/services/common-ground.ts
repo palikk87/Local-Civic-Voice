@@ -62,10 +62,16 @@ export async function commonGround(
   // Scoped to the records the viewer has touched, so this stays one query
   // against an indexed column however many records the other person has voted
   // on. The overlap is what is being asked about; the rest is not.
+  // ARTICLE IV. Their anonymous positions are not theirs to be told about:
+  // this names a specific person's side on a specific bill to somebody else,
+  // which is exactly what the anonymous option exists to prevent. The reader's
+  // OWN anonymous votes still count on their side of the comparison — hiding a
+  // position from the person who took it protects nobody.
   const theirs = await prisma.governmentReferenceVote.findMany({
     where: {
       userId: otherId,
       position: { in: ["support", "oppose"] },
+      isAnonymous: false,
       governmentReferenceId: { in: [...mineByReference.keys()] },
     },
     select: {
@@ -152,10 +158,13 @@ export async function alignmentWith(
 
   const mineByReference = new Map(mine.map((v) => [v.governmentReferenceId, v.position]));
 
+  // Article IV again: an alignment number is a claim about how a named person
+  // voted, so it can only be built from the positions they put their name to.
   const theirs = await prisma.governmentReferenceVote.findMany({
     where: {
       userId: { in: targets },
       position: { in: ["support", "oppose"] },
+      isAnonymous: false,
       governmentReferenceId: { in: [...mineByReference.keys()] },
     },
     select: { userId: true, governmentReferenceId: true, position: true },
