@@ -408,16 +408,34 @@ export function freshClientHeaders(extra: Record<string, string> = {}): Record<s
 
 let signUpCount = 0;
 
+/**
+ * Create an account and sign in.
+ *
+ * VERIFIED BY DEFAULT. Constitution Article I, Section 3 gates every write to
+ * the public record on a verified account, and almost every test in this suite
+ * is about what happens AFTER somebody has finished signing up. Leaving them
+ * unverified would make four hundred tests assert the same 403 instead of the
+ * thing they were written for.
+ *
+ * Pass `verified: false` to get an account that has not entered its code —
+ * that is how the gate itself is tested, and there is a test that fails if
+ * this default silently stops applying.
+ */
 export async function signUp(input: {
   email: string;
   password: string;
   name: string;
+  verified?: boolean;
 }): Promise<{ cookie: string; userId: string }> {
   signUpCount += 1;
   const response = await fetch(`${BASE_URL}/api/auth/sign-up/email`, {
     method: "POST",
     headers: freshClientHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      email: input.email,
+      password: input.password,
+      name: input.name,
+    }),
   });
 
   if (!response.ok) {
@@ -430,6 +448,12 @@ export async function signUp(input: {
   const body = (await response.json()) as { user?: { id: string } };
   const userId = body.user?.id;
   if (!userId) throw new Error("sign-up returned no user id");
+
+  // Straight into the row rather than through the OTP endpoint: the code is
+  // emailed, and no test should depend on an email provider being reachable.
+  if (input.verified !== false) {
+    await prisma.user.update({ where: { id: userId }, data: { emailVerified: true } });
+  }
 
   return { cookie: setCookie.split(";")[0]!, userId };
 }

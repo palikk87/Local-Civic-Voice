@@ -9,6 +9,7 @@ import { prisma } from "../prisma";
 // web it points at the site rather than the API), and ignored the S3 driver
 // completely. Every picture ever attached to a post was broken in every client.
 import { publicUrlFor } from "../services/storage";
+import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import { blockExistsBetween, hiddenFrom } from "../services/relationships";
 import { purgeMediaObjects } from "../services/media-objects";
 import type { auth } from "../auth";
@@ -271,6 +272,13 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
   const user = c.get("user");
   if (!user) {
     return c.json({ error: "Authentication required" }, 401);
+  }
+
+  // CONSTITUTION ARTICLE I, SECTION 3 / BILL OF RIGHTS ARTICLE III. Writing to
+  // the public record needs a verified account, so a thousand throwaway
+  // signups cannot manufacture a conversation around a bill.
+  if (!(await isVerified(user))) {
+    return c.json(VERIFICATION_REQUIRED, 403);
   }
 
   const { content, billId, governmentReferenceId, referenceType, referenceId, mediaIds } =
@@ -1013,6 +1021,10 @@ postsRouter.post(
       return c.json({ error: "Authentication required" }, 401);
     }
 
+    if (!(await isVerified(user))) {
+      return c.json(VERIFICATION_REQUIRED, 403);
+    }
+
     const postId = c.req.param("id");
 
     // You cannot talk to somebody who has blocked you, or to somebody you have
@@ -1159,6 +1171,10 @@ postsRouter.post("/:id/repost", async (c) => {
     const user = c.get("user");
     if (!user) {
       return c.json({ error: "Authentication required" }, 401);
+    }
+
+    if (!(await isVerified(user))) {
+      return c.json(VERIFICATION_REQUIRED, 403);
     }
 
     const targetId = c.req.param("id");

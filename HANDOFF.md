@@ -440,3 +440,34 @@ thing it covers and watching it fail. That includes the two paths that used to b
 recorded from the live API and replayed offline, and the brief pipeline runs end
 to end with the model answered at the network boundary — the classifier, the
 chunker, the prompts, the fact-check pass and the version pin all real.
+
+## Anti-bot: what "verified" means here, and what it does not
+
+Constitution Article I, Section 3 — "Only verified human beings may contribute
+to the Pulse" — is now enforced. An account that has not entered the code
+emailed at signup gets a 403 (`code: "email_verification_required"`) from
+voting, delegating, posting, commenting and reposting. Reading stays completely
+open: every law, brief, tally and argument is visible without an account at
+all, because the government's business is the public good and the Pulse is the
+part that needs protecting.
+
+**Be honest about the strength of this.** A code to an inbox raises the cost of
+a thousand accounts from nothing to something. It is not proof of personhood —
+disposable inboxes defeat it, and anyone determined will get through. The copy
+in the app does not claim more than that, and neither should any marketing.
+
+If you want something stronger, the two realistic options both need a decision
+and an account from you, and neither should be guessed at:
+
+- **Phone (SMS)**: a real deterrent, because numbers cost money and are harder
+  to farm. Needs an SMS provider (Twilio, MessageBird, Vonage). The code path
+  is already generic — `services/email.ts` sends the code and `auth.ts` chooses
+  the channel — so adding SMS is a new sender plus a `phoneNumber` column, not
+  a redesign. **Not built**: it needs an account and a paid credential, and I do
+  not create accounts or handle credentials.
+- **Identity verification** (Persona, Stripe Identity, ID.me): the only thing
+  that would honestly justify the phrase "verified citizen" in the Constitution.
+  A product and legal decision as much as a technical one.
+
+The `emailVerified` column is the single gate for all of these — whatever you
+add later sets the same flag, and nothing downstream changes.

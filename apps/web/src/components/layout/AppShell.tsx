@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { VerifyEmailBanner } from "@/components/auth/VerifyEmailBanner";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -90,6 +91,10 @@ export function AppShell({
 
   return (
     <div className="min-h-screen bg-background">
+      {/* A gate with no sign on it is indistinguishable from a broken app.
+          Renders nothing unless the reader is signed in and unverified. */}
+      <VerifyEmailBanner />
+
       {/* ---------- Desktop left sidebar ---------- */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border bg-background/95 px-3 py-5 backdrop-blur lg:flex">
         <Link to="/feed" className="flex items-center gap-2.5 px-2">

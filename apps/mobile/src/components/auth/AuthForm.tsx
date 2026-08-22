@@ -15,6 +15,7 @@ import {
 import * as Haptics from 'expo-haptics';
 
 import { authClient } from '@/lib/auth/auth-client';
+import { VerifyEmailStep } from './VerifyEmailStep';
 import { SESSION_QUERY_KEY } from '@/lib/auth/use-session';
 import { api } from '@/lib/api/api';
 
@@ -60,6 +61,7 @@ export function AuthForm({
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === 'signup';
@@ -137,7 +139,13 @@ export function AuthForm({
     await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
     await queryClient.invalidateQueries();
     if (usernameError) setError(usernameError);
-    onSuccess?.();
+
+    // CONSTITUTION ARTICLE I, SECTION 3. The account exists and is signed in,
+    // but it cannot vote, delegate or post until the emailed code is entered.
+    // The server sent that code the moment the account was created, so this is
+    // a prompt rather than a trigger — closing it loses nothing except the
+    // ability to take part until they come back to it.
+    setVerifying(true);
   }
 
   async function handleSubmit() {
@@ -165,6 +173,24 @@ export function AuthForm({
   const fieldWrap =
     'flex-row items-center bg-slate-800/60 border border-slate-700 rounded-xl px-4';
   const fieldInput = 'flex-1 py-4 px-3 text-white text-base';
+
+  // The account is made; the code is what is left. Shown in place of the form
+  // rather than over it, so there is one obvious next thing to do.
+  if (verifying) {
+    return (
+      <VerifyEmailStep
+        email={email.trim().toLowerCase()}
+        onVerified={() => {
+          setVerifying(false);
+          onSuccess?.();
+        }}
+        onSkip={() => {
+          setVerifying(false);
+          onSuccess?.();
+        }}
+      />
+    );
+  }
 
   return (
     <View>

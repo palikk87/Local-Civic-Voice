@@ -39,7 +39,15 @@ async function ensureCitizen(c: (typeof CITIZENS)[number]) {
   });
   return prisma.user.update({
     where: { email },
-    data: { username: c.username, bio: c.bio },
+    data: {
+      username: c.username,
+      bio: c.bio,
+      // Constitution Article I, Section 3 gates every write to the public
+      // record on a verified account. These are seeded by the operator, not
+      // signed up by a person, so there is no inbox to send a code to and no
+      // reason to leave them permanently unable to take part.
+      emailVerified: true,
+    },
   });
 }
 

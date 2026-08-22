@@ -12,6 +12,7 @@ import {
   DELEGATE_REQUIREMENTS,
 } from "../services/delegation-service";
 import { alignmentWith } from "../services/common-ground";
+import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -147,6 +148,13 @@ delegationsRouter.post(
     const currentUser = c.get("user");
     if (!currentUser) {
       return c.json({ error: "Authentication required" }, 401);
+    }
+
+    // CONSTITUTION ARTICLE I, SECTION 3. A delegation moves published tallies
+    // the moment the delegate votes, so lending a voice is contributing to the
+    // Pulse and needs the same verified account that voting does.
+    if (!(await isVerified(currentUser))) {
+      return c.json(VERIFICATION_REQUIRED, 403);
     }
 
     const { toUserId, category } = c.req.valid("json");

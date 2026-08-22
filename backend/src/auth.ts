@@ -47,6 +47,23 @@ export const auth = betterAuth({
         after: async (user) => {
           if (isSampleAccount(user)) return;
           console.log(`[Signup] New account created: ${user.email}`);
+
+          // CONSTITUTION ARTICLE I, SECTION 3: only verified human beings may
+          // contribute to the Pulse. The code goes out the moment the account
+          // exists, from the server rather than from either client, so the
+          // step cannot be skipped by talking to the API directly.
+          //
+          // Never throws into signup. An account that exists but whose first
+          // email failed is recoverable — they press "send another code" — and
+          // an account that failed to be created because an email provider was
+          // briefly down is not.
+          void auth.api
+            .sendVerificationOTP({
+              body: { email: user.email, type: "email-verification" },
+            })
+            .catch((error: unknown) => {
+              console.error("[Signup] could not send verification code", user.email, error);
+            });
         },
       },
     },

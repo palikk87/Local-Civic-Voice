@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { VerifyEmailStep } from "./VerifyEmailStep";
 import { api } from "@/lib/api";
 
 type Mode = "signin" | "signup";
@@ -55,6 +56,7 @@ export function AuthForm({
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
@@ -122,7 +124,13 @@ export function AuthForm({
 
     await queryClient.invalidateQueries();
     if (usernameError) setError(usernameError);
-    onSuccess?.();
+
+    // CONSTITUTION ARTICLE I, SECTION 3. The account exists and is signed in,
+    // but it cannot vote, delegate or post until the emailed code is entered.
+    // The server sent that code the moment the account was created, so this
+    // step is a prompt rather than a trigger — closing it loses nothing except
+    // the ability to take part until they come back to it.
+    setVerifying(true);
   }
 
   async function handleSubmit() {
@@ -148,6 +156,26 @@ export function AuthForm({
 
   const iconClass =
     "absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground";
+
+  // The account is made; the code is what is left. Shown in place of the form
+  // rather than as a dialog over it, so there is one obvious next thing to do.
+  if (verifying) {
+    return (
+      <div className={className}>
+        <VerifyEmailStep
+          email={email.trim().toLowerCase()}
+          onVerified={() => {
+            setVerifying(false);
+            onSuccess?.();
+          }}
+          onSkip={() => {
+            setVerifying(false);
+            onSuccess?.();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={className}>

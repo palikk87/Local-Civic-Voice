@@ -113,7 +113,14 @@ async function main(): Promise<void> {
 
   const user = await prisma.user.update({
     where: { email },
-    data: { role: "superadmin", username },
+    data: {
+      role: "superadmin",
+      username,
+      // Constitution Article I, Section 3 gates every write to the public
+      // record on a verified account. This one is created by the operator from
+      // the command line, so there is no signup flow to send a code through.
+      emailVerified: true,
+    },
   });
 
   console.log(`Created super admin. id=${user.id} username=${user.username} role=${user.role}`);

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import { publicUrlFor } from "../services/storage";
 import type { auth } from "../auth";
 import {
@@ -719,6 +720,13 @@ governmentReferencesRouter.post("/:id/vote", zValidator("json", voteSchema), asy
   }
 
   let referenceId = c.req.param("id");
+  // CONSTITUTION ARTICLE I, SECTION 3. Only verified human beings contribute
+  // to the Pulse. Checked before anything is written, so an unverified account
+  // cannot move a published tally even by a single voice.
+  if (!(await isVerified(user))) {
+    return c.json(VERIFICATION_REQUIRED, 403);
+  }
+
   const { position, reason: reasonGiven, anonymous } = c.req.valid("json");
 
   // ARTICLE IV. The request decides when it says so, in either direction;
