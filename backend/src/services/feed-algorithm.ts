@@ -47,6 +47,15 @@ const ALGORITHM_CONFIG = {
   SEEN_CONTENT_PENALTY: 0.1, // 90% penalty for content user has already seen
   MAX_TIMES_SHOWN: 3, // After 3 impressions, heavily penalize
   RANDOM_DISCOVERY_CHANCE: 0.15, // 15% chance to inject random discovery content
+
+  // THE TWO SIGNALS ONLY THIS PLATFORM HAS.
+  //
+  // Every weight above this line exists in every feed ever built: engagement,
+  // recency, who you follow, what you clicked. They are a model of what will
+  // hold attention. These two are not a model of anything — they are read off
+  // the public record of what people actually voted on.
+  POSITION_MATCH_BOOST: 60, // A post about a record this reader took a side on.
+  OTHER_SIDE_RATIO: 0.2, // A FLOOR of the feed from people who voted the other way.
 };
 
 interface FeedItem {
@@ -89,6 +98,17 @@ interface UserPreferences {
   preferredCategories: Record<string, number>;
   preferredAuthors: Record<string, number>;
   followingIds: string[];
+  /**
+   * Every record this person has taken a public side on, and which side.
+   *
+   * THE FEED DID NOT KNOW THIS. Category preference and "people like you" were
+   * both computed from the legacy `Vote` table, while every client on the
+   * platform votes through /api/government-references/:id/vote, which writes
+   * `GovernmentReferenceVote`. So the half of the ranking that was supposed to
+   * make this feed about legislation read an empty table, and what was left
+   * was engagement and recency — the same feed as everywhere else.
+   */
+  positions: Record<string, string>;
   interactionHistory: {
     likedPostIds: string[];
     commentedPostIds: string[];
@@ -102,7 +122,8 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
     cacheKey("user", "prefs", userId),
     async () => {
       // Batch all independent queries with Promise.all for better performance
-      const [following, likes, comments, interactions, votes] = await Promise.all([
+      const [following, likes, comments, interactions, positionVotes, legacyVotes] =
+        await Promise.all([
         // Get user's following list
         prisma.follow.findMany({
           where: { followerId: userId },
@@ -128,7 +149,19 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
           take: 500,
           orderBy: { createdAt: "desc" },
         }),
-        // Calculate category preferences from votes
+        // Category preference and the reader's own positions, from the table
+        // the platform actually writes to.
+        prisma.governmentReferenceVote.findMany({
+          where: { userId, position: { in: ["support", "oppose"] } },
+          select: {
+            governmentReferenceId: true,
+            position: true,
+            governmentReference: { select: { category: true } },
+          },
+        }),
+        // The legacy table as well, so an account that voted before the
+        // reference endpoints existed is not suddenly treated as having no
+        // history at all.
         prisma.vote.findMany({
           where: { userId },
           include: { bill: { select: { category: true } } },
@@ -139,7 +172,17 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
       const likedPostIds = likes.map((l) => l.postId);
 
       const preferredCategories: Record<string, number> = {};
-      votes.forEach((vote) => {
+      const positions: Record<string, string> = {};
+
+      positionVotes.forEach((vote) => {
+        positions[vote.governmentReferenceId] = vote.position;
+        const category = vote.governmentReference?.category;
+        if (category) {
+          preferredCategories[category] = (preferredCategories[category] || 0) + 1;
+        }
+      });
+
+      legacyVotes.forEach((vote) => {
         const category = vote.bill.category;
         preferredCategories[category] = (preferredCategories[category] || 0) + 1;
       });
@@ -166,6 +209,7 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
         preferredCategories,
         preferredAuthors,
         followingIds,
+        positions,
         interactionHistory: {
           likedPostIds,
           commentedPostIds: comments.map((c) => c.postId),
@@ -181,12 +225,24 @@ export async function calculatePostScore(
   userPrefs: UserPreferences,
   seenAuthors: Set<string>,
   seenCategories: Set<string>,
-  userViewHistory?: Map<string, number> // postId -> times shown
-): Promise<{ score: number; reason: string; isRising: boolean; isFresh: boolean }> {
+  userViewHistory?: Map<string, number>, // postId -> times shown
+  /**
+   * Post ids whose author took the OPPOSITE side to the reader on the record
+   * the post is about. Precomputed in one query rather than looked up per post.
+   */
+  otherSidePostIds?: Set<string>
+): Promise<{
+  score: number;
+  reason: string;
+  isRising: boolean;
+  isFresh: boolean;
+  isOtherSide: boolean;
+}> {
   let score = 0;
   let reason = "Recommended";
   let isRising = false;
   let isFresh = false;
+  const isOtherSide = otherSidePostIds?.has(post.id) ?? false;
 
   const now = new Date();
   const postAge = (now.getTime() - new Date(post.createdAt).getTime()) / (1000 * 60 * 60);
@@ -309,7 +365,28 @@ export async function calculatePostScore(
     score *= ALGORITHM_CONFIG.SAME_CATEGORY_PENALTY;
   }
 
-  return { score: Math.max(score, 0), reason, isRising, isFresh };
+  // 12. THE TWO SIGNALS ONLY THIS PLATFORM HAS.
+  //
+  // A post about a record this reader has taken a public side on is relevant
+  // to them as a matter of record, not as a prediction — they committed to a
+  // position on that exact bill. Nothing else in this file can know that.
+  if (post.governmentReferenceId && userPrefs.positions[post.governmentReferenceId]) {
+    score += ALGORITHM_CONFIG.POSITION_MATCH_BOOST;
+    if (reason === "Recommended" || reason === "Fresh content") {
+      reason = "About a law you took a position on";
+    }
+  }
+
+  // And the label for the other side. NOT A BOOST AND NOT A PENALTY: the
+  // quota is applied when the feed is assembled, so agreeing with somebody
+  // costs nothing and disagreeing buys nothing. What it does buy is the
+  // sentence saying why this is here, because a feed that quietly rearranges
+  // what somebody sees is the thing this is meant to be an alternative to.
+  if (isOtherSide) {
+    reason = "They voted the other way on this";
+  }
+
+  return { score: Math.max(score, 0), reason, isRising, isFresh, isOtherSide };
 }
 
 export async function getPersonalizedFeed(
@@ -423,6 +500,45 @@ export async function getPersonalizedFeed(
     },
   });
 
+  // WHICH OF THESE POSTS COME FROM THE OTHER SIDE.
+  //
+  // One query, not one per post: for every post attached to a record this
+  // reader has taken a side on, did its author take the opposite side? That is
+  // a fact on the public record — no model, no inference from clicks, and
+  // nothing any other feed can compute.
+  const otherSidePostIds = new Set<string>();
+  if (userPrefs && Object.keys(userPrefs.positions).length > 0) {
+    const candidates = posts.filter(
+      (post) =>
+        post.governmentReferenceId && userPrefs!.positions[post.governmentReferenceId],
+    );
+
+    if (candidates.length > 0) {
+      const authorVotes = await prisma.governmentReferenceVote.findMany({
+        where: {
+          userId: { in: [...new Set(candidates.map((p) => p.authorId))] },
+          governmentReferenceId: {
+            in: [...new Set(candidates.map((p) => p.governmentReferenceId as string))],
+          },
+          position: { in: ["support", "oppose"] },
+        },
+        select: { userId: true, governmentReferenceId: true, position: true },
+      });
+
+      const theirPosition = new Map(
+        authorVotes.map((v) => [`${v.userId}:${v.governmentReferenceId}`, v.position]),
+      );
+
+      for (const post of candidates) {
+        const mine = userPrefs.positions[post.governmentReferenceId as string];
+        const theirs = theirPosition.get(`${post.authorId}:${post.governmentReferenceId}`);
+        if (theirs && theirs !== mine) {
+          otherSidePostIds.add(post.id);
+        }
+      }
+    }
+  }
+
   // Batch load all post metrics in ONE query
   const postIds = posts.map((p) => p.id);
   const postMetrics = await prisma.postMetrics.findMany({
@@ -461,6 +577,7 @@ export async function getPersonalizedFeed(
   interface ScoredPost extends FeedItem {
     isRising: boolean;
     isFresh: boolean;
+    isOtherSide: boolean;
   }
 
   const allScoredPosts: ScoredPost[] = [];
@@ -476,17 +593,19 @@ export async function getPersonalizedFeed(
     }
 
     const metrics = metricsMap.get(post.id);
-    const { score, reason, isRising, isFresh } = await calculatePostScore(
+    const { score, reason, isRising, isFresh, isOtherSide } = await calculatePostScore(
       { ...post, metrics },
       userPrefs || {
         preferredCategories: {},
         preferredAuthors: {},
         followingIds: [],
+        positions: {},
         interactionHistory: { likedPostIds: [], commentedPostIds: [], viewedPostIds: [] },
       },
       seenAuthors,
       seenCategories,
-      userViewHistory
+      userViewHistory,
+      otherSidePostIds
     );
 
     const scoredPost: ScoredPost = {
@@ -524,6 +643,7 @@ export async function getPersonalizedFeed(
       isSaved: userSaves.has(post.id),
       isRising,
       isFresh,
+      isOtherSide,
     };
 
     allScoredPosts.push(scoredPost);
@@ -599,6 +719,34 @@ export async function getPersonalizedFeed(
         if (post) finalFeed.push(post);
         risingIdx++;
       }
+    }
+
+    // THE OTHER SIDE IS A FLOOR, NOT A TAX.
+    //
+    // Up to a fifth of the feed is reserved for people who took the opposite
+    // position on a record this reader also voted on. It is added rather than
+    // substituted for something similar: agreeing with somebody costs them
+    // nothing, and the reader is never shown less of what they came for.
+    //
+    // Nothing about this is inferred. Every post here is one where two people
+    // are on public record disagreeing about the same bill, which is the only
+    // reason a platform can do this honestly at all — every other "see the
+    // other side" feature is a guess about somebody's politics.
+    const otherSideSlots = Math.floor(limit * ALGORITHM_CONFIG.OTHER_SIDE_RATIO);
+    if (otherSideSlots > 0) {
+      const alreadyIn = new Set(finalFeed.map((p) => p.id));
+      const waiting = allScoredPosts
+        .filter((p) => p.isOtherSide && !alreadyIn.has(p.id))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, otherSideSlots);
+
+      // Spread through the feed rather than stacked at the end, where nobody
+      // reaches them.
+      const step = Math.max(1, Math.floor(finalFeed.length / (waiting.length + 1)));
+      waiting.forEach((post, index) => {
+        const at = Math.min((index + 1) * step, finalFeed.length);
+        finalFeed.splice(at, 0, post);
+      });
     }
 
     // Random discovery injection (15% chance per remaining slot)
@@ -904,29 +1052,35 @@ export async function getSimilarUsers(userId: string, limit: number = 10): Promi
     return cached.slice(0, limit);
   }
 
-  // Get user's votes
-  const userVotes = await prisma.vote.findMany({
-    where: { userId },
-    select: { billId: true, position: true },
+  // THE TABLE THE PLATFORM ACTUALLY WRITES TO.
+  //
+  // This read `Vote` — the legacy Bill table — while every client votes through
+  // /api/government-references/:id/vote, which writes GovernmentReferenceVote.
+  // So "people like you" was empty for every account created since, and the
+  // feature quietly did nothing at all.
+  const userVotes = await prisma.governmentReferenceVote.findMany({
+    where: { userId, position: { in: ["support", "oppose"] } },
+    select: { governmentReferenceId: true, position: true },
   });
 
   if (userVotes.length === 0) return [];
 
   // Find users who voted similarly
-  const voteMap = new Map(userVotes.map((v) => [v.billId, v.position]));
+  const voteMap = new Map(userVotes.map((v) => [v.governmentReferenceId, v.position]));
 
-  const otherUsers = await prisma.vote.findMany({
+  const otherUsers = await prisma.governmentReferenceVote.findMany({
     where: {
-      billId: { in: Array.from(voteMap.keys()) },
+      governmentReferenceId: { in: Array.from(voteMap.keys()) },
       userId: { not: userId },
+      position: { in: ["support", "oppose"] },
     },
-    select: { userId: true, billId: true, position: true },
+    select: { userId: true, governmentReferenceId: true, position: true },
   });
 
   // Calculate similarity scores
   const similarityScores: Record<string, number> = {};
   for (const vote of otherUsers) {
-    const userPosition = voteMap.get(vote.billId);
+    const userPosition = voteMap.get(vote.governmentReferenceId);
     if (userPosition === vote.position) {
       similarityScores[vote.userId] = (similarityScores[vote.userId] || 0) + 1;
     }

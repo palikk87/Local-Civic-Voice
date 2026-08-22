@@ -137,5 +137,9 @@ export function algorithmicPostToFeedItem(post: AlgorithmicFeedPost): FeedItem {
     timestamp: post.createdAt,
     likes: post.metrics.likes,
     isLiked: post.isLiked,
+    // Carried through so the badge can say why this is here. The server sets
+    // it from two public votes on the same record; dropping it here is how it
+    // used to reach the UI as nothing at all.
+    isOtherSide: post.feedReason === 'They voted the other way on this',
   };
 }

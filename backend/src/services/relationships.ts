@@ -28,6 +28,7 @@
 
 import { prisma } from "../prisma";
 import { republishTalliesAfterDelegationChange } from "./delegation-service";
+import { invalidateUserCache } from "./cache";
 
 /** Everyone this person cannot see and cannot be seen by. */
 export async function blockedBothWays(userId: string): Promise<string[]> {
@@ -140,7 +141,24 @@ export async function block(blockerId: string, blockedId: string): Promise<void>
     });
   });
 
+  // A BLOCK TAKES EFFECT NOW, NOT IN THIRTY SECONDS.
+  //
+  // The feed keeps a per-reader cached response, so without this the person
+  // they just blocked stayed in their feed until it expired. That is a short
+  // window and exactly the wrong one to leave open — somebody blocks in the
+  // moment they most need it to have worked.
+  invalidateUserCache(blockerId);
+  invalidateUserCache(blockedId);
+
   for (const toUserId of new Set(severed.map((d) => d.toUserId))) {
     await republishTalliesAfterDelegationChange(toUserId);
   }
+}
+
+/**
+ * Muting is quieter than a block but has to land just as fast: the whole point
+ * is not seeing somebody again, and "again in thirty seconds" is not that.
+ */
+export function forgetCachedFeeds(userId: string): void {
+  invalidateUserCache(userId);
 }

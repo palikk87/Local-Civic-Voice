@@ -73,7 +73,13 @@ export type FeedReason =
   | { type: 'rep_gap'; gapPct: number }
   | { type: 'breaking'; urgency: 'critical' | 'high' | 'medium' }
   | { type: 'similar_voters'; matchPct: number }
-  | { type: 'delegate'; delegateName: string };
+  | { type: 'delegate'; delegateName: string }
+  /**
+   * The reader and this author are on public record disagreeing about the
+   * same bill. Every other platform's "see the other side" is a guess about
+   * somebody's politics; this is two votes.
+   */
+  | { type: 'other_side' };
 
 // ==========================================
 // ALGORITHM WEIGHTS (Tunable)

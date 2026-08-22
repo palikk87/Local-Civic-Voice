@@ -307,6 +307,25 @@ function FeedReasonIcon({ type, color }: { type: string; color: string }) {
 }
 
 function FeedReasonBadge({ item }: { item: ScoredFeedItem }) {
+  // THE OTHER SIDE OUTRANKS EVERY OTHER LABEL, because it is the only one that
+  // is a fact rather than a ranking artefact: the reader and this author are on
+  // public record disagreeing about the same bill. It is also the label most
+  // worth being honest about — a feed that quietly rearranges what somebody
+  // sees is the thing this platform exists to be an alternative to.
+  if (item.isOtherSide) {
+    return (
+      <span
+        className="inline-flex items-center self-start rounded-full px-2 py-0.5 mb-2"
+        style={{ backgroundColor: "#EF444420" }}
+      >
+        <Scale size={10} color="#EF4444" />
+        <span className="ml-1 text-xs font-medium" style={{ color: "#EF4444" }}>
+          Voted the other way
+        </span>
+      </span>
+    );
+  }
+
   if (!item.feedReason) return null;
 
   const getLabel = (): string => {

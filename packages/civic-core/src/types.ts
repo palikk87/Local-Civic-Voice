@@ -198,6 +198,12 @@ export interface FeedItem {
   timestamp: string;
   likes: number;
   isLiked?: boolean;
+  /**
+   * This author took the OPPOSITE position to the reader on the record the
+   * post is about. Set by the server from two public votes on the same bill —
+   * not inferred from anything, which is why the feed can say it out loud.
+   */
+  isOtherSide?: boolean;
 }
 
 export interface UserVote {

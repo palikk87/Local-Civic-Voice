@@ -298,6 +298,23 @@ function FeedReasonIcon({ type, color }: { type: string; color: string }) {
 }
 
 function FeedReasonBadge({ item }: { item: ScoredFeedItem }) {
+  // THE OTHER SIDE OUTRANKS EVERY OTHER LABEL, because it is the only one that
+  // is a fact rather than a ranking artefact: the reader and this author are on
+  // public record disagreeing about the same bill.
+  if (item.isOtherSide) {
+    return (
+      <View
+        className="flex-row items-center px-2 py-0.5 rounded-full mb-2 self-start"
+        style={{ backgroundColor: '#EF444420' }}
+      >
+        <Scale size={10} color="#EF4444" />
+        <Text className="text-xs font-medium ml-1" style={{ color: '#EF4444' }}>
+          Voted the other way
+        </Text>
+      </View>
+    );
+  }
+
   if (!item.feedReason) return null;
 
   const getLabel = (): string => {

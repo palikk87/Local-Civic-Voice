@@ -12,7 +12,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import type { auth } from "../auth";
-import { block, blockExistsBetween } from "../services/relationships";
+import { block, blockExistsBetween, forgetCachedFeeds } from "../services/relationships";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -131,6 +131,11 @@ safetyRouter.post("/mutes/:id", async (c) => {
     create: { muterId: user.id, mutedId: id },
     update: {},
   });
+
+  // The feed keeps a per-reader cached response; without this the muted person
+  // stays in it until the cache expires, which is the one thing muting is for.
+  forgetCachedFeeds(user.id);
+
   return c.json({ success: true, isMuted: true });
 });
 
