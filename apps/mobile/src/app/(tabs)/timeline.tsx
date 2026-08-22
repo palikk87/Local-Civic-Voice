@@ -415,7 +415,12 @@ function PostCard({
             <Text className="text-white font-semibold">
               {post.author.displayName}
             </Text>
-            <Text className="text-slate-500 text-sm ml-2">· {timeAgo}</Text>
+            {/* The timestamp is the permalink, the way it is everywhere else.
+                Until now a post had no address at all and this was plain
+                text. */}
+            <Pressable onPress={() => router.push(`/post/${post.id}`)}>
+              <Text className="text-slate-500 text-sm ml-2">· {timeAgo}</Text>
+            </Pressable>
           </View>
           <Text className="text-slate-400 text-sm">@{post.author.username}</Text>
         </View>
@@ -720,7 +725,7 @@ function PostCard({
             </View>
           ))}
           {post.comments.length > 2 && (
-            <Pressable onPress={() => onComment(post)}>
+            <Pressable onPress={() => router.push(`/post/${post.id}`)}>
               <Text className="text-amber-500 text-sm font-medium">
                 View all {post.comments.length} comments
               </Text>

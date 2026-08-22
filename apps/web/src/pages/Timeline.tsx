@@ -1,6 +1,6 @@
 // Web port of mobile/src/app/(tabs)/timeline.tsx
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Plus,
   Heart,
@@ -340,7 +340,15 @@ function PostCard({
         <div className="flex-1 ml-3 min-w-0">
           <div className="flex items-center">
             <span className="text-white font-semibold">{post.author.displayName}</span>
-            <span className="text-slate-500 text-sm ml-2">· {timeAgo}</span>
+            {/* The timestamp is the permalink, the way it is everywhere else.
+                Until now a post had no address at all and this was plain
+                text. */}
+            <Link
+              to={`/post/${post.id}`}
+              className="text-slate-500 text-sm ml-2 hover:underline"
+            >
+              · {timeAgo}
+            </Link>
           </div>
           <span className="text-slate-400 text-sm">@{post.author.username}</span>
         </div>
@@ -635,11 +643,9 @@ function PostCard({
             </div>
           ))}
           {post.comments.length > 2 ? (
-            <button onClick={() => onComment(post)}>
-              <span className="text-amber-500 text-sm font-medium">
-                View all {post.comments.length} comments
-              </span>
-            </button>
+            <Link to={`/post/${post.id}`} className="text-amber-500 text-sm font-medium">
+              View all {post.comments.length} comments
+            </Link>
           ) : null}
         </div>
       ) : null}

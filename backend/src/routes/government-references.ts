@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { publicUrlFor } from "../services/storage";
 import type { auth } from "../auth";
 import {
   ReferenceType,
@@ -919,8 +920,8 @@ governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchem
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
-        url: `/uploads${m.url}`,
-        thumbnailUrl: m.thumbnailUrl ? `/uploads${m.thumbnailUrl}` : null,
+        url: publicUrlFor(m.url),
+        thumbnailUrl: m.thumbnailUrl ? publicUrlFor(m.thumbnailUrl) : null,
         mimeType: m.mimeType,
       })),
       commentsCount: post._count.comments,

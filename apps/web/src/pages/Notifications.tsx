@@ -88,7 +88,9 @@ function destinationOf(notification: Notification): string | null {
 
   if (data.conversationId) return `/conversation/${data.conversationId}`;
   if (data.governmentReferenceId) return `/reference/${data.governmentReferenceId}`;
-  if (data.postId) return `/timeline`;
+  // A post has an address now. This used to drop the reader on the feed to
+  // go and find whatever somebody had replied to.
+  if (data.postId) return `/post/${data.postId}`;
   if (data.fromUserId) return `/user/${data.fromUserId}`;
   return null;
 }

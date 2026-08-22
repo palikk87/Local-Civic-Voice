@@ -49,6 +49,8 @@ const BillDetail = lazy(() => import("./pages/BillDetail"));
 const ExecutiveOrderDetail = lazy(() => import("./pages/ExecutiveOrderDetail"));
 const ScotusDetail = lazy(() => import("./pages/ScotusDetail"));
 const UserProfile = lazy(() => import("./pages/UserProfile"));
+const PostDetail = lazy(() => import("./pages/PostDetail"));
+const StartHere = lazy(() => import("./pages/StartHere"));
 const HashtagPage = lazy(() => import("./pages/HashtagPage"));
 const MyRecord = lazy(() => import("./pages/MyRecord"));
 const PositionReview = lazy(() => import("./pages/PositionReview"));
@@ -188,6 +190,8 @@ const App = () => (
               {/* Same path as the mobile route, so a reset link works on either client. */}
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/user/:id" element={<UserProfile />} />
+              <Route path="/post/:id" element={<PostDetail />} />
+              <Route path="/start" element={<StartHere />} />
               <Route path="/hashtag/:tag" element={<HashtagPage />} />
               <Route path="/record" element={<MyRecord />} />
               <Route path="/record/review" element={<PositionReview />} />

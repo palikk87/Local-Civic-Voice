@@ -215,8 +215,10 @@ function NotificationsContent() {
       router.push(`/bill/${data.governmentReferenceId}`);
       return;
     }
+    // A post has an address now. This used to drop the reader on the feed to
+    // go and find whatever somebody had replied to.
     if (data?.postId) {
-      router.push('/(tabs)/timeline');
+      router.push(`/post/${data.postId}`);
       return;
     }
     if (data?.fromUserId) {
@@ -228,7 +230,7 @@ function NotificationsContent() {
     if (notification.referenceType === 'user' && notification.referenceId) {
       router.push(`/user/${notification.referenceId}`);
     } else if (notification.referenceType === 'post' && notification.referenceId) {
-      router.push('/(tabs)/timeline');
+      router.push(`/post/${notification.referenceId}`);
     } else if (notification.referenceType === 'bill' && notification.referenceId) {
       router.push(`/bill/${notification.referenceId}`);
     }

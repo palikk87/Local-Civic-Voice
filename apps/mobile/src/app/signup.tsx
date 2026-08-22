@@ -63,7 +63,9 @@ export default function SignUpScreen() {
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(200).springify()}>
-              <AuthForm mode="signup" onSuccess={() => router.replace('/(tabs)')} />
+              {/* A brand-new account lands on the one screen that asks what
+                  they think before it shows them anybody. */}
+              <AuthForm mode="signup" onSuccess={() => router.replace('/start')} />
 
               <Pressable
                 onPress={() => router.replace('/(tabs)/discover')}

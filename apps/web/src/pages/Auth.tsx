@@ -34,7 +34,11 @@ export default function Auth() {
         </div>
 
         <div className="rounded-2xl border border-border bg-card/80 p-6 shadow-2xl backdrop-blur-sm sm:p-8">
-          <AuthForm mode="signin" onSuccess={() => navigate("/explore")} />
+          {/* onSuccess only fires after a sign-UP — signing in reloads in
+              place so Better Auth picks up the cookie. So this is the new
+              account's first destination, and it is the one screen that asks
+              what they think before it shows them anybody. */}
+          <AuthForm mode="signin" onSuccess={() => navigate("/start")} />
         </div>
 
         {/* No account needed to look around — same escape hatch the mobile app offers. */}

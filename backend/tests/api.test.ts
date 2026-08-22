@@ -713,6 +713,62 @@ describe("media keys", () => {
     );
   });
 
+  test("a picture on a post is served as a URL a browser can actually load", async () => {
+    // FOUR HANDLERS USED TO BUILD THIS BY HAND as `/uploads${key}`, which lost
+    // the separating slash, produced a relative path with no origin — nothing
+    // on a phone can resolve one, and on the web it points at the site rather
+    // than the API — and ignored the S3 driver entirely. Every picture ever
+    // attached to a post was broken in every client, and the only reason it
+    // was not caught is that no test ever read a post's media back.
+    const cookie = await signedInCookie();
+
+    const form = new FormData();
+    form.append("file", new File([ONE_PIXEL_PNG], "evidence.png", { type: "image/png" }));
+
+    const upload = await fetch(`${BASE_URL}/api/media/upload`, {
+      method: "POST",
+      headers: { cookie },
+      body: form,
+    });
+    expect(upload.status).toBe(201);
+    const { media } = (await upload.json()) as { media: { id: string } };
+
+    const reference = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${4900 + Math.floor(Math.random() * 90)}-119`,
+        referenceType: "bill",
+        title: "A bill with a picture attached to a post about it",
+        status: "proposed",
+        category: "healthcare",
+      },
+    });
+
+    const created = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: "Here is what the text actually says.",
+        governmentReferenceId: reference.id,
+        mediaIds: [media.id],
+      }),
+    });
+    expect(created.status).toBe(201);
+    const { post } = (await created.json()) as { post: { id: string } };
+
+    const detail = await fetch(`${BASE_URL}/api/posts/${post.id}`, { headers: { cookie } });
+    expect(detail.status).toBe(200);
+    const body = (await detail.json()) as { post: { media: Array<{ url: string }> } };
+
+    const url = body.post.media[0]?.url ?? "";
+    expect(url.startsWith("http")).toBe(true);
+    expect(url).not.toContain("/uploadsimages");
+
+    // And it serves the bytes that were uploaded.
+    const fetched = await fetch(url);
+    expect(fetched.status).toBe(200);
+    expect(new Uint8Array(await fetched.arrayBuffer())).toEqual(new Uint8Array(ONE_PIXEL_PNG));
+  });
+
   test("a new upload gets an unguessable key with no timestamp and no filename", async () => {
     const form = new FormData();
     form.append(

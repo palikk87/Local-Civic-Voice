@@ -2,6 +2,13 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+// The ONE place a stored key becomes a URL. media.url holds a storage key
+// ("images/abc.jpg"), never a URL. Four handlers in this file used to build it
+// by hand as `/uploads${key}` — which lost the separating slash, produced a
+// relative path with no origin (nothing on a phone can resolve one, and on the
+// web it points at the site rather than the API), and ignored the S3 driver
+// completely. Every picture ever attached to a post was broken in every client.
+import { publicUrlFor } from "../services/storage";
 import { blockExistsBetween, hiddenFrom } from "../services/relationships";
 import { purgeMediaObjects } from "../services/media-objects";
 import type { auth } from "../auth";
@@ -221,8 +228,8 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
-        url: `/uploads${m.url}`,
-        thumbnailUrl: m.thumbnailUrl ? `/uploads${m.thumbnailUrl}` : null,
+        url: publicUrlFor(m.url),
+        thumbnailUrl: m.thumbnailUrl ? publicUrlFor(m.thumbnailUrl) : null,
         mimeType: m.mimeType,
         sizeBytes: m.sizeBytes,
         durationMs: m.durationMs,
@@ -413,8 +420,8 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
-        url: `/uploads${m.url}`,
-        thumbnailUrl: m.thumbnailUrl ? `/uploads${m.thumbnailUrl}` : null,
+        url: publicUrlFor(m.url),
+        thumbnailUrl: m.thumbnailUrl ? publicUrlFor(m.thumbnailUrl) : null,
         mimeType: m.mimeType,
         sizeBytes: m.sizeBytes,
         durationMs: m.durationMs,
@@ -656,8 +663,8 @@ postsRouter.get("/:id", async (c) => {
       media: post.media.map((m) => ({
         id: m.id,
         type: m.type,
-        url: `/uploads${m.url}`,
-        thumbnailUrl: m.thumbnailUrl ? `/uploads${m.thumbnailUrl}` : null,
+        url: publicUrlFor(m.url),
+        thumbnailUrl: m.thumbnailUrl ? publicUrlFor(m.thumbnailUrl) : null,
         mimeType: m.mimeType,
         sizeBytes: m.sizeBytes,
         durationMs: m.durationMs,
