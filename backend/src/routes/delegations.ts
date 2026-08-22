@@ -11,6 +11,7 @@ import {
   voiceReceipts,
   DELEGATE_REQUIREMENTS,
 } from "../services/delegation-service";
+import { alignmentWith } from "../services/common-ground";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -84,9 +85,30 @@ delegationsRouter.get("/me", async (c) => {
  * routine activity. Serves the Delegates screen on both faucets.
  */
 delegationsRouter.get("/delegates", async (c) => {
+  const currentUser = c.get("user");
   const delegates = await listEligibleDelegates();
+
+  // HOW OFTEN EACH OF THEM HAS AGREED WITH THE READER, on the records where
+  // both actually voted. Every delegation UI ever built asks somebody to hand
+  // their vote to a stranger on the strength of a follower count and a bio,
+  // because none of them have a shared record to measure against. This one
+  // does, so the directory can answer the only question that matters: when I
+  // have had an opinion, has this person shared it?
+  //
+  // Computed in one pass for the whole list rather than per card.
+  const alignment = currentUser
+    ? await alignmentWith(
+        currentUser.id,
+        delegates.map((d) => d.id),
+      )
+    : [];
+  const byUser = new Map(alignment.map((a) => [a.userId, a]));
+
   return c.json({
-    delegates,
+    delegates: delegates.map((delegate) => ({
+      ...delegate,
+      alignment: byUser.get(delegate.id) ?? null,
+    })),
     requirements: DELEGATE_REQUIREMENTS,
   });
 });

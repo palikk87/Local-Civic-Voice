@@ -49,6 +49,17 @@ interface DelegateListing {
   followerCount: number;
   topCategories: string[];
   memberSince: string;
+  /**
+   * How often this person has agreed with the reader, on the records where
+   * both actually voted. Null when signed out; agreementPct is null below
+   * three shared records, because a percentage from one is noise.
+   */
+  alignment: {
+    shared: number;
+    agreed: number;
+    disagreed: number;
+    agreementPct: number | null;
+  } | null;
 }
 
 interface DelegatesResponse {
@@ -166,6 +177,22 @@ function DelegateCard({
           <Text className="text-slate-300 text-sm mt-3 leading-5" numberOfLines={2}>
             {delegate.bio}
           </Text>
+        ) : null}
+
+        {/* Where the reader and this person have actually landed, before they
+            hand over a vote. Above the vanity counts on purpose: a follower
+            number says nothing about whether somebody would have voted the way
+            you did. */}
+        {delegate.alignment && delegate.alignment.shared > 0 ? (
+          <View className="mt-3 rounded-lg bg-slate-900/40 border border-slate-700/40 p-2.5">
+            <Text className="text-slate-300 text-xs leading-5">
+              {delegate.alignment.agreementPct === null
+                ? `You have both voted on ${delegate.alignment.shared} record${
+                    delegate.alignment.shared === 1 ? '' : 's'
+                  } — too few to say much yet.`
+                : `Agreed with you on ${delegate.alignment.agreed} of ${delegate.alignment.shared} records you both voted on (${delegate.alignment.agreementPct}%).`}
+            </Text>
+          </View>
         ) : null}
 
         {/* Stats */}

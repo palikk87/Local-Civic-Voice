@@ -29,6 +29,22 @@ interface DelegateListing {
   followerCount: number;
   topCategories: string[];
   memberSince: string;
+  /**
+   * How often this person has agreed with the reader, on the records where
+   * both of them actually voted.
+   *
+   * THE NUMBER LIQUID DEMOCRACY HAS ALWAYS NEEDED AND NEVER HAD. Every
+   * delegation UI ever built asks somebody to hand their vote to a stranger on
+   * the strength of a follower count and a bio, because none of them have a
+   * shared record to measure against. Null when signed out.
+   */
+  alignment: {
+    shared: number;
+    agreed: number;
+    disagreed: number;
+    /** Null below three shared records: a percentage from one is noise. */
+    agreementPct: number | null;
+  } | null;
 }
 
 interface DelegatesResponse {
@@ -120,6 +136,28 @@ function DelegateCard({
                 </Badge>
               ))}
             </div>
+          ) : null}
+
+          {/* Where the reader and this person have actually landed, before
+              they hand over a vote. Shown above the vanity counts on purpose:
+              a follower number says nothing about whether somebody would have
+              voted the way you did. */}
+          {delegate.alignment && delegate.alignment.shared > 0 ? (
+            <p className="mt-3 rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-foreground">
+              {delegate.alignment.agreementPct === null ? (
+                <>
+                  You have both voted on {delegate.alignment.shared} record
+                  {delegate.alignment.shared === 1 ? "" : "s"} — too few to say much yet.
+                </>
+              ) : (
+                <>
+                  Agreed with you on{" "}
+                  <span className="font-semibold">{delegate.alignment.agreed}</span> of{" "}
+                  {delegate.alignment.shared} records you both voted on (
+                  {delegate.alignment.agreementPct}%).
+                </>
+              )}
+            </p>
           ) : null}
 
           <div className="mt-4 grid grid-cols-3 gap-4 text-xs">

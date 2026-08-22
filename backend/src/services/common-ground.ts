@@ -99,3 +99,93 @@ export async function commonGround(
     disagreements: disagreements.slice(0, limit),
   };
 }
+
+export interface Alignment {
+  userId: string;
+  /** Records both people have taken a position on. */
+  shared: number;
+  agreed: number;
+  disagreed: number;
+  /** Null below the threshold: a percentage from two records is noise. */
+  agreementPct: number | null;
+}
+
+/**
+ * How often each of these people has agreed with the reader, on the records
+ * where both of them actually voted.
+ *
+ * THIS IS THE NUMBER LIQUID DEMOCRACY HAS ALWAYS NEEDED AND NEVER HAD. Every
+ * delegation UI ever built asks somebody to hand their vote to a stranger on
+ * the strength of a follower count, a bio, and a category label. None of them
+ * can answer the only question that matters — "when I have had an opinion, has
+ * this person shared it?" — because none of them have a shared record to
+ * measure against. This platform does.
+ *
+ * Batched deliberately. A delegates directory rendering this per card would
+ * otherwise fire one query per delegate on every scroll.
+ *
+ * Direct votes only, both sides. Counting delegated weight would mean a
+ * delegate could look aligned with somebody purely because a third party's
+ * chain happened to route through them.
+ */
+export async function alignmentWith(
+  viewerId: string,
+  otherIds: string[],
+  minimumShared = 3,
+): Promise<Alignment[]> {
+  const targets = [...new Set(otherIds)].filter((id) => id !== viewerId);
+  if (targets.length === 0) return [];
+
+  const mine = await prisma.governmentReferenceVote.findMany({
+    where: { userId: viewerId, position: { in: ["support", "oppose"] } },
+    select: { governmentReferenceId: true, position: true },
+  });
+  if (mine.length === 0) {
+    return targets.map((userId) => ({
+      userId,
+      shared: 0,
+      agreed: 0,
+      disagreed: 0,
+      agreementPct: null,
+    }));
+  }
+
+  const mineByReference = new Map(mine.map((v) => [v.governmentReferenceId, v.position]));
+
+  const theirs = await prisma.governmentReferenceVote.findMany({
+    where: {
+      userId: { in: targets },
+      position: { in: ["support", "oppose"] },
+      governmentReferenceId: { in: [...mineByReference.keys()] },
+    },
+    select: { userId: true, governmentReferenceId: true, position: true },
+  });
+
+  const tally = new Map<string, { agreed: number; disagreed: number }>();
+  for (const vote of theirs) {
+    const yourPosition = mineByReference.get(vote.governmentReferenceId);
+    if (!yourPosition) continue;
+
+    const entry = tally.get(vote.userId) ?? { agreed: 0, disagreed: 0 };
+    if (yourPosition === vote.position) entry.agreed += 1;
+    else entry.disagreed += 1;
+    tally.set(vote.userId, entry);
+  }
+
+  return targets.map((userId) => {
+    const entry = tally.get(userId) ?? { agreed: 0, disagreed: 0 };
+    const shared = entry.agreed + entry.disagreed;
+
+    return {
+      userId,
+      shared,
+      agreed: entry.agreed,
+      disagreed: entry.disagreed,
+      // BELOW THE THRESHOLD THERE IS NO NUMBER, rather than a flattering one.
+      // "100% aligned" off a single shared record is the most misleading thing
+      // this endpoint could say, and it is exactly the shape somebody would
+      // act on when deciding who speaks for them.
+      agreementPct: shared >= minimumShared ? Math.round((entry.agreed / shared) * 100) : null,
+    };
+  });
+}
