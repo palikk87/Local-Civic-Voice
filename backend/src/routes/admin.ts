@@ -3,8 +3,6 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { verifyPasswordOrDummy } from "../password-check";
-import { hashPassword } from "better-auth/crypto";
-import { createHash, randomBytes } from "node:crypto";
 import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
@@ -14,6 +12,13 @@ import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
 import { JobPriority, JobType, enqueueLineageSync, jobQueue } from "../services/job-queue";
 import { officialSources } from "../services/reference-content";
+import {
+  B2B_PUBLIC_FIELDS,
+  createB2BClient,
+  generateApiKey,
+  generatePassword,
+  rotateB2BCredentials,
+} from "../services/credentials";
 
 // ==========================================
 // Type Definitions
@@ -929,21 +934,6 @@ adminRouter.delete("/posts/:id", zValidator("param", idParamSchema), async (c) =
 // there is no "show me the key again" and there deliberately never will be.
 // Losing one means rotating it.
 
-/** SHA-256 hex digest. Must match hashApiKey() in routes/b2b.ts and scripts/seed-b2b.ts. */
-function hashB2BApiKey(apiKey: string): string {
-  return createHash("sha256").update(apiKey).digest("hex");
-}
-
-/** 48 bytes of CSPRNG, base64url. The same strength `openssl rand -base64 48` gives. */
-function generateB2BApiKey(): string {
-  return randomBytes(48).toString("base64url");
-}
-
-/** A generated password, for when the admin does not supply one. */
-function generateB2BPassword(): string {
-  return randomBytes(24).toString("base64url");
-}
-
 /** Public projection of a stored client. Never includes either hash. */
 function toAdminB2BClient(row: {
   id: string;
@@ -967,16 +957,9 @@ function toAdminB2BClient(row: {
   };
 }
 
-const B2B_CLIENT_SELECT = {
-  id: true,
-  username: true,
-  name: true,
-  type: true,
-  tier: true,
-  lastAccessAt: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
+// One definition, in services/credentials.ts, so a field added to B2BClient
+// cannot start leaking through one endpoint and not another.
+const B2B_CLIENT_SELECT = B2B_PUBLIC_FIELDS;
 
 /**
  * Authenticate before validating.
@@ -1043,28 +1026,19 @@ adminRouter.post("/b2b-clients", zValidator("json", createB2BClientSchema), asyn
     return c.json({ error: "A B2B client with that username already exists" }, { status: 409 });
   }
 
-  const password = body.password ?? generateB2BPassword();
-  const apiKey = generateB2BApiKey();
+  const password = body.password ?? generatePassword();
+  const apiKey = generateApiKey();
 
-  const created = await prisma.b2BClient.create({
-    data: {
-      username,
-      name: body.name,
-      type: body.type,
-      tier: body.tier,
-      passwordHash: await hashPassword(password),
-      apiKeyHash: hashB2BApiKey(apiKey),
-    },
-    select: B2B_CLIENT_SELECT,
-  });
-
-  createActivityLog(
-    "create_b2b_client",
-    session.adminId,
-    session.username,
-    "system",
-    created.id,
-    `Created B2B client ${created.username} (${created.tier})`
+  // Through services/credentials.ts, like every other credential write in this
+  // codebase. It hashes both values and writes the audit row before returning,
+  // so the record of this account existing cannot be lost to a crash between
+  // the two.
+  const created = await createB2BClient(
+    { username, name: body.name, type: body.type, tier: body.tier, password, apiKey },
+    {
+      actor: { kind: "admin", adminId: session.adminId, username: session.username },
+      reason: `Created from the admin console at the ${body.tier} tier`,
+    }
   );
 
   return c.json(
@@ -1146,49 +1120,24 @@ adminRouter.post(
       return c.json({ error: "B2B client not found" }, { status: 404 });
     }
 
-    const data: { passwordHash?: string; apiKeyHash?: string } = {};
     const credentials: { password?: string; apiKey?: string } = {};
+    if (body.password) credentials.password = body.newPassword ?? generatePassword();
+    if (body.apiKey) credentials.apiKey = generateApiKey();
 
-    if (body.password) {
-      const password = body.newPassword ?? generateB2BPassword();
-      data.passwordHash = await hashPassword(password);
-      credentials.password = password;
-    }
-    if (body.apiKey) {
-      const apiKey = generateB2BApiKey();
-      data.apiKeyHash = hashB2BApiKey(apiKey);
-      credentials.apiKey = apiKey;
-    }
-
-    const updated = await prisma.b2BClient.update({
-      where: { id },
-      data,
-      select: B2B_CLIENT_SELECT,
+    // services/credentials.ts hashes, writes, revokes the sessions the old
+    // password opened, and records who asked and why — in that order, awaited.
+    // Rotating here is the route to prefer over the seed script precisely
+    // because this leaves a name behind.
+    const { client, revokedSessions } = await rotateB2BCredentials(id, credentials, {
+      actor: { kind: "admin", adminId: session.adminId, username: session.username },
+      reason: "Requested from the admin console",
     });
-
-    // Rotating a password revokes the sessions it opened. Leaving them alive
-    // would mean a rotation prompted by a leak changed nothing for as long as
-    // the stolen session lasted, which is the whole reason to rotate.
-    let revoked = 0;
-    if (body.password) {
-      revoked = (await prisma.b2BSession.deleteMany({ where: { clientId: id } })).count;
-    }
-
-    createActivityLog(
-      "rotate_b2b_client",
-      session.adminId,
-      session.username,
-      "system",
-      id,
-      `Rotated ${[body.password && "password", body.apiKey && "API key"].filter(Boolean).join(" and ")} ` +
-        `for B2B client ${updated.username}`
-    );
 
     return c.json({
       success: true,
-      client: toAdminB2BClient(updated),
-      credentials: { username: updated.username, ...credentials },
-      revokedSessions: revoked,
+      client: toAdminB2BClient(client),
+      credentials: { username: client.username, ...credentials },
+      revokedSessions,
       warning: "Copy these now. They cannot be shown again — only rotated.",
     });
   }

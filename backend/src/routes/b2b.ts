@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
-import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
 import { verifyPasswordOrDummy } from "../password-check";
 import { generateB2BToken } from "../session-token";
+import { hashApiKey } from "../services/credentials";
 
 /**
  * What a paying client is told about participation here.
@@ -205,10 +205,13 @@ interface SentimentData {
 //   hashApiKey below for why doing this "the same way" would be wrong.
 
 /**
- * SHA-256 hex digest of an API key. Must match hashApiKey() in
- * scripts/seed-b2b.ts, which is what writes the stored value.
+ * WHY THE API KEY IS A PLAIN SHA-256 DIGEST, given the password column next to
+ * it uses a KDF.
  *
- * WHY NOT A KDF, given the password column next to it uses one:
+ * The function itself lives in services/credentials.ts, with everything else
+ * that touches a secret — this file only reads. It used to be defined here AND
+ * in the seed script, with a comment in each saying the two must match, which
+ * is the kind of agreement that holds right up until it does not.
  *
  * An API key arrives with no username attached — the digest IS the lookup key.
  * A KDF cannot be looked up: scrypt salts every hash, so the same input hashes
@@ -235,9 +238,6 @@ interface SentimentData {
  * not a step toward the key. Timing against a raw secret, which is what the old
  * code compared, genuinely was.
  */
-function hashApiKey(apiKey: string): string {
-  return createHash("sha256").update(apiKey).digest("hex");
-}
 
 /** Stored account, exactly as Prisma returns it. Carries both hashes. */
 type B2BClientRow = NonNullable<Awaited<ReturnType<typeof findClientByApiKey>>>;
@@ -552,6 +552,83 @@ b2bRouter.get("/auth/verify", async (c) => {
       tier: session.tier,
     },
     expiresAt: session.expiresAt,
+  });
+});
+
+/**
+ * GET /api/b2b/account/security
+ *
+ * Every change ever made to this account's password or API key: when, and by
+ * whom.
+ *
+ * WHY A CLIENT CAN SEE THIS. A B2B password changed here once and nobody could
+ * account for it. From the outside — from the desk of the business paying for
+ * the dashboard — a working login that stops working for no stated reason is
+ * indistinguishable from a breach, and no explanation offered afterwards buys
+ * back the week they spent wondering. The prevention side of that is in
+ * services/credentials.ts, which is the only thing in this codebase that can
+ * change a credential and records every change before it returns. This is the
+ * other half: the record is readable by the party it is about, without having
+ * to ask anyone.
+ *
+ * Scoped to this client's own id. It reveals nothing about any other account,
+ * and nothing about the secrets themselves — only that they moved.
+ */
+b2bRouter.get("/account/security", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getClientFromToken(authHeader);
+
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  const [client, events] = await Promise.all([
+    prisma.b2BClient.findUnique({
+      where: { id: session.clientId },
+      select: { username: true, name: true, tier: true, createdAt: true, lastAccessAt: true },
+    }),
+    prisma.adminActivityLog.findMany({
+      where: {
+        targetType: "system",
+        targetId: session.clientId,
+        action: { in: ["create_b2b_client", "rotate_b2b_client"] },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
+  ]);
+
+  if (!client) {
+    return c.json({ error: "Account not found" }, { status: 404 });
+  }
+
+  const rotations = events.filter((event) => event.action === "rotate_b2b_client");
+
+  return c.json({
+    account: {
+      username: client.username,
+      name: client.name,
+      tier: client.tier,
+      createdAt: client.createdAt.toISOString(),
+      lastAccessAt: client.lastAccessAt?.toISOString() ?? null,
+    },
+    credentials: {
+      // Null means nothing has ever been rotated — the credentials are the ones
+      // issued when the account was created.
+      lastRotatedAt: rotations[0]?.createdAt.toISOString() ?? null,
+      rotationCount: rotations.length,
+    },
+    /**
+     * `changedBy` is the actor as recorded, not a display name: an admin's
+     * username, or "cli:scripts/seed-b2b.ts" when it was done from a shell.
+     * Which one it was is exactly the question worth answering.
+     */
+    history: events.map((event) => ({
+      action: event.action,
+      at: event.createdAt.toISOString(),
+      changedBy: event.adminUsername,
+      details: event.details,
+    })),
   });
 });
 

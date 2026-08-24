@@ -20,13 +20,28 @@
  *   ADMIN_PASSWORD='…' \
  *   bun run scripts/seed-admin.ts
  *
- * Safe to re-run. On an account that already exists it updates the role, the
- * username, and — unlike the version this replaced, which only set a password on
- * creation — the password too. So this is also how the admin password is rotated.
+ * SAFE TO RE-RUN, AND IT WILL NOT CHANGE THE PASSWORD YOU DID NOT ASK IT TO.
+ *
+ * It used to. Every run rewrote the password, so running this to correct a
+ * username or repair a role silently re-keyed the super-admin — a working login
+ * that stopped working for no visible reason, with nothing recorded anywhere.
+ * The B2B seed had the identical shape, and it is what produced a B2B password
+ * change nobody could account for.
+ *
+ * Now: a missing account is created, and an existing one has only its role,
+ * username and display name refreshed. To change the password deliberately, say
+ * so:
+ *
+ *   ADMIN_ROTATE=1 … bun run scripts/seed-admin.ts
+ *
+ * Either way the change goes through src/services/credentials.ts, which writes
+ * a line to the admin activity log naming this script and the reason, and waits
+ * for that line to land before the script exits. A credential that can change
+ * without a trace is a credential nobody can trust.
  */
-import { hashPassword } from "better-auth/crypto";
 import { auth } from "../src/auth";
 import { prisma } from "../src/prisma";
+import { setUserPassword } from "../src/services/credentials";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
@@ -65,6 +80,20 @@ function warnIfWeak(password: string): void {
   }
 }
 
+const ACTOR = { kind: "cli", script: "scripts/seed-admin.ts" } as const;
+
+/**
+ * Whether this run was asked to change an existing password.
+ *
+ * Unset means no. Rotating the super-admin credential is not a side effect of
+ * correcting a username, and this script has no way to know whether the value
+ * in the shell is the current one or a new one somebody typed.
+ */
+function rotationRequested(): boolean {
+  const raw = (process.env.ADMIN_ROTATE ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes";
+}
+
 async function main(): Promise<void> {
   requireEnv();
   const email = ADMIN_EMAIL as string;
@@ -80,30 +109,38 @@ async function main(): Promise<void> {
   });
 
   if (existing) {
-    // Hashed with Better Auth's own function, so the console's verifyPassword
-    // and ordinary citizen sign-in both accept it.
-    const hash = await hashPassword(password);
-    const credential = existing.accounts[0];
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: existing.id },
-        data: { role: "superadmin", username, name },
-      }),
-      credential
-        ? prisma.account.update({ where: { id: credential.id }, data: { password: hash } })
-        : prisma.account.create({
-            data: {
-              userId: existing.id,
-              accountId: existing.id,
-              providerId: "credential",
-              password: hash,
-            },
-          }),
-    ]);
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { role: "superadmin", username, name },
+    });
 
     console.log(`Updated super admin. id=${existing.id} username=${username} role=superadmin`);
-    console.log(credential ? "Password rotated." : "Password set (no credential row existed).");
+
+    const credential = existing.accounts[0];
+
+    // An account with no credential row cannot be signed in to at all, so
+    // setting a password there is a repair rather than a rotation — nothing is
+    // taken away from anyone. That is the one case this does without being
+    // asked, and it says so.
+    if (!credential) {
+      await setUserPassword(existing.id, password, {
+        actor: ACTOR,
+        reason: "The account had no credential row, so nobody could sign in to it",
+      });
+      console.log("Password set (no credential row existed). Recorded in the activity log.");
+      return;
+    }
+
+    if (!rotationRequested()) {
+      console.log("Password left as it is. To change it: ADMIN_ROTATE=1");
+      return;
+    }
+
+    await setUserPassword(existing.id, password, {
+      actor: ACTOR,
+      reason: "ADMIN_ROTATE was set on a seed run",
+    });
+    console.log("Password ROTATED, as ADMIN_ROTATE asked. Recorded in the activity log.");
     return;
   }
 

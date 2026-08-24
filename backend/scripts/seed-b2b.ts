@@ -45,9 +45,11 @@
  * names and types are not secrets and are not deployment config, so they live
  * here rather than adding four more variables to fill in by hand.
  */
-import { createHash } from "node:crypto";
-import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../src/prisma";
+import {
+  createB2BClient,
+  rotateB2BCredentials,
+} from "../src/services/credentials";
 
 const B2B_DEMO_USERNAME = process.env.B2B_DEMO_USERNAME;
 const B2B_DEMO_PASSWORD = process.env.B2B_DEMO_PASSWORD;
@@ -102,11 +104,6 @@ function warnIfWeak(label: string, password: string, apiKey: string): void {
   }
 }
 
-/** SHA-256 hex digest. Must match hashApiKey() in src/routes/b2b.ts. */
-function hashApiKey(apiKey: string): string {
-  return createHash("sha256").update(apiKey).digest("hex");
-}
-
 interface SeedAccount {
   /** Which of the two this is, for the B2B_ROTATE switch. */
   slot: "demo" | "admin";
@@ -131,6 +128,8 @@ function rotationRequested(slot: SeedAccount["slot"]): boolean {
   return raw.split(/[,\s]+/).includes(slot);
 }
 
+const ACTOR = { kind: "cli", script: "scripts/seed-b2b.ts" } as const;
+
 async function upsertClient(account: SeedAccount): Promise<void> {
   // Stored lowercased; routes/b2b.ts lowercases before matching, which keeps
   // the case-insensitive login the fixture array had.
@@ -146,43 +145,49 @@ async function upsertClient(account: SeedAccount): Promise<void> {
     // was told to change them.
     await prisma.b2BClient.update({
       where: { username },
-      data: {
-        name: account.name,
-        type: account.type,
-        tier: account.tier,
-        ...(rotate
-          ? {
-              passwordHash: await hashPassword(account.password),
-              apiKeyHash: hashApiKey(account.apiKey),
-            }
-          : {}),
-      },
+      data: { name: account.name, type: account.type, tier: account.tier },
     });
+
+    if (rotate) {
+      // Through services/credentials.ts, which records the change before this
+      // returns. That is the difference between "the password changed" and
+      // "the password changed, and here is the line that says this script did
+      // it, when, and why".
+      const { revokedSessions } = await rotateB2BCredentials(
+        existing.id,
+        { password: account.password, apiKey: account.apiKey },
+        { actor: ACTOR, reason: `B2B_ROTATE named the ${account.slot} account` }
+      );
+      console.log(
+        `Updated B2B client. id=${existing.id} username=${username} tier=${account.tier}`
+      );
+      console.log(
+        `  Password and API key ROTATED, as B2B_ROTATE asked. ` +
+          `${revokedSessions} live session(s) ended. Recorded in the activity log.`
+      );
+      return;
+    }
 
     console.log(
       `Updated B2B client. id=${existing.id} username=${username} tier=${account.tier}`
     );
     console.log(
-      rotate
-        ? "  Password and API key ROTATED, as B2B_ROTATE asked."
-        : `  Password and API key left as they are. To change them: B2B_ROTATE=${account.slot}`
+      `  Password and API key left as they are. To change them: B2B_ROTATE=${account.slot}`
     );
     return;
   }
 
-  const passwordHash = await hashPassword(account.password);
-  const apiKeyHash = hashApiKey(account.apiKey);
-
-  const created = await prisma.b2BClient.create({
-    data: {
+  const created = await createB2BClient(
+    {
       username,
       name: account.name,
       type: account.type,
       tier: account.tier,
-      passwordHash,
-      apiKeyHash,
+      password: account.password,
+      apiKey: account.apiKey,
     },
-  });
+    { actor: ACTOR, reason: `Seeded the ${account.slot} business account` }
+  );
   console.log(
     `Created B2B client. id=${created.id} username=${created.username} tier=${created.tier}`
   );

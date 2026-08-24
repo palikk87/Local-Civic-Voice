@@ -156,6 +156,20 @@ a laptop means having `BETTER_AUTH_SECRET`, `BACKEND_URL`, `APP_ORIGINS`,
 `APP_SCHEMES` and `MEDIA_STORAGE` set as well. It fails loudly and names the
 missing one, so you will not be guessing.
 
+**Re-running it never changes the password.** A missing account is created; an
+existing one has only its role, username and display name refreshed. It used to
+rewrite the password on every run, so correcting a username silently re-keyed the
+super-admin. To change it deliberately:
+
+```bash
+ADMIN_ROTATE=1 ADMIN_EMAIL=… ADMIN_USERNAME=… ADMIN_PASSWORD='the new one' \
+bun scripts/seed-admin.ts
+```
+
+The one thing it does without being asked is set a password on an account that
+has no credential row at all — nobody can sign in to such an account, so there is
+nothing to take away — and it says so when it does.
+
 ### Seed the B2B portal accounts
 
 Same idea, same moment, different script. The two business-dashboard logins are
@@ -195,12 +209,28 @@ B2B_ROTATE=demo   …   # just the demo login
 B2B_ROTATE=admin  …   # just the admin login
 ```
 
-The admin portal has the same operation with an audit trail behind it
-(`POST /api/admin/b2b-clients/:id/rotate`), and it also revokes the sessions the
-old password opened. Prefer that when you have an admin session; use the script
-when you do not. If a B2B password ever changes unexpectedly, the portal's
-activity log is where to look — a rotation done there is recorded as
-`rotate_b2b_client` with the admin who did it.
+The admin portal has the same operation
+(`POST /api/admin/b2b-clients/:id/rotate`). Prefer it when you have an admin
+session, because it records a person's name rather than a script's.
+
+### Every credential change is recorded
+
+`backend/src/services/credentials.ts` is the only thing in the backend that may
+hash a password or write `passwordHash`, `apiKeyHash`, or an account's password —
+enforced by `backend/tests/credential-writes.test.ts`, which reads the source and
+fails the day a second writer appears. Every change through it needs an actor and
+a reason, and writes the audit row **before** returning, so a script that exits
+the moment its work is done cannot leave the change unrecorded.
+
+Where to look when something changed:
+
+- **Admin portal → Logs**, filtered to `system`. Actions are `create_b2b_client`,
+  `rotate_b2b_client`, `set_user_password`, `rotate_user_password`. A change made
+  from a shell is recorded as `cli:scripts/seed-b2b.ts` rather than borrowed from
+  an admin's name.
+- **`GET /api/b2b/account/security`** — a business client can read its own
+  history without asking anyone: when its credentials were last rotated, how many
+  times, and by whom.
 
 Unlike the admin seed, this one needs only `DATABASE_URL` and `DIRECT_URL` — it
 writes rows directly and never loads the auth stack.
