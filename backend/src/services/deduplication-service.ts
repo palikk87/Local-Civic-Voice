@@ -3,6 +3,7 @@ import { parseBrief } from "./citizen-brief";
 import { computeWeightedTally } from "./delegation-service";
 import { canonicalReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName, namesFor, transferNames } from "./reference-names";
+import { linkOrphanRollCalls } from "./roll-call";
 
 
 /**
@@ -361,6 +362,13 @@ export async function findOrCreateReference(
       await claimName(tx, created.id, normalizeReferenceId(data.referenceType, alias), NameSource.CREATED);
     }
 
+    // A roll call can arrive before the record it belongs to: the chambers
+    // publish a vote whether or not this platform has heard of the measure,
+    // and those are kept unlinked rather than discarded. Now that the record
+    // exists, its votes find it — otherwise the Representation Gap would stay
+    // dark on a bill Congress had already voted on.
+    await linkOrphanRollCalls(created.masterReferenceId, created.id, tx as typeof prisma);
+
     return created;
   });
 
@@ -384,6 +392,10 @@ export interface MergeReport {
   votesMoved: number;
   votesSuperseded: number;
   chainsFlattened: number;
+  /** Positions carried across, with their reasons and law versions. */
+  ledgerMoved: number;
+  /** Roll calls carried across, so the Representation Gap survives. */
+  rollCallsMoved: number;
   namesKept: string[];
   brief: "target kept its own" | "adopted from source" | "neither had one";
   officialText: "target kept its own" | "adopted from source" | "neither had one";
@@ -516,6 +528,41 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
       data: { governmentReferenceId: targetId, referenceId: targetId },
     });
 
+    // --- The position ledger ------------------------------------------------
+    //
+    // Every position anybody ever took on the losing record, with the reason
+    // they gave and the version of the text they read it on. This is what
+    // "your record", the review queue, the pulse history and "who changed
+    // their mind" are all built from, and all of them read by record id.
+    //
+    // Left behind, it does not error — it just goes quiet. A citizen's own
+    // history stops appearing, a crossing vanishes from the surviving record,
+    // and the numbers simply get smaller with nothing to say why. The whole
+    // promise of one law, one record is that this cannot happen.
+    //
+    // No de-duplication: two records that turn out to be one law are one law,
+    // so somebody who voted on both said both of those things about it, and a
+    // ledger is a history rather than a current state.
+    const ledger = await tx.positionEvent.updateMany({
+      where: { governmentReferenceId: sourceId },
+      data: { governmentReferenceId: targetId },
+    });
+
+    // --- The government's own vote -------------------------------------------
+    //
+    // Roll calls from senate.gov and clerk.house.gov, and the member-level
+    // votes hanging off them. Left behind, the Representation Gap disappears
+    // from the surviving record: the platform would know the public's number
+    // and have the chamber's number sitting on a tombstone nothing points at.
+    //
+    // The unique key is (chamber, congress, session, rollNumber), which has
+    // nothing to do with which record it is attached to, so two records each
+    // holding roll calls merge without collision.
+    const rollCalls = await tx.rollCall.updateMany({
+      where: { governmentReferenceId: sourceId },
+      data: { governmentReferenceId: targetId },
+    });
+
     // --- Earlier merges ----------------------------------------------------
     //
     // If something was already merged into the source, it now points at the
@@ -636,6 +683,8 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
       votesMoved,
       votesSuperseded,
       chainsFlattened: chains.count,
+      ledgerMoved: ledger.count,
+      rollCallsMoved: rollCalls.count,
       namesKept,
       brief: adoptBrief
         ? ("adopted from source" as const)

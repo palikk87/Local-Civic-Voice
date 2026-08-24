@@ -27,6 +27,7 @@
  */
 
 import { canonicalReferenceId, ReferenceKind } from "./master-reference-id";
+import { findByName } from "./reference-names";
 
 export interface MemberVote {
   memberId: string;
@@ -334,6 +335,63 @@ export function parseSenateMenu(xml: string, congress: number): SenateMenuEntry[
  * their own records after the fact — the Senate document carries a
  * `modify_date` for exactly that reason.
  */
+
+/**
+ * The record a roll call belongs to, through every name it has ever had.
+ *
+ * MRID RULE 3, "MEMORY": a record answers to every name it has ever had. An
+ * exact match on the current id is not enough — a bill that was renumbered, or
+ * whose id was corrected (`s-res-829-119` becoming `sres-829-119`), would come
+ * back unlinked and the government's own vote would sit on nothing.
+ *
+ * MRID RULE 2, "JOINING": a record that was merged away hands its business to
+ * the survivor, so the vote follows the merge pointer — the same rule a
+ * citizen's vote follows.
+ */
+async function resolveRecord(
+  masterReferenceId: string,
+  db: typeof import("../prisma").prisma,
+): Promise<string | null> {
+  const direct = await db.governmentReference.findFirst({
+    where: { masterReferenceId },
+    select: { id: true, mergedIntoId: true },
+  });
+  if (direct) return direct.mergedIntoId ?? direct.id;
+
+  // Every name it has ever answered to.
+  const byName = await findByName(masterReferenceId, db);
+  if (!byName) return null;
+
+  const reference = await db.governmentReference.findUnique({
+    where: { id: byName.referenceId },
+    select: { id: true, mergedIntoId: true },
+  });
+  return reference?.mergedIntoId ?? reference?.id ?? null;
+}
+
+/**
+ * Attach any roll call that arrived before the record it belongs to.
+ *
+ * The chambers publish a vote whether or not this platform has heard of the
+ * measure, and those roll calls are kept unlinked rather than thrown away —
+ * the government's own vote is worth having either way. This is the other half
+ * of that: when the record does appear, its votes find it.
+ *
+ * Called after a record is created or renamed. Cheap: one indexed lookup on a
+ * column that is null for almost every row.
+ */
+export async function linkOrphanRollCalls(
+  masterReferenceId: string,
+  governmentReferenceId: string,
+  db: typeof import("../prisma").prisma,
+): Promise<number> {
+  const { count } = await db.rollCall.updateMany({
+    where: { masterReferenceId, governmentReferenceId: null },
+    data: { governmentReferenceId },
+  });
+  return count;
+}
+
 export async function storeRollCall(
   parsed: ParsedRollCall,
   db: typeof import("../prisma").prisma,
@@ -341,16 +399,9 @@ export async function storeRollCall(
   // Resolve the record by its canonical id, and by any name it has ever had,
   // so a roll call still lands on a bill that has since been renumbered or
   // merged into another.
-  let governmentReferenceId: string | null = null;
-  if (parsed.masterReferenceId) {
-    const reference = await db.governmentReference.findFirst({
-      where: { masterReferenceId: parsed.masterReferenceId },
-      select: { id: true, mergedIntoId: true },
-    });
-    // A vote on a card that was merged away belongs to the surviving record —
-    // the same rule a citizen's vote follows.
-    governmentReferenceId = reference?.mergedIntoId ?? reference?.id ?? null;
-  }
+  const governmentReferenceId = parsed.masterReferenceId
+    ? await resolveRecord(parsed.masterReferenceId, db)
+    : null;
 
   const data = {
     chamber: parsed.chamber,
