@@ -106,6 +106,14 @@ const CHECKS: Check[] = [
       "the Library searches when asked and never on its own — typing is not a request",
   },
   {
+    name: "web verify-email-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "verify-email-check"],
+    guards:
+      "there is somewhere to type the emailed code, and the page never claims a send " +
+      "that did not happen",
+  },
+  {
     name: "web share-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "share-check"],

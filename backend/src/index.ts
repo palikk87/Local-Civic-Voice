@@ -21,6 +21,7 @@ import { onboardingRouter } from "./routes/onboarding";
 import { representativesRouter } from "./routes/representatives";
 import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
+import { verificationRouter } from "./routes/verification";
 import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
@@ -220,6 +221,7 @@ app.route("/api/login", loginRouter);
 app.route("/api/representatives", representativesRouter);
 app.route("/api/delegations", delegationsRouter);
 app.route("/api/ai", aiRouter);
+app.route("/api/verification", verificationRouter);
 
 // Serve user uploads — only when storage is local disk.
 //
@@ -415,6 +417,22 @@ void checkStorage().then(({ ok, driver, detail }) => {
     );
   }
 });
+
+// Same reasoning, for mail.
+//
+// Without a provider, sign-up creates the account, shows "check your email",
+// and no email exists anywhere — and the constitution's verification gate then
+// locks that person out of voting, delegating and posting with no way through.
+// It was invisible for exactly as long as it took somebody to try signing up,
+// because Better Auth's own send path answers success either way. Now it says
+// so at boot, and /health carries the same fact for whatever polls it.
+if (!isEmailConfigured()) {
+  console.warn(
+    "[Email] ⚠️  RESEND_API_KEY is not set. Verification codes, sign-in codes and " +
+      "password resets cannot be delivered, so nobody who signs up from here can " +
+      "finish signing up. Reading still works."
+  );
+}
 
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string): Promise<void> {

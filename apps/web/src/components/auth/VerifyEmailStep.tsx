@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { MailCheck, Loader2 } from "lucide-react";
+import { MailCheck, Loader2, MailWarning } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
+import { api } from "@/lib/api";
 
 /**
  * The last step of signing up: the code from the email.
@@ -39,6 +40,29 @@ export function VerifyEmailStep({
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  // null while unknown. false means this server has no mail provider, and no
+  // amount of pressing "send another code" will produce one.
+  const [deliverable, setDeliverable] = useState<boolean | null>(null);
+
+  // Asked once, on mount. A screen that says "check your email" while the
+  // server knows it cannot send email is a lie told to the only person who can
+  // do anything about it. This is how that case became visible: the send used
+  // to go through Better Auth, which answers success either way.
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .get<{ deliverable: boolean }>("/api/verification/email")
+      .then((status) => {
+        if (!cancelled) setDeliverable(status.deliverable);
+      })
+      .catch(() => {
+        // Signed out, or the API is unreachable. Neither is something to
+        // announce here — the code box still works if a code did arrive.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function verify() {
     const clean = code.trim();
@@ -71,19 +95,36 @@ export function VerifyEmailStep({
     }
   }
 
+  /**
+   * Ask the backend for a fresh code, and say what actually happened.
+   *
+   * NOT authClient.emailOtp.sendVerificationOtp any more. Better Auth hands
+   * that send to a background runner that catches every error, so the endpoint
+   * answers `{ success: true }` when the mail provider is missing or refusing.
+   * This button reported "Sent." over a message that never left the server.
+   * /api/verification/email/send awaits the send and returns the truth.
+   */
   async function resend() {
     setError(null);
     setNotice(null);
     setResending(true);
     try {
-      const { error: err } = await authClient.emailOtp.sendVerificationOtp({
-        email,
-        type: "email-verification",
-      });
-      setNotice(err ? null : "Sent. It can take a minute to arrive.");
-      if (err) setError(err.message || "Could not send another code.");
-    } catch {
-      setError("Could not send another code.");
+      const result = await api.post<{ sent: boolean; verified?: boolean }>(
+        "/api/verification/email/send",
+        {},
+      );
+      if (result.verified) {
+        setNotice("Your email is already verified.");
+        setDeliverable(true);
+        return;
+      }
+      setDeliverable(true);
+      setNotice("Sent. It can take a minute to arrive.");
+    } catch (e) {
+      // The message is the server's own — "this server cannot send email yet"
+      // or the provider's refusal — rather than a shrug.
+      setError(e instanceof Error ? e.message : "Could not send another code.");
+      setDeliverable(false);
     } finally {
       setResending(false);
     }
@@ -120,6 +161,19 @@ export function VerifyEmailStep({
           This is how the Pulse stays a count of citizens rather than of accounts.
         </p>
       </div>
+
+      {deliverable === false ? (
+        <div className="flex gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
+          <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+          <p className="text-sm text-foreground">
+            This site cannot send email right now, so no code is on its way. Whoever runs it
+            needs to set a mail provider.{" "}
+            <span className="text-muted-foreground">
+              Reading stays open in the meantime — you can come back to this.
+            </span>
+          </p>
+        </div>
+      ) : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {notice ? <p className="text-sm text-muted-foreground">{notice}</p> : null}

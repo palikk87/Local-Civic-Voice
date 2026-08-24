@@ -6,17 +6,79 @@ import { prisma } from "../prisma";
 import { verifyPasswordOrDummy } from "../password-check";
 import { generateB2BToken } from "../session-token";
 
-/** Live platform counts from the shared Prisma database (votes use position support/oppose). */
+/**
+ * What a paying client is told about participation here.
+ *
+ * TWO THINGS THIS USED TO GET WRONG, both of which understate or overstate
+ * real participation to somebody buying it.
+ *
+ * 1. IT COUNTED ROWS, NOT PEOPLE. `prisma.user.count()` is every row in the
+ *    User table. This database has been shared with another project, so that
+ *    includes accounts that never signed up here — which is why this endpoint
+ *    reported 51 while the admin portal, which asks a narrower question,
+ *    reported 1. A client paying for reach was being shown a number nobody
+ *    could reproduce. PARTICIPANTS is the same definition the admin portal's
+ *    `realAccounts` uses: an account somebody can sign in with, meaning it has
+ *    a credential row. One definition, two dashboards, no disagreement.
+ *
+ * 2. IT READ THE WRONG VOTE TABLE. Every vote a citizen casts today lands in
+ *    GovernmentReferenceVote; the legacy Vote table has taken no new rows since
+ *    the clients stopped calling /api/bills/:id/vote, and both apps deleted
+ *    those hooks. So the vote totals sold here were frozen at whatever they
+ *    were on that day. Both are counted now: the old rows are real votes people
+ *    really cast, and dropping them would lose history.
+ *
+ * There is no filter for synthetic accounts, deliberately. The synthetic
+ * citizens used for load work live in their own database and never in this one,
+ * which is the whole reason they are built that way: a filter is something one
+ * query eventually forgets, and a row that is not there cannot be counted.
+ */
 async function getPlatformCounts() {
-  const [totalVotes, totalUsers, totalPosts, totalComments, yeaVotes, nayVotes] = await Promise.all([
+  const [
+    legacyVotes,
+    referenceVotes,
+    totalUsers,
+    totalPosts,
+    totalComments,
+    legacyYea,
+    legacyNay,
+    referenceYea,
+    referenceNay,
+  ] = await Promise.all([
     prisma.vote.count(),
-    prisma.user.count(),
+    prisma.governmentReferenceVote.count(),
+    prisma.user.count({ where: { accounts: { some: { providerId: "credential" } } } }),
     prisma.post.count(),
     prisma.comment.count(),
     prisma.vote.count({ where: { position: "support" } }),
     prisma.vote.count({ where: { position: "oppose" } }),
+    prisma.governmentReferenceVote.count({ where: { position: "support" } }),
+    prisma.governmentReferenceVote.count({ where: { position: "oppose" } }),
   ]);
-  return { totalVotes, totalUsers, totalPosts, totalComments, yeaVotes, nayVotes };
+
+  return {
+    totalVotes: legacyVotes + referenceVotes,
+    totalUsers,
+    totalPosts,
+    totalComments,
+    yeaVotes: legacyYea + referenceYea,
+    nayVotes: legacyNay + referenceNay,
+  };
+}
+
+/**
+ * Votes cast in a window, across both tables.
+ *
+ * Same reason as above: asking only the legacy table produced a "weekly change"
+ * of zero forever, because that table has not taken a row in months.
+ */
+async function votesBetween(from: Date, to?: Date): Promise<number> {
+  const createdAt = to ? { gte: from, lt: to } : { gte: from };
+  const [legacy, reference] = await Promise.all([
+    prisma.vote.count({ where: { createdAt } }),
+    prisma.governmentReferenceVote.count({ where: { createdAt } }),
+  ]);
+  return legacy + reference;
 }
 
 interface BillRow {
@@ -550,8 +612,8 @@ b2bRouter.get("/sentiment/overview", async (c) => {
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
     const [thisWeekVotes, lastWeekVotes] = await Promise.all([
-      prisma.vote.count({ where: { createdAt: { gte: oneWeekAgo } } }),
-      prisma.vote.count({ where: { createdAt: { gte: twoWeeksAgo, lt: oneWeekAgo } } }),
+      votesBetween(oneWeekAgo),
+      votesBetween(twoWeeksAgo, oneWeekAgo),
     ]);
 
     const thisWeek = thisWeekVotes || 0;

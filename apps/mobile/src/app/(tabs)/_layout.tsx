@@ -2,7 +2,12 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Home, Compass, Landmark, User, Newspaper, BookOpen, UsersRound } from 'lucide-react-native';
 import { View } from 'react-native';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePermissions } from '@/lib/auth/use-civic-auth';
+import {
+  VerifyEmailBanner,
+  useNeedsEmailVerification,
+} from '@/components/auth/VerifyEmailBanner';
 
 export default function TabLayout() {
   // Guests don't see links to member-only screens (timeline, profile) — same rule the
@@ -11,7 +16,14 @@ export default function TabLayout() {
   const showTimeline = can('viewTimeline');
   const showProfile = can('viewProfile');
 
-  return (
+  // Web twin: AppShell mounts VerifyEmailBanner at the top of every page. This
+  // is that, for the tab stack — an unverified account browsed a normal-looking
+  // app here whose vote buttons quietly answered 403, with nothing on screen
+  // saying why or what to do about it.
+  const needsVerification = useNeedsEmailVerification();
+  const insets = useSafeAreaInsets();
+
+  const tabs = (
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -99,5 +111,20 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+  );
+
+  if (!needsVerification) return tabs;
+
+  return (
+    <View className="flex-1 bg-slate-900">
+      <VerifyEmailBanner />
+      {/* The banner has already paid the top inset. Every tab screen wraps
+          itself in SafeAreaView edges={['top']}, which reads the window insets
+          and would pay it a second time — a blank strip under the banner.
+          Handing them a zeroed top is the supported way to say it is spent. */}
+      <SafeAreaInsetsContext.Provider value={{ ...insets, top: 0 }}>
+        {tabs}
+      </SafeAreaInsetsContext.Provider>
+    </View>
   );
 }

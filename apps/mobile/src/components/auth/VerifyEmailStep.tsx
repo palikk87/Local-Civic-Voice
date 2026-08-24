@@ -16,13 +16,14 @@
 // every law, brief and tally; they simply cannot vote or post until they
 // finish. The government's business is the public good; the Pulse is the thing
 // that has to be protected.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { MailCheck } from 'lucide-react-native';
+import { MailCheck, MailWarning } from 'lucide-react-native';
 
 import { authClient } from '@/lib/auth/auth-client';
+import { api } from '@/lib/api/api';
 
 export function VerifyEmailStep({
   email,
@@ -39,6 +40,28 @@ export function VerifyEmailStep({
   const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  // null while unknown. false means this server has no mail provider, and no
+  // amount of pressing "send another code" will produce one.
+  const [deliverable, setDeliverable] = useState<boolean | null>(null);
+
+  // Asked once, on mount. A screen that says "check your email" while the
+  // server knows it cannot send email is a lie told to the only person who can
+  // do anything about it.
+  useEffect(() => {
+    let cancelled = false;
+    void api
+      .get<{ deliverable: boolean }>('/api/verification/email')
+      .then((status) => {
+        if (!cancelled) setDeliverable(status.deliverable);
+      })
+      .catch(() => {
+        // Signed out, or the API is unreachable. Neither is worth announcing
+        // here — the code box still works if a code did arrive.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function verify() {
     const clean = code.trim();
@@ -69,19 +92,31 @@ export function VerifyEmailStep({
     }
   }
 
+  // Ask the backend for a fresh code, and say what actually happened.
+  //
+  // NOT authClient.emailOtp.sendVerificationOtp any more. Better Auth hands
+  // that send to a background runner that catches every error, so the endpoint
+  // answers success when the mail provider is missing or refusing. This button
+  // reported 'Sent.' over a message that never left the server.
   async function resend() {
     setError(null);
     setNotice(null);
     setResending(true);
     try {
-      const { error: err } = await authClient.emailOtp.sendVerificationOtp({
-        email,
-        type: 'email-verification',
-      });
-      setNotice(err ? null : 'Sent. It can take a minute to arrive.');
-      if (err) setError(err.message || 'Could not send another code.');
-    } catch {
-      setError('Could not send another code.');
+      const result = await api.post<{ sent: boolean; verified?: boolean }>(
+        '/api/verification/email/send',
+        {},
+      );
+      if (result.verified) {
+        setNotice('Your email is already verified.');
+        setDeliverable(true);
+        return;
+      }
+      setDeliverable(true);
+      setNotice('Sent. It can take a minute to arrive.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send another code.');
+      setDeliverable(false);
     } finally {
       setResending(false);
     }
@@ -117,6 +152,17 @@ export function VerifyEmailStep({
       <Text className="text-slate-500 text-xs mt-1.5">
         This is how the Pulse stays a count of citizens rather than of accounts.
       </Text>
+
+      {deliverable === false ? (
+        <View className="flex-row gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 mt-3">
+          <MailWarning size={16} color="#F87171" />
+          <Text className="flex-1 text-slate-200 text-sm">
+            This app cannot send email right now, so no code is on its way. Whoever runs it
+            needs to set a mail provider.{' '}
+            <Text className="text-slate-400">Reading stays open in the meantime.</Text>
+          </Text>
+        </View>
+      ) : null}
 
       {error ? <Text className="text-red-400 text-sm mt-2">{error}</Text> : null}
       {notice ? <Text className="text-slate-400 text-sm mt-2">{notice}</Text> : null}

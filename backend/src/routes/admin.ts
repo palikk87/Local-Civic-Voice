@@ -1458,19 +1458,39 @@ adminRouter.get("/stats", async (c) => {
   }
 
   try {
-    // Live counts from the shared Prisma database
-    const [userCount, postCount, commentCount, voteCount] = await Promise.all([
-      prisma.user.count(),
-      prisma.post.count(),
-      prisma.comment.count(),
-      prisma.vote.count(),
-    ]);
-
-    // Get users active today
+    // ONE DEFINITION OF "A USER", SHARED WITH THE B2B DASHBOARD.
+    //
+    // This used to be a bare prisma.user.count() — every row in the User
+    // table. That database has been shared with another project, so the number
+    // included accounts that never signed up here, and the same platform
+    // reported 51 users on one dashboard and 1 on another. A user is an account
+    // somebody can sign in with, which means it has a credential row; the raw
+    // row count still appears, labelled as such, on the storage-health card,
+    // because durability is the one question it actually answers.
+    //
+    // VOTES COME FROM BOTH TABLES. Everything cast today lands in
+    // GovernmentReferenceVote; the legacy Vote table stopped taking rows when
+    // both clients dropped /api/bills/:id/vote. Reading only the old one froze
+    // this figure — and froze "active today" with it, so a busy day showed
+    // nobody at all.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [postsToday, votesToday] = await Promise.all([
+    const [
+      userCount,
+      postCount,
+      commentCount,
+      legacyVoteCount,
+      referenceVoteCount,
+      postsToday,
+      legacyVotesToday,
+      referenceVotesToday,
+    ] = await Promise.all([
+      prisma.user.count({ where: { accounts: { some: { providerId: "credential" } } } }),
+      prisma.post.count(),
+      prisma.comment.count(),
+      prisma.vote.count(),
+      prisma.governmentReferenceVote.count(),
       prisma.post.findMany({
         where: { createdAt: { gte: today } },
         select: { authorId: true },
@@ -1479,11 +1499,18 @@ adminRouter.get("/stats", async (c) => {
         where: { createdAt: { gte: today } },
         select: { userId: true },
       }),
+      prisma.governmentReferenceVote.findMany({
+        where: { createdAt: { gte: today } },
+        select: { userId: true },
+      }),
     ]);
+
+    const voteCount = legacyVoteCount + referenceVoteCount;
 
     const activeUserIds = new Set([
       ...postsToday.map((p) => p.authorId),
-      ...votesToday.map((v) => v.userId),
+      ...legacyVotesToday.map((v) => v.userId),
+      ...referenceVotesToday.map((v) => v.userId),
     ]);
 
     // Every count below comes from the database. None of it is held in memory,

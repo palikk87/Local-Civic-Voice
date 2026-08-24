@@ -5,6 +5,7 @@ import { emailOTP } from "better-auth/plugins";
 import { prisma } from "./prisma";
 import { env, trustedOrigins } from "./env";
 import { sendOtpEmail } from "./services/email";
+import { sendVerificationCode } from "./services/email-verification";
 
 /** Seeded sample accounts, so signup logs only report real people. */
 function isSampleAccount(user: { email: string }): boolean {
@@ -50,20 +51,29 @@ export const auth = betterAuth({
 
           // CONSTITUTION ARTICLE I, SECTION 3: only verified human beings may
           // contribute to the Pulse. The code goes out the moment the account
-          // exists, from the server rather than from either client, so the
-          // step cannot be skipped by talking to the API directly.
+          // exists, so it is usually already waiting by the time the screen
+          // asking for it has painted.
           //
-          // Never throws into signup. An account that exists but whose first
+          // It does NOT go out through auth.api.sendVerificationOTP any more.
+          // That endpoint hands the send to runInBackgroundOrAwait, which
+          // catches every error and logs it at debug level — so it answered
+          // success on a deployment with no mail provider at all, and the
+          // .catch() that used to sit here was unreachable code. A signup on
+          // such a deployment produced an account, a "check your email" screen,
+          // and no email, with nothing said to anyone.
+          //
+          // sendVerificationCode never throws; it returns what happened. Still
+          // fire-and-forget, because an account that exists but whose first
           // email failed is recoverable — they press "send another code" — and
-          // an account that failed to be created because an email provider was
+          // an account that failed to be created because a mail provider was
           // briefly down is not.
-          void auth.api
-            .sendVerificationOTP({
-              body: { email: user.email, type: "email-verification" },
-            })
-            .catch((error: unknown) => {
-              console.error("[Signup] could not send verification code", user.email, error);
-            });
+          void sendVerificationCode(user.email).then((result) => {
+            if (!result.sent) {
+              console.error(
+                `[Signup] no verification code reached ${user.email} (${result.code}): ${result.detail}`
+              );
+            }
+          });
         },
       },
     },

@@ -12,7 +12,32 @@ import { env } from "../env";
  * this backend needs an email dependency.
  */
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+/**
+ * Overridable only so the test suite can stand a server in front of it and read
+ * what actually went out. Defaults to Resend; see env.ts.
+ */
+const RESEND_ENDPOINT = env.RESEND_ENDPOINT;
+
+/**
+ * Why a send failed, in a form a route can turn into a status code.
+ *
+ * `sendEmail` used to throw a bare Error for both cases, which meant "nobody
+ * configured a mail provider" and "the provider rejected this message" reached
+ * the caller as the same unclassifiable string. They are different problems
+ * with different owners, and a citizen staring at a code screen deserves to be
+ * told which one is happening.
+ */
+export type EmailFailureCode = "email_not_configured" | "email_send_failed";
+
+export class EmailNotSent extends Error {
+  readonly code: EmailFailureCode;
+
+  constructor(code: EmailFailureCode, message: string) {
+    super(message);
+    this.name = "EmailNotSent";
+    this.code = code;
+  }
+}
 
 /**
  * Every purpose Better Auth's emailOTP plugin can emit. Keep this exhaustive —
@@ -36,24 +61,36 @@ async function sendEmail({ to, subject, html, text }: SendEmailArgs): Promise<vo
     // Loud on purpose. The previous implementation returned silently for every
     // purpose except sign-in, so password-reset codes were dropped with no error
     // anywhere — the failure was invisible until someone tried to reset.
-    throw new Error(
+    throw new EmailNotSent(
+      "email_not_configured",
       "RESEND_API_KEY is not set, so no email can be sent. Set it in the backend " +
-        "environment; password reset and sign-in codes depend on it."
+        "environment; sign-up, sign-in and password-reset codes all depend on it."
     );
   }
 
-  const response = await fetch(RESEND_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ from: env.EMAIL_FROM, to: [to], subject, html, text }),
-  });
+  // A connection failure has to come back classified too. Left bare it arrives
+  // as a TypeError, which the caller cannot tell apart from a bug in this file.
+  let response: Response;
+  try {
+    response = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ from: env.EMAIL_FROM, to: [to], subject, html, text }),
+    });
+  } catch (error) {
+    throw new EmailNotSent(
+      "email_send_failed",
+      `Could not reach the mail provider: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
-    throw new Error(
+    throw new EmailNotSent(
+      "email_send_failed",
       `Resend rejected the message (HTTP ${response.status})${detail ? `: ${detail}` : ""}`
     );
   }

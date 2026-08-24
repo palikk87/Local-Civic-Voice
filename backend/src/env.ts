@@ -67,6 +67,11 @@ const envSchema = z.object({
   // Must be a verified sender on a domain you control in Resend, or delivery
   // fails even with a valid key.
   EMAIL_FROM: z.string().optional().default("Civic Voice <noreply@civicvoice.app>"),
+  // Where the message is actually POSTed. Overridable for one reason: the test
+  // suite points it at a local Bun.serve and reads the body, which is the only
+  // way to prove the code a citizen is told to type is the code that leaves the
+  // building. Never set in production.
+  RESEND_ENDPOINT: z.url().optional().default("https://api.resend.com/emails"),
 
   // Government API Keys
   CONGRESS_API_KEY: z.string().optional(),

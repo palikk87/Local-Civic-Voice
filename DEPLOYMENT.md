@@ -178,9 +178,29 @@ bun scripts/seed-b2b.ts
 Capture the two API keys as you generate them — they are hashed on the way in
 and cannot be read back out. Losing one means running this again with a new one.
 
-All six are required and the script names every one it is missing. It is safe to
-re-run: on an account that already exists it overwrites the password and the API
-key, which is also how you rotate either of them.
+All six are required and the script names every one it is missing.
+
+**Re-running it does not change a credential you did not ask it to change.** A
+missing account is created; an existing one keeps its password and API key, and
+only its display name, type and tier are refreshed. This used to work the other
+way — every run re-keyed every account it touched, so setting up the second login
+silently rotated the first one's password out from under whoever was using it,
+with nothing recorded anywhere.
+
+To rotate deliberately, say so:
+
+```bash
+B2B_ROTATE=1      …   # both accounts
+B2B_ROTATE=demo   …   # just the demo login
+B2B_ROTATE=admin  …   # just the admin login
+```
+
+The admin portal has the same operation with an audit trail behind it
+(`POST /api/admin/b2b-clients/:id/rotate`), and it also revokes the sessions the
+old password opened. Prefer that when you have an admin session; use the script
+when you do not. If a B2B password ever changes unexpectedly, the portal's
+activity log is where to look — a rotation done there is recorded as
+`rotate_b2b_client` with the admin who did it.
 
 Unlike the admin seed, this one needs only `DATABASE_URL` and `DIRECT_URL` — it
 writes rows directly and never loads the auth stack.
@@ -379,6 +399,12 @@ application code.
 ### Resend — transactional email
 
 - **Supplies:** `RESEND_API_KEY`, `EMAIL_FROM`
+- **Required for anyone to finish signing up.** The verification gate means an
+  account cannot vote, delegate or post until its emailed code is entered. With
+  no key set, sign-up creates the account, the screen asks for a code, and no
+  code exists. The API warns about this at boot, `/health` reports
+  `email.configured: false`, and the sign-up screen tells the person in front of
+  it rather than pretending a message went out.
 - **Cost:** 3,000 emails/month free; $20/month above that
 - **Lock-in:** minimal. One file, `backend/src/services/email.ts`, one HTTPS POST
   to their send endpoint, no SDK.

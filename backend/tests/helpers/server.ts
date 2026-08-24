@@ -119,6 +119,23 @@ export const prisma = new PrismaClient({ datasources: { db: { url: DATABASE_URL 
 process.env.DATABASE_URL ??= DATABASE_URL;
 process.env.DIRECT_URL ??= DATABASE_URL;
 
+// Same reason, for the variables src/env.ts refuses to boot without. A test
+// file that imports a service pulls env.ts into THIS process, where nothing
+// has set them — so the import failed with a validation error that read like a
+// misconfigured machine rather than a missing line here. Throwaway values: this
+// process serves nothing and signs nothing.
+process.env.BETTER_AUTH_SECRET ??= "test-only-secret-value-not-used-anywhere-else";
+
+/**
+ * Extra variables for the next server this harness starts.
+ *
+ * Set by startServer(overrides) and cleared by stopServer(), so a file that
+ * needs a differently-configured server — the mail-verification suite runs
+ * three: no provider, a working one, and one that refuses — asks for it
+ * explicitly rather than every other file inheriting its settings.
+ */
+let envOverrides: Record<string, string> = {};
+
 function env(): Record<string, string> {
   return {
     ...process.env,
@@ -160,6 +177,10 @@ function env(): Record<string, string> {
     //
     // No B2B_* either. The server does not read them any more — B2B accounts
     // are rows, written by seedB2BClients() below.
+
+    // Last, so a caller that needs a differently-configured server can override
+    // any of the above.
+    ...envOverrides,
   };
 }
 
@@ -239,7 +260,43 @@ async function waitForHealth(timeoutMs = 30_000): Promise<void> {
   throw new Error(`Server did not become healthy within ${timeoutMs}ms: ${lastError}`);
 }
 
-export async function startServer(): Promise<void> {
+/**
+ * Refuse to run against a database that is not obviously disposable.
+ *
+ * resetData() TRUNCATEs User, Session, Account, GovernmentReference and the
+ * rest between every test, and seedB2BClients() writes B2B credentials. Point
+ * TEST_DATABASE_URL at the wrong database — a copy-paste, an exported variable
+ * left over in a shell — and this suite empties it, quietly, in about four
+ * seconds. Nothing about the failure would look like a mistake in the URL.
+ *
+ * The rule is a name containing "test". If a throwaway database is genuinely
+ * named something else, say so out loud with TEST_DATABASE_IS_DISPOSABLE=1
+ * rather than loosening this.
+ */
+function refuseNonTestDatabase(): void {
+  if (process.env.TEST_DATABASE_IS_DISPOSABLE === "1") return;
+
+  let name = "";
+  try {
+    name = new URL(DATABASE_URL).pathname.replace(/^\//, "");
+  } catch {
+    throw new Error(`TEST_DATABASE_URL is not a URL this suite can read: ${DATABASE_URL}`);
+  }
+
+  if (/test/i.test(name)) return;
+
+  throw new Error(
+    `Refusing to run the test suite against a database named "${name}".\n\n` +
+      `Every test truncates User, Session, Account, GovernmentReference and more, so\n` +
+      `running here would empty it. Point TEST_DATABASE_URL at a throwaway database\n` +
+      `whose name contains "test", or set TEST_DATABASE_IS_DISPOSABLE=1 if this one\n` +
+      `really is disposable under a different name.`
+  );
+}
+
+export async function startServer(overrides: Record<string, string> = {}): Promise<void> {
+  refuseNonTestDatabase();
+  envOverrides = overrides;
   // Refuse to start on top of somebody else.
   //
   // stopServer() used to call kill() and return immediately, so a previous
@@ -321,6 +378,10 @@ export async function stopServer(): Promise<void> {
     await server.exited;
     server = null;
   }
+
+  // Cleared here rather than in startServer, so a file that forgets to pass
+  // them again gets the plain configuration instead of the last one's.
+  envOverrides = {};
 }
 
 /** Wipe rows between tests without touching the schema. */
