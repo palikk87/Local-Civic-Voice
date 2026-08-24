@@ -100,6 +100,26 @@ export type BriefResponse =
   | { state: "unavailable"; reason: string; sourceUrl?: string | null };
 
 export interface GovReferenceDetail extends GovReference {
+  /**
+   * How the chamber actually voted, when it has.
+   *
+   * From senate.gov or clerk.house.gov. Null when Congress has taken no
+   * recorded vote on this measure — which is most of them, most of the time,
+   * and is why every panel keyed on this stays hidden rather than inventing a
+   * tally.
+   */
+  officialVotes?: {
+    yea: number;
+    nay: number;
+    present: number;
+    notVoting: number;
+    chamber: string;
+    question: string;
+    result: string;
+    votedAt: string;
+    sourceUrl: string;
+  } | null;
+
   fullText: string | null;
   aliases: string[];
   userVote: VotePosition | null;

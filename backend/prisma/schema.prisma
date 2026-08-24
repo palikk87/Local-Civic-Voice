@@ -300,17 +300,17 @@ model PostLike {
 }
 
 model Comment {
-  id        String    @id @default(cuid())
+  id        String        @id @default(cuid())
   content   String
   postId    String
   authorId  String
   parentId  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies   Comment[] @relation("CommentReplies")
-  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  parent    Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[]     @relation("CommentReplies")
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post      Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
   likes     CommentLike[]
 
   @@index([postId])
@@ -699,6 +699,7 @@ model GovernmentReference {
   mergedFrom        GovernmentReference[]     @relation("MergedReferences")
   posts             Post[]                    @relation("GovernmentReferencePosts")
   votes             GovernmentReferenceVote[]
+  rollCalls         RollCall[]
   positionEvents    PositionEvent[]
   names             ReferenceName[]
   candidatesAsLeft  ReferenceMergeCandidate[] @relation("MergeCandidateLeft")
@@ -971,7 +972,7 @@ model Report {
   reviewedAt     DateTime?
   createdAt      DateTime  @default(now())
 
-  reporter     User @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reporter     User  @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reportedUser User? @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
 
   @@index([status])
@@ -1021,4 +1022,87 @@ model PositionEvent {
   @@index([userId, createdAt])
   @@index([governmentReferenceId])
   @@index([userId, governmentReferenceId])
+}
+
+/// A recorded vote of the House or Senate on one measure.
+///
+/// THE MISSING HALF OF THE REPRESENTATION GAP. The platform could say "73% of
+/// citizens here oppose this" and had nothing to compare it against, because
+/// nothing stored how Congress actually voted. `officialVotes` on the bill
+/// card was never set by anything and the PulseGap component had never
+/// rendered for a real record.
+///
+/// Sourced from senate.gov and clerk.house.gov, which publish every roll call
+/// as XML with NO API KEY. This was previously written up as blocked on a
+/// congress.gov key; it never needed one.
+model RollCall {
+  id         String @id @default(cuid())
+  /// "house" or "senate".
+  chamber    String
+  congress   Int
+  /// Senate sessions are 1 or 2; the House numbers rolls per calendar year.
+  session    Int
+  /// Roll number within the chamber's numbering for that session/year.
+  rollNumber Int
+  /// The calendar year the House filed it under. Null for Senate rolls.
+  year       Int?
+
+  /// As printed by the chamber — "H R 4058", "S.J.Res. 82".
+  legisNumber           String?
+  /// The canonical record this belongs to, when it could be resolved.
+  masterReferenceId     String?
+  governmentReferenceId String?
+
+  question    String
+  /// "Passed", "Failed", "Agreed to", "Joint Resolution Defeated (50-50)".
+  result      String
+  /// The chamber's own description of the measure.
+  description String?
+  votedAt     DateTime
+
+  yea       Int
+  nay       Int
+  present   Int @default(0)
+  notVoting Int @default(0)
+
+  /// Where this came from, so any number here is traceable to an official page.
+  sourceUrl String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  governmentReference GovernmentReference? @relation(fields: [governmentReferenceId], references: [id], onDelete: SetNull)
+  memberVotes         RollCallMemberVote[]
+
+  @@unique([chamber, congress, session, rollNumber])
+  @@index([governmentReferenceId])
+  @@index([masterReferenceId])
+  @@index([votedAt])
+}
+
+/// How one member of Congress voted on one roll call.
+///
+/// This is the half that makes the gap personal — "here is how YOUR
+/// representative voted" — and the reason member ids are kept: bioguide for
+/// the House, LIS for the Senate, both stable and both the official ids.
+model RollCallMemberVote {
+  id         String @id @default(cuid())
+  rollCallId String
+
+  /// Bioguide id (House) or LIS member id (Senate).
+  memberId  String
+  lastName  String
+  firstName String?
+  party     String
+  state     String
+  /// The district for a House member; null for a senator.
+  district  String?
+  /// "Yea", "Nay", "Present", "Not Voting" — the chamber's own wording.
+  voteCast  String
+
+  rollCall RollCall @relation(fields: [rollCallId], references: [id], onDelete: Cascade)
+
+  @@unique([rollCallId, memberId])
+  @@index([memberId])
+  @@index([state, district])
 }

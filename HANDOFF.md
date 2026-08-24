@@ -319,34 +319,52 @@ Not built:
 - **Pinning a post, muting a thread, and a public list of who blocked whom** —
   none of these exist and none of them should without a reason.
 
-### The Representation Gap needs data nobody has fetched yet
+### The Representation Gap — built, and it never needed a key
 
-The most compelling thing this app could say is "the people here said 73%
-oppose; the House passed it 218-210; here is how your representative voted."
-The UI for it exists — `PulseGap`, and an "Official Vote" block on the bill
-page — and neither has ever rendered for a real record, because
-`referenceToBill` never sets `officialVotes` and nothing in the schema stores a
-roll call.
+**Correction to what this document used to say.** It said the gap was blocked
+on a `CONGRESS_API_KEY` this environment does not have. That was wrong. Both
+chambers publish every roll call themselves, as XML, unauthenticated:
 
-Nothing is fabricated: the blocks are conditional and simply do not appear. But
-the feature is absent rather than broken, and it is the one most worth building.
+- `https://www.senate.gov/legislative/LIS/roll_call_votes/vote{congress}{session}/vote_{congress}_{session}_{roll}.xml`
+- `https://clerk.house.gov/evs/{year}/roll{roll}.xml`
+- Index: `https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_{congress}_{session}.xml`
 
-What it needs:
+Both carry member-level detail — name, party, state, how each one voted — with
+the official ids (LIS for the Senate, Bioguide for the House). Real responses
+from the 119th Congress are recorded in `tests/fixtures/rollcall/` and replayed
+in the tests.
 
-1. A `RollCall` table — chamber, congress, session, roll number, date, question,
-   yea/nay/present/not-voting, and the bill it belongs to.
-2. A fetch against congress.gov. The v3 API exposes House roll calls at
-   `/house-vote` and per-bill actions at `/bill/{congress}/{type}/{number}/actions`,
-   which is where the vote references appear. **Unverified** — this environment
-   has no `CONGRESS_API_KEY`, so the shape was never confirmed against a real
-   response, and it should be recorded as a fixture the way every other
-   government fetch in this repo is before anything is built on it.
-3. Member-level votes, to answer "how did MY representative vote". That is the
-   half that makes it personal, and the half most likely to be a separate
-   request per roll call.
+What now exists: `RollCall` and `RollCallMemberVote` tables; parsers for both
+chambers; `bun run sync-roll-calls` to pull and store them; and
+`GET /:id/representation-gap` plus `GET /:id/official-vote`. The record
+endpoint now sets `officialVotes`, which is the field PulseGap and the
+"Official Vote" block have keyed on since the beginning and which nothing had
+ever populated — so those panels render for a real record for the first time.
 
-Do not build it from `government-data.ts`. Those `officialVotes` numbers are
-hardcoded fixtures from the original prototype and are not real.
+**Run the sync to see it.** Nothing is backfilled automatically:
+
+```bash
+cd backend
+bun run sync-roll-calls --chamber house --house-year 2025 --limit 400
+bun run sync-roll-calls --chamber senate --congress 119 --session 1
+```
+
+A gap only appears where both halves are real — a stored roll call AND at least
+10 citizen votes on this platform. Below that it returns null and the panels
+stay hidden, which is deliberate: an absent feature beats an invented number.
+
+**Still missing: "how did MY representative vote."** The member-level data is
+stored and the endpoint returns the whole chamber, but nothing knows which
+district a given citizen is in. The Census geocoder answers that for free and
+with no key (`https://geocoding.geo.census.gov/geocoder/geographies/address`,
+verified working), but it needs a home address — and Bill of Rights Article IV
+says collect "only the minimum data necessary". Storing an address to
+personalise a panel is a real privacy decision, not a technical one, so it is
+written up rather than guessed at. A district (not an address) could be stored
+instead, which is the version worth considering first.
+
+**Do not** use `officialVotes` from `government-data.ts`. Those are hardcoded
+fixtures from the original prototype and are not real.
 
 ### A deleted account keeps voting
 

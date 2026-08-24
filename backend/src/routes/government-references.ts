@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
+import { representationGap, officialVoteRoll } from "../services/representation-gap";
 import { publicUrlFor } from "../services/storage";
 import type { auth } from "../auth";
 import {
@@ -471,6 +472,14 @@ governmentReferencesRouter.get("/:id", async (c) => {
   // is one indexed query away.
   const { former: aliases } = await namesFor(reference.id);
 
+  // The chamber's latest recorded vote on this measure, if it has taken one.
+  // A bill is voted on many times — procedural motions, amendments, final
+  // passage — and the honest one to show is where the chamber last stood.
+  const latestRollCall = await prisma.rollCall.findFirst({
+    where: { governmentReferenceId: reference.id },
+    orderBy: { votedAt: "desc" },
+  });
+
   return c.json({
     reference: {
       id: reference.id,
@@ -524,6 +533,27 @@ governmentReferencesRouter.get("/:id", async (c) => {
         oppose: reference.opposeVotes,
         total: reference.supportVotes + reference.opposeVotes,
       },
+      // HOW THE CHAMBER ACTUALLY VOTED, from senate.gov or clerk.house.gov.
+      //
+      // This is the field the Representation Gap has always keyed on, on both
+      // clients, and nothing had ever set it — so PulseGap and the "Official
+      // Vote" block had never rendered for a real record. Null when the
+      // chamber has not voted, which keeps those panels hidden rather than
+      // showing a fabricated tally.
+      officialVotes: latestRollCall
+        ? {
+            yea: latestRollCall.yea,
+            nay: latestRollCall.nay,
+            present: latestRollCall.present,
+            notVoting: latestRollCall.notVoting,
+            chamber: latestRollCall.chamber,
+            question: latestRollCall.question,
+            result: latestRollCall.result,
+            votedAt: latestRollCall.votedAt.toISOString(),
+            // Every number here is traceable to the page it came from.
+            sourceUrl: latestRollCall.sourceUrl,
+          }
+        : null,
       engagement: {
         comments: reference.totalComments,
         shares: reference.totalShares,
@@ -1503,4 +1533,50 @@ governmentReferencesRouter.get("/:id/turning-points", async (c) => {
   }
 
   return c.json(await turningPoints(referenceId, user?.id ?? null, limit));
+});
+
+
+/**
+ * GET /api/government-references/:id/representation-gap
+ *
+ * What the citizens here said, against what the chamber actually did.
+ *
+ * Returns 200 with `gap: null` rather than a 404 when there is nothing to
+ * compare — no roll call yet, or too few voices here to call it a public. The
+ * clients hide the panel on null, which is how an absent feature stays absent
+ * instead of becoming an invented number.
+ */
+governmentReferencesRouter.get("/:id/representation-gap", async (c) => {
+  const referenceId = c.req.param("id");
+
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { id: true },
+  });
+  if (!reference) {
+    return c.json({ error: "Reference not found" }, 404);
+  }
+
+  return c.json({ gap: await representationGap(referenceId) });
+});
+
+/**
+ * GET /api/government-references/:id/official-vote
+ *
+ * How every member voted on the chamber's latest roll call for this record —
+ * the half that lets somebody find their own delegation and see what was done
+ * with their representation.
+ */
+governmentReferencesRouter.get("/:id/official-vote", async (c) => {
+  const referenceId = c.req.param("id");
+
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { id: true },
+  });
+  if (!reference) {
+    return c.json({ error: "Reference not found" }, 404);
+  }
+
+  return c.json({ roll: await officialVoteRoll(referenceId) });
 });

@@ -79,6 +79,24 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
     realWorldImpact: ref.description ?? "",
     relatedLaws: [],
     communityVotes: toVoteTally(ref.votes),
+    // HOW THE CHAMBER ACTUALLY VOTED. The Representation Gap has keyed on this
+    // field since the beginning and nothing had ever set it, so PulseGap and
+    // the "Official Vote" block had never rendered for a real record. It now
+    // comes from senate.gov or clerk.house.gov, and stays undefined when the
+    // chamber has not voted — which keeps those panels hidden rather than
+    // filling them with a fabricated tally.
+    //
+    // Bills only. Executive orders and Supreme Court cases are not voted on by
+    // Congress, and a gap against a vote that never happened is fiction.
+    officialVotes:
+      "officialVotes" in ref && ref.officialVotes
+        ? {
+            yea: ref.officialVotes.yea,
+            nay: ref.officialVotes.nay,
+            abstain: ref.officialVotes.present,
+            notVoting: ref.officialVotes.notVoting,
+          }
+        : undefined,
     projectedOutcome: ref.votes.support > ref.votes.oppose ? "likely_pass" : "uncertain",
     branch: "legislative",
   };

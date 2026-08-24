@@ -102,6 +102,26 @@ export function requestCitizenBrief(id: string, force = false) {
 }
 
 export interface GovReferenceDetail extends GovReference {
+  /**
+   * How the chamber actually voted, when it has.
+   *
+   * From senate.gov or clerk.house.gov. Null when Congress has taken no
+   * recorded vote on this measure — which is most of them, most of the time,
+   * and is why every panel keyed on this stays hidden rather than inventing a
+   * tally.
+   */
+  officialVotes?: {
+    yea: number;
+    nay: number;
+    present: number;
+    notVoting: number;
+    chamber: string;
+    question: string;
+    result: string;
+    votedAt: string;
+    sourceUrl: string;
+  } | null;
+
   fullText: string | null;
   userVote: "support" | "oppose" | null;
   updatedAt: string;
@@ -307,6 +327,24 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
     realWorldImpact: ref.description ?? "",
     relatedLaws: [],
     communityVotes: toVoteTally(ref.votes),
+    // HOW THE CHAMBER ACTUALLY VOTED. The Representation Gap has keyed on this
+    // field since the beginning and nothing had ever set it, so PulseGap and
+    // the "Official Vote" block had never rendered for a real record. It now
+    // comes from senate.gov or clerk.house.gov, and stays undefined when the
+    // chamber has not voted — which keeps those panels hidden rather than
+    // filling them with a fabricated tally.
+    //
+    // Bills only. Executive orders and Supreme Court cases are not voted on by
+    // Congress, and a gap against a vote that never happened is fiction.
+    officialVotes:
+      "officialVotes" in ref && ref.officialVotes
+        ? {
+            yea: ref.officialVotes.yea,
+            nay: ref.officialVotes.nay,
+            abstain: ref.officialVotes.present,
+            notVoting: ref.officialVotes.notVoting,
+          }
+        : undefined,
     projectedOutcome: ref.votes.support > ref.votes.oppose ? "likely_pass" : "uncertain",
     branch: "legislative",
   };
