@@ -6,6 +6,7 @@ import { verifyPasswordOrDummy } from "../password-check";
 import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
+import { emailConfiguration, trySendingEmail } from "../services/email";
 import { purgeMediaObjects } from "../services/media-objects";
 import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
 import { LOOK_ALIKE } from "../services/reference-lineage";
@@ -18,6 +19,7 @@ import {
   generateApiKey,
   generatePassword,
   rotateB2BCredentials,
+  setUserPassword,
 } from "../services/credentials";
 
 // ==========================================
@@ -576,6 +578,82 @@ adminRouter.get("/users/:id", zValidator("param", idParamSchema), async (c) => {
     return c.json({ error: "Failed to fetch user" }, { status: 500 });
   }
 });
+
+const resetPasswordSchema = z.object({
+  // Optional. Omit and one is generated, which is the path to prefer — a
+  // password an administrator chose is a password an administrator knows.
+  newPassword: z.string().min(8, "Password must be at least 8 characters").optional(),
+  reason: z.string().min(1, "Say why — it goes in the activity log").max(500),
+});
+
+/**
+ * POST /api/admin/users/:id/reset-password
+ *
+ * A super admin sets somebody's password, and ends their sessions.
+ *
+ * WHY THIS EXISTS. No backend process re-keys anybody any more: the seed
+ * scripts create and never overwrite, and a credential can only move through
+ * services/credentials.ts. That rule is only livable if the people who are
+ * supposed to be able to do it still can. This is the super admin's half —
+ * total control, exercised deliberately, with their name on it. The other half
+ * is the person's own: Settings → Change password, and "Forgot password".
+ *
+ * The reason is required rather than optional. Somebody is about to be signed
+ * out of every device and handed a new password, and "why" is the first thing
+ * they will ask.
+ */
+adminRouter.post(
+  "/users/:id/reset-password",
+  zValidator("param", idParamSchema),
+  zValidator("json", resetPasswordSchema),
+  async (c) => {
+    const authHeader = c.req.header("Authorization");
+    const session = await getAdminFromToken(authHeader);
+    if (!session) {
+      return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+    }
+    if (session.role !== "superadmin") {
+      return c.json({ error: "Only superadmin can reset a password" }, { status: 403 });
+    }
+
+    const { id } = c.req.valid("param");
+    const body = c.req.valid("json");
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, username: true },
+    });
+    if (!user) {
+      return c.json({ error: "User not found" }, { status: 404 });
+    }
+
+    const password = body.newPassword ?? generatePassword();
+
+    const { created, revokedSessions } = await setUserPassword(
+      user.id,
+      password,
+      {
+        actor: { kind: "admin", adminId: session.adminId, username: session.username },
+        reason: body.reason,
+      },
+      // Always. An admin resetting somebody else's password is responding to
+      // something, and a live session that survives the reset makes it useless.
+      { revokeSessions: true }
+    );
+
+    return c.json({
+      success: true,
+      user: { id: user.id, username: user.username, email: user.email },
+      // Shown once, and only to the super admin who asked. Nothing stores it.
+      password,
+      created,
+      revokedSessions,
+      warning:
+        "Give this to them over a channel they already trust, and tell them to change it. " +
+        "It cannot be shown again.",
+    });
+  }
+);
 
 adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) => {
   const authHeader = c.req.header("Authorization");
@@ -1344,6 +1422,114 @@ adminRouter.get("/content-health", async (c) => {
     console.error("Error building content health:", error);
     return c.json({ error: "Failed to build content health" }, { status: 500 });
   }
+});
+
+/**
+ * GET /api/admin/email-health
+ *
+ * What this server knows about its mail setup, without sending anything.
+ *
+ * Every field here exists because it was, at some point, the actual answer to
+ * "there is definitely a key in place and no email arrives". A key set on the
+ * web host rather than the API. A key with a newline on the end. A key that was
+ * not a Resend key. And most often of all, a perfectly good key sending From a
+ * domain nobody verified — which the provider refuses in a way indistinguishable
+ * from a bad key.
+ */
+adminRouter.get("/email-health", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  const config = emailConfiguration();
+
+  const warnings = [
+    !config.configured &&
+      "No RESEND_API_KEY on the API. Nobody who signs up can finish signing up — the " +
+        "verification code has nowhere to go. Reading still works.",
+    config.configured &&
+      !config.keyLooksLikeResend &&
+      "RESEND_API_KEY is set but does not start with \"re_\". Resend keys do. This is " +
+        "usually a different service's key pasted into the right box.",
+    config.configured &&
+      !config.fromIsProviderTestSender &&
+      `EMAIL_FROM sends from ${config.fromDomain ?? "an unreadable address"}. Resend ` +
+        "refuses any message from a domain the account has not verified, and that " +
+        "failure looks exactly like a bad key. Verify the domain, or use " +
+        "onboarding@resend.dev while testing.",
+    config.fromIsProviderTestSender &&
+      "EMAIL_FROM is Resend's shared test sender. It needs no DNS, but it delivers " +
+        "ONLY to the address the Resend account was opened with — everyone else gets " +
+        "nothing, and the send still reports success.",
+  ].filter(Boolean) as string[];
+
+  return c.json({
+    data: {
+      ...config,
+      // Send a test message to find out for certain. Named here so the answer
+      // to "how do I check?" is in the same response as the question.
+      verifyWith: "POST /api/admin/email-health/test { to }",
+      warnings,
+    },
+  });
+});
+
+const emailTestSchema = z.object({
+  to: z.email("Enter the address to send the test message to"),
+});
+
+/**
+ * POST /api/admin/email-health/test
+ *
+ * Sends a real message and reports exactly what the provider said.
+ *
+ * Superadmin only: it spends the mail quota and it can be pointed at any
+ * address. Everything above is inference; this is the answer.
+ */
+adminRouter.post("/email-health/test", zValidator("json", emailTestSchema), async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Only superadmin can send a test message" }, { status: 403 });
+  }
+
+  const { to } = c.req.valid("json");
+  const result = await trySendingEmail(to);
+
+  createActivityLog(
+    "email_health_test",
+    session.adminId,
+    session.username,
+    "system",
+    undefined,
+    `Sent a mail check to ${to} — ${result.ok ? "accepted" : result.code}`
+  );
+
+  if (result.ok) {
+    return c.json({
+      sent: true,
+      to,
+      from: emailConfiguration().from,
+      note: "The provider accepted it. If it does not arrive, check spam and the provider's own dashboard.",
+    });
+  }
+
+  return c.json(
+    {
+      sent: false,
+      to,
+      code: result.code,
+      // The provider's own words, verbatim. This is the sentence that names the
+      // problem — an unverified sending domain says so here and nowhere else.
+      detail: result.detail,
+    },
+    result.code === "email_not_configured" ? 503 : 502
+  );
 });
 
 adminRouter.get("/storage-health", async (c) => {

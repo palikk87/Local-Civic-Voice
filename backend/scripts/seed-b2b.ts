@@ -20,36 +20,36 @@
  * Generate the two API keys with something like `openssl rand -base64 48`.
  * They are machine credentials; nothing needs to type them twice.
  *
- * SAFE TO RE-RUN, AND IT WILL NOT CHANGE A CREDENTIAL YOU DID NOT ASK IT TO.
+ * THIS SCRIPT CREATES. IT NEVER CHANGES AN EXISTING CREDENTIAL.
  *
- * It used to. Every run overwrote the password and API key of every account it
- * touched, which meant running it to create the second account silently
- * rotated the first one's password out from under whoever was using it — a
- * working B2B login that stopped working for no visible reason, with nothing
- * recorded anywhere. Setting up one account is not consent to re-key another.
+ * It used to overwrite the password and API key of every account it touched on
+ * every run, which meant running it to create the second account silently
+ * rotated the first one's out from under whoever was using it — a working B2B
+ * login that stopped working for no visible reason, with nothing recorded
+ * anywhere. To a business paying for the dashboard, that is indistinguishable
+ * from a breach.
  *
- * So: a missing account is created; an existing one keeps its credentials and
- * only its display name, type and tier are refreshed. To deliberately rotate,
- * say so:
+ * The rule now is simple and absolute: no backend process re-keys anybody. A
+ * missing account is created; an existing one has its display name, type and
+ * tier refreshed and its credentials left exactly alone. There is no flag, no
+ * environment variable, and no "force" — because the moment one exists, it gets
+ * used at 2am by somebody who has not read this comment.
  *
- *   B2B_ROTATE=1 … bun run scripts/seed-b2b.ts        both accounts
- *   B2B_ROTATE=demo … bun run scripts/seed-b2b.ts     just the demo one
- *   B2B_ROTATE=admin … bun run scripts/seed-b2b.ts    just the admin one
+ * ROTATION IS A PERSON'S DECISION, MADE WHERE IT LEAVES A NAME:
  *
- * A rotation prints what it did. The admin portal has the same operation with
- * an audit trail behind it (POST /api/admin/b2b-clients/:id/rotate, which also
- * revokes the sessions the old password opened); prefer that when there is an
- * admin session to hand, and use this when there is not.
+ *   Super admin  →  POST /api/admin/b2b-clients/:id/rotate
+ *                   Records who did it and why, revokes the sessions the old
+ *                   password opened, and shows the new values once.
+ *
+ * enforced by tests/credential-writes.test.ts, which fails if a rotation call
+ * reappears in this file.
  *
  * The two accounts differ only in tier intent, not in mechanism. Their display
  * names and types are not secrets and are not deployment config, so they live
  * here rather than adding four more variables to fill in by hand.
  */
 import { prisma } from "../src/prisma";
-import {
-  createB2BClient,
-  rotateB2BCredentials,
-} from "../src/services/credentials";
+import { createB2BClient } from "../src/services/credentials";
 
 const B2B_DEMO_USERNAME = process.env.B2B_DEMO_USERNAME;
 const B2B_DEMO_PASSWORD = process.env.B2B_DEMO_PASSWORD;
@@ -115,19 +115,6 @@ interface SeedAccount {
   tier: string;
 }
 
-/**
- * Whether this run was asked to re-key this account.
- *
- * Unset means no. Anything else is read as a deliberate instruction, and an
- * unrecognised value rotates nothing rather than guessing.
- */
-function rotationRequested(slot: SeedAccount["slot"]): boolean {
-  const raw = (process.env.B2B_ROTATE ?? "").trim().toLowerCase();
-  if (!raw) return false;
-  if (raw === "1" || raw === "true" || raw === "all" || raw === "both") return true;
-  return raw.split(/[,\s]+/).includes(slot);
-}
-
 const ACTOR = { kind: "cli", script: "scripts/seed-b2b.ts" } as const;
 
 async function upsertClient(account: SeedAccount): Promise<void> {
@@ -138,41 +125,19 @@ async function upsertClient(account: SeedAccount): Promise<void> {
   const existing = await prisma.b2BClient.findUnique({ where: { username } });
 
   if (existing) {
-    const rotate = rotationRequested(account.slot);
-
     // Name, type and tier are settings. Password and API key are somebody's
-    // working credentials, and are left exactly where they are unless this run
-    // was told to change them.
+    // working credentials, and this script has no business touching them.
     await prisma.b2BClient.update({
       where: { username },
       data: { name: account.name, type: account.type, tier: account.tier },
     });
 
-    if (rotate) {
-      // Through services/credentials.ts, which records the change before this
-      // returns. That is the difference between "the password changed" and
-      // "the password changed, and here is the line that says this script did
-      // it, when, and why".
-      const { revokedSessions } = await rotateB2BCredentials(
-        existing.id,
-        { password: account.password, apiKey: account.apiKey },
-        { actor: ACTOR, reason: `B2B_ROTATE named the ${account.slot} account` }
-      );
-      console.log(
-        `Updated B2B client. id=${existing.id} username=${username} tier=${account.tier}`
-      );
-      console.log(
-        `  Password and API key ROTATED, as B2B_ROTATE asked. ` +
-          `${revokedSessions} live session(s) ended. Recorded in the activity log.`
-      );
-      return;
-    }
-
     console.log(
       `Updated B2B client. id=${existing.id} username=${username} tier=${account.tier}`
     );
     console.log(
-      `  Password and API key left as they are. To change them: B2B_ROTATE=${account.slot}`
+      "  Password and API key untouched. To change them, a super admin uses " +
+        "POST /api/admin/b2b-clients/:id/rotate, which records who did it."
     );
     return;
   }

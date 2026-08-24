@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { BlockedAndMuted } from "@/components/settings/BlockedAndMuted";
+import { ChangePassword } from "@/components/settings/ChangePassword";
 
 interface NotificationPreferences {
   likes: boolean;
@@ -131,6 +132,8 @@ export default function Settings() {
           </div>
         ) : (
           <>
+            <ChangePassword />
+
             <BlockedAndMuted />
 
             <div className="rounded-lg border border-border bg-card p-6">

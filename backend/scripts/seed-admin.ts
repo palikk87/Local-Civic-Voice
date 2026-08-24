@@ -20,24 +20,38 @@
  *   ADMIN_PASSWORD='…' \
  *   bun run scripts/seed-admin.ts
  *
- * SAFE TO RE-RUN, AND IT WILL NOT CHANGE THE PASSWORD YOU DID NOT ASK IT TO.
+ * THIS SCRIPT CREATES. IT NEVER CHANGES AN EXISTING PASSWORD.
  *
- * It used to. Every run rewrote the password, so running this to correct a
+ * It used to rewrite the password on every run, so running it to correct a
  * username or repair a role silently re-keyed the super-admin — a working login
  * that stopped working for no visible reason, with nothing recorded anywhere.
- * The B2B seed had the identical shape, and it is what produced a B2B password
+ * The B2B seed had the identical shape, and that is what produced a B2B password
  * change nobody could account for.
  *
- * Now: a missing account is created, and an existing one has only its role,
- * username and display name refreshed. To change the password deliberately, say
- * so:
+ * The rule now is absolute: no backend process re-keys anybody. A missing
+ * account is created; an existing one has its role, username and display name
+ * refreshed and its password left alone. There is no flag and no override,
+ * because an override is a thing that gets used at 2am by somebody who has not
+ * read this comment.
  *
- *   ADMIN_ROTATE=1 … bun run scripts/seed-admin.ts
+ * CHANGING A PASSWORD IS A PERSON'S DECISION, MADE WHERE IT LEAVES A NAME:
  *
- * Either way the change goes through src/services/credentials.ts, which writes
- * a line to the admin activity log naming this script and the reason, and waits
- * for that line to land before the script exits. A credential that can change
- * without a trace is a credential nobody can trust.
+ *   The admin themselves  →  Settings → Change password, while signed in, or
+ *                            "Forgot password" with a code to their own inbox.
+ *                            The admin console verifies against the same User
+ *                            row an ordinary sign-in does, so both work for it.
+ *
+ *   A super admin, for    →  POST /api/admin/users/:id/reset-password
+ *   somebody else            Records who did it, and ends that person's
+ *                            sessions.
+ *
+ * THE ONE EXCEPTION, and it is not a reset. An account with no credential row
+ * cannot be signed in to by anybody; giving it one takes nothing away from
+ * anyone and is the only way to recover a super-admin created by an older bug.
+ * That case is handled, recorded, and announced when it happens.
+ *
+ * Enforced by tests/credential-writes.test.ts, which fails if a rotation path
+ * reappears in this file.
  */
 import { auth } from "../src/auth";
 import { prisma } from "../src/prisma";
@@ -82,18 +96,6 @@ function warnIfWeak(password: string): void {
 
 const ACTOR = { kind: "cli", script: "scripts/seed-admin.ts" } as const;
 
-/**
- * Whether this run was asked to change an existing password.
- *
- * Unset means no. Rotating the super-admin credential is not a side effect of
- * correcting a username, and this script has no way to know whether the value
- * in the shell is the current one or a new one somebody typed.
- */
-function rotationRequested(): boolean {
-  const raw = (process.env.ADMIN_ROTATE ?? "").trim().toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes";
-}
-
 async function main(): Promise<void> {
   requireEnv();
   const email = ADMIN_EMAIL as string;
@@ -131,16 +133,10 @@ async function main(): Promise<void> {
       return;
     }
 
-    if (!rotationRequested()) {
-      console.log("Password left as it is. To change it: ADMIN_ROTATE=1");
-      return;
-    }
-
-    await setUserPassword(existing.id, password, {
-      actor: ACTOR,
-      reason: "ADMIN_ROTATE was set on a seed run",
-    });
-    console.log("Password ROTATED, as ADMIN_ROTATE asked. Recorded in the activity log.");
+    console.log("Password untouched — this script does not change one that works.");
+    console.log(
+      "  To change it: sign in and use Settings → Change password, or 'Forgot password'."
+    );
     return;
   }
 

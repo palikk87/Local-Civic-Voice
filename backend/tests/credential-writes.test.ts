@@ -146,18 +146,62 @@ describe("only one file may write a credential", () => {
   });
 });
 
-describe("a seed script never re-keys an account it was not asked to", () => {
-  test("the B2B seed rotates only when B2B_ROTATE names the account", () => {
-    const src = code("scripts/seed-b2b.ts");
-    expect(src).toContain("B2B_ROTATE");
-    // The update that runs on every re-run carries settings, never secrets.
-    expect(/data:\s*\{\s*name:[^}]*tier:[^}]*\}/.test(src)).toBe(true);
-    expect(src).not.toContain("hashPassword");
+describe("no backend process can re-key anybody", () => {
+  /**
+   * The rule, stated plainly: a credential that already works is only ever
+   * changed by a person — the account holder, or a super admin — through a
+   * route that records their name. No script, no job, no boot step, no
+   * "repair" helper. An override flag is not a compromise here: it is a thing
+   * that gets used at 2am by somebody who has not read the comment above it,
+   * which is exactly how the B2B password changed in the first place.
+   */
+  const NEVER_ROTATES = ["scripts/seed-b2b.ts", "scripts/seed-admin.ts"];
+
+  test("neither seed script rotates a credential, on any flag", () => {
+    for (const file of NEVER_ROTATES) {
+      const src = code(file);
+      expect(src).not.toContain("rotateB2BCredentials");
+      expect(src).not.toContain("hashPassword");
+      // No escape hatch. Matched on the environment read rather than the word,
+      // so a console.log pointing somebody at the admin console's own rotate
+      // route — which is where they should be sent — is not mistaken for one.
+      expect(/process\.env\.[A-Z_]*(ROTATE|FORCE|OVERWRITE)/i.test(src)).toBe(false);
+    }
   });
 
-  test("the admin seed rotates only when ADMIN_ROTATE says so", () => {
+  test("the B2B seed's re-run path carries settings and no secrets", () => {
+    const src = code("scripts/seed-b2b.ts");
+    // The update that runs when the account already exists.
+    expect(/data:\s*\{\s*name:[^}]*tier:[^}]*\}/.test(src)).toBe(true);
+    expect(src).toContain("createB2BClient");
+  });
+
+  test("the admin seed only ever gives a password to an account that has none", () => {
     const src = code("scripts/seed-admin.ts");
-    expect(src).toContain("ADMIN_ROTATE");
-    expect(src).not.toContain("hashPassword");
+    // setUserPassword appears once, inside the branch for an account with no
+    // credential row — nobody can sign in to such an account, so nothing is
+    // taken from anyone.
+    expect((src.match(/setUserPassword\s*\(/g) ?? []).length).toBe(1);
+    expect(src).toContain("if (!credential)");
+  });
+
+  test("nothing anywhere in src/ or scripts/ changes a password on its own", () => {
+    // A rotation reached from a job, a boot step, or a request nobody made is
+    // the shape of the original bug. Every legitimate caller sits behind an
+    // authenticated route or is the create path.
+    const callers = backendFiles().filter((file) =>
+      /\b(rotateB2BCredentials|setUserPassword)\s*\(/.test(code(file)),
+    );
+
+    expect(callers.sort()).toEqual(
+      [
+        // Super admin: rotate a B2B key, reset a person's password.
+        "src/routes/admin.ts",
+        // The account holder: change your own password.
+        "src/routes/users.ts",
+        // Give a credential to an admin account that has none.
+        "scripts/seed-admin.ts",
+      ].sort(),
+    );
   });
 });

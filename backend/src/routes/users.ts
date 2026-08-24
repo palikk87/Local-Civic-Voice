@@ -12,6 +12,8 @@ import {
   standing,
 } from "../services/position-history";
 import type { auth } from "../auth";
+import { verifyPasswordOrDummy } from "../password-check";
+import { setUserPassword } from "../services/credentials";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -645,6 +647,86 @@ usersRouter.get("/me/votes", zValidator("query", z.object({
  * PATCH /api/users/me
  * Update current user's profile
  */
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password"),
+  newPassword: z.string().min(8, "Use at least 8 characters"),
+  /**
+   * Ends every other session. Default true: somebody changing their password
+   * is usually doing it because they think somebody else has it, and leaving
+   * the other sessions alive would defeat the point. The device they are
+   * typing on stays signed in either way.
+   */
+  signOutOtherDevices: z.boolean().optional().default(true),
+});
+
+/**
+ * POST /api/users/me/password
+ *
+ * Change your own password.
+ *
+ * WHY THIS EXISTS. No backend process re-keys anybody: the seed scripts create
+ * and never overwrite, and a credential only moves through
+ * services/credentials.ts. That rule is only livable if the people who should
+ * be able to change a password still can — and until now a signed-in person
+ * could not. The only route to a new password was "forgot password", which
+ * means logging out and waiting for an email to arrive, for something they
+ * already had the right to do.
+ *
+ * The current password is required. Without it, anyone who reaches an unlocked
+ * laptop takes the account permanently, and a session cookie is not consent to
+ * change the credential behind it.
+ */
+usersRouter.post("/me/password", zValidator("json", changePasswordSchema), async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const { currentPassword, newPassword, signOutOtherDevices } = c.req.valid("json");
+
+  const credential = await prisma.account.findFirst({
+    where: { userId: user.id, providerId: "credential" },
+    select: { password: true },
+  });
+
+  // Same shape for "no credential row" and "wrong password", and the check runs
+  // either way — see password-check.ts. This is the caller's own account, so
+  // enumeration is not the risk; a timing difference that says whether a
+  // password is even set is still not worth handing out.
+  const ok = await verifyPasswordOrDummy(credential?.password, currentPassword, "user");
+  if (!ok) {
+    return c.json({ error: "That is not your current password." }, 403);
+  }
+
+  if (newPassword === currentPassword) {
+    return c.json({ error: "That is the password you already have." }, 400);
+  }
+
+  const currentUsername = (user as { username?: string | null }).username ?? user.id;
+
+  // This request's own session is spared, so the person stays signed in on the
+  // device they are typing on. Re-authenticating them here instead would mean
+  // handling a password inside this route a second time, for no gain.
+  const session = c.get("session");
+
+  const { revokedSessions } = await setUserPassword(
+    user.id,
+    newPassword,
+    {
+      actor: { kind: "self", userId: user.id, username: currentUsername },
+      reason: "Changed by the account holder from Settings",
+    },
+    { revokeSessions: signOutOtherDevices, keepSessionId: session?.id }
+  );
+
+  return c.json({
+    success: true,
+    // Reported so the client can say "signed out on 3 other devices" rather
+    // than leaving somebody to wonder whether it worked everywhere.
+    signedOutOtherDevices: revokedSessions,
+  });
+});
+
 usersRouter.patch("/me", zValidator("json", z.object({
   name: z.string().min(1).max(100).optional(),
   username: z.string().min(1).max(30).regex(/^[a-z0-9_]+$/, "lowercase letters, numbers and underscores only").optional(),

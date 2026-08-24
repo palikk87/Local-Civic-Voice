@@ -20,6 +20,7 @@ import {
   prisma,
   resetData,
   freshClientHeaders,
+  signUp,
   startServer,
   stopServer,
 } from "./helpers/server";
@@ -213,6 +214,237 @@ describe("every credential change records who and why", () => {
     // away; replacing a working one does. The log tells them apart.
     expect(second!.action).toBe("rotate_user_password");
     expect(second!.details).toContain("ADMIN_ROTATE");
+  });
+});
+
+describe("a person controls their own password", () => {
+  const PASSWORD = "original-password-not-a-real-one";
+
+  async function person(): Promise<{ cookie: string; userId: string; email: string }> {
+    seq += 1;
+    const email = `holder${seq}@example.com`;
+    const account = await signUp({ email, password: PASSWORD, name: `Holder ${seq}` });
+    return { ...account, email };
+  }
+
+  function withCookie(cookie: string) {
+    return freshClientHeaders({ "Content-Type": "application/json", cookie });
+  }
+
+  async function changePassword(
+    cookie: string,
+    body: Record<string, unknown>,
+  ): Promise<Response> {
+    return fetch(`${BASE_URL}/api/users/me/password`, {
+      method: "POST",
+      headers: withCookie(cookie),
+      body: JSON.stringify(body),
+    });
+  }
+
+  async function canSignIn(email: string, password: string): Promise<boolean> {
+    const response = await fetch(`${BASE_URL}/api/login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ identifier: email, password }),
+    });
+    return response.ok;
+  }
+
+  test("they can change it, and the new one works", async () => {
+    const holder = await person();
+
+    const response = await changePassword(holder.cookie, {
+      currentPassword: PASSWORD,
+      newPassword: "a-brand-new-password",
+    });
+    expect(response.status).toBe(200);
+
+    expect(await canSignIn(holder.email, "a-brand-new-password")).toBe(true);
+    expect(await canSignIn(holder.email, PASSWORD)).toBe(false);
+  });
+
+  test("a session cookie alone is not enough — the old password is required", async () => {
+    const holder = await person();
+
+    const response = await changePassword(holder.cookie, {
+      currentPassword: "not-the-right-one",
+      newPassword: "a-brand-new-password",
+    });
+
+    // Somebody who reaches an unlocked laptop must not be able to take the
+    // account permanently.
+    expect(response.status).toBe(403);
+    expect(await canSignIn(holder.email, PASSWORD)).toBe(true);
+  });
+
+  test("changing it does not sign them out of the device they did it on", async () => {
+    const holder = await person();
+
+    await changePassword(holder.cookie, {
+      currentPassword: PASSWORD,
+      newPassword: "a-brand-new-password",
+    });
+
+    // Being signed out by the act of securing your account reads as the change
+    // having broken something. /me/standing is used rather than /me because
+    // GET /api/users/:id answers a signed-out caller with 404 rather than 401 —
+    // it reads "me" as an id — so it cannot tell the two apart.
+    const stillHere = await fetch(`${BASE_URL}/api/users/me/standing`, {
+      headers: withCookie(holder.cookie),
+    });
+    expect(stillHere.status).toBe(200);
+  });
+
+  test("but it does end the other sessions", async () => {
+    const holder = await person();
+
+    const elsewhere = await fetch(`${BASE_URL}/api/login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ identifier: holder.email, password: PASSWORD }),
+    });
+    expect(elsewhere.ok).toBe(true);
+    const otherCookie = elsewhere.headers.get("set-cookie")!.split(";")[0]!;
+
+    const response = await changePassword(holder.cookie, {
+      currentPassword: PASSWORD,
+      newPassword: "a-brand-new-password",
+    });
+    expect(((await response.json()) as { signedOutOtherDevices: number }).signedOutOtherDevices)
+      .toBeGreaterThanOrEqual(1);
+
+    const otherDevice = await fetch(`${BASE_URL}/api/users/me/standing`, {
+      headers: freshClientHeaders({ cookie: otherCookie }),
+    });
+    expect(otherDevice.status).toBe(401);
+  });
+
+  test("the change is recorded as theirs, not as an administrator's", async () => {
+    const holder = await person();
+
+    await changePassword(holder.cookie, {
+      currentPassword: PASSWORD,
+      newPassword: "a-brand-new-password",
+    });
+
+    const event = await prisma.adminActivityLog.findFirst({
+      where: { targetId: holder.userId },
+      orderBy: { createdAt: "desc" },
+    });
+    // "I changed my password" and "somebody changed my password" are different
+    // events, and only one of them should alarm anybody.
+    expect(event!.action).toBe("rotate_user_password");
+    expect(event!.adminUsername.startsWith("self:")).toBe(true);
+  });
+
+  test("a stranger cannot change anybody's password", async () => {
+    const response = await fetch(`${BASE_URL}/api/users/me/password`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ currentPassword: PASSWORD, newPassword: "whatever-it-is" }),
+    });
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("a super admin can reset somebody's password", () => {
+  async function adminHeaders(role: "admin" | "superadmin"): Promise<Record<string, string>> {
+    const token = `admin_reset_${Math.random().toString(36).slice(2)}`;
+    await prisma.adminSession.create({
+      data: {
+        token,
+        adminId: `test-${role}`,
+        username: `test-${role}`,
+        role,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    return freshClientHeaders({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" });
+  }
+
+  async function reset(
+    headers: Record<string, string>,
+    userId: string,
+    body: Record<string, unknown> = { reason: "They called support and proved who they were" },
+  ): Promise<Response> {
+    return fetch(`${BASE_URL}/api/admin/users/${userId}/reset-password`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+  }
+
+  test("the new password is returned once and it works", async () => {
+    seq += 1;
+    const email = `locked-out${seq}@example.com`;
+    const account = await signUp({ email, password: "forgotten-password", name: "Locked Out" });
+
+    const response = await reset(await adminHeaders("superadmin"), account.userId);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { password: string; revokedSessions: number };
+
+    const signIn = await fetch(`${BASE_URL}/api/login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ identifier: email, password: body.password }),
+    });
+    expect(signIn.ok).toBe(true);
+  });
+
+  test("it ends every session that account had", async () => {
+    seq += 1;
+    const account = await signUp({
+      email: `compromised${seq}@example.com`,
+      password: "the-leaked-one",
+      name: "Compromised",
+    });
+
+    const response = await reset(await adminHeaders("superadmin"), account.userId);
+    expect(((await response.json()) as { revokedSessions: number }).revokedSessions)
+      .toBeGreaterThanOrEqual(1);
+
+    // A reset prompted by a compromise is pointless if the intruder's session
+    // outlives it.
+    const stale = await fetch(`${BASE_URL}/api/users/me/standing`, {
+      headers: freshClientHeaders({ cookie: account.cookie }),
+    });
+    expect(stale.status).toBe(401);
+  });
+
+  test("it needs a reason, and records who did it", async () => {
+    seq += 1;
+    const account = await signUp({
+      email: `reasoned${seq}@example.com`,
+      password: "something",
+      name: "Reasoned",
+    });
+
+    const noReason = await reset(await adminHeaders("superadmin"), account.userId, {});
+    expect(noReason.status).toBe(400);
+
+    await reset(await adminHeaders("superadmin"), account.userId, {
+      reason: "Lost their phone and their laptop",
+    });
+
+    const event = await prisma.adminActivityLog.findFirst({
+      where: { targetId: account.userId },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(event!.adminUsername).toBe("test-superadmin");
+    expect(event!.details).toContain("Lost their phone and their laptop");
+  });
+
+  test("an ordinary admin cannot", async () => {
+    seq += 1;
+    const account = await signUp({
+      email: `protected${seq}@example.com`,
+      password: "something",
+      name: "Protected",
+    });
+
+    const response = await reset(await adminHeaders("admin"), account.userId);
+    expect(response.status).toBe(403);
   });
 });
 

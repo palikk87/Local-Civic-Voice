@@ -136,7 +136,13 @@ process.env.BETTER_AUTH_SECRET ??= "test-only-secret-value-not-used-anywhere-els
  */
 let envOverrides: Record<string, string> = {};
 
-function env(): Record<string, string> {
+/**
+ * `string | undefined` rather than `string`: this spreads process.env, whose
+ * values are optional, and hands the result to Bun.spawn — which drops the
+ * undefined ones rather than passing an empty string. Narrowing it would mean
+ * either a cast or a filter, both of which lie about what is being passed.
+ */
+function env(): Record<string, string | undefined> {
   return {
     ...process.env,
     NODE_ENV: "development",

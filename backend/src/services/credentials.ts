@@ -48,7 +48,20 @@ import { prisma } from "../prisma";
  */
 export type CredentialActor =
   | { kind: "admin"; adminId: string; username: string }
-  /** A command-line run. `script` is the path, so the log names the tool. */
+  /**
+   * Somebody changing their own password. Recorded distinctly from an admin
+   * doing it to them, because "I changed my password" and "somebody changed my
+   * password" are different events and only one of them is alarming.
+   */
+  | { kind: "self"; userId: string; username: string }
+  /**
+   * A command-line run. `script` is the path, so the log names the tool.
+   *
+   * NOTE: no script in this repository rotates anything. Both seeds create and
+   * leave existing credentials alone. This exists for the one honest case —
+   * giving a credential to an account that has none, which nobody could sign in
+   * to — and so that any future script is forced to identify itself.
+   */
   | { kind: "cli"; script: string };
 
 export interface CredentialChange {
@@ -61,12 +74,20 @@ export interface CredentialChange {
 }
 
 function actorFields(actor: CredentialActor): { adminId: string; adminUsername: string } {
-  return actor.kind === "admin"
-    ? { adminId: actor.adminId, adminUsername: actor.username }
-    : // Deliberately not a real admin id. A change made from a shell was not
+  switch (actor.kind) {
+    case "admin":
+      return { adminId: actor.adminId, adminUsername: actor.username };
+    case "self":
+      // Prefixed so it can never be mistaken for an administrator acting on
+      // somebody. The person and the operator both need to be able to tell
+      // those apart at a glance.
+      return { adminId: actor.userId, adminUsername: `self:${actor.username}` };
+    case "cli":
+      // Deliberately not a real admin id. A change made from a shell was not
       // made by an account, and recording it as one would be a lie in the very
       // log that exists to prevent lies.
-      { adminId: "cli", adminUsername: `cli:${actor.script}` };
+      return { adminId: "cli", adminUsername: `cli:${actor.script}` };
+  }
 }
 
 /**
@@ -281,8 +302,18 @@ export async function rotateB2BCredentials(
 export async function setUserPassword(
   userId: string,
   password: string,
-  change: CredentialChange
-): Promise<{ created: boolean }> {
+  change: CredentialChange,
+  options: {
+    revokeSessions?: boolean;
+    /**
+     * One session to spare. Somebody changing their own password should end
+     * every OTHER session, not the one they are typing on — being signed out by
+     * the act of securing your account reads as the change having broken
+     * something.
+     */
+    keepSessionId?: string;
+  } = {}
+): Promise<{ created: boolean; revokedSessions: number }> {
   requireReason(change);
 
   const hash = await hashPassword(password);
@@ -300,14 +331,32 @@ export async function setUserPassword(
     });
   }
 
+  // Ending the old sessions is the caller's call, and the two cases differ.
+  // An admin resetting somebody else's password is usually responding to a
+  // compromise, and leaving the attacker's session alive would make the reset
+  // pointless. Somebody changing their own password on their own laptop is not
+  // asking to be signed out of it.
+  let revokedSessions = 0;
+  if (options.revokeSessions) {
+    revokedSessions = (
+      await prisma.session.deleteMany({
+        where: {
+          userId,
+          ...(options.keepSessionId ? { id: { not: options.keepSessionId } } : {}),
+        },
+      })
+    ).count;
+  }
+
   await record(
     credential ? "rotate_user_password" : "set_user_password",
     change,
     userId,
     credential
-      ? `Rotated the password for user ${userId}`
+      ? `Rotated the password for user ${userId}` +
+          (options.revokeSessions ? `, ending ${revokedSessions} session(s)` : "")
       : `Set a password for user ${userId} (no credential row existed)`
   );
 
-  return { created: !credential };
+  return { created: !credential, revokedSessions };
 }

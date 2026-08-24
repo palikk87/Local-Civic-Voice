@@ -63,10 +63,34 @@ const envSchema = z.object({
   // path throws instead. That split is deliberate — the implementation this
   // replaced returned silently when it could not send, which is how password
   // reset came to be broken in production without anyone noticing.
-  RESEND_API_KEY: z.string().optional(),
+  // Trimmed, because a key is almost always pasted. A trailing newline or a
+  // stray space survives every UI that stores it and produces a 401 from the
+  // provider that reads, to whoever set it, as "the key I definitely set does
+  // not work". An empty string after trimming is treated as unset rather than
+  // as a key that happens to be blank.
+  RESEND_API_KEY: z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = value?.trim();
+      return trimmed ? trimmed : undefined;
+    }),
   // Must be a verified sender on a domain you control in Resend, or delivery
   // fails even with a valid key.
-  EMAIL_FROM: z.string().optional().default("Civic Voice <noreply@civicvoice.app>"),
+  //
+  // THIS IS THE SECOND HALF OF "EMAIL DOESN'T WORK", and the half that looks
+  // like a missing key when it is not one. Resend refuses any message whose
+  // From address is on a domain the account has not verified — a correct key
+  // and an unverified sender fail identically from outside. The default below
+  // is a placeholder: unless civicvoice.app is verified in the Resend account
+  // this key belongs to, every send is refused. Use onboarding@resend.dev while
+  // testing; it needs no DNS and delivers only to the address the account was
+  // opened with.
+  EMAIL_FROM: z
+    .string()
+    .optional()
+    .default("Civic Voice <noreply@civicvoice.app>")
+    .transform((value) => value.trim()),
   // Where the message is actually POSTed. Overridable for one reason: the test
   // suite points it at a local Bun.serve and reads the body, which is the only
   // way to prove the code a citizen is told to type is the code that leaves the

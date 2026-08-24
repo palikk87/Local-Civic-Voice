@@ -26,6 +26,7 @@ import {
   Scale,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import { ChangePassword } from '@/components/settings/ChangePassword';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   useNotificationStore,
@@ -381,6 +382,10 @@ function NotificationSettingsContent() {
               </Text>
             </View>
           </View>
+
+          {/* The account holder's own control over their credential. Web twin
+              puts the same card at the top of Settings. */}
+          <ChangePassword />
 
           {/* Quick actions */}
           <View className="flex-row mb-6">

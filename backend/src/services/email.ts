@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { env } from "../env";
 
 /**
@@ -151,7 +152,84 @@ export async function sendOtpEmail(
   await sendEmail({ to, subject: copy.subject, html, text });
 }
 
-/** Whether email can actually be sent. Surfaced by the health check. */
+/** Whether a key is present at all. Surfaced by the health check. */
 export function isEmailConfigured(): boolean {
   return !!env.RESEND_API_KEY;
+}
+
+/**
+ * What this deployment can say about its mail setup without sending anything.
+ *
+ * Never returns the key. `keyFingerprint` is the first four characters of its
+ * SHA-256 digest — enough to answer "is the value the server has the same one I
+ * pasted?" by comparing two fingerprints, and useless to anybody who learns it.
+ *
+ * WHY THIS EXISTS. "There is definitely a key in place" and "no email arrives"
+ * are both true far more often than they should be, and the reason is almost
+ * never a missing key. It is a key with a newline on the end, a key set on the
+ * web host instead of the API, or — most often — a verified key sending From a
+ * domain the provider has not verified, which is refused identically to a bad
+ * key. Guessing between those from the outside is what wasted the time. This
+ * reports each of them separately.
+ */
+export function emailConfiguration(): {
+  configured: boolean;
+  keyFingerprint: string | null;
+  keyLooksLikeResend: boolean;
+  from: string;
+  fromDomain: string | null;
+  fromIsProviderTestSender: boolean;
+} {
+  const key = env.RESEND_API_KEY;
+  const from = env.EMAIL_FROM;
+  const domain = from.match(/@([^\s>]+)/)?.[1]?.toLowerCase() ?? null;
+
+  return {
+    configured: !!key,
+    keyFingerprint: key
+      ? createHash("sha256").update(key).digest("hex").slice(0, 4)
+      : null,
+    // Resend keys start "re_". A value that does not is usually the wrong key
+    // pasted into the right box — an OpenAI key, a database URL, a Vercel token.
+    keyLooksLikeResend: !!key && key.startsWith("re_"),
+    from,
+    fromDomain: domain,
+    // Resend's shared sender. Needs no DNS, and delivers ONLY to the address
+    // the Resend account was opened with — which is itself a common reason a
+    // send "succeeds" and nothing arrives for anybody else.
+    fromIsProviderTestSender: domain === "resend.dev",
+  };
+}
+
+/**
+ * Actually send a message, and report exactly what happened.
+ *
+ * The one question worth asking of a mail setup, asked in the only way that
+ * answers it: by sending. Everything else is inference.
+ */
+export async function trySendingEmail(to: string): Promise<
+  | { ok: true }
+  | { ok: false; code: EmailFailureCode; detail: string }
+> {
+  try {
+    await sendEmail({
+      to,
+      subject: "Civic Voice mail check",
+      text:
+        "This is a test message from the Civic Voice admin console.\n\n" +
+        "If it arrived, sign-up codes, sign-in codes and password resets will too.",
+      html:
+        "<p>This is a test message from the Civic Voice admin console.</p>" +
+        "<p>If it arrived, sign-up codes, sign-in codes and password resets will too.</p>",
+    });
+    return { ok: true };
+  } catch (error) {
+    const code: EmailFailureCode =
+      error instanceof EmailNotSent ? error.code : "email_send_failed";
+    return {
+      ok: false,
+      code,
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
 }

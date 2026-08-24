@@ -44,7 +44,7 @@ import { initializeProcessors } from "./services/job-processors";
 
 // Import cache stats
 import { getCacheStats } from "./services/cache";
-import { isEmailConfigured } from "./services/email";
+import { emailConfiguration, isEmailConfigured } from "./services/email";
 
 // Type the Hono app with user/session variables
 const app = new Hono<{
@@ -426,12 +426,36 @@ void checkStorage().then(({ ok, driver, detail }) => {
 // It was invisible for exactly as long as it took somebody to try signing up,
 // because Better Auth's own send path answers success either way. Now it says
 // so at boot, and /health carries the same fact for whatever polls it.
-if (!isEmailConfigured()) {
-  console.warn(
-    "[Email] ⚠️  RESEND_API_KEY is not set. Verification codes, sign-in codes and " +
-      "password resets cannot be delivered, so nobody who signs up from here can " +
-      "finish signing up. Reading still works."
-  );
+{
+  const mail = emailConfiguration();
+  if (!mail.configured) {
+    console.warn(
+      "[Email] ⚠️  RESEND_API_KEY is not set. Verification codes, sign-in codes and " +
+        "password resets cannot be delivered, so nobody who signs up from here can " +
+        "finish signing up. Reading still works."
+    );
+  } else {
+    // Says the key is present AND names the thing that fails next. "No email
+    // arrives" is far more often an unverified sending domain than a missing
+    // key, and the two are indistinguishable from the provider's response —
+    // which is how a deployment with a perfectly good key spends a week being
+    // debugged as if it had none.
+    console.log(
+      `[Email] key present (fingerprint ${mail.keyFingerprint}), sending from ${mail.from}`
+    );
+    if (!mail.keyLooksLikeResend) {
+      console.warn(
+        '[Email] ⚠️  RESEND_API_KEY does not start with "re_". Resend keys do — this is ' +
+          "usually another service's key in the right box."
+      );
+    }
+    if (!mail.fromIsProviderTestSender) {
+      console.warn(
+        `[Email] ⚠️  Nothing will send unless ${mail.fromDomain ?? "that domain"} is a ` +
+          "verified domain in this Resend account. Check with: POST /api/admin/email-health/test"
+      );
+    }
+  }
 }
 
 // Graceful shutdown handler

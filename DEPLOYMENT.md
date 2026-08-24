@@ -156,19 +156,19 @@ a laptop means having `BETTER_AUTH_SECRET`, `BACKEND_URL`, `APP_ORIGINS`,
 `APP_SCHEMES` and `MEDIA_STORAGE` set as well. It fails loudly and names the
 missing one, so you will not be guessing.
 
-**Re-running it never changes the password.** A missing account is created; an
-existing one has only its role, username and display name refreshed. It used to
-rewrite the password on every run, so correcting a username silently re-keyed the
-super-admin. To change it deliberately:
+**Re-running it never changes the password, and there is no flag that makes it.**
+A missing account is created; an existing one has only its role, username and
+display name refreshed. It used to rewrite the password on every run, so
+correcting a username silently re-keyed the super-admin.
 
-```bash
-ADMIN_ROTATE=1 ADMIN_EMAIL=… ADMIN_USERNAME=… ADMIN_PASSWORD='the new one' \
-bun scripts/seed-admin.ts
-```
+To change the super-admin's password: sign in and use **Settings → Change
+password**, or **Forgot password** with a code to that inbox. The admin console
+verifies against the same User row an ordinary sign-in does, so both work for it.
 
-The one thing it does without being asked is set a password on an account that
-has no credential row at all — nobody can sign in to such an account, so there is
-nothing to take away — and it says so when it does.
+The one thing the script does without being asked is set a password on an account
+that has **no credential row at all** — nobody can sign in to such an account, so
+nothing is taken from anyone, and it is the only way back from an account created
+by an older bug. It says so when it does it.
 
 ### Seed the B2B portal accounts
 
@@ -194,24 +194,36 @@ and cannot be read back out. Losing one means running this again with a new one.
 
 All six are required and the script names every one it is missing.
 
-**Re-running it does not change a credential you did not ask it to change.** A
-missing account is created; an existing one keeps its password and API key, and
+**Re-running it never changes a credential, and there is no flag that makes it.**
+A missing account is created; an existing one keeps its password and API key, and
 only its display name, type and tier are refreshed. This used to work the other
 way — every run re-keyed every account it touched, so setting up the second login
 silently rotated the first one's password out from under whoever was using it,
 with nothing recorded anywhere.
 
-To rotate deliberately, say so:
+To rotate a B2B credential, a super admin uses
+`POST /api/admin/b2b-clients/:id/rotate`. It records who did it and why, revokes
+the sessions the old password opened, and shows the new values once.
 
-```bash
-B2B_ROTATE=1      …   # both accounts
-B2B_ROTATE=demo   …   # just the demo login
-B2B_ROTATE=admin  …   # just the admin login
-```
+### No backend process can re-key anybody
 
-The admin portal has the same operation
-(`POST /api/admin/b2b-clients/:id/rotate`). Prefer it when you have an admin
-session, because it records a person's name rather than a script's.
+That is the rule, and it is enforced rather than documented.
+
+**Nothing in the backend changes a credential that already works.** No script, no
+job, no boot step, no override flag — an override is a thing that gets used at 2am
+by somebody who has not read the comment above it, which is how the B2B password
+changed in the first place. `backend/tests/credential-writes.test.ts` reads the
+source and fails if a rotation path reappears in either seed, or if any file other
+than `backend/src/services/credentials.ts` hashes a password or writes
+`passwordHash`, `apiKeyHash`, or an account's password.
+
+**People still have full control.** Three ways, each of which records a name:
+
+| Who | What they can do | Where |
+|---|---|---|
+| Anyone, for their own account | Change their password | Settings → Change password (web and mobile), or Forgot password |
+| Super admin | Reset any person's password, ending their sessions | `POST /api/admin/users/:id/reset-password` — a reason is required |
+| Super admin | Rotate a B2B password or API key | `POST /api/admin/b2b-clients/:id/rotate` |
 
 ### Every credential change is recorded
 
@@ -225,9 +237,12 @@ the moment its work is done cannot leave the change unrecorded.
 Where to look when something changed:
 
 - **Admin portal → Logs**, filtered to `system`. Actions are `create_b2b_client`,
-  `rotate_b2b_client`, `set_user_password`, `rotate_user_password`. A change made
-  from a shell is recorded as `cli:scripts/seed-b2b.ts` rather than borrowed from
-  an admin's name.
+  `rotate_b2b_client`, `set_user_password`, `rotate_user_password`. The actor
+  says which kind of change it was: an admin's username when an administrator
+  did it, `self:<username>` when the account holder did it themselves, and
+  `cli:<script>` for the one script path that can give a credential to an account
+  that has none. "I changed my password" and "somebody changed my password" are
+  different events and only one of them should alarm anybody.
 - **`GET /api/b2b/account/security`** — a business client can read its own
   history without asking anyone: when its credentials were last rotated, how many
   times, and by whom.
@@ -435,6 +450,25 @@ application code.
   code exists. The API warns about this at boot, `/health` reports
   `email.configured: false`, and the sign-up screen tells the person in front of
   it rather than pretending a message went out.
+- **A key that is definitely set and still sends nothing is almost always the
+  sender domain.** Resend refuses any message whose `From` is on a domain the
+  account has not verified, and that refusal is indistinguishable from a bad key
+  from the outside. The default `EMAIL_FROM` is a placeholder
+  (`noreply@civicvoice.app`) — unless that domain is verified in the Resend
+  account the key belongs to, every send is refused.
+
+  Two ways to find out which it is, without guessing:
+
+  ```
+  GET  /api/admin/email-health              # key present? fingerprint? sender domain?
+  POST /api/admin/email-health/test { to }  # actually sends, returns Resend's own words
+  ```
+
+  The first reports whether a key is present, a four-character fingerprint of it
+  (so you can tell whether the server has the value you pasted), whether it looks
+  like a Resend key at all, and what domain it is sending from — never the key
+  itself. The second sends a real message and hands back exactly what the provider
+  said. Superadmin only, because it spends the mail quota.
 - **Cost:** 3,000 emails/month free; $20/month above that
 - **Lock-in:** minimal. One file, `backend/src/services/email.ts`, one HTTPS POST
   to their send endpoint, no SDK.
