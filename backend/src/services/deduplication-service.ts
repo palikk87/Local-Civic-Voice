@@ -396,6 +396,10 @@ export interface MergeReport {
   ledgerMoved: number;
   /** Roll calls carried across, so the Representation Gap survives. */
   rollCallsMoved: number;
+  /** The journal entry that can undo this merge. */
+  journalId: string;
+  /** How this merge was decided. */
+  decidedBy: string;
   namesKept: string[];
   brief: "target kept its own" | "adopted from source" | "neither had one";
   officialText: "target kept its own" | "adopted from source" | "neither had one";
@@ -453,7 +457,27 @@ export interface MergeReport {
  * merged, so a process that died halfway left votes on a record nothing pointed
  * at any more.
  */
-export async function mergeReferences(sourceId: string, targetId: string): Promise<MergeReport> {
+export interface MergeDecision {
+  /** "congress_identical", "same_text", "ai_adjudicated", or "admin". */
+  decidedBy: string;
+  /** Why, in words, from whoever or whatever decided. */
+  reason: string;
+  evidenceUrl?: string | null;
+  /** The model's confidence, when a model decided. */
+  confidence?: number | null;
+}
+
+export async function mergeReferences(
+  sourceId: string,
+  targetId: string,
+  /**
+   * How this merge was decided, recorded so it can be explained and undone.
+   *
+   * Defaults to an admin decision because that is what every caller meant
+   * before this argument existed.
+   */
+  decision: MergeDecision = { decidedBy: "admin", reason: "Merged by an administrator." },
+): Promise<MergeReport> {
   if (sourceId === targetId) {
     throw new Error("Cannot merge a reference into itself");
   }
@@ -485,6 +509,34 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // round trip per vote, and on a record with real traffic that is the
     // difference between a merge and a timeout.
 
+    // WHAT IS ABOUT TO BE LOST, captured before it is lost.
+    //
+    // The two statements below overwrite some positions and delete others.
+    // Without this, a merge could be described but never undone — and a merge
+    // that cannot be undone is one a machine has no business deciding.
+    const overlapping = await tx.governmentReferenceVote.findMany({
+      where: {
+        governmentReferenceId: sourceId,
+        userId: {
+          in: (
+            await tx.governmentReferenceVote.findMany({
+              where: { governmentReferenceId: targetId },
+              select: { userId: true },
+            })
+          ).map((v) => v.userId),
+        },
+      },
+      select: { userId: true, position: true, createdAt: true, updatedAt: true, isAnonymous: true },
+    });
+
+    const targetPositions = await tx.governmentReferenceVote.findMany({
+      where: {
+        governmentReferenceId: targetId,
+        userId: { in: overlapping.map((v) => v.userId) },
+      },
+      select: { userId: true, position: true, updatedAt: true },
+    });
+
     // Someone voted on both, and their vote on the source is the later one:
     // their position on the survivor becomes the one they last stated.
     const votesSuperseded = await tx.$executeRaw`
@@ -509,6 +561,17 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
          )
     `;
 
+    // WHICH ROWS ARE ABOUT TO MOVE. Collected before each update, because an
+    // undo has to put back exactly what came across and nothing that was
+    // already on the survivor. "Everything currently on the target" is not the
+    // same set, and using it would turn one mistake into two.
+    const movedVoteIds = (
+      await tx.governmentReferenceVote.findMany({
+        where: { governmentReferenceId: sourceId },
+        select: { id: true },
+      })
+    ).map((row) => row.id);
+
     // Everyone who voted only on the source now counts toward the survivor.
     const votesMoved = await tx.$executeRaw`
       UPDATE "GovernmentReferenceVote"
@@ -523,6 +586,13 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // or it points at a tombstone; the title is left alone deliberately —
     // rewriting it would edit somebody's post, and the badge that tells a
     // reader the law has moved on is a separate piece of work.
+    const movedPostIds = (
+      await tx.post.findMany({
+        where: { governmentReferenceId: sourceId },
+        select: { id: true },
+      })
+    ).map((row) => row.id);
+
     const posts = await tx.post.updateMany({
       where: { governmentReferenceId: sourceId },
       data: { governmentReferenceId: targetId, referenceId: targetId },
@@ -543,6 +613,13 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // No de-duplication: two records that turn out to be one law are one law,
     // so somebody who voted on both said both of those things about it, and a
     // ledger is a history rather than a current state.
+    const movedLedgerIds = (
+      await tx.positionEvent.findMany({
+        where: { governmentReferenceId: sourceId },
+        select: { id: true },
+      })
+    ).map((row) => row.id);
+
     const ledger = await tx.positionEvent.updateMany({
       where: { governmentReferenceId: sourceId },
       data: { governmentReferenceId: targetId },
@@ -558,10 +635,53 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // The unique key is (chamber, congress, session, rollNumber), which has
     // nothing to do with which record it is attached to, so two records each
     // holding roll calls merge without collision.
+    const movedRollCallIds = (
+      await tx.rollCall.findMany({
+        where: { governmentReferenceId: sourceId },
+        select: { id: true },
+      })
+    ).map((row) => row.id);
+
     const rollCalls = await tx.rollCall.updateMany({
       where: { governmentReferenceId: sourceId },
       data: { governmentReferenceId: targetId },
     });
+
+    // --- The journal --------------------------------------------------------
+    //
+    // Written inside the same transaction as the merge itself, so a merge and
+    // its undo instructions can never disagree: either both exist or neither
+    // does.
+    const journal = await tx.mergeJournal.create({
+      data: {
+        sourceId,
+        targetId,
+        decidedBy: decision.decidedBy,
+        reason: decision.reason,
+        evidenceUrl: decision.evidenceUrl ?? null,
+        confidence: decision.confidence ?? null,
+        deletedVotes: JSON.stringify(overlapping),
+        supersededVotes: JSON.stringify(targetPositions),
+        commentsAbsorbed: source.totalComments,
+        sharesAbsorbed: source.totalShares,
+      },
+      select: { id: true },
+    });
+
+    // Every row that moved, so an undo puts back exactly what came across and
+    // nothing that was already there. Recording ids rather than "everything on
+    // the survivor" is the difference between an undo and a second mistake.
+    const movedRows = [
+      ...movedPostIds.map((rowId) => ({ model: "Post", rowId })),
+      ...movedVoteIds.map((rowId) => ({ model: "GovernmentReferenceVote", rowId })),
+      ...movedLedgerIds.map((rowId) => ({ model: "PositionEvent", rowId })),
+      ...movedRollCallIds.map((rowId) => ({ model: "RollCall", rowId })),
+    ];
+    if (movedRows.length > 0) {
+      await tx.mergeJournalRow.createMany({
+        data: movedRows.map((row) => ({ ...row, journalId: journal.id })),
+      });
+    }
 
     // --- Earlier merges ----------------------------------------------------
     //
@@ -579,7 +699,16 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     // The survivor answers to everything either record ever answered to, so no
     // link that was shared under an old name dies. The registry is the
     // authority; `aliases` on the row is a mirror it rewrites.
-    await transferNames(tx, sourceId, targetId);
+    const namesTransferred = await transferNames(tx, sourceId, targetId);
+    if (namesTransferred.length > 0) {
+      await tx.mergeJournalRow.createMany({
+        data: namesTransferred.map((name) => ({
+          journalId: journal.id,
+          model: "ReferenceName",
+          rowId: name,
+        })),
+      });
+    }
     const namesKept = (
       await tx.referenceName.findMany({
         where: { referenceId: targetId, isCurrent: false },
@@ -606,6 +735,13 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
     const sourceBrief = parseBrief(source.citizenBriefJson);
     const adoptBrief = !targetBrief && !!sourceBrief;
     const adoptText = !target.fullText && Boolean(source.fullText);
+
+    // The adopted flags are only known once the brief and text decisions are
+    // made, and they are part of what an undo has to put back.
+    await tx.mergeJournal.update({
+      where: { id: journal.id },
+      data: { adoptedBrief: adoptBrief, adoptedText: adoptText },
+    });
 
     const updated = await tx.governmentReference.update({
       where: { id: targetId },
@@ -685,6 +821,8 @@ export async function mergeReferences(sourceId: string, targetId: string): Promi
       chainsFlattened: chains.count,
       ledgerMoved: ledger.count,
       rollCallsMoved: rollCalls.count,
+      journalId: journal.id,
+      decidedBy: decision.decidedBy,
       namesKept,
       brief: adoptBrief
         ? ("adopted from source" as const)
@@ -796,4 +934,198 @@ export async function recalculateReferenceStats(referenceId: string): Promise<{
   });
 
   return { supportVotes, opposeVotes, totalComments, totalShares };
+}
+
+export interface UnmergeReport {
+  journalId: string;
+  sourceId: string;
+  targetId: string;
+  postsReturned: number;
+  votesReturned: number;
+  votesRestored: number;
+  ledgerReturned: number;
+  rollCallsReturned: number;
+}
+
+/**
+ * Undo a merge.
+ *
+ * THIS IS WHAT MAKES AUTOMATING THE DECISION DEFENSIBLE. A merge pools two
+ * records' votes into one published number and deletes the duplicates of
+ * anybody who voted on both. While that was one-way, the only responsible
+ * gatekeeper was a human, because the cost of being wrong was a corrupted
+ * Pulse nobody could repair. With an undo, a wrong merge is a button.
+ *
+ * Reverses exactly what the journal recorded and nothing else:
+ *
+ *   - rows move back by id, so anything that was already on the survivor stays
+ *     where it is;
+ *   - deleted votes are recreated from the copy taken before they were spent;
+ *   - superseded positions are put back to what they said before;
+ *   - the counters the survivor absorbed are given back;
+ *   - a brief or official text the survivor only has because it adopted one is
+ *     returned, and one it had of its own is left alone.
+ *
+ * Refuses to run twice. A journal replayed a second time would move rows that
+ * legitimately belong to the survivor now.
+ */
+export async function unmergeReferences(
+  journalId: string,
+  revertedBy: string,
+  revertReason: string,
+): Promise<UnmergeReport> {
+  return prisma.$transaction(async (tx) => {
+    const journal = await tx.mergeJournal.findUnique({
+      where: { id: journalId },
+      include: { rows: true },
+    });
+    if (!journal) throw new Error("No such merge to undo");
+    if (journal.revertedAt) throw new Error("That merge has already been undone");
+
+    const source = await tx.governmentReference.findUnique({
+      where: { id: journal.sourceId },
+      select: { id: true, mergedIntoId: true },
+    });
+    if (!source) throw new Error("The merged-away record no longer exists");
+    if (source.mergedIntoId !== journal.targetId) {
+      // It has been merged onward, or already separated. Unwinding from the
+      // middle of a chain would leave the records pointing at each other in
+      // ways nothing else in this system expects.
+      throw new Error("That record has moved on since; undo the later merge first");
+    }
+
+    const idsFor = (model: string) =>
+      journal.rows.filter((row) => row.model === model).map((row) => row.rowId);
+
+    const posts = await tx.post.updateMany({
+      where: { id: { in: idsFor("Post") } },
+      data: { governmentReferenceId: journal.sourceId, referenceId: journal.sourceId },
+    });
+
+    const votes = await tx.governmentReferenceVote.updateMany({
+      where: { id: { in: idsFor("GovernmentReferenceVote") } },
+      data: { governmentReferenceId: journal.sourceId },
+    });
+
+    const ledger = await tx.positionEvent.updateMany({
+      where: { id: { in: idsFor("PositionEvent") } },
+      data: { governmentReferenceId: journal.sourceId },
+    });
+
+    const rollCalls = await tx.rollCall.updateMany({
+      where: { id: { in: idsFor("RollCall") } },
+      data: { governmentReferenceId: journal.sourceId },
+    });
+
+    // The votes the merge spent, put back on the record they were cast on.
+    const deleted = JSON.parse(journal.deletedVotes) as {
+      userId: string;
+      position: string;
+      createdAt: string;
+      updatedAt: string;
+      isAnonymous?: boolean;
+    }[];
+    let votesRestored = 0;
+    for (const vote of deleted) {
+      await tx.governmentReferenceVote.create({
+        data: {
+          governmentReferenceId: journal.sourceId,
+          userId: vote.userId,
+          position: vote.position,
+          createdAt: new Date(vote.createdAt),
+          updatedAt: new Date(vote.updatedAt),
+          isAnonymous: vote.isAnonymous ?? false,
+        },
+      });
+      votesRestored += 1;
+    }
+
+    // Positions the merge overwrote with a later one from the source, put back
+    // to what the citizen had actually said on THIS record.
+    const superseded = JSON.parse(journal.supersededVotes) as {
+      userId: string;
+      position: string;
+      updatedAt: string;
+    }[];
+    for (const vote of superseded) {
+      await tx.governmentReferenceVote.updateMany({
+        where: { governmentReferenceId: journal.targetId, userId: vote.userId },
+        data: { position: vote.position, updatedAt: new Date(vote.updatedAt) },
+      });
+    }
+
+    // Give back the counters, and any brief or text the survivor only has
+    // because it adopted one.
+    await tx.governmentReference.update({
+      where: { id: journal.targetId },
+      data: {
+        totalComments: { decrement: journal.commentsAbsorbed },
+        totalShares: { decrement: journal.sharesAbsorbed },
+        ...(journal.adoptedBrief
+          ? {
+              citizenBrief: null,
+              citizenBriefJson: null,
+              citizenBriefAt: null,
+              citizenBriefModel: null,
+            }
+          : {}),
+        ...(journal.adoptedText ? { fullText: null } : {}),
+      },
+    });
+
+    // Every name the merge moved goes home, so the separated record answers to
+    // what it always answered to and no link that was shared under it dies.
+    const names = idsFor("ReferenceName");
+    if (names.length > 0) {
+      await tx.referenceName.updateMany({
+        where: { name: { in: names }, referenceId: journal.targetId },
+        data: { referenceId: journal.sourceId, isCurrent: false, learnedFrom: "unmerged" },
+      });
+      // The name matching the record's own id is current again.
+      const record = await tx.governmentReference.findUnique({
+        where: { id: journal.sourceId },
+        select: { masterReferenceId: true },
+      });
+      if (record) {
+        await tx.referenceName.updateMany({
+          where: { referenceId: journal.sourceId, name: record.masterReferenceId },
+          data: { isCurrent: true },
+        });
+      }
+    }
+
+    // The record stands on its own again.
+    await tx.governmentReference.update({
+      where: { id: journal.sourceId },
+      data: { mergedIntoId: null },
+    });
+
+    // BOTH published tallies are wrong until they are recomputed: the survivor
+    // is still counting votes that have just gone home, and the separated
+    // record is counting none of its own. Recomputed from the votes that now
+    // exist, which is the same rule the merge itself follows.
+    for (const referenceId of [journal.targetId, journal.sourceId]) {
+      const { support, oppose } = await computeWeightedTally(referenceId, tx);
+      await tx.governmentReference.update({
+        where: { id: referenceId },
+        data: { supportVotes: support, opposeVotes: oppose },
+      });
+    }
+
+    await tx.mergeJournal.update({
+      where: { id: journal.id },
+      data: { revertedAt: new Date(), revertedBy, revertReason },
+    });
+
+    return {
+      journalId: journal.id,
+      sourceId: journal.sourceId,
+      targetId: journal.targetId,
+      postsReturned: posts.count,
+      votesReturned: votes.count,
+      votesRestored,
+      ledgerReturned: ledger.count,
+      rollCallsReturned: rollCalls.count,
+    };
+  });
 }

@@ -53,6 +53,11 @@
 
 import { prisma } from "../prisma";
 import { mergeReferences } from "./deduplication-service";
+import {
+  adjudicate,
+  recordFor,
+  AI_MERGE_CONFIDENCE,
+} from "./merge-adjudicator";
 import { ReferenceKind, billReferenceId, parseReferenceId } from "./master-reference-id";
 import { findByName } from "./reference-names";
 
@@ -637,4 +642,120 @@ export async function retireStaleCandidates(): Promise<number> {
   });
 
   return stale.length;
+}
+
+export interface AdjudicationSweep {
+  considered: number;
+  merged: number;
+  rejected: number;
+  leftPending: number;
+}
+
+/**
+ * Work the queue automatically, so it stops being a queue.
+ *
+ * WHY THIS EXISTS. A pending candidate is two records for one law, each
+ * publishing its own vote count, neither of them the number. Waiting for an
+ * administrator to notice means publishing two half-answers for as long as
+ * nobody looks — and nobody looks. The review queue was the right design while
+ * a merge could not be undone; it can be undone now, so the decision can be
+ * made here and corrected if it is wrong.
+ *
+ * WHAT IT REFUSES TO DO. Merge on resemblance. A look-alike is a title
+ * similarity this platform computed and nobody official stands behind, and the
+ * load test behind this system found exactly why that is not enough: three DHS
+ * appropriations bills with twenty-six published relationships between them
+ * and no identical label, and two Venezuela bills with nearly the same title
+ * that are different laws. Those pairs go to the adjudicator like any other,
+ * and the adjudicator is written to answer "different" when they are.
+ *
+ * Every merge it makes is journalled with the tier that decided, the reason in
+ * words and the model's confidence where a model was involved.
+ */
+export async function adjudicatePending(
+  limit = 25,
+  options: { allowAI?: boolean } = {},
+): Promise<AdjudicationSweep> {
+  const pending = await prisma.referenceMergeCandidate.findMany({
+    where: { status: CandidateStatus.PENDING },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  });
+
+  const sweep: AdjudicationSweep = {
+    considered: 0,
+    merged: 0,
+    rejected: 0,
+    leftPending: 0,
+  };
+
+  for (const candidate of pending) {
+    const [left, right] = await Promise.all([
+      recordFor(candidate.leftId),
+      recordFor(candidate.rightId),
+    ]);
+    if (!left || !right) continue;
+
+    sweep.considered += 1;
+
+    const verdict = await adjudicate(left, right, options);
+
+    if (verdict.verdict === "same" && verdict.confidence >= AI_MERGE_CONFIDENCE) {
+      const roles = await pickSurvivor(left.id, right.id);
+      if (!roles) {
+        sweep.leftPending += 1;
+        continue;
+      }
+
+      await mergeReferences(roles.sourceId, roles.targetId, {
+        decidedBy: verdict.basis,
+        reason: verdict.reason,
+        evidenceUrl: candidate.evidenceUrl,
+        confidence: verdict.confidence,
+      });
+
+      await prisma.referenceMergeCandidate.update({
+        where: { id: candidate.id },
+        data: {
+          status: CandidateStatus.APPROVED,
+          decidedAt: new Date(),
+          note: `Merged automatically (${verdict.basis}): ${verdict.reason}`,
+        },
+      });
+
+      sweep.merged += 1;
+      console.log(
+        `[Adjudicator] ${left.masterReferenceId} = ${right.masterReferenceId} ` +
+          `(${verdict.basis}, confidence ${verdict.confidence}) — merged`,
+      );
+      continue;
+    }
+
+    if (verdict.verdict === "different") {
+      // Written down so the same pair is not re-litigated every sweep, and so
+      // a person reading the queue later can see what was decided and why.
+      await prisma.referenceMergeCandidate.update({
+        where: { id: candidate.id },
+        data: {
+          status: CandidateStatus.REJECTED,
+          decidedAt: new Date(),
+          note: `Not the same measure (${verdict.basis}): ${verdict.reason}`,
+        },
+      });
+      sweep.rejected += 1;
+      continue;
+    }
+
+    // "Unsure", or a confident-enough model that was not confident enough.
+    // Left where it is: an honest maybe is the one case a person is still
+    // better at than this.
+    sweep.leftPending += 1;
+  }
+
+  console.log(
+    `[Adjudicator] considered ${sweep.considered}: ${sweep.merged} merged, ` +
+      `${sweep.rejected} ruled different, ${sweep.leftPending} still open`,
+  );
+
+  return sweep;
 }

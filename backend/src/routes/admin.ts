@@ -9,7 +9,7 @@ import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { purgeMediaObjects } from "../services/media-objects";
-import { mergeReferences } from "../services/deduplication-service";
+import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
 import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
 import { JobPriority, JobType, enqueueLineageSync, jobQueue } from "../services/job-queue";
@@ -2200,4 +2200,81 @@ adminRouter.post("/reports/:id", async (c) => {
   });
 
   return c.json({ id: updated.id, status: updated.status });
+});
+
+
+/**
+ * GET /api/admin/reference-merges/journal
+ *
+ * Every merge the system made by itself, newest first, with what decided it
+ * and why — and a button to undo any of them.
+ *
+ * THIS IS THE OVERSIGHT THAT REPLACED THE APPROVAL QUEUE. Asking a person to
+ * approve every merge meant duplicates sat unmerged for as long as nobody
+ * looked, and each one published two half-answers about the same law. Reading
+ * a log of what was decided, and being able to reverse any of it, is a better
+ * use of the same person's attention than a queue they will not work.
+ */
+adminRouter.get("/reference-merges/journal", async (c) => {
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
+  const decidedBy = c.req.query("decidedBy") || undefined;
+
+  const entries = await prisma.mergeJournal.findMany({
+    where: decidedBy ? { decidedBy } : {},
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      sourceId: true,
+      targetId: true,
+      decidedBy: true,
+      reason: true,
+      confidence: true,
+      evidenceUrl: true,
+      revertedAt: true,
+      revertedBy: true,
+      revertReason: true,
+      createdAt: true,
+    },
+  });
+
+  const referenceIds = [...new Set(entries.flatMap((e) => [e.sourceId, e.targetId]))];
+  const records = new Map(
+    (
+      await prisma.governmentReference.findMany({
+        where: { id: { in: referenceIds } },
+        select: { id: true, masterReferenceId: true, title: true },
+      })
+    ).map((r) => [r.id, r]),
+  );
+
+  return c.json({
+    entries: entries.map((entry) => ({
+      ...entry,
+      createdAt: entry.createdAt.toISOString(),
+      revertedAt: entry.revertedAt?.toISOString() ?? null,
+      source: records.get(entry.sourceId) ?? null,
+      target: records.get(entry.targetId) ?? null,
+    })),
+  });
+});
+
+/**
+ * POST /api/admin/reference-merges/journal/:id/undo
+ *
+ * Put a merge back. Superadmin only, same bar as making one.
+ */
+adminRouter.post("/reference-merges/journal/:id/undo", async (c) => {
+  const session = c.get("adminSession");
+  const body = await c.req.json().catch(() => ({}) as { reason?: string });
+  const reason = typeof body.reason === "string" && body.reason.trim()
+    ? body.reason.trim()
+    : "Undone by an administrator.";
+
+  try {
+    const report = await unmergeReferences(c.req.param("id"), session.username, reason);
+    return c.json({ undone: report });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : "Could not undo" }, 400);
+  }
 });

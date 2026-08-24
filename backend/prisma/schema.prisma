@@ -1106,3 +1106,75 @@ model RollCallMemberVote {
   @@index([memberId])
   @@index([state, district])
 }
+
+/// What a merge did, in enough detail to undo it.
+///
+/// MERGING USED TO BE ONE-WAY, which is the real reason it needed a human
+/// standing in front of it. A wrong merge pooled two different laws' votes
+/// into one number permanently, and the duplicate votes it deleted were gone.
+/// With that true, "ask an admin" was the only responsible answer.
+///
+/// This makes it reversible, and that is what makes automating the decision
+/// safe rather than reckless. A machine may now act on evidence, because a
+/// mistake is a button rather than a corrupted record.
+model MergeJournal {
+  id       String @id @default(cuid())
+  sourceId String
+  targetId String
+
+  /// How the decision was made: "congress_identical", "same_text",
+  /// "ai_adjudicated", or "admin".
+  decidedBy   String
+  /// The reasoning, in words, whoever or whatever decided.
+  reason      String
+  /// A page a human can open to check the claim.
+  evidenceUrl String?
+  /// The model's confidence, when a model decided. Null otherwise.
+  confidence  Float?
+
+  /// Votes DELETED by the merge — people who had voted on both records, whose
+  /// duplicate was spent. Stored whole, because there is nothing else left of
+  /// them to restore from.
+  deletedVotes    String @default("[]")
+  /// Votes whose position was overwritten by a later one from the source, and
+  /// what they said before.
+  supersededVotes String @default("[]")
+
+  /// Counter deltas the survivor absorbed, so they can be given back.
+  commentsAbsorbed Int     @default(0)
+  sharesAbsorbed   Int     @default(0)
+  /// Whether the survivor adopted the source's brief or official text.
+  adoptedBrief     Boolean @default(false)
+  adoptedText      Boolean @default(false)
+
+  /// Set when this merge has been undone, so a journal is never replayed twice.
+  revertedAt   DateTime?
+  revertedBy   String?
+  revertReason String?
+
+  createdAt DateTime @default(now())
+
+  rows MergeJournalRow[]
+
+  @@index([sourceId])
+  @@index([targetId])
+  @@index([decidedBy])
+  @@index([revertedAt])
+}
+
+/// One row a merge moved, and where it came from.
+///
+/// Cheaper and safer than storing a bag of ids on the journal: this survives a
+/// record with tens of thousands of votes, and it says per row where it
+/// belongs if the merge is undone.
+model MergeJournalRow {
+  id        String @id @default(cuid())
+  journalId String
+  /// The Prisma model name: Post, GovernmentReferenceVote, PositionEvent, RollCall.
+  model     String
+  rowId     String
+
+  journal MergeJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@index([journalId, model])
+}

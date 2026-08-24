@@ -259,6 +259,50 @@ On by default; it is in notification preferences like any other.
 
 ---
 
+
+## Duplicate laws now merge themselves
+
+Two records for one bill means two vote counts and neither is the number. That
+used to wait for an administrator to approve each merge, which meant it waited
+indefinitely.
+
+**It decides on evidence, not resemblance:**
+
+1. **Proof** — congress.gov "Identical bill" (a named Library of Congress
+   analyst), or the two official texts being the same once formatting is
+   normalised. No model involved.
+2. **Judgement** — a model reads both texts and answers same / different /
+   unsure with a confidence and a reason. Merges only above 0.9 confidence AND
+   only when the structural facts agree (same type, same congress).
+3. **Nothing** — everything else is left alone.
+
+It will not merge on a similar title. The load test behind this system found
+three DHS appropriations bills with twenty-six published relationships and no
+identical label, and two Venezuela bills with nearly the same title that are
+different laws. Both shapes are tests now.
+
+```bash
+cd backend
+bun run adjudicate-merges --dry-run     # see the verdicts, change nothing
+bun run adjudicate-merges               # act on them
+bun run adjudicate-merges --no-ai       # proof only, no model
+```
+
+**Every merge is reversible.** That is what makes automating it defensible: a
+merge pools two records' votes and deletes the duplicates of anyone who voted
+on both, so while it was one-way, a human gatekeeper was the only responsible
+answer. `MergeJournal` records what each merge moved, deleted and overwrote.
+
+- `GET /api/admin/reference-merges/journal` — what was decided, by what, and why
+- `POST /api/admin/reference-merges/journal/:id/undo` — put it back (superadmin)
+
+Reading that log and reversing the odd mistake is a better use of an
+administrator's attention than a queue they will not work.
+
+**Run it on a schedule** alongside the lineage sync. Nothing calls it
+automatically yet — that is a deployment decision (a Railway cron, most
+simply), not a code one.
+
 ## Still open in the code
 
 ### Social features that do not exist yet
