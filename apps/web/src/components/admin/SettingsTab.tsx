@@ -4,6 +4,7 @@ import { LogOut, Shield, KeyRound, Clock } from "lucide-react";
 import { useAdminStore } from "@/lib/mobile/admin-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { KeysAndEmailCard } from "./KeysAndEmailCard";
 
 export function SettingsTab() {
   const navigate = useNavigate();
@@ -44,6 +45,8 @@ export function SettingsTab() {
           </div>
         </div>
       </div>
+
+      <KeysAndEmailCard />
 
       <div className="rounded-lg border border-border bg-card p-5">
         <p className="mb-1 font-medium text-foreground">About the console</p>

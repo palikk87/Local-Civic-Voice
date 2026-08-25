@@ -744,3 +744,16 @@ export const useAdminStore = create<AdminState>()(
     }
   )
 );
+
+/**
+ * Authorization header for /api/admin/* calls, or {} when not signed in as admin.
+ *
+ * Web twin: apps/web/src/lib/mobile/admin-store.ts. Added so a component can
+ * make an admin request without reaching into the store's shape itself — the
+ * five call sites above each build this header by hand, which is how they came
+ * to differ in the first place.
+ */
+export function adminAuthHeader(): Record<string, string> {
+  const token = useAdminStore.getState().session?.token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

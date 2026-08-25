@@ -19,6 +19,7 @@ import {
 } from 'lucide-react-native';
 import { useAdminStore } from '@/lib/admin-store';
 import * as Haptics from 'expo-haptics';
+import { KeysAndEmailCard } from '@/components/admin/KeysAndEmailCard';
 
 interface SettingItemProps {
   title: string;
@@ -109,6 +110,8 @@ export default function AdminSettingsScreen() {
             </View>
           </View>
         </View>
+
+        <KeysAndEmailCard />
 
         {/* Settings */}
         <Text className="text-white text-lg font-bold mb-3">System</Text>
