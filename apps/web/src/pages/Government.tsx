@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { DataFreshness } from "@/components/civic/DataFreshness";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -129,6 +130,12 @@ export default function Government() {
           <p className="mt-1 text-sm text-muted-foreground">
             Every federal official, across all three branches
           </p>
+
+          {/* How current this is, stated rather than assumed. See the component
+              for why: a stale snapshot and a live one look identical. */}
+          <div className="mt-4">
+            <DataFreshness />
+          </div>
 
           <div className="relative mt-4">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />

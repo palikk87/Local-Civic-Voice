@@ -132,6 +132,13 @@ interface UpsertData {
   fullText?: string;
   signedDate?: Date;
   decidedDate?: Date;
+  /**
+   * From the bill LIST response, which carries latestAction and nothing else
+   * about provenance. The introduced date and the sponsor need a detail call
+   * each and are filled afterwards by services/bill-provenance.ts.
+   */
+  lastActionDate?: Date;
+  lastActionText?: string;
 }
 
 /**
@@ -197,6 +204,8 @@ async function upsertReference(data: UpsertData): Promise<void> {
         ...(nextTextHash ? { fullTextHash: nextTextHash } : {}),
         ...(fields.signedDate ? { signedDate: fields.signedDate } : {}),
         ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
+        ...(fields.lastActionDate ? { lastActionDate: fields.lastActionDate } : {}),
+        ...(fields.lastActionText ? { lastActionText: fields.lastActionText } : {}),
         ...(lawMoved
           ? { lawChangedAt: new Date(), lawVersion: { increment: 1 } }
           : {}),
@@ -305,6 +314,12 @@ async function syncBills(): Promise<number> {
       description: bill.latestAction
         ? `${bill.type.toUpperCase()} ${bill.number} — ${bill.congress ?? congress}th Congress. Latest action (${bill.latestAction.actionDate}): ${bill.latestAction.text}`
         : undefined,
+      // Real, and available right here in the list response. It used to be
+      // ref.createdAt on the client, which is when WE saw the bill.
+      ...(bill.latestAction?.actionDate
+        ? { lastActionDate: new Date(`${bill.latestAction.actionDate}T00:00:00Z`) }
+        : {}),
+      ...(bill.latestAction?.text ? { lastActionText: bill.latestAction.text } : {}),
     });
     synced++;
   }

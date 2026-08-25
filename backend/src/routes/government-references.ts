@@ -201,6 +201,16 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
       sourceUrl: true,
       signedDate: true,
       decidedDate: true,
+      // Real provenance. These columns exist so "we do not know" has somewhere
+      // to live — before them the client filled both dates with its own
+      // createdAt and named a chamber as the sponsor.
+      introducedDate: true,
+      lastActionDate: true,
+      lastActionText: true,
+      sponsorBioguideId: true,
+      sponsorName: true,
+      sponsorParty: true,
+      sponsorState: true,
       supportVotes: true,
       opposeVotes: true,
       totalComments: true,
@@ -238,6 +248,17 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
       category: ref.category,
       chamber: ref.chamber,
       congress: ref.congress,
+      introducedDate: ref.introducedDate?.toISOString() ?? null,
+      lastActionDate: ref.lastActionDate?.toISOString() ?? null,
+      lastActionText: ref.lastActionText ?? null,
+      sponsor: ref.sponsorName
+        ? {
+            bioguideId: ref.sponsorBioguideId,
+            name: ref.sponsorName,
+            party: ref.sponsorParty,
+            state: ref.sponsorState,
+          }
+        : null,
       sourceUrl: ref.sourceUrl,
       signedDate: ref.signedDate?.toISOString() ?? null,
       decidedDate: ref.decidedDate?.toISOString() ?? null,
@@ -270,6 +291,75 @@ const TRENDING_FLOOR = 5;
  * GET /api/government-references/trending
  * Get trending references based on recent engagement
  */
+/**
+ * GET /api/government-references/freshness
+ *
+ * How current is the government you are looking at?
+ *
+ * WHY THIS EXISTS. A visitor had no way to tell whether the Government section
+ * showed today's Congress or a snapshot from whenever the last sync happened to
+ * run — and after a deploy pause, or a spent API key, those two look identical.
+ * A platform whose whole claim is that its records are the real ones owes a
+ * reader the date on them.
+ *
+ * Everything here is measured. `syncedAt` is the newest sourceCheckedAt across
+ * stored records, `newest` is the most recent thing we hold, and the cadence
+ * numbers are the intervals the schedulers actually run at rather than a
+ * sentence in a README that can drift from the code.
+ *
+ * Registered BEFORE "/:id" — Hono matches in registration order, and a static
+ * suffix placed after a bare parameter route is never reached.
+ */
+governmentReferencesRouter.get("/freshness", async (c) => {
+  const [checked, newestBill, counts, provenance] = await Promise.all([
+    prisma.governmentReference.findFirst({
+      where: { sourceCheckedAt: { not: null }, mergedIntoId: null },
+      orderBy: { sourceCheckedAt: "desc" },
+      select: { sourceCheckedAt: true },
+    }),
+    prisma.governmentReference.findFirst({
+      where: { referenceType: "bill", mergedIntoId: null, lastActionDate: { not: null } },
+      orderBy: { lastActionDate: "desc" },
+      select: { lastActionDate: true, masterReferenceId: true, title: true },
+    }),
+    prisma.governmentReference.groupBy({
+      by: ["referenceType"],
+      where: { mergedIntoId: null },
+      _count: { _all: true },
+    }),
+    // How much of the store still has no date or sponsor. The honest measure
+    // of how far the background fill has got.
+    prisma.governmentReference.count({
+      where: { referenceType: "bill", mergedIntoId: null, introducedDate: null },
+    }),
+  ]);
+
+  return c.json({
+    /** Newest source check across all stored records. Null before any sync. */
+    syncedAt: checked?.sourceCheckedAt?.toISOString() ?? null,
+    /** The most recent legislative action we hold, and what it was on. */
+    newestAction: newestBill
+      ? {
+          date: newestBill.lastActionDate?.toISOString() ?? null,
+          referenceId: newestBill.masterReferenceId,
+          title: newestBill.title,
+        }
+      : null,
+    counts: Object.fromEntries(counts.map((row) => [row.referenceType, row._count._all])),
+    /**
+     * The schedule as the code actually runs it, in hours. A cadence stated in
+     * prose drifts from the intervals; these are the intervals.
+     */
+    cadence: {
+      recordsHours: 24,
+      rollCallsHours: 12,
+      provenanceHours: 4,
+    },
+    /** Bills still waiting on a congress.gov detail call for date and sponsor. */
+    awaitingProvenance: provenance,
+  });
+});
+
 governmentReferencesRouter.get("/trending", zValidator("query", z.object({
   limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 10)),
   referenceType: referenceTypeEnum.optional(),
@@ -311,6 +401,16 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       citizenBrief: true,
       signedDate: true,
       decidedDate: true,
+      // Real provenance. These columns exist so "we do not know" has somewhere
+      // to live — before them the client filled both dates with its own
+      // createdAt and named a chamber as the sponsor.
+      introducedDate: true,
+      lastActionDate: true,
+      lastActionText: true,
+      sponsorBioguideId: true,
+      sponsorName: true,
+      sponsorParty: true,
+      sponsorState: true,
       supportVotes: true,
       opposeVotes: true,
       totalComments: true,
@@ -373,6 +473,17 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       category: ref.category,
       chamber: ref.chamber,
       congress: ref.congress,
+      introducedDate: ref.introducedDate?.toISOString() ?? null,
+      lastActionDate: ref.lastActionDate?.toISOString() ?? null,
+      lastActionText: ref.lastActionText ?? null,
+      sponsor: ref.sponsorName
+        ? {
+            bioguideId: ref.sponsorBioguideId,
+            name: ref.sponsorName,
+            party: ref.sponsorParty,
+            state: ref.sponsorState,
+          }
+        : null,
       sourceUrl: ref.sourceUrl,
       description: ref.description,
       citizenBrief: ref.citizenBrief,
@@ -512,6 +623,19 @@ governmentReferencesRouter.get("/:id", async (c) => {
       sourceUrl: reference.sourceUrl,
       chamber: reference.chamber,
       congress: reference.congress,
+      // Real provenance. Both dates used to be filled by the CLIENT with our
+      // own createdAt, and the sponsor was the chamber's name.
+      introducedDate: reference.introducedDate?.toISOString() ?? null,
+      lastActionDate: reference.lastActionDate?.toISOString() ?? null,
+      lastActionText: reference.lastActionText ?? null,
+      sponsor: reference.sponsorName
+        ? {
+            bioguideId: reference.sponsorBioguideId,
+            name: reference.sponsorName,
+            party: reference.sponsorParty,
+            state: reference.sponsorState,
+          }
+        : null,
       status: reference.status,
       category: reference.category,
       description: reference.description,

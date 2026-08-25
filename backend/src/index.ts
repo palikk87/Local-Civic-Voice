@@ -47,6 +47,7 @@ import { initializeProcessors } from "./services/job-processors";
 import { getCacheStats } from "./services/cache";
 import { emailConfiguration, isEmailConfigured } from "./services/email";
 import { keySummary, keyWarnings } from "./services/key-report";
+import { fillBillProvenance } from "./services/bill-provenance";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
 
@@ -428,6 +429,30 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   };
   // Not at boot. A restart loop would spend the courtesy budget on nothing.
   setInterval(runRollCallSync, ROLL_CALL_SYNC_INTERVAL_MS);
+}
+
+/**
+ * Dates and sponsors, filled in behind the sync.
+ *
+ * The bill list endpoint carries latestAction and nothing else about
+ * provenance, so introducedDate and the sponsor need one detail call each. That
+ * is too many calls to make while a sync is running and far too many to make
+ * while a reader waits, so this converges quietly instead — a small batch every
+ * few hours, oldest gaps first.
+ *
+ * Until a record is reached, its date and sponsor are null and the clients
+ * render nothing. That is the point: the columns exist so that "we do not know"
+ * has somewhere to live. Before them, the client filled the gap with
+ * `ref.createdAt` and a chamber's name, and a 2007 law read as introduced
+ * today, sponsored by the House of Representatives.
+ */
+const PROVENANCE_INTERVAL_MS = 4 * 60 * 60 * 1000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  setInterval(() => {
+    void fillBillProvenance(25).catch((error) => {
+      console.error("[Provenance] fill failed:", error);
+    });
+  }, PROVENANCE_INTERVAL_MS);
 }
 
 // Duplicate laws: two filings of one bill split the vote count in half, and

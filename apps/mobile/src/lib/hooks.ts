@@ -87,9 +87,27 @@ export interface BillWithSponsor extends Bill {
  * and what is true is that this platform does not know.
  */
 export interface DailyDigestBill
-  extends Omit<Bill, 'cosponsor_count' | 'amendment_count'> {
+  extends Omit<
+    Bill,
+    | 'cosponsor_count'
+    | 'amendment_count'
+    | 'introduced_date'
+    | 'last_action_date'
+    | 'created_at'
+    | 'updated_at'
+  > {
   weight_score: number
   representatives?: Representative | null
+  /**
+   * NULLABLE, because these are facts about the legislation and we may not
+   * have them yet. The generated row type declares them required, which is
+   * what let the mapper fill both with the moment OUR row was written — so a
+   * 2007 statute displayed as introduced today.
+   */
+  introduced_date: string | null
+  last_action_date: string | null
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface CongressInfo {

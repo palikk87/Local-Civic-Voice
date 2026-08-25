@@ -124,7 +124,8 @@ export interface BillVerification {
   verificationStatus: 'verified' | 'pending' | 'disputed' | 'outdated';
   discrepancies: Discrepancy[];
   officialLink: string;
-  lastOfficialUpdate: string;
+  /** Null when congress.gov has not been asked yet. Renders as nothing. */
+  lastOfficialUpdate: string | null;
 }
 
 export interface Discrepancy {
@@ -155,8 +156,17 @@ export function verifyBill(bill: Bill): BillVerification {
     verificationStatus = 'disputed';
   }
 
-  const daysSinceUpdate = getDaysSince(bill.lastActionDate);
-  if (daysSinceUpdate > 30) {
+  /*
+   * "Outdated" needs a date to be outdated FROM.
+   *
+   * lastActionDate used to be the moment our row was written, so nothing was
+   * ever more than a few days old and this branch effectively never fired. It
+   * is real now, and absent until congress.gov has been asked — and a record
+   * whose last action is unknown is not known to be stale, so the status is
+   * left alone rather than asserted.
+   */
+  const daysSinceUpdate = bill.lastActionDate ? getDaysSince(bill.lastActionDate) : null;
+  if (daysSinceUpdate !== null && daysSinceUpdate > 30) {
     verificationStatus = 'outdated';
   }
 
@@ -168,7 +178,7 @@ export function verifyBill(bill: Bill): BillVerification {
     verificationStatus,
     discrepancies,
     officialLink,
-    lastOfficialUpdate: bill.lastActionDate,
+    lastOfficialUpdate: bill.lastActionDate ?? null,
   };
 }
 
@@ -185,10 +195,11 @@ function calculateTrustScore(bill: Bill, sources: DataSource[]): number {
   // Bonus for official vote data
   if (bill.officialVotes) score += 20;
 
-  // Penalty for old data
-  const daysSinceUpdate = getDaysSince(bill.lastActionDate);
-  if (daysSinceUpdate > 30) score -= 10;
-  if (daysSinceUpdate > 90) score -= 20;
+  // Penalty for old data. No date means no penalty: not knowing when a law
+  // last moved is not evidence that it moved long ago.
+  const daysSinceUpdate = bill.lastActionDate ? getDaysSince(bill.lastActionDate) : null;
+  if (daysSinceUpdate !== null && daysSinceUpdate > 30) score -= 10;
+  if (daysSinceUpdate !== null && daysSinceUpdate > 90) score -= 20;
 
   return Math.min(100, Math.max(0, score));
 }

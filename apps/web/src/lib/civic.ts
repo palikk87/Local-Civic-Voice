@@ -38,6 +38,22 @@ export interface GovReference {
   sourceUrl: string | null;
   signedDate: string | null;
   decidedDate: string | null;
+  /**
+   * Real provenance from congress.gov, filled by the background pass in
+   * backend/src/services/bill-provenance.ts. Null until it has been asked,
+   * which the cards render as nothing — these two used to be the row's own
+   * createdAt, so a 2007 statute displayed as introduced today.
+   */
+  introducedDate?: string | null;
+  lastActionDate?: string | null;
+  lastActionText?: string | null;
+  /** A member, or null. It used to be the chamber's name, for every bill. */
+  sponsor?: {
+    bioguideId: string | null;
+    name: string;
+    party: string | null;
+    state: string | null;
+  } | null;
   /** Present on /trending and /:id responses; absent from the list endpoint. */
   description?: string | null;
   citizenBrief?: string | null;

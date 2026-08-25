@@ -67,8 +67,10 @@ function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: Weight
     status: dbStatus,
     chamber: bill.chamber,
     sponsor_id: bill.sponsor?.id || null,
-    introduced_date: bill.introducedDate,
-    last_action_date: bill.lastActionDate,
+    // Null rather than a stand-in. Both used to be the moment our row was
+    // written, which made every record look like it dated from the sync.
+    introduced_date: bill.introducedDate ?? null,
+    last_action_date: bill.lastActionDate ?? null,
     category: bill.category,
     full_text: bill.fullText,
     simplified_text: bill.simplifiedText,
@@ -85,8 +87,8 @@ function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: Weight
     view_count: 0,
     weight_score: weightResult.weightScore,
     weight_last_calculated: new Date().toISOString(),
-    created_at: bill.introducedDate,
-    updated_at: bill.lastActionDate,
+    created_at: bill.introducedDate ?? null,
+    updated_at: bill.lastActionDate ?? null,
     weightTier: getWeightTier(weightResult.weightScore),
   };
 }

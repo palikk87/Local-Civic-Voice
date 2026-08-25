@@ -35,6 +35,22 @@ export interface GovReference {
   description?: string | null;
   citizenBrief?: string | null;
   signedDate: string | null;
+  /**
+   * Real provenance from congress.gov, filled by the background pass in
+   * backend/src/services/bill-provenance.ts. Null until asked, which the cards
+   * render as nothing — these used to be the row's own createdAt, so a 2007
+   * statute displayed as introduced today.
+   */
+  introducedDate?: string | null;
+  lastActionDate?: string | null;
+  lastActionText?: string | null;
+  /** A member, or null. It used to be the chamber's name, for every bill. */
+  sponsor?: {
+    bioguideId: string | null;
+    name: string;
+    party: string | null;
+    state: string | null;
+  } | null;
   decidedDate: string | null;
   votes: { support: number; oppose: number; total: number };
   engagement: { comments: number; shares: number; posts: number };
@@ -309,16 +325,38 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
     shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
     status: statusMap[ref.status] ?? "introduced",
     chamber,
-    sponsor: {
-      id: "congress",
-      name: chamber === "senate" ? "U.S. Senate" : "U.S. House of Representatives",
-      party: "I",
-      state: "US",
-      chamber,
-      imageUrl: "",
-    },
-    introducedDate: ref.createdAt,
-    lastActionDate: ref.createdAt,
+    /**
+     * THE SPONSOR IS A PERSON OR IT IS NOTHING.
+     *
+     * This named the chamber — "U.S. House of Representatives", party
+     * "Independent", state "US", blank avatar — for every bill, because there
+     * was nowhere to store a real one. congress.gov names the member, and
+     * GovernmentReference now has the columns. Until the provenance pass
+     * reaches a record the fields are null and the card shows no sponsor rather
+     * than a fictional one.
+     */
+    sponsor:
+      "sponsor" in ref && ref.sponsor
+        ? {
+            id: ref.sponsor.bioguideId ?? ref.sponsor.name,
+            name: ref.sponsor.name,
+            party: (ref.sponsor.party ?? "I") as "D" | "R" | "I",
+            state: ref.sponsor.state ?? "",
+            chamber,
+            imageUrl: ref.sponsor.bioguideId
+              ? `https://www.congress.gov/img/member/${ref.sponsor.bioguideId.toLowerCase()}_200.jpg`
+              : "",
+          }
+        : undefined,
+    /**
+     * BOTH WERE `ref.createdAt` — when OUR row was written — so a 2007 statute
+     * displayed as introduced today. They come from congress.gov now, and are
+     * undefined until it has been asked.
+     */
+    introducedDate:
+      "introducedDate" in ref && ref.introducedDate ? ref.introducedDate : undefined,
+    lastActionDate:
+      "lastActionDate" in ref && ref.lastActionDate ? ref.lastActionDate : undefined,
     category: toCategory(ref.category),
     congressNumber,
     congressUrl: ref.sourceUrl ?? undefined,

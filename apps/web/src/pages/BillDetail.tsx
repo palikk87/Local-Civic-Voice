@@ -508,45 +508,83 @@ export default function BillDetail() {
             <h1 className="text-white font-bold text-2xl mb-2">{bill.shortTitle}</h1>
             <p className="text-slate-400 text-base leading-6">{bill.title}</p>
 
-            {/* Sponsor */}
-            <div className="flex items-center mt-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-              <img src={bill.sponsor.imageUrl} alt={bill.sponsor.name} className="w-10 h-10 rounded-full object-cover" />
-              <div className="ml-3 flex-1">
-                <p className="text-white font-medium">Sponsored by {bill.sponsor.name}</p>
-                <p className="text-slate-400 text-sm">
-                  {bill.sponsor.party === "D" ? "Democrat" : bill.sponsor.party === "R" ? "Republican" : "Independent"} -{" "}
-                  {bill.sponsor.state}
-                </p>
-              </div>
-              <span
-                className={cn(
-                  "px-2 py-1 rounded-full font-semibold",
-                  bill.sponsor.party === "D"
-                    ? "bg-blue-900/50 text-blue-400"
-                    : bill.sponsor.party === "R"
-                    ? "bg-red-900/50 text-red-400"
-                    : "bg-purple-900/50 text-purple-400"
-                )}
-              >
-                {bill.sponsor.party}
-              </span>
-            </div>
+            {/*
+              SPONSOR — a member, or nothing at all.
 
-            {/* Dates */}
-            <div className="flex mt-3 flex-wrap gap-4">
-              <div className="flex items-center">
-                <Clock size={14} color="#64748B" />
-                <span className="text-slate-400 text-sm ml-1.5">
-                  Introduced {new Date(bill.introducedDate).toLocaleDateString()}
+              This block used to render unconditionally, and the mapper always
+              supplied a sponsor, so every bill on the platform showed
+              "Sponsored by U.S. House of Representatives / Independent - US"
+              with a broken avatar. Bills are sponsored by a person.
+              congress.gov names them; until the provenance pass has reached
+              this record the field is absent and the block does not render.
+            */}
+            {bill.sponsor ? (
+              <div className="flex items-center mt-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                {bill.sponsor.imageUrl ? (
+                  <img
+                    src={bill.sponsor.imageUrl}
+                    alt={bill.sponsor.name}
+                    className="w-10 h-10 rounded-full object-cover"
+                    // A member photo that 404s leaves a broken-image icon,
+                    // which reads as a bug rather than as a missing portrait.
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                  />
+                ) : null}
+                <div className="ml-3 flex-1">
+                  <p className="text-white font-medium">Sponsored by {bill.sponsor.name}</p>
+                  <p className="text-slate-400 text-sm">
+                    {bill.sponsor.party === "D"
+                      ? "Democrat"
+                      : bill.sponsor.party === "R"
+                      ? "Republican"
+                      : "Independent"}
+                    {bill.sponsor.state ? ` — ${bill.sponsor.state}` : ""}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "px-2 py-1 rounded-full font-semibold",
+                    bill.sponsor.party === "D"
+                      ? "bg-blue-900/50 text-blue-400"
+                      : bill.sponsor.party === "R"
+                      ? "bg-red-900/50 text-red-400"
+                      : "bg-purple-900/50 text-purple-400"
+                  )}
+                >
+                  {bill.sponsor.party}
                 </span>
               </div>
-              <div className="flex items-center">
-                <Building2 size={14} color="#64748B" />
-                <span className="text-slate-400 text-sm ml-1.5">
-                  Last action {new Date(bill.lastActionDate).toLocaleDateString()}
-                </span>
+            ) : null}
+
+            {/*
+              DATES — from congress.gov, or absent.
+
+              Both used to be `ref.createdAt`, the moment our own row was
+              written, so a statute from 2007 read "Introduced today" and every
+              record looked like it dated from whenever we synced it.
+            */}
+            {bill.introducedDate || bill.lastActionDate ? (
+              <div className="flex mt-3 flex-wrap gap-4">
+                {bill.introducedDate ? (
+                  <div className="flex items-center">
+                    <Clock size={14} color="#64748B" />
+                    <span className="text-slate-400 text-sm ml-1.5">
+                      Introduced {new Date(bill.introducedDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                ) : null}
+                {bill.lastActionDate ? (
+                  <div className="flex items-center">
+                    <Building2 size={14} color="#64748B" />
+                    <span className="text-slate-400 text-sm ml-1.5">
+                      Last action {new Date(bill.lastActionDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                ) : null}
               </div>
-            </div>
+            ) : null}
           </div>
 
           {/* Community Vote Stats */}

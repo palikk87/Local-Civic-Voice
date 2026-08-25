@@ -711,65 +711,89 @@ export default function BillDetailScreen() {
                 {bill.title}
               </Text>
 
-              {/* Sponsor */}
-              <View className="flex-row items-center mt-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-                <Image
-                  source={{ uri: bill.sponsor.imageUrl }}
-                  className="w-10 h-10 rounded-full"
-                />
-                <View className="ml-3 flex-1">
-                  <Text className="text-white font-medium">
-                    Sponsored by {bill.sponsor.name}
-                  </Text>
-                  <Text className="text-slate-400 text-sm">
-                    {bill.sponsor.party === 'D'
-                      ? 'Democrat'
-                      : bill.sponsor.party === 'R'
-                      ? 'Republican'
-                      : 'Independent'}{' '}
-                    - {bill.sponsor.state}
-                  </Text>
-                </View>
-                <View
-                  className={cn(
-                    'px-2 py-1 rounded-full',
-                    bill.sponsor.party === 'D'
-                      ? 'bg-blue-900/50'
-                      : bill.sponsor.party === 'R'
-                      ? 'bg-red-900/50'
-                      : 'bg-purple-900/50'
-                  )}
-                >
-                  <Text
-                    className={cn(
-                      'font-semibold',
-                      bill.sponsor.party === 'D'
-                        ? 'text-blue-400'
+              {/*
+                SPONSOR — a member, or nothing at all.
+
+                This block rendered unconditionally and the mapper always
+                supplied a sponsor, so every bill showed "Sponsored by U.S.
+                House of Representatives / Independent - US" with a broken
+                avatar. Bills are sponsored by a person; congress.gov names
+                them, and until the provenance pass reaches this record the
+                field is absent and the block does not render.
+              */}
+              {bill.sponsor ? (
+                <View className="flex-row items-center mt-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                  {bill.sponsor.imageUrl ? (
+                    <Image
+                      source={{ uri: bill.sponsor.imageUrl }}
+                      className="w-10 h-10 rounded-full"
+                    />
+                  ) : null}
+                  <View className="ml-3 flex-1">
+                    <Text className="text-white font-medium">
+                      Sponsored by {bill.sponsor.name}
+                    </Text>
+                    <Text className="text-slate-400 text-sm">
+                      {bill.sponsor.party === 'D'
+                        ? 'Democrat'
                         : bill.sponsor.party === 'R'
-                        ? 'text-red-400'
-                        : 'text-purple-400'
+                        ? 'Republican'
+                        : 'Independent'}
+                      {bill.sponsor.state ? ` — ${bill.sponsor.state}` : ''}
+                    </Text>
+                  </View>
+                  <View
+                    className={cn(
+                      'px-2 py-1 rounded-full',
+                      bill.sponsor.party === 'D'
+                        ? 'bg-blue-900/50'
+                        : bill.sponsor.party === 'R'
+                        ? 'bg-red-900/50'
+                        : 'bg-purple-900/50'
                     )}
                   >
-                    {bill.sponsor.party}
-                  </Text>
+                    <Text
+                      className={cn(
+                        'font-semibold',
+                        bill.sponsor.party === 'D'
+                          ? 'text-blue-400'
+                          : bill.sponsor.party === 'R'
+                          ? 'text-red-400'
+                          : 'text-purple-400'
+                      )}
+                    >
+                      {bill.sponsor.party}
+                    </Text>
+                  </View>
                 </View>
-              </View>
+              ) : null}
 
-              {/* Dates */}
-              <View className="flex-row mt-3">
-                <View className="flex-row items-center mr-4">
-                  <Clock size={14} color="#64748B" />
-                  <Text className="text-slate-400 text-sm ml-1.5">
-                    Introduced {new Date(bill.introducedDate).toLocaleDateString()}
-                  </Text>
+              {/*
+                DATES — from congress.gov, or absent.
+
+                Both used to be `ref.createdAt`, the moment our own row was
+                written, so a statute from 2007 read "Introduced today".
+              */}
+              {bill.introducedDate || bill.lastActionDate ? (
+                <View className="flex-row mt-3">
+                  {bill.introducedDate ? (
+                    <View className="flex-row items-center mr-4">
+                      <Clock size={14} color="#64748B" />
+                      <Text className="text-slate-400 text-sm ml-1.5">
+                        Introduced {new Date(bill.introducedDate).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {bill.lastActionDate ? (
+                    <View className="flex-row items-center">
+                      <Building2 size={14} color="#64748B" />
+                      <Text className="text-slate-400 text-sm ml-1.5">
+                        Last action {new Date(bill.lastActionDate).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  ) : null}
                 </View>
-                <View className="flex-row items-center">
-                  <Building2 size={14} color="#64748B" />
-                  <Text className="text-slate-400 text-sm ml-1.5">
-                    Last action {new Date(bill.lastActionDate).toLocaleDateString()}
-                  </Text>
-                </View>
-              </View>
+              ) : null}
             </Animated.View>
 
             {/* Community Vote Stats */}

@@ -57,7 +57,7 @@ Title: ${bill.title}
 Short Title: ${bill.shortTitle}
 Category: ${bill.category}
 Status: ${bill.status}
-Sponsor: ${bill.sponsor.name} (${bill.sponsor.party}-${bill.sponsor.state})
+${bill.sponsor ? `Sponsor: ${bill.sponsor.name} (${bill.sponsor.party}-${bill.sponsor.state})` : ''}
 
 Full Text Summary:
 ${bill.fullText.substring(0, 2000)}

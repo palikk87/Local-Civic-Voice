@@ -9,9 +9,21 @@ export interface Bill {
   shortTitle: string;
   status: 'introduced' | 'in_committee' | 'passed_house' | 'passed_senate' | 'enacted' | 'vetoed' | 'signed_into_law';
   chamber: 'house' | 'senate';
-  sponsor: Representative;
-  introducedDate: string;
-  lastActionDate: string;
+  /**
+   * OPTIONAL, BECAUSE A SPONSOR WE HAVE NOT FETCHED IS NOT A SPONSOR.
+   *
+   * Required, this field forced every mapper to produce one, and both of them
+   * did — naming the chamber ("U.S. House of Representatives", party
+   * Independent, state US, blank avatar) for every bill on the platform. A
+   * field that cannot be left out is a field that gets invented.
+   */
+  sponsor?: Representative;
+  /**
+   * Also optional, and for the same reason: both were filled with the moment
+   * OUR row was written, so a 2007 statute read as introduced today.
+   */
+  introducedDate?: string;
+  lastActionDate?: string;
   category: BillCategory;
   congressNumber?: string; // e.g., "H.R.82", "S.596"
   congressUrl?: string; // Link to Congress.gov

@@ -734,6 +734,39 @@ model GovernmentReference {
   contentStartedAt    DateTime?
   signedDate          DateTime?
   decidedDate         DateTime?
+
+  // ---------------------------------------------------------------------
+  // WHEN THIS ACTUALLY HAPPENED, from the source rather than from us.
+  //
+  // These did not exist. reference-mappers.ts filled introducedDate and
+  // lastActionDate with `ref.createdAt` — the moment OUR row was written — so
+  // a law from 2007 displayed as introduced today, and every record on the
+  // platform appeared to be from the day we happened to sync it. A date is a
+  // fact about the legislation, not about our database.
+  // ---------------------------------------------------------------------
+
+  /// The day it was introduced, per congress.gov. Null when unknown.
+  introducedDate      DateTime?
+  /// The day of the most recent action, per congress.gov.
+  lastActionDate      DateTime?
+  /// What that action was, in the chamber's own words.
+  lastActionText      String?
+
+  // ---------------------------------------------------------------------
+  // WHO SPONSORED IT — a member, not a chamber.
+  //
+  // The mapper invented "U.S. House of Representatives / Independent - US"
+  // with a blank avatar for every bill, because there was nowhere to put a
+  // sponsor. Bills are sponsored by a person, and congress.gov names them.
+  // ---------------------------------------------------------------------
+
+  /// Bioguide id, so the sponsor joins the roster the Delegates screen uses.
+  sponsorBioguideId   String?
+  sponsorName         String?
+  /// "D", "R", "I" — the letter the roster uses.
+  sponsorParty        String?
+  /// Two-letter state.
+  sponsorState        String?
   aliases             String?
   mergedIntoId        String?
   supportVotes        Int       @default(0)
@@ -758,6 +791,8 @@ model GovernmentReference {
   @@index([status])
   @@index([category])
   @@index([createdAt])
+  // Sorting by when a law was actually introduced, now that we know.
+  @@index([introducedDate])
   @@index([supportVotes])
   @@index([opposeVotes])
   @@index([mergedIntoId])

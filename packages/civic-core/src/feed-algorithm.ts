@@ -237,6 +237,15 @@ function calculateGapBoost(bill: Bill): { score: number; gapPct: number } {
  * Calculate urgency boost for time-sensitive bills
  */
 function calculateUrgencyBoost(bill: Bill): { score: number; urgency?: 'critical' | 'high' | 'medium' } {
+  // NO DATE, NO URGENCY BOOST.
+  //
+  // lastActionDate used to be the moment our own row was written, so every
+  // record looked like it had moved in the chamber today and the urgency
+  // ladder below fired for all of them. It is real now, and absent until
+  // congress.gov has been asked — and a record whose last action we do not
+  // know is not evidence of urgency, so it gets none.
+  if (!bill.lastActionDate) return { score: 0 };
+
   const lastActionDate = new Date(bill.lastActionDate);
   const daysSinceAction = (Date.now() - lastActionDate.getTime()) / (1000 * 60 * 60 * 24);
 
@@ -588,7 +597,9 @@ function checkLocalRelevance(
   bill: Bill,
   location: { state: string; district?: string }
 ): boolean {
-  return bill.sponsor.state === location.state;
+  // No sponsor known, no claim of locality. The mapper used to name the
+  // chamber for every bill, which made this comparison meaningless anyway.
+  return bill.sponsor?.state === location.state;
 }
 
 // ==========================================

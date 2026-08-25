@@ -61,16 +61,39 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
     shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
     status: statusMap[ref.status] ?? "introduced",
     chamber,
-    sponsor: {
-      id: "congress",
-      name: chamber === "senate" ? "U.S. Senate" : "U.S. House of Representatives",
-      party: "I",
-      state: "US",
-      chamber,
-      imageUrl: "",
-    },
-    introducedDate: ref.createdAt,
-    lastActionDate: ref.createdAt,
+    /**
+     * THE SPONSOR IS A PERSON OR IT IS NOTHING.
+     *
+     * This used to name the chamber — "U.S. House of Representatives", party
+     * "Independent", state "US", blank avatar — for every bill on the platform,
+     * because there was nowhere to store a real one. Bills are sponsored by a
+     * member; congress.gov names them, and GovernmentReference now has the
+     * columns. Until the provenance pass reaches a record the fields are null,
+     * and the card renders no sponsor rather than a fictional one.
+     */
+    sponsor:
+      "sponsor" in ref && ref.sponsor
+        ? {
+            id: ref.sponsor.bioguideId ?? ref.sponsor.name,
+            name: ref.sponsor.name,
+            party: (ref.sponsor.party ?? "I") as "D" | "R" | "I",
+            state: ref.sponsor.state ?? "",
+            chamber,
+            imageUrl: ref.sponsor.bioguideId
+              ? `https://www.congress.gov/img/member/${ref.sponsor.bioguideId.toLowerCase()}_200.jpg`
+              : "",
+          }
+        : undefined,
+    /**
+     * BOTH OF THESE WERE `ref.createdAt` — the moment OUR row was written. A
+     * statute from 2007 therefore displayed as introduced today, and every
+     * record looked like it dated from whenever we happened to sync it. They
+     * come from congress.gov now, and are undefined until it has been asked.
+     */
+    introducedDate:
+      "introducedDate" in ref && ref.introducedDate ? ref.introducedDate : undefined,
+    lastActionDate:
+      "lastActionDate" in ref && ref.lastActionDate ? ref.lastActionDate : undefined,
     category: toCategory(ref.category),
     congressNumber,
     congressUrl: ref.sourceUrl ?? undefined,
