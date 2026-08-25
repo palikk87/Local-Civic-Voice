@@ -260,6 +260,13 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
 });
 
 /**
+ * The least engagement a record needs before this platform will call it
+ * trending. Five interactions is not a movement, but it is enough that the
+ * ordering means something rather than being recency in a costume.
+ */
+const TRENDING_FLOOR = 5;
+
+/**
  * GET /api/government-references/trending
  * Get trending references based on recent engagement
  */
@@ -329,7 +336,21 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
   withTrendingScore.sort(
     (a, b) => b.trendingScore - a.trendingScore || recency(b) - recency(a),
   );
-  const topReferences = withTrendingScore.slice(0, limit);
+
+  // NOTHING IS TRENDING UNTIL SOMETHING IS.
+  //
+  // The score is honest arithmetic, but on a platform with almost no activity
+  // every record scores zero or close to it, ties fall through to recency, and
+  // the top three still get stamped "#1 Trending". That is a claim about
+  // popularity made out of an empty database — the same failure as an invented
+  // number, arrived at from the other direction: real arithmetic wearing a
+  // label the data cannot support.
+  //
+  // Below the floor this returns nothing and the section renders its empty
+  // state, which is the truthful answer to "what is trending here" when the
+  // answer is "nothing yet".
+  const trending = withTrendingScore.filter((ref) => ref.trendingScore >= TRENDING_FLOOR);
+  const topReferences = trending.slice(0, limit);
 
   // The caller's standing vote on each law, so every card can light it up.
   const userVotesByRef = await loadUserVotes(

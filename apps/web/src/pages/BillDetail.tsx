@@ -334,7 +334,12 @@ export default function BillDetail() {
       congressUrl: libraryPost.sharedContent?.sourceUrl,
       fullText: fullTextValue,
       simplifiedText: simplifiedTextValue,
-      realWorldImpact: libraryPost.opinion ?? "This legislation could have significant impact on citizens.",
+      // No fallback sentence. This used to read "This legislation could have
+      // significant impact on citizens" whenever the sharer had written
+      // nothing — a claim about a specific law's real-world effect, asserted by
+      // the app, true of every law and therefore about none of them. An empty
+      // string renders nothing, which is what we actually know.
+      realWorldImpact: libraryPost.opinion ?? "",
       relatedLaws: [],
       // A library item is a document someone saved, not a reference the
       // platform tracks, so it has no tallies. These used to be

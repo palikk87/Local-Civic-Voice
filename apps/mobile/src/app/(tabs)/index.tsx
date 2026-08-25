@@ -811,12 +811,16 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
 
           <VoteButtons bill={item.bill} />
 
-          {/* Representation Gap - The People vs Congress */}
-          {item.bill.officialVotes && (
-            <View className="mt-2">
-              <PulseGapBadge gap={calculateRepresentationGap(item.bill)} />
-            </View>
-          )}
+          {/* Representation Gap - The People vs Congress.
+              The guard is the null, not a field check. */}
+          {(() => {
+            const gap = calculateRepresentationGap(item.bill);
+            return gap ? (
+              <View className="mt-2">
+                <PulseGapBadge gap={gap} />
+              </View>
+            ) : null;
+          })()}
         </View>
 
         {/* Action Bar */}

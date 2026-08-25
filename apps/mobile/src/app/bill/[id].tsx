@@ -488,7 +488,11 @@ export default function BillDetailScreen() {
       congressUrl: libraryPost.sharedContent?.sourceUrl,
       fullText: fullTextValue,
       simplifiedText: simplifiedTextValue,
-      realWorldImpact: libraryPost.opinion ?? 'This legislation could have significant impact on citizens.',
+      // No fallback sentence. This used to assert a real-world effect whenever
+      // the sharer had written nothing — a claim true of every law and
+      // therefore about none of them. Empty renders nothing, which is what we
+      // actually know.
+      realWorldImpact: libraryPost.opinion ?? '',
       relatedLaws: [],
       communityVotes: {
         // A library item is a document someone saved, not a reference the
@@ -861,18 +865,18 @@ export default function BillDetailScreen() {
               </View>
             </Animated.View>
 
-            {/* Representation Gap - Shows discrepancy between public and official votes */}
-            {bill.officialVotes && (
-              <Animated.View
-                entering={FadeInDown.delay(125).springify()}
-                className="px-4 mb-4"
-              >
-                <PulseGap
-                  gap={calculateRepresentationGap(bill)}
-                  compact
-                />
-              </Animated.View>
-            )}
+            {/* Representation Gap. The guard is the null, not a field check. */}
+            {(() => {
+              const gap = calculateRepresentationGap(bill);
+              return gap ? (
+                <Animated.View
+                  entering={FadeInDown.delay(125).springify()}
+                  className="px-4 mb-4"
+                >
+                  <PulseGap gap={gap} compact />
+                </Animated.View>
+              ) : null;
+            })()}
 
             {/* The three things only this platform can show: who crossed
                 sides and why, what the other side actually wrote, and when

@@ -46,6 +46,8 @@ import { initializeProcessors } from "./services/job-processors";
 import { getCacheStats } from "./services/cache";
 import { emailConfiguration, isEmailConfigured } from "./services/email";
 import { keySummary, keyWarnings } from "./services/key-report";
+import { syncRollCalls } from "./services/roll-call-sync";
+import { adjudicatePending } from "./services/reference-lineage";
 
 // Type the Hono app with user/session variables
 const app = new Hono<{
@@ -398,6 +400,58 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 const LINEAGE_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   setInterval(() => enqueueLineageSync("daily"), LINEAGE_SYNC_INTERVAL_MS);
+}
+
+// Roll calls: how each chamber actually voted, from senate.gov and
+// clerk.house.gov. Both publish plain XML with no key and no quota.
+//
+// THIS IS WHY THE GAP WAS INVISIBLE. The ingest existed and had tests, but it
+// lived only in scripts/sync-roll-calls.ts, so it ran when somebody typed the
+// command — which nobody ever did. `officialVotes` stayed empty on every
+// record, every gap panel on both clients checks that field before rendering,
+// and the platform's whole premise silently rendered nothing. An ingest with no
+// schedule is an ingest that does not exist.
+//
+// Twice a day. The chambers vote on a sitting day and publish within hours, and
+// a run costs a few hundred spaced requests against a courtesy that would be
+// easy to abuse.
+const ROLL_CALL_SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  const runRollCallSync = () => {
+    void syncRollCalls().catch((error) => {
+      // Never throws into the interval: a failed pull is a gap that stays
+      // hidden for twelve hours, not a reason to take the process down.
+      console.error("[RollCall] sync failed:", error);
+    });
+  };
+  // Not at boot. A restart loop would spend the courtesy budget on nothing.
+  setInterval(runRollCallSync, ROLL_CALL_SYNC_INTERVAL_MS);
+}
+
+// Duplicate laws: two filings of one bill split the vote count in half, and
+// every citizen looking at either one sees a Pulse that is missing the other
+// half. The adjudicator merges only on evidence — identical stored text, or a
+// congress.gov "Identical bill" relationship an analyst confirmed — and every
+// merge it makes is reversible from the admin console's journal.
+//
+// Same reason as above: this existed, was tested, and had never run.
+const MERGE_ADJUDICATION_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const MERGE_ADJUDICATION_BATCH = 25;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  setInterval(() => {
+    void adjudicatePending(MERGE_ADJUDICATION_BATCH, { allowAI: true })
+      .then((sweep) => {
+        if (sweep.considered > 0) {
+          console.log(
+            `[Merge] considered ${sweep.considered}: ${sweep.merged} merged, ` +
+              `${sweep.rejected} ruled different, ${sweep.leftPending} left for a person.`
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("[Merge] adjudication failed:", error);
+      });
+  }, MERGE_ADJUDICATION_INTERVAL_MS);
 }
 
 // Accounts live in Postgres, external to this container, so they survive

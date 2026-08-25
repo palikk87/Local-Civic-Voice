@@ -72,10 +72,23 @@ export interface BillWithSponsor extends Bill {
   representatives?: Representative | null
 }
 
-export interface DailyDigestBill extends Bill {
+/**
+ * DELIBERATELY DROPS TWO FIELDS THE BASE TYPE DEMANDS.
+ *
+ * `Bill` inherits cosponsor_count and amendment_count from the old Supabase
+ * generated types. Neither has a column behind it: Prisma's Bill model has
+ * `cosponsors` as free text and nothing at all for amendments, and
+ * GovernmentReference has neither. A required field with no source is how the
+ * digest came to invent both — a status lookup table "for demo" plus
+ * Math.random() on every render — and feed them into the voice-weight figure
+ * that tells a citizen how much their vote counts.
+ *
+ * Omitted rather than defaulted to zero: zero says a bill has no cosponsors,
+ * and what is true is that this platform does not know.
+ */
+export interface DailyDigestBill
+  extends Omit<Bill, 'cosponsor_count' | 'amendment_count'> {
   weight_score: number
-  cosponsor_count: number
-  amendment_count: number
   representatives?: Representative | null
 }
 

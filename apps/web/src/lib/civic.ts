@@ -328,48 +328,26 @@ export function supportPct(votes: Votes): number {
   return Math.round((votes.support / votes.total) * 100);
 }
 
-// ---------- Gap detection / official vote (deterministic derived stats) ----------
-
-export interface GapStats {
-  communityPct: number; // % of community voting yea
-  officialPct: number; // % of chamber voting yea
-  gapPct: number; // absolute gap between the two
-  officialYea: number;
-  officialNay: number;
-  projected: "Likely Pass" | "Likely Fail" | "Uncertain";
-  direct: number; // direct community votes
-  delegated: number; // delegated community votes
-}
-
-function hashSeed(input: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h);
-}
-
-/**
- * Official chamber votes are not yet mirrored in our database, so we derive
- * stable, realistic figures from the reference identity. The same reference
- * always produces the same official tally, so gap badges stay consistent
- * across the feed, discover, and detail views.
- */
-export function gapStats(reference: Pick<GovReference, "id" | "masterReferenceId" | "votes" | "chamber" | "referenceType">): GapStats {
-  const seed = hashSeed(reference.masterReferenceId || reference.id);
-  const communityPct = supportPct(reference.votes);
-  const chamberSize = reference.chamber === "senate" ? 100 : 435;
-  const officialPct = seed % 101; // 0..100 stable
-  const officialYea = Math.round((officialPct / 100) * chamberSize);
-  const officialNay = chamberSize - officialYea;
-  const gapPct = reference.votes.total > 0 ? Math.abs(communityPct - officialPct) : 0;
-  const projected: GapStats["projected"] =
-    officialPct >= 60 ? "Likely Pass" : officialPct <= 40 ? "Likely Fail" : "Uncertain";
-  const delegated = Math.round(reference.votes.total * (0.1 + ((seed >> 3) % 11) / 100));
-  const direct = Math.max(0, reference.votes.total - delegated);
-  return { communityPct, officialPct, gapPct, officialYea, officialNay, projected, direct, delegated };
-}
+// ---------- Gap detection ----------
+//
+// GONE, AND NOT REPLACED: gapStats() and hashSeed().
+//
+// gapStats() derived the official congressional vote from a hash of the
+// record's own id — `officialPct = seed % 101`, scaled by chamber size — and
+// from the same seed produced the projected outcome and the direct-versus-
+// delegated split. Its comment called these "stable, realistic figures". They
+// were stable, which is the part that makes it dangerous: a fabrication that
+// never contradicts itself is one nobody catches. The Gap is this platform's
+// entire premise, and this measured it against an invented roll call.
+//
+// It had no callers, which is the only reason it was not shipping a lie. That
+// is not a reason to keep it — the next person to need a gap number would have
+// found it sitting here looking authoritative.
+//
+// The real thing lives at GET /api/government-references/:id/representation-gap,
+// which compares the published tally here against a roll call parsed from
+// senate.gov or clerk.house.gov, and returns a reason rather than a number when
+// there is nothing honest to say. See components/civic/RepresentationGapPanel.
 
 // ---------- API calls ----------
 

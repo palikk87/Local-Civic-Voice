@@ -23,21 +23,33 @@ export function calculateApprovalPct(yea: number, nay: number): number {
 /**
  * Calculate the Representation Gap for a single bill
  */
-export function calculateRepresentationGap(bill: Bill): RepresentationGap {
+/**
+ * The gap, or null when there is no chamber vote to compare against.
+ *
+ * THIS USED TO RETURN A NUMBER NO MATTER WHAT. Without `bill.officialVotes` it
+ * left `officialApprovalPct` at 0 and carried on, so a record Congress had
+ * simply not voted on yet was reported as the chamber approving it 0% — and
+ * the gap became the public's own support percentage, pointed at a vote that
+ * never happened. Every caller happened to check `officialVotes` first, which
+ * is the only reason this never reached a screen; the guard lived at four call
+ * sites instead of here, and removing it at any one of them would have shipped
+ * the fiction silently.
+ *
+ * The guard lives here now. There is no gap without both halves.
+ */
+export function calculateRepresentationGap(bill: Bill): RepresentationGap | null {
+  if (!bill.officialVotes) return null;
+
   // Calculate public (AYE & NAY) approval percentage
   const publicApprovalPct = calculateApprovalPct(
     bill.communityVotes.yea,
     bill.communityVotes.nay
   );
 
-  // Calculate official (Congress) approval percentage
-  let officialApprovalPct = 0;
-  if (bill.officialVotes) {
-    officialApprovalPct = calculateApprovalPct(
-      bill.officialVotes.yea,
-      bill.officialVotes.nay
-    );
-  }
+  const officialApprovalPct = calculateApprovalPct(
+    bill.officialVotes.yea,
+    bill.officialVotes.nay
+  );
 
   // Calculate the absolute gap
   const gapPercentage = Math.abs(publicApprovalPct - officialApprovalPct);
@@ -60,10 +72,14 @@ export function calculateRepresentationGap(bill: Bill): RepresentationGap {
 }
 
 /**
- * Calculate Representation Gaps for multiple bills
+ * Gaps for many bills. Bills with no chamber vote are absent from the result
+ * rather than present with an invented official percentage, so the length of
+ * this array is the number of real comparisons, not the number of bills.
  */
 export function calculateBulkRepresentationGaps(bills: Bill[]): RepresentationGap[] {
-  return bills.map(calculateRepresentationGap);
+  return bills
+    .map(calculateRepresentationGap)
+    .filter((gap): gap is RepresentationGap => gap !== null);
 }
 
 /**
@@ -72,7 +88,9 @@ export function calculateBulkRepresentationGaps(bills: Bill[]): RepresentationGa
 export function getBillsWithSignificantGaps(bills: Bill[]): Bill[] {
   return bills.filter((bill) => {
     const gap = calculateRepresentationGap(bill);
-    return gap.hasSignificantGap;
+    // A bill Congress has not voted on has no gap — not a gap of zero, and not
+    // a significant one. It is excluded rather than counted as aligned.
+    return gap?.hasSignificantGap ?? false;
   });
 }
 
@@ -81,9 +99,11 @@ export function getBillsWithSignificantGaps(bills: Bill[]): Bill[] {
  */
 export function sortByRepresentationGap(bills: Bill[]): Bill[] {
   return [...bills].sort((a, b) => {
-    const gapA = calculateRepresentationGap(a);
-    const gapB = calculateRepresentationGap(b);
-    return gapB.gapPercentage - gapA.gapPercentage;
+    // Unmeasurable sorts last, rather than sorting as a gap of zero — which
+    // would put "Congress has not voted" among the bills it most agrees with.
+    const a_ = calculateRepresentationGap(a)?.gapPercentage ?? -1;
+    const b_ = calculateRepresentationGap(b)?.gapPercentage ?? -1;
+    return b_ - a_;
   });
 }
 

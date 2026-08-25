@@ -50,24 +50,25 @@ function mapOutcomeToDbOutcome(outcome: Bill['projectedOutcome']): ProjectedOutc
 
 // Convert mock bill to digest bill with calculated weight
 function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: WeightTier } {
-  // Generate mock cosponsor/amendment counts based on status for demo
-  const statusMultipliers: Record<string, { cosponsor: number; amendment: number }> = {
-    introduced: { cosponsor: 5, amendment: 0 },
-    in_committee: { cosponsor: 15, amendment: 2 },
-    passed_house: { cosponsor: 50, amendment: 8 },
-    passed_senate: { cosponsor: 45, amendment: 6 },
-    enacted: { cosponsor: 100, amendment: 15 },
-    signed_into_law: { cosponsor: 120, amendment: 20 },
-  };
-
-  const multiplier = statusMultipliers[bill.status] || statusMultipliers.introduced;
-  const cosponsorCount = multiplier.cosponsor + Math.floor(Math.random() * 20);
-  const amendmentCount = multiplier.amendment + Math.floor(Math.random() * 5);
-
+  // COSPONSORS AND AMENDMENTS ARE GONE, AND NOT REPLACED.
+  //
+  // They were invented twice over: a lookup table that guessed a count from the
+  // bill's status ("for demo"), plus Math.random() on top of that, evaluated on
+  // every render. So the numbers changed while somebody watched — 45 to 64
+  // cosponsors in about a minute, and one of them went down — and they fed
+  // calculateVoiceWeight(), which is the figure this platform uses to tell a
+  // citizen how much their vote counts. A fabricated decoration is bad; a
+  // fabricated input to a civic weighting is a different thing entirely.
+  //
+  // GovernmentReference has no cosponsor or amendment column, so there is no
+  // real source to rewire to. Both counts are removed from the card rather than
+  // shown as zero, because zero asserts that a bill has no cosponsors, and what
+  // is true is that we do not know.
+  //
+  // Voice weight now comes from status alone, which is a real column. The
+  // multipliers for the other two default to 0 in calculateVoiceWeight().
   const weightResult = calculateVoiceWeight({
     status: mapStatusToDbStatus(bill.status),
-    cosponsorCount,
-    amendmentCount,
   });
 
   const dbStatus = mapStatusToDbStatus(bill.status);
@@ -98,8 +99,6 @@ function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: Weight
     official_not_voting: bill.officialVotes?.notVoting || null,
     is_trending: true,
     view_count: 0,
-    cosponsor_count: cosponsorCount,
-    amendment_count: amendmentCount,
     weight_score: weightResult.weightScore,
     weight_last_calculated: new Date().toISOString(),
     created_at: bill.introducedDate,
@@ -190,22 +189,11 @@ function DigestBillCard({ bill, index, onPress }: DigestBillCardProps) {
           {bill.short_title}
         </Text>
 
-        {/* Stats Row */}
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center">
-            <View className="flex-row items-center mr-3">
-              <Users size={12} color="#64748B" />
-              <Text className="text-slate-400 text-xs ml-1">
-                {bill.cosponsor_count}
-              </Text>
-            </View>
-            <View className="flex-row items-center">
-              <FileEdit size={12} color="#64748B" />
-              <Text className="text-slate-400 text-xs ml-1">
-                {bill.amendment_count}
-              </Text>
-            </View>
-          </View>
+        {/* Stats Row.
+            The cosponsor and amendment counts that used to sit here are gone —
+            both were invented, and neither had a label, so they announced two
+            bare numbers that even this project's owner could not identify. */}
+        <View className="flex-row items-center justify-end">
           <View
             className={cn(
               'px-2 py-0.5 rounded-full',
