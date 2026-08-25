@@ -28,6 +28,7 @@
 
 import { createHash } from "node:crypto";
 import { env } from "../env";
+import { emailConfiguration } from "./email";
 
 export interface KeyStatus {
   /** The environment variable name, spelled exactly as it must be set. */
@@ -126,6 +127,29 @@ export function keyReport(): KeyStatus[] {
 export function keyWarnings(report: KeyStatus[] = keyReport()): string[] {
   const by = (name: string) => report.find((key) => key.name === name)!;
   const warnings: string[] = [];
+
+  // THE SENDER, NOT THE KEY. This is first because it is the failure that
+  // looks most like a working system: a valid key, an accepted request, a 200,
+  // and no mail for anybody. It was the real cause of "email verification does
+  // not send an email" on this deployment, while the key was perfect the whole
+  // time and every diagnostic that only asked about the key said so.
+  const mail = emailConfiguration();
+  if (mail.configured) {
+    if (mail.fromIsProviderTestSender) {
+      warnings.push(
+        `EMAIL_FROM is ${mail.from} — Resend's shared test sender. It needs no DNS, and ` +
+          "it delivers ONLY to the address the Resend account was opened with. Every other " +
+          "recipient gets nothing, and the send still succeeds, so the app believes the code " +
+          "went out. Verify a domain in Resend and send from an address on it."
+      );
+    } else if (mail.fromDomain) {
+      warnings.push(
+        `Nothing sends unless ${mail.fromDomain} is a verified domain in this Resend ` +
+          "account. Resend refuses mail from an unverified sender in a way that is " +
+          "indistinguishable from a bad key. Send a test below to find out for certain."
+      );
+    }
+  }
 
   for (const key of report) {
     if (key.present && !key.looksRight) {
