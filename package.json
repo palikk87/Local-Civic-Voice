@@ -4,6 +4,7 @@
   "workspaces": [],
   "scripts": {
     "verify": "bun scripts/verify.ts",
+    "brand-assets": "python3 scripts/make-brand-assets.py",
     "deploy-check": "bun scripts/deploy-check.ts",
     "branches": "bun scripts/branches.ts",
     "system-check": "cd backend && bun scripts/system-check.ts"

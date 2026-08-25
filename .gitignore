@@ -56,3 +56,7 @@ ios/
 !apps/mobile/ios/Podfile
 *.keystore
 *.jks
+
+# Fonts fetched by scripts/make-brand-assets.py. Open-licensed, but there is no
+# reason to carry 460KB of them in the repository to redraw four images.
+.brand-fonts/

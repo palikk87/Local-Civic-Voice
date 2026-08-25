@@ -575,6 +575,39 @@ This is the step that actually fixes sign-up email: until a domain is verified,
 to the address the Resend account was opened with. Everyone else gets nothing,
 and the send still reports success.
 
+> **First delete the registrar's "this domain sends no email" preset, or
+> verification will pass and mail will still die.**
+>
+> Squarespace puts an **Email Security** preset on a fresh domain. It is three
+> records that together say the domain sends nothing:
+>
+> - `v=spf1 -all` — no server is allowed to send as this domain
+> - a null `_domainkey` — no DKIM key is valid
+> - `DMARC p=reject` with strict alignment — reject anything that fails, and
+>   nothing can pass
+>
+> **Resend verifies fine with all three in place.** Verification only checks
+> that Resend's own DKIM record resolves; it does not read the policy records
+> that tell receivers to bin the mail. So the dashboard turns green, the API
+> returns 200, and every message is rejected at the receiving end. That is a
+> third distinct way for email to fail while every check says it is healthy —
+> alongside a missing key and an unverified sender.
+>
+> Delete the **Email Security** preset (and the **Squarespace Defaults** preset,
+> whose A/CNAME records fight the web host's) before adding the custom records.
+>
+> **Then put a DMARC record back.** Deleting the preset leaves no `_dmarc` at
+> all, which is not a policy so much as an absence of one. Start permissive and
+> tighten once you have seen a week of reports — `p=reject` on day one bins your
+> own sign-up codes if anything is misaligned:
+>
+> ```
+> _dmarc    TXT    v=DMARC1; p=none; rua=mailto:you@ayeandnay.com
+> ```
+>
+> Resend sends from a `send.` subdomain, so SPF alignment happens there rather
+> than on the apex and no apex SPF record is required for delivery.
+
 **4. Then, and only then, move the sender.**
 
 ```
@@ -600,11 +633,25 @@ Keep `civicvoice` for as long as any build carrying the old scheme is installed
 anywhere. It costs nothing to keep and it is the difference between an old build
 signing in and an old build appearing broken.
 
-**Not required, and deliberately not done here:** moving the API itself to
-`api.ayeandnay.com`. The web app reaches it through the `/api/*` rewrite in
-`apps/web/vercel.json`, so the API's hostname is not user-visible and moving it
-is a separate change with its own way of breaking. If you do move it, that
-rewrite destination and `BACKEND_URL` change together.
+**7. The API's own hostname.** `api.ayeandnay.com` is set up as a Railway
+custom domain and serving, but nothing points at it yet: the rewrite in
+`apps/web/vercel.json` still targets the generated `.up.railway.app` address,
+and `BACKEND_URL` still names it too.
+
+That is safe today and becomes a trap the moment the Railway **service** is
+renamed as part of this rebrand — the generated hostname is derived from the
+service name, so renaming the service silently breaks the rewrite and takes the
+whole API down with it. Moving to `api.ayeandnay.com` first removes that
+coupling. Both change together:
+
+```
+apps/web/vercel.json   rewrites[0].destination → https://api.ayeandnay.com/api/:path*
+Railway                BACKEND_URL             → https://api.ayeandnay.com
+```
+
+`MEDIA_PUBLIC_URL` is set independently, so stored media URLs are unaffected.
+The native app has its own `EXPO_PUBLIC_BACKEND_URL` and should move at its next
+build.
 
 ## After the first deploy
 
