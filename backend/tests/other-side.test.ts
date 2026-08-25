@@ -189,6 +189,55 @@ describe("the other side", () => {
   });
 });
 
+/**
+ * Read the pulse history once every voice cast so far has reached it.
+ *
+ * WHY A POLL AND NOT A PLAIN READ. Voting writes two things: the vote row,
+ * which the response waits for, and a PositionEvent, which it does not —
+ * routes/government-references.ts calls `void recordPosition(...)` on purpose,
+ * so that a vote can never fail because its history did. That is the right
+ * trade for the product: the tally is what the person came to do, the ledger is
+ * the memory of it.
+ *
+ * The consequence is that pulse-history is eventually consistent, and a test
+ * that reads it the microsecond after voting is asserting on a race. It passed
+ * on this machine every time and failed in CI, whose runner is slower and
+ * contended — "expected 2, received 1", one vote's event still in flight.
+ *
+ * So the test waits for the projection to catch up, which is what any real
+ * reader does by virtue of arriving later. DO NOT "fix" this by awaiting
+ * recordPosition in the route: that would put a vote's success back at the
+ * mercy of its bookkeeping, which is the exact failure the `void` prevents.
+ */
+async function pulseHistory(
+  cookie: string,
+  referenceId: string,
+  expected: { voices: number },
+): Promise<{ points: { support: number; oppose: number; lawChanged: boolean }[] }> {
+  const deadline = Date.now() + 5000;
+  let latest: { points: { support: number; oppose: number; lawChanged: boolean }[] } = {
+    points: [],
+  };
+
+  while (Date.now() < deadline) {
+    latest = (await (
+      await fetch(`${BASE_URL}/api/government-references/${referenceId}/pulse-history`, {
+        headers: freshClientHeaders({ cookie }),
+      })
+    ).json()) as typeof latest;
+
+    const last = latest.points[latest.points.length - 1];
+    // Counted rather than "any point exists": a withdrawal settles at zero, and
+    // waiting for a non-empty response would return before it landed.
+    if (last && last.support + last.oppose === expected.voices) return latest;
+    await Bun.sleep(50);
+  }
+
+  // Returned rather than thrown, so the assertion that follows reports what was
+  // actually there — a timeout message would hide the numbers.
+  return latest;
+}
+
 describe("how opinion moved", () => {
   test("the pulse can be read back over time, not just today", async () => {
     const first = await citizen("first");
@@ -198,11 +247,7 @@ describe("how opinion moved", () => {
     await vote(first.cookie, bill.id, "support");
     await vote(second.cookie, bill.id, "oppose");
 
-    const history = (await (
-      await fetch(`${BASE_URL}/api/government-references/${bill.id}/pulse-history`, {
-        headers: freshClientHeaders({ cookie: first.cookie }),
-      })
-    ).json()) as { points: Array<{ support: number; oppose: number; lawChanged: boolean }> };
+    const history = await pulseHistory(first.cookie, bill.id, { voices: 2 });
 
     // The vote table can only ever say what the Pulse is now.
     expect(history.points.length).toBeGreaterThan(0);
@@ -218,11 +263,7 @@ describe("how opinion moved", () => {
     await vote(person.cookie, bill.id, "support");
     await vote(other.cookie, bill.id, "support");
 
-    const history = (await (
-      await fetch(`${BASE_URL}/api/government-references/${bill.id}/pulse-history`, {
-        headers: freshClientHeaders({ cookie: person.cookie }),
-      })
-    ).json()) as { points: Array<{ support: number }> };
+    const history = await pulseHistory(person.cookie, bill.id, { voices: 2 });
 
     // Somebody who backed a bill and moved on is still backing it.
     expect(history.points[history.points.length - 1]!.support).toBe(2);
@@ -235,11 +276,8 @@ describe("how opinion moved", () => {
     await vote(person.cookie, bill.id, "support");
     await vote(person.cookie, bill.id, "support");
 
-    const history = (await (
-      await fetch(`${BASE_URL}/api/government-references/${bill.id}/pulse-history`, {
-        headers: freshClientHeaders({ cookie: person.cookie }),
-      })
-    ).json()) as { points: Array<{ support: number; oppose: number }> };
+    // Voting the same way twice withdraws it, so the settled state is nobody.
+    const history = await pulseHistory(person.cookie, bill.id, { voices: 0 });
 
     expect(history.points[history.points.length - 1]!).toMatchObject({ support: 0, oppose: 0 });
   });
@@ -254,11 +292,7 @@ describe("how opinion moved", () => {
       data: { lawVersion: 2, lawChangedAt: new Date() },
     });
 
-    const history = (await (
-      await fetch(`${BASE_URL}/api/government-references/${bill.id}/pulse-history`, {
-        headers: freshClientHeaders({ cookie: person.cookie }),
-      })
-    ).json()) as { points: Array<{ lawChanged: boolean }> };
+    const history = await pulseHistory(person.cookie, bill.id, { voices: 1 });
 
     // On this platform the amendment is usually the answer to "what turned it".
     expect(history.points.some((p) => p.lawChanged)).toBe(true);

@@ -38,6 +38,25 @@ const CHECKS: Check[] = [
     guards: "the API compiles",
   },
   {
+    /**
+     * The one check CI had and this did not, which is exactly how it got
+     * missed: two commits in a row shipped a migration whose `updatedAt`
+     * carried DEFAULT CURRENT_TIMESTAMP while schema.prisma declared no
+     * default. Local verify was fifteen green; CI was red on a sixteenth check
+     * local could not run, and the deploy gate — correctly — refused to ship
+     * either one.
+     *
+     * A gate a developer cannot run before pushing is a gate that fails after
+     * pushing. It builds its own throwaway database and never reads
+     * DATABASE_URL from the environment.
+     */
+    name: "backend schema drift",
+    cwd: "backend",
+    cmd: ["./scripts/drift-check.sh"],
+    guards:
+      "the migrations build exactly what schema.prisma describes, on an empty database",
+  },
+  {
     name: "backend tests",
     cwd: "backend",
     // `bun run test`, not `bun test`: the script carries the timeout. Booting
