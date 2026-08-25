@@ -32,6 +32,22 @@ interface Check {
 
 const CHECKS: Check[] = [
   {
+    /**
+     * First, because it costs milliseconds and because it is the rule with the
+     * worst consequence: two backends sharing one Postgres, each reshaping it
+     * at boot, destroyed 423 rows and dropped the AdminSession table 507 times
+     * in 16 days. That database is still shared.
+     *
+     * Here as well as in CI for the same reason as the drift check below — CI
+     * caught this one on a warning message inside the drift check script
+     * itself, which is a thing local should have said first.
+     */
+    name: "no schema push",
+    cwd: ".",
+    cmd: ["./scripts/no-db-push.sh"],
+    guards: "nothing executable can reshape a database that belongs to two projects",
+  },
+  {
     name: "backend typecheck",
     cwd: "backend",
     cmd: ["bunx", "tsc", "--noEmit"],

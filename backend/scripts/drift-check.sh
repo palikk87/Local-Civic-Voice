@@ -48,8 +48,9 @@ if ! bunx prisma migrate diff \
   echo ""
   echo "The migrations and schema.prisma disagree — see the difference above."
   echo "Fix the MIGRATION to match the schema. Never edit a migration that has"
-  echo "already been applied to a real database, and never 'prisma db push':"
-  echo "this database is shared with another project."
+  echo "already been applied to a real database, and never reshape the database"
+  echo "directly with a schema-push command — this database is shared with"
+  echo "another project, so a push takes the other project's tables with it."
   exit 1
 fi
 
