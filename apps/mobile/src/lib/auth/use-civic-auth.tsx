@@ -8,7 +8,7 @@ import React, {
 } from 'react';
 
 import { useSession } from './use-session';
-import { can, resolveRole, type Capability, type Role } from '@/lib/permissions';
+import { can, isStaffAccount, resolveRole, type Capability, type Role } from '@/lib/permissions';
 import { useAdminStore } from '@/lib/admin-store';
 import { useAuthStore, type AuthUser } from '@/lib/auth-store';
 import { api } from '@/lib/api/api';
@@ -82,6 +82,7 @@ export function usePermissions(): {
   isLoading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isStaff: boolean;
   user: ReturnType<typeof useCurrentUser>['user'];
 } {
   const { isLoading, isAuthenticated, user } = useCurrentUser();
@@ -90,7 +91,12 @@ export function usePermissions(): {
   const role = resolveRole({ isSignedIn: isAuthenticated, isAdmin });
   const check = useCallback((capability: Capability) => can(role, capability), [role]);
 
-  return { role, can: check, isLoading, isAuthenticated, isAdmin, user };
+  // Whether the signed-in ACCOUNT is staff — separate from `isAdmin`, which
+  // only says a console session exists in this device's storage. Use this to
+  // decide what to show a person; use `can()` for what a tier may do.
+  const isStaff = isStaffAccount(user as { role?: string | null } | null);
+
+  return { role, can: check, isLoading, isAuthenticated, isAdmin, isStaff, user };
 }
 
 /**

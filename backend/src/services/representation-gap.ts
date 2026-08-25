@@ -96,6 +96,61 @@ export async function representationGap(
   };
 }
 
+/**
+ * The gap, or the reason there isn't one yet.
+ *
+ * WHY THIS EXISTS ALONGSIDE representationGap(). That function answers null for
+ * four completely different situations — the record is unknown, barely anybody
+ * here has voted, the chamber has not voted, or the chamber's vote carries no
+ * split to compare. The clients rendered nothing for all four, so the most
+ * compelling thing this platform can show simply vanished from the page with no
+ * explanation, and looked to everyone like a missing feature rather than a
+ * measurement that is not available yet.
+ *
+ * Same lesson as the mail failures: an absent number and a number that cannot
+ * be computed yet are different states, and collapsing them into silence is how
+ * a working feature gets reported as broken.
+ */
+export type GapStatus =
+  | { gap: RepresentationGap; reason: null }
+  | {
+      gap: null;
+      reason: "unknown_record" | "not_enough_voices" | "no_official_vote" | "no_recorded_split";
+      /** For "not_enough_voices": how many have voted, and how many are needed. */
+      publicTotal?: number;
+      needed?: number;
+    };
+
+export async function gapStatus(referenceId: string): Promise<GapStatus> {
+  const reference = await prisma.governmentReference.findUnique({
+    where: { id: referenceId },
+    select: { id: true, supportVotes: true, opposeVotes: true },
+  });
+  if (!reference) return { gap: null, reason: "unknown_record" };
+
+  const publicTotal = reference.supportVotes + reference.opposeVotes;
+  if (publicTotal < MINIMUM_PUBLIC_VOICES) {
+    return {
+      gap: null,
+      reason: "not_enough_voices",
+      publicTotal,
+      needed: MINIMUM_PUBLIC_VOICES,
+    };
+  }
+
+  const rollCall = await prisma.rollCall.findFirst({
+    where: { governmentReferenceId: referenceId },
+    orderBy: { votedAt: "desc" },
+  });
+  if (!rollCall) return { gap: null, reason: "no_official_vote" };
+  if (rollCall.yea + rollCall.nay === 0) return { gap: null, reason: "no_recorded_split" };
+
+  const gap = await representationGap(referenceId);
+  // representationGap() re-reads and re-applies the same rules, so a null here
+  // would mean the two disagree. Reported rather than papered over.
+  return gap ? { gap, reason: null } : { gap: null, reason: "no_recorded_split" };
+}
+
 export interface MemberVoteView {
   memberId: string;
   name: string;

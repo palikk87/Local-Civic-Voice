@@ -37,12 +37,12 @@ import {
   generateDebatePoints,
   getAIAvailability,
 } from "@/lib/mobile/ai-service";
-import { calculateRepresentationGap } from "@/lib/mobile/representation-gap";
-import { PulseGap } from "@/components/mobile/PulseGap";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import { NewsReelCarousel } from "@/components/mobile/NewsReelCarousel";
 import { TransparencyIndicator, ArticleBadge } from "@/components/mobile/BillOfRightsBadge";
+import { PulseBar } from "@/components/civic/PulseBar";
+import { RepresentationGapPanel } from "@/components/civic/RepresentationGapPanel";
 import type { Bill, Representative } from "@/lib/mobile/types";
 import { useTimelineStore } from "@/lib/mobile/timeline-store";
 import { bills } from "@/lib/mobile/mock-data";
@@ -559,9 +559,7 @@ export default function BillDetail() {
                 </span>
               </div>
 
-              <div className="h-3 bg-slate-700 rounded-full overflow-hidden mb-3">
-                <div className="h-full bg-emerald-500 rounded-l-full" style={{ width: `${yeaPercentage}%` }} />
-              </div>
+              <PulseBar yea={bill.communityVotes.yea} nay={bill.communityVotes.nay} height="h-3" className="mb-3" />
 
               <div className="flex justify-between">
                 <div className="flex items-center">
@@ -611,12 +609,13 @@ export default function BillDetail() {
             </div>
           </div>
 
-          {/* Representation Gap */}
-          {bill.officialVotes ? (
-            <div className="px-4 mb-4">
-              <PulseGap gap={calculateRepresentationGap(bill)} compact />
-            </div>
-          ) : null}
+          {/* The Gap — always rendered. It used to be hidden whenever the
+              client-side `officialVotes` was absent, which is every record
+              Congress has not voted on yet, so the platform's headline feature
+              was silently missing from most pages. */}
+          <div className="px-4 mb-4">
+            <RepresentationGapPanel referenceId={billRefData?.reference?.id} />
+          </div>
 
           {/* Vote Transparency */}
           <div className="px-4 mb-4">

@@ -99,3 +99,26 @@ export function resolveRole(opts: { isSignedIn: boolean; isAdmin: boolean }): Ro
   if (opts.isAdmin) return 'admin';
   return opts.isSignedIn ? 'user' : 'guest';
 }
+
+/**
+ * Staff roles, as stored on the citizen's own User row.
+ * Web twin: apps/web/src/lib/permissions.ts
+ *
+ * WHY THIS IS READ FROM THE ACCOUNT AND NOT FROM THE ADMIN-CONSOLE STORE.
+ * The profile screen used to advertise the Admin Console and the B2B portal
+ * whenever a persisted `isAdminAuthenticated` flag was set. That flag lives in
+ * AsyncStorage, is written when somebody signs into the console, and is never
+ * reconciled against the citizen account in front of it — so once anybody had
+ * used the console on a device, every later user of that device was shown both
+ * entry points, including after the token had expired and after a different
+ * person had signed in.
+ *
+ * The cards never granted access — both portals have their own login — but
+ * advertising a door is how somebody learns to go and knock on it, and telling
+ * an ordinary citizen that this is their console is simply wrong.
+ */
+const STAFF_ROLES = new Set(['admin', 'moderator', 'superadmin']);
+
+export function isStaffAccount(user: { role?: string | null } | null | undefined): boolean {
+  return !!user?.role && STAFF_ROLES.has(user.role.toLowerCase());
+}

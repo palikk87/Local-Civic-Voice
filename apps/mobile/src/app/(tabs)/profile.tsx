@@ -36,7 +36,6 @@ import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore } from '@/lib/voting-store';
 import { useAuthStore } from '@/lib/auth-store';
 import { useAdminStore } from '@/lib/admin-store';
-import { useB2BStore } from '@/lib/b2b-store';
 import { usePermissions, useCurrentUser } from '@/lib/auth/use-civic-auth';
 import { cn } from '@/lib/cn';
 import { useUserVoteHistory } from '@/lib/hooks';
@@ -260,16 +259,15 @@ function ProfileContent() {
   });
   const activeDelegationsCount = myDelegations?.activeCount ?? 0;
 
-  // Portal entry points. The admin tier comes from the separate admin-console
-  // session, never from a citizen account — a brand-new signup is `user`, so the
-  // console card stays hidden. B2B is its own login, so B2B clients keep theirs.
-  const { can } = usePermissions();
-  const hasB2BSession = useB2BStore((s) => s.isAuthenticated);
-
-  // The platform's master admin account (matches the superadmin in
-  // backend/src/routes/admin.ts). Seeing the entry cards doesn't grant access —
-  // the admin console and B2B portal still require their own logins.
-  const isMasterAdmin = (user?.username ?? '').toLowerCase() === 'palikk87';
+  // Portal entry points, decided by the signed-in ACCOUNT's role.
+  //
+  // This used to read persisted flags — `isAdminAuthenticated` from the admin
+  // store and `isAuthenticated` from the B2B store — neither of which is ever
+  // reconciled against the citizen in front of them. Once anybody had signed
+  // into either portal on a device, every later user of that device saw both
+  // cards on their own profile. It also unlocked them for one hardcoded
+  // username, which is an account identifier committed to a public repository.
+  const { isStaff } = usePermissions();
 
   // Calculate vote stats
   const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
@@ -665,8 +663,8 @@ function ProfileContent() {
             </Pressable>
           </View>
 
-          {/* Admin Console — master admin account or holders of an admin-console session */}
-          {can('viewAdmin') || isMasterAdmin ? (
+          {/* Admin Console — only for an account whose own role is staff. */}
+          {isStaff ? (
           <View className="px-4 mb-6">
             <Pressable
               onPress={() => {
@@ -702,9 +700,9 @@ function ProfileContent() {
           </View>
           ) : null}
 
-          {/* B2B Analytics Portal — master admin, admins, or clients already signed
-              into the B2B portal. Not advertised to ordinary citizen accounts. */}
-          {can('viewAdmin') || hasB2BSession || isMasterAdmin ? (
+          {/* B2B Analytics Portal — same rule. A business client signs in at the
+              B2B portal directly; they have no citizen profile to reach it from. */}
+          {isStaff ? (
           <View className="px-4 mb-6">
             <Pressable
               onPress={() => {

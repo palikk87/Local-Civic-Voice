@@ -53,6 +53,7 @@ import {
   referenceToExecutiveOrder,
 } from '@/lib/api/references';
 import { useCitizenBrief } from '@/lib/use-citizen-brief';
+import { PulseBar } from '@/components/PulseBar';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -410,12 +411,7 @@ export default function ExecutiveOrderDetailScreen() {
                   </Text>
                 </View>
 
-                <View className="h-3 bg-slate-700 rounded-full overflow-hidden mb-3">
-                  <View
-                    className="h-full bg-emerald-500 rounded-l-full"
-                    style={{ width: `${yeaPercentage}%` }}
-                  />
-                </View>
+                <PulseBar yea={eo.communityVotes.yea} nay={eo.communityVotes.nay} className="mb-3" />
 
                 <View className="flex-row justify-between">
                   <View className="flex-row items-center">

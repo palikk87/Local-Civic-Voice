@@ -81,6 +81,7 @@ import {
 } from '@/lib/api/references';
 import type { Bill as SupabaseBill, Representative as SupabaseRepresentative } from '@/lib/database.types';
 import { useRequireAuth } from '@/lib/auth/use-civic-auth';
+import { PulseBar } from '@/components/PulseBar';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -785,12 +786,7 @@ export default function BillDetailScreen() {
                   </Text>
                 </View>
 
-                <View className="h-3 bg-slate-700 rounded-full overflow-hidden mb-3">
-                  <View
-                    className="h-full bg-emerald-500 rounded-l-full"
-                    style={{ width: `${yeaPercentage}%` }}
-                  />
-                </View>
+                <PulseBar yea={bill.communityVotes.yea} nay={bill.communityVotes.nay} className="mb-3" />
 
                 <View className="flex-row justify-between">
                   <View className="flex-row items-center">

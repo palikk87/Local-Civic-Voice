@@ -574,6 +574,23 @@ export function enqueueLineageSync(
 }
 
 /**
+ * Enqueue a brief for a document too long to read inside one request.
+ *
+ * The brief endpoint does its work inline, because the reader pressed a button
+ * and is watching. That is right for almost every record and impossible for the
+ * largest — an appropriations act or an NDAA is hundreds of thousands of words,
+ * and every attempt exhausts the request budget at the same point. Retrying
+ * cannot help, so the endpoint stops asking the reader to and hands it here,
+ * where nothing is waiting.
+ */
+export function enqueueBriefGeneration(
+  referenceId: string,
+  priority: JobPriority = JobPriority.NORMAL
+): string {
+  return jobQueue.enqueue(JobType.GENERATE_REFERENCE_BRIEF, { referenceId }, priority);
+}
+
+/**
  * Enqueue a trending update job
  */
 export function enqueueTrendingUpdate(

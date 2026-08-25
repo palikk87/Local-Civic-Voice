@@ -32,6 +32,7 @@ import { useRequireAuth } from "@/hooks/use-civic-auth";
 import { cn } from "@/lib/utils";
 import type { SupremeCourtCase, JusticeVote } from "@/lib/mobile/types";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
+import { PulseBar } from "@/components/civic/PulseBar";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import {
   useGovernmentReference,
@@ -416,9 +417,7 @@ export default function ScotusDetail() {
                 </span>
               </div>
 
-              <div className="h-3 bg-slate-700 rounded-full overflow-hidden mb-3">
-                <div className="h-full bg-emerald-500 rounded-l-full" style={{ width: `${yeaPercentage}%` }} />
-              </div>
+              <PulseBar yea={scotusCase.communityVotes.yea} nay={scotusCase.communityVotes.nay} height="h-3" className="mb-3" />
 
               <div className="flex justify-between">
                 <div className="flex items-center">

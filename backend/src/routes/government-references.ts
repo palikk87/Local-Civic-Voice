@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
-import { representationGap, officialVoteRoll } from "../services/representation-gap";
+import { gapStatus, officialVoteRoll } from "../services/representation-gap";
 import { publicUrlFor } from "../services/storage";
 import type { auth } from "../auth";
 import {
@@ -26,7 +26,7 @@ import { ensureReferenceContent } from "../services/reference-content";
 import { parseBrief } from "../services/citizen-brief";
 import { resolveLibraryDocument } from "../services/library-resolve";
 import { libraryResolveRequestSchema } from "../types";
-import { JobPriority, JobType, jobQueue } from "../services/job-queue";
+import { JobPriority, JobType, enqueueBriefGeneration, jobQueue } from "../services/job-queue";
 import { briefState, isAbandoned, isWorking, markSettled, markWorking } from "../services/brief-state";
 
 type AuthVariables = {
@@ -1194,6 +1194,8 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
     return c.json({ state: "working", startedAt: row.contentStartedAt?.toISOString() ?? null });
   }
 
+  const startedAt = Date.now();
+
   // Claim the work before doing any of it, so a second reader arriving during
   // the model call is told "working" instead of starting their own run.
   if (!isWorking(row.contentStatus) || isAbandoned(row) || force) {
@@ -1213,9 +1215,48 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
     // A thrown job must not leave the row claiming to be busy — that is the
     // exact shape of the bug this endpoint replaces.
     await markSettled(referenceId, "unavailable").catch(() => undefined);
-    console.error(`[Brief] generation failed for ${referenceId}:`, error);
+
+    // LOGGED WITH ENOUGH TO TELL WHICH KIND OF FAILURE THIS IS.
+    //
+    // The old line printed the error and nothing else, so "the brief could not
+    // be written" was the only thing anybody outside the process ever learned —
+    // and the reports that reached us were "certain laws will not brief", with
+    // no way to see what those laws had in common. Length and elapsed time are
+    // what separate "this document is enormous" from "the model refused" from
+    // "the source timed out", and all three wear the same message on screen.
+    const elapsedMs = Date.now() - startedAt;
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[Brief] generation failed for ${referenceId} ` +
+        `(${row.masterReferenceId ?? "no mrid"}, ${row.referenceType}, after ${elapsedMs}ms): ${detail}`
+    );
+
+    // A law long enough to exhaust the request budget will exhaust it again on
+    // every retry, so "Try again" was an instruction that could never work.
+    // Hand it to the background queue, which has no request attached to it, and
+    // say what is actually happening.
+    const ranOutOfTime = elapsedMs >= BRIEF_REQUEST_DEADLINE_MS || /timeout|abort|deadline/i.test(detail);
+    if (ranOutOfTime) {
+      enqueueBriefGeneration(referenceId);
+      await markWorking(referenceId, "brief_pending").catch(() => undefined);
+      return c.json(
+        {
+          state: "working",
+          code: "too_long_for_one_request",
+          reason:
+            "This document is long enough that it cannot be read inside a single request. " +
+            "It is being written in the background now — come back in a few minutes.",
+        },
+        200
+      );
+    }
+
     return c.json(
-      { state: "unavailable", reason: "The brief could not be written just now. Try again." },
+      {
+        state: "unavailable",
+        code: "generation_failed",
+        reason: "The brief could not be written just now. Try again.",
+      },
       200
     );
   }
@@ -1557,7 +1598,9 @@ governmentReferencesRouter.get("/:id/representation-gap", async (c) => {
     return c.json({ error: "Reference not found" }, 404);
   }
 
-  return c.json({ gap: await representationGap(referenceId) });
+  // The status, not just the number. A page that is told only "null" can do
+  // nothing but hide the section, which is what made this look missing.
+  return c.json(await gapStatus(referenceId));
 });
 
 /**

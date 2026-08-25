@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
 import { useSession } from "@/lib/auth-client";
-import { can, resolveRole, type Capability } from "@/lib/permissions";
+import { can, isStaffAccount, resolveRole, type Capability } from "@/lib/permissions";
 import { useAdminStore } from "@/lib/mobile/admin-store";
 
 interface AuthUIState {
@@ -64,7 +64,14 @@ export function usePermissions() {
   const role = resolveRole({ isSignedIn: isAuthenticated, isAdmin });
   const check = useCallback((capability: Capability) => can(role, capability), [role]);
 
-  return { role, can: check, isLoading, isAuthenticated, isAdmin, user };
+  /**
+   * Whether the signed-in ACCOUNT is staff — separate from `isAdmin`, which only
+   * says a console session exists in this browser's storage. Use this to decide
+   * what to show a person; use `can()` for what a tier may do.
+   */
+  const isStaff = isStaffAccount(user as { role?: string | null } | null);
+
+  return { role, can: check, isLoading, isAuthenticated, isAdmin, isStaff, user };
 }
 
 /**

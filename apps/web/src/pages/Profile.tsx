@@ -202,7 +202,7 @@ export default function Profile() {
   const { user: sessionUser, isLoading: sessionLoading } = useCurrentUser();
   // Admin tier comes from the separate admin-console session, never from a citizen
   // account — a brand-new signup is `user`, so the console card stays hidden.
-  const { can } = usePermissions();
+  const { can, isStaff } = usePermissions();
   const mockUser = useAuthStore((s) => s.user);
   const mockSignOut = useAuthStore((s) => s.signOut);
   const queryClient = useQueryClient();
@@ -211,10 +211,10 @@ export default function Profile() {
 
   const user = mockUser ?? (sessionUser ? authUserFromSession(sessionUser) : null);
 
-  // The platform's master admin account (matches the superadmin in
-  // backend/src/routes/admin.ts). Seeing the entry cards doesn't grant access —
-  // the admin console and B2B portal still require their own logins.
-  const isMasterAdmin = (user?.username ?? "").toLowerCase() === "palikk87";
+  // NO HARDCODED USERNAME HERE ANY MORE. This used to also unlock the entry
+  // cards for one literal username, which is an account identifier committed to
+  // a public repository, and which hands the cards to whoever registers that
+  // name next. `isStaff` reads the role off the signed-in account instead.
 
   // Votes
   const mockUserVotes = useVotingStore((s) => s.userVotes);
@@ -539,8 +539,10 @@ export default function Profile() {
             </button>
           </div>
 
-          {/* Admin Console — master admin account or holders of an admin-console session */}
-          {can("viewAdmin") || isMasterAdmin ? (
+          {/* Admin Console — only for an account whose own role is staff. Not for
+              whoever happens to have an admin-console flag left in this
+              browser's storage, which is what this used to check. */}
+          {isStaff ? (
           <div className="px-4 mb-6">
             <button
               onClick={() => navigate("/admin/login")}
@@ -566,9 +568,9 @@ export default function Profile() {
           </div>
           ) : null}
 
-          {/* B2B Analytics Portal — master admin account or admin-console holders.
-              Not advertised to ordinary citizen accounts (same rule as mobile). */}
-          {can("viewAdmin") || isMasterAdmin ? (
+          {/* B2B Analytics Portal — same rule. A business client signs in at
+              /b2b directly; they have no citizen profile to reach it from. */}
+          {isStaff ? (
           <div className="px-4 mb-6">
             <button
               onClick={() => navigate("/b2b/login")}

@@ -30,6 +30,7 @@ import { useRequireAuth } from "@/hooks/use-civic-auth";
 import { cn } from "@/lib/utils";
 import type { ExecutiveOrder } from "@/lib/mobile/types";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
+import { PulseBar } from "@/components/civic/PulseBar";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import {
   useGovernmentReference,
@@ -310,9 +311,7 @@ export default function ExecutiveOrderDetail() {
                 <span className="text-slate-400 text-sm">{eo.communityVotes.totalVoters.toLocaleString()} votes</span>
               </div>
 
-              <div className="h-3 bg-slate-700 rounded-full overflow-hidden mb-3">
-                <div className="h-full bg-emerald-500 rounded-l-full" style={{ width: `${yeaPercentage}%` }} />
-              </div>
+              <PulseBar yea={eo.communityVotes.yea} nay={eo.communityVotes.nay} height="h-3" className="mb-3" />
 
               <div className="flex justify-between">
                 <div className="flex items-center">
