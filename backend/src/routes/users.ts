@@ -310,18 +310,26 @@ usersRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const currentUser = c.get("user");
 
-  const user = await prisma.user.findUnique({
-    where: { id },
-    include: {
-      _count: {
-        select: {
-          followers: true,
-          following: true,
-          votes: true,
+  // `_count.votes` counts the LEGACY Vote table, which has taken no new rows
+  // since both clients dropped /api/bills/:id/vote. Counting only that told a
+  // citizen who had voted forty times that they had voted none. Both tables,
+  // for the same reason the admin and B2B dashboards count both: the old rows
+  // are votes real people really cast.
+  const [user, referenceVotes] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            followers: true,
+            following: true,
+            votes: true,
+          },
         },
       },
-    },
-  });
+    }),
+    prisma.governmentReferenceVote.count({ where: { userId: id } }),
+  ]);
 
   if (!user) {
     return c.json({ error: "User not found" }, 404);
@@ -355,7 +363,11 @@ usersRouter.get("/:id", async (c) => {
         })) !== null
       : false;
 
-  return c.json({ ...formatUser(user, isFollowing), isFriend: followsBack });
+  return c.json({
+    ...formatUser(user, isFollowing),
+    votesCount: (user._count?.votes ?? 0) + referenceVotes,
+    isFriend: followsBack,
+  });
 });
 
 /**

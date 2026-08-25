@@ -612,34 +612,8 @@ function VoteButtons({ bill }: VoteButtonsProps) {
           </button>
         </div>
 
-        {/* Projected Outcome Badge */}
-        <span
-          className={cn(
-            "px-2 py-1 rounded-full",
-            bill.projectedOutcome === "likely_pass"
-              ? "bg-emerald-900/50"
-              : bill.projectedOutcome === "likely_fail"
-              ? "bg-red-900/50"
-              : "bg-slate-700"
-          )}
-        >
-          <span
-            className={cn(
-              "text-xs font-medium",
-              bill.projectedOutcome === "likely_pass"
-                ? "text-emerald-400"
-                : bill.projectedOutcome === "likely_fail"
-                ? "text-red-400"
-                : "text-slate-400"
-            )}
-          >
-            {bill.projectedOutcome === "likely_pass"
-              ? "Likely Pass"
-              : bill.projectedOutcome === "likely_fail"
-              ? "Likely Fail"
-              : "Uncertain"}
-          </span>
-        </span>
+        {/* PROJECTED OUTCOME BADGE REMOVED. A prediction the platform had no
+            basis for — its only ever input was a hash of the record's id. */}
       </div>
     </div>
   );

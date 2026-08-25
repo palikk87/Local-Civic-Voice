@@ -252,6 +252,24 @@ function ProfileContent() {
   // The real count, from the server that holds them. This used to read a
   // device-only store that nothing ever filled, so a citizen who had lent their
   // voice to three people was told they had none.
+  // THE REAL COUNTS, FROM THE SERVER.
+  //
+  // These used to come off `user`, built by signed-in-identity.ts, which sets
+  // `followers: 0` as a literal because a session carries no such field. So the
+  // profile showed zero followers and zero following forever, whatever the
+  // database held — following was working; the display was a constant.
+  const { data: liveProfile } = useQuery({
+    queryKey: ['users', user?.id ?? ''],
+    queryFn: () =>
+      api.get<{ followers: number; following: number; votesCount: number }>(
+        `/api/users/${user?.id}`,
+      ),
+    enabled: !!user?.id,
+  });
+
+  const followerCount = liveProfile?.followers ?? 0;
+  const followingCount = liveProfile?.following ?? 0;
+
   const { data: myDelegations } = useQuery({
     queryKey: ['my-delegations'],
     queryFn: () => api.get<{ activeCount: number }>('/api/delegations/me'),
@@ -453,13 +471,13 @@ function ProfileContent() {
             <View className="flex-row mt-4">
               <Pressable className="items-center mr-6">
                 <Text className="text-white font-bold text-lg">
-                  {user.followers}
+                  {followerCount}
                 </Text>
                 <Text className="text-slate-400 text-sm">Followers</Text>
               </Pressable>
               <Pressable className="items-center">
                 <Text className="text-white font-bold text-lg">
-                  {user.following}
+                  {followingCount}
                 </Text>
                 <Text className="text-slate-400 text-sm">Following</Text>
               </Pressable>

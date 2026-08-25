@@ -579,29 +579,14 @@ export default function BillDetail() {
                 </div>
               </div>
 
-              {/* Projected vs Community */}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-700/50">
-                <div>
-                  <p className="text-slate-400 text-xs mb-1">Projected Outcome</p>
-                  <span
-                    className={cn(
-                      "inline-block px-3 py-1.5 rounded-full font-medium",
-                      bill.projectedOutcome === "likely_pass"
-                        ? "bg-emerald-900/50 text-emerald-400"
-                        : bill.projectedOutcome === "likely_fail"
-                        ? "bg-red-900/50 text-red-400"
-                        : "bg-slate-700 text-slate-400"
-                    )}
-                  >
-                    {bill.projectedOutcome === "likely_pass"
-                      ? "Likely to Pass"
-                      : bill.projectedOutcome === "likely_fail"
-                      ? "Likely to Fail"
-                      : "Uncertain"}
-                  </span>
-                </div>
-
-                {bill.officialVotes ? (
+              {/* PROJECTED OUTCOME IS GONE. Khalid's call, and the right one:
+                  it was a prediction the platform had no basis for. Where it
+                  had any input at all it came from gapStats(), which derived
+                  the chamber's vote from a hash of the record's id — so the
+                  "projection" was a restatement of a fabricated number. What
+                  the chamber actually did, when it has done it, is below. */}
+              {bill.officialVotes ? (
+                <div className="flex items-center justify-end mt-4 pt-4 border-t border-slate-700/50">
                   <div>
                     <p className="text-slate-400 text-xs mb-1 text-right">Official Vote</p>
                     <div className="flex items-center">
@@ -609,8 +594,8 @@ export default function BillDetail() {
                       <span className="text-red-500 font-medium">{bill.officialVotes.nay} N</span>
                     </div>
                   </div>
-                ) : null}
-              </div>
+                </div>
+              ) : null}
             </div>
           </div>
 

@@ -69,6 +69,8 @@ export function B2BClientsTab() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [issued, setIssued] = useState<IssuedCredentials | null>(null);
+  const [settingPasswordFor, setSettingPasswordFor] = useState<B2BClient | null>(null);
+  const [chosenPassword, setChosenPassword] = useState("");
   const [form, setForm] = useState({
     username: "",
     name: "",
@@ -102,11 +104,32 @@ export function B2BClientsTab() {
     onError: (e: Error) => toast.error(e.message || "Could not create the client"),
   });
 
+  /**
+   * Rotate, either to a generated value or to one the admin typed.
+   *
+   * The endpoint has always accepted `newPassword`; this UI only ever sent the
+   * randomize flag, so the only way to give a client a password they had agreed
+   * on was to rotate and then read the generated one back to them. A chosen
+   * password is a legitimate need — onboarding calls, shared credentials
+   * handed over in person — and refusing it here did not make anything safer,
+   * it just moved the workaround off the platform.
+   *
+   * Generated is still the default and still the better path: a password an
+   * administrator invented is a password an administrator knows.
+   */
   const rotate = useMutation({
-    mutationFn: ({ id, what }: { id: string; what: "password" | "apiKey" }) =>
+    mutationFn: ({
+      id,
+      what,
+      newPassword,
+    }: {
+      id: string;
+      what: "password" | "apiKey";
+      newPassword?: string;
+    }) =>
       api.post<{ credentials: IssuedCredentials; revokedSessions: number }>(
         `/api/admin/b2b-clients/${id}/rotate`,
-        { [what]: true },
+        { [what]: true, ...(newPassword ? { newPassword } : {}) },
         { headers: adminAuthHeader() },
       ),
     onSuccess: (response) => {
@@ -243,6 +266,15 @@ export function B2BClientsTab() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setSettingPasswordFor(client)}
+                    disabled={rotate.isPending}
+                  >
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    Set password
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => rotate.mutate({ id: client.id, what: "apiKey" })}
                     disabled={rotate.isPending}
                   >
@@ -366,6 +398,71 @@ export function B2BClientsTab() {
 
           <DialogFooter>
             <Button onClick={() => setIssued(null)}>I have copied them</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set a chosen password.
+          Rotating to a generated value stays the default and the better path;
+          this exists because "the client agreed a password on a call" is a real
+          situation, and without it the workaround was to rotate and read the
+          generated one down the phone — which is worse. */}
+      <Dialog
+        open={!!settingPasswordFor}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSettingPasswordFor(null);
+            setChosenPassword("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Set a password</DialogTitle>
+            <DialogDescription>
+              For {settingPasswordFor?.name}. This signs out every session the old
+              password opened, and is recorded in the activity log with your name.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Input
+            type="text"
+            autoComplete="off"
+            placeholder="At least 12 characters"
+            value={chosenPassword}
+            onChange={(event) => setChosenPassword(event.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Shown as you type on purpose — you are about to read it to somebody, and a
+            masked field is how a typo becomes a locked-out client.
+          </p>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSettingPasswordFor(null);
+                setChosenPassword("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={chosenPassword.trim().length < 12 || rotate.isPending}
+              onClick={() => {
+                const client = settingPasswordFor;
+                if (!client) return;
+                rotate.mutate({
+                  id: client.id,
+                  what: "password",
+                  newPassword: chosenPassword.trim(),
+                });
+                setSettingPasswordFor(null);
+                setChosenPassword("");
+              }}
+            >
+              Set it
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

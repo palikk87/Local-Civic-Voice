@@ -29,6 +29,7 @@ import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { useVotingStore } from "@/lib/mobile/voting-store";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
 import { api } from "@/lib/api";
+import { queryKeys } from "@/lib/mobile/api-hooks";
 import { cn } from "@/lib/utils";
 import { useUserVoteHistory } from "@/lib/mobile/hooks";
 import { useCurrentUser, usePermissions } from "@/hooks/use-civic-auth";
@@ -216,6 +217,27 @@ export default function Profile() {
   // a public repository, and which hands the cards to whoever registers that
   // name next. `isStaff` reads the role off the signed-in account instead.
 
+  // THE REAL COUNTS, FROM THE SERVER.
+  //
+  // These used to come off `user`, which is built by authUserFromSession() —
+  // and that function sets `followers: 0, following: 0, votesCount: 0` as
+  // literals, because a Better Auth session carries no such fields. So the
+  // profile showed zero followers and zero following forever, no matter what
+  // the database held. Khalid followed somebody and watched the number stay at
+  // 0 and reasonably concluded following was broken; it was not, the display
+  // was a constant.
+  const { data: liveProfile } = useQuery({
+    queryKey: queryKeys.user(user?.id ?? ""),
+    queryFn: () =>
+      api.get<{ followers: number; following: number; votesCount: number }>(
+        `/api/users/${user?.id}`,
+      ),
+    enabled: !!user?.id,
+  });
+
+  const followerCount = liveProfile?.followers ?? 0;
+  const followingCount = liveProfile?.following ?? 0;
+
   // Votes
   const mockUserVotes = useVotingStore((s) => s.userVotes);
   // useUserVoteHistory was the Supabase half. It was only ever passed a user id
@@ -395,11 +417,11 @@ export default function Profile() {
             {/* Follow Stats */}
             <div className="flex mt-4">
               <button className="flex flex-col items-center mr-6">
-                <span className="text-white font-bold text-lg">{user.followers}</span>
+                <span className="text-white font-bold text-lg">{followerCount}</span>
                 <span className="text-slate-400 text-sm">Followers</span>
               </button>
               <button className="flex flex-col items-center">
-                <span className="text-white font-bold text-lg">{user.following}</span>
+                <span className="text-white font-bold text-lg">{followingCount}</span>
                 <span className="text-slate-400 text-sm">Following</span>
               </button>
             </div>
