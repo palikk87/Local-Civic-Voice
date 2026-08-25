@@ -27,7 +27,40 @@ model User {
   role          String  @default("user")
   image         String?
   bio           String?
+  /// Free text on the profile card. Display only — never parsed, never counted.
+  /// The structured jurisdiction is the two columns below.
   location      String?
+
+  // ---------------------------------------------------------------------
+  // JURISDICTION — where this person's voice belongs, and nothing more.
+  //
+  // Bill of Rights Article IV: "AYE & NAY shall collect only the minimum data
+  // necessary to verify citizenship AND JURISDICTION." Jurisdiction is named
+  // there as a legitimate purpose, so this is authorised — and the same
+  // sentence caps it, so this is where the collection stops. There is no
+  // street, no ZIP kept after it has been resolved, no coordinates, no IP.
+  //
+  // OPTIONAL, AND NEVER REQUIRED TO VOTE. Article I holds that the power of the
+  // vote originates in the individual; making a ballot conditional on handing
+  // over an address would be exactly the lock-in that article forbids. Somebody
+  // who declines still votes, and their voice still counts in the national
+  // Pulse. It simply cannot be placed on a map, which is the truth and is what
+  // the map says.
+  //
+  // SELF-DECLARED, NOT INFERRED. Nothing geolocates anybody. The person picks
+  // their district from the real congress.gov roster and can see their
+  // representative's name while doing it, which is both a confirmation for them
+  // and the reason no guess is needed.
+  // ---------------------------------------------------------------------
+
+  /// Two-letter state, e.g. "CA". Null until the person says.
+  stateCode  String?
+  /// "CA-12", or "AK-AL" for an at-large seat. Null until the person says, and
+  /// null for somebody who gave a state but not a district.
+  districtId String?
+  /// When they last set it. A district that has not been confirmed since the
+  /// last redistricting is a district that may now be wrong.
+  jurisdictionSetAt DateTime?
 
   // Moderation state. Read and written by the admin console (routes/admin.ts).
   //
@@ -72,6 +105,11 @@ model User {
   reportsFiled           Report[]                  @relation("Reporter")
   reportsAbout           Report[]                  @relation("ReportedUser")
   positionEvents         PositionEvent[]
+
+  // Aggregating the Pulse by geography is the whole purpose of the two
+  // jurisdiction columns above, and it is a grouped count over the whole table.
+  @@index([stateCode])
+  @@index([districtId])
 }
 
 model AdminSession {

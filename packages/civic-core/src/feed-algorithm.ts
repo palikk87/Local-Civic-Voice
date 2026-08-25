@@ -565,18 +565,30 @@ function getHoursAgo(timestamp: string): number {
   return (now.getTime() - then.getTime()) / (1000 * 60 * 60);
 }
 
+/**
+ * Is this record local to somebody in `location`?
+ *
+ * ONE TEST, AND IT IS THE SPONSOR'S STATE. A record introduced by a member from
+ * your state is genuinely yours in a way nothing else here can establish.
+ *
+ * THE KEYWORD MATCH IS GONE. It also returned true when the bill's title
+ * contained the literal word "state", which is a large fraction of federal
+ * legislation — "Department of State", "state and local governments", "United
+ * States". A filter that admits most of the corpus is not a filter, and it made
+ * "Local" look populated while meaning nothing. Matching the state's own name
+ * in a title fared no better: every bill mentioning Washington matched for
+ * everybody in Washington state.
+ *
+ * A narrower true filter beats a broad false one. If a record's real
+ * jurisdictional reach becomes available later — the districts a program
+ * actually funds, say — that is a new signal to add, not a keyword to guess
+ * with.
+ */
 function checkLocalRelevance(
   bill: Bill,
   location: { state: string; district?: string }
 ): boolean {
-  // Check if bill sponsor is from user's state
-  if (bill.sponsor.state === location.state) return true;
-
-  // Check if bill title/category affects local issues
-  const localKeywords = ['state', location.state.toLowerCase()];
-  const titleLower = bill.title.toLowerCase();
-
-  return localKeywords.some(keyword => titleLower.includes(keyword));
+  return bill.sponsor.state === location.state;
 }
 
 // ==========================================
@@ -597,5 +609,5 @@ export const FEED_TYPES: FeedConfig[] = [
   { type: 'following', label: 'Following', icon: 'Users', description: 'From people you follow' },
   { type: 'trending', label: 'Trending', icon: 'TrendingUp', description: 'Most engaging right now' },
   { type: 'gaps', label: 'Gaps', icon: 'AlertTriangle', description: 'Public vs Congress disagreements' },
-  { type: 'local', label: 'Local', icon: 'MapPin', description: 'Bills affecting your area' },
+  { type: 'local', label: 'Local', icon: 'MapPin', description: 'Introduced by a member from your state' },
 ];

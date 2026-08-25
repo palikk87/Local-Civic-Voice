@@ -98,38 +98,71 @@ export interface SentimentData {
   changePercent: number | null;
 }
 
-export interface DistrictData {
-  districtId: string;
-  state: string;
-  stateCode: string;
-  representative: string;
-  party: 'D' | 'R' | 'I';
-  coordinates: { lat: number; lng: number };
-  engagement: {
-    totalVotes: number;
-    activeUsers: number;
-    postsCreated: number;
-  };
-  sentiment: {
-    overall: number;
-    byCategory: Record<string, number>;
-  };
+
+
+/**
+ * A place's Pulse, or the reason there isn't one.
+ *
+ * The API withholds numbers for any district where fewer than `floor` people
+ * have voted — Bill of Rights Article IV shields personal identity from third
+ * parties, and a percentage over one voter is that person's ballot with their
+ * address on it. A discriminated union rather than nullable fields, so a screen
+ * cannot render `score` without having checked.
+ */
+export type PlaceResult =
+  | { enough: true; voices: number; support: number; oppose: number; score: number }
+  | { enough: false; voices: number; reason: 'not_enough_voices'; floor: number };
+
+/** How much of the map the data is actually drawn from. Shown, never implied. */
+export interface Coverage {
+  participants: number;
+  placed: number;
+  districtsRepresented: number;
+  districtsReportable: number;
 }
 
-export interface StateData {
-  stateCode: string;
+export interface Representative {
   name: string;
-  totalDistricts: number;
-  engagement: {
-    totalVotes: number;
-    activeUsers: number;
-    postsCreated: number;
-  };
-  sentiment: {
-    overall: number;
-    byCategory: Record<string, number>;
-  };
-  topIssues: Array<{ id: string; name: string; sentiment: number }>;
+  party: string;
+  photoUrl: string | null;
+}
+
+export interface StateRow {
+  stateCode: string;
+  stateName: string;
+  residents: number;
+  districtsRepresented: number;
+  pulse: PlaceResult;
+}
+
+export interface DistrictRow {
+  districtId: string;
+  stateCode: string;
+  stateName: string;
+  district: number | null;
+  representative: Representative | null;
+  residents: number;
+  pulse: PlaceResult;
+}
+
+export interface HeatmapPoint {
+  districtId: string;
+  stateCode: string;
+  representative: Representative | null;
+  party: 'D' | 'R' | 'I' | null;
+  /** Voices behind the shade. Never below the floor. */
+  value: number;
+  sentiment: number | null;
+}
+
+export interface HeatmapResult {
+  districts: HeatmapPoint[];
+  /** Districts deliberately withheld, with the count that is safe to publish. */
+  suppressed: { districtId: string; voices: number; reason: string }[];
+  range: { min: number; max: number };
+  coverage: Coverage;
+  floor: number;
+  derivation: string;
 }
 
 export interface IssueData {
@@ -174,40 +207,50 @@ export interface SentimentOverview {
   topIssues: Array<{ id: string; name: string; sentiment: number; volume: number }>;
 }
 
-export interface HeatmapData {
-  districts: Array<{
-    districtId: string;
-    coordinates: { lat: number; lng: number };
-    value: number;
-    sentiment: number;
-    party: 'D' | 'R' | 'I';
-  }>;
-  range: { min: number; max: number };
-  filters: {
-    category?: string;
-    party?: string;
-    minEngagement?: number;
-  };
+
+/**
+ * A record's measured history, and a projection only where one is supported.
+ *
+ * The old shape carried `confidence` and `modelVersion: "v2.3.1"` over a seeded
+ * random walk. Both are gone; `basis` replaces them, because what a reader
+ * needs in order to judge a line is how many days and voices it rests on.
+ */
+export interface PulseDay {
+  date: string;
+  support: number;
+  oppose: number;
+  lawChanged: boolean;
 }
 
-export interface ForecastData {
-  targetId: string;
-  targetType: 'bill' | 'issue';
-  currentSentiment: number;
-  predictions: Array<{
-    date: string;
-    predicted: number;
-    confidence: number;
-    lowerBound: number;
-    upperBound: number;
-  }>;
-  factors: Array<{
-    factor: string;
-    impact: number;
-    direction: 'positive' | 'negative';
-  }>;
-  recommendation: string;
+export interface ProjectedPoint {
+  date: string;
+  predicted: number;
+  lowerBound: number;
+  upperBound: number;
 }
+
+export interface TrajectoryData {
+  currentSentiment: number;
+  /** Observed. Present whenever anybody has voted. */
+  history: PulseDay[];
+  basis: {
+    days: number;
+    voices: number;
+    firstDay: string | null;
+    lastDay: string | null;
+    /** Days the law's own text changed — movement may be about that. */
+    lawChangedOn: string[];
+  };
+  /** Null when the history is too short to fit a line to. */
+  projection: {
+    points: ProjectedPoint[];
+    slopePerDay: number;
+    residual: number;
+    method: string;
+  } | null;
+  noProjection: { reason: string; daysObserved: number; daysNeeded: number } | null;
+}
+
 
 interface B2BState {
   session: B2BSession | null;
@@ -217,11 +260,12 @@ interface B2BState {
 
   // Data
   sentimentOverview: SentimentOverview | null;
-  districts: DistrictData[];
-  states: StateData[];
+  districts: DistrictRow[];
+  states: StateRow[];
+  coverage: Coverage | null;
   issues: IssueData[];
   trendingTopics: TrendingTopic[];
-  heatmapData: HeatmapData | null;
+  heatmapData: HeatmapResult | null;
 
   // Actions
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -230,15 +274,15 @@ interface B2BState {
 
   // Data fetching
   fetchSentimentOverview: () => Promise<void>;
-  fetchDistricts: (params?: { stateCode?: string; party?: string }) => Promise<void>;
+  fetchDistricts: (params?: { category?: string }) => Promise<void>;
   fetchStates: () => Promise<void>;
-  fetchStateDetails: (stateCode: string) => Promise<StateData | null>;
-  fetchDistrictDetails: (districtId: string) => Promise<DistrictData | null>;
+  fetchStateDetails: (stateCode: string) => Promise<{ stateCode: string; stateName: string; pulse: PlaceResult; residents: number; districts: DistrictRow[]; coverage: Coverage } | null>;
+
   fetchIssues: () => Promise<void>;
   fetchIssueDetails: (issueId: string) => Promise<IssueData | null>;
   fetchTrendingTopics: () => Promise<void>;
   fetchHeatmapData: (filters?: { category?: string; party?: string; minEngagement?: number }) => Promise<void>;
-  fetchForecast: (targetType: 'bill' | 'issue', targetId: string) => Promise<ForecastData | null>;
+  fetchForecast: (targetType: 'bill' | 'issue', targetId: string) => Promise<TrajectoryData | null>;
   fetchBillSentiment: (billId: string) => Promise<SentimentData | null>;
 }
 
@@ -293,6 +337,7 @@ export const useB2BStore = create<B2BState>()(
       sentimentOverview: null,
       districts: [],
       states: [],
+      coverage: null,
       issues: [],
       trendingTopics: [],
       heatmapData: null,
@@ -502,64 +547,49 @@ export const useB2BStore = create<B2BState>()(
         if (!session?.token) return;
 
         try {
-          const queryParams = new URLSearchParams();
-          if (params.stateCode) queryParams.set('stateCode', params.stateCode);
-          if (params.party) queryParams.set('party', params.party);
+          const query = new URLSearchParams({ limit: '500' });
+          if (params.category) query.set('category', params.category);
 
-          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/districts?${queryParams}`, {
+          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/districts?${query}`, {
             headers: { 'Authorization': `Bearer ${session.token}` },
           });
+          if (!response.ok) return;
 
-          if (response.ok) {
-            const data = await response.json();
-            // Backend returns { results: [...] }, map to expected format
-            const districtsData = data.districts || data.results || [];
-            set({ districts: districtsData });
-          }
+          const data = await response.json();
+          set({
+            districts: (data.results ?? []) as DistrictRow[],
+            coverage: (data.coverage ?? null) as Coverage | null,
+          });
         } catch {
-          // Ignore errors
+          // Same.
         }
       },
 
+      /**
+       * States somebody actually lives in.
+       *
+       * Was: all 51, every one carrying the national sentiment figure
+       * multiplied by its share of the 435 House seats. There is no
+       * apportionment now — a state with no declared residents is not in the
+       * list, which is the truth about it.
+       */
       fetchStates: async () => {
         const { session } = get();
         if (!session?.token) return;
 
         try {
-          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/states`, {
+          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/states?limit=60`, {
             headers: { 'Authorization': `Bearer ${session.token}` },
           });
+          if (!response.ok) return;
 
-          if (response.ok) {
-            const data = await response.json();
-            // Backend returns { results: [...] } with stateName, map to expected format
-            const statesData = data.states || data.results || [];
-            const mappedStates: StateData[] = statesData.map((s: {
-              stateCode: string;
-              stateName?: string;
-              name?: string;
-              totalDistricts: number;
-              engagement: {
-                totalVotes: number;
-                activeUsers: number;
-                postsCreated: number;
-              };
-              sentiment: {
-                overall: number;
-                byCategory: Record<string, number>;
-              };
-            }) => ({
-              stateCode: s.stateCode,
-              name: s.stateName || s.name || s.stateCode,
-              totalDistricts: s.totalDistricts,
-              engagement: s.engagement,
-              sentiment: s.sentiment,
-              topIssues: [],
-            }));
-            set({ states: mappedStates });
-          }
+          const data = await response.json();
+          set({
+            states: (data.results ?? []) as StateRow[],
+            coverage: (data.coverage ?? null) as Coverage | null,
+          });
         } catch {
-          // Ignore errors
+          // Leave the previous value alone rather than blanking the screen.
         }
       },
 
@@ -571,33 +601,12 @@ export const useB2BStore = create<B2BState>()(
           const response = await fetch(`${BACKEND_URL}/api/b2b/geo/states/${stateCode}`, {
             headers: { 'Authorization': `Bearer ${session.token}` },
           });
-
-          if (response.ok) {
-            return await response.json();
-          }
-          return null;
+          return response.ok ? await response.json() : null;
         } catch {
           return null;
         }
       },
 
-      fetchDistrictDetails: async (districtId) => {
-        const { session } = get();
-        if (!session?.token) return null;
-
-        try {
-          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/districts/${districtId}`, {
-            headers: { 'Authorization': `Bearer ${session.token}` },
-          });
-
-          if (response.ok) {
-            return await response.json();
-          }
-          return null;
-        } catch {
-          return null;
-        }
-      },
 
       fetchIssues: async () => {
         const { session } = get();
@@ -687,26 +696,31 @@ export const useB2BStore = create<B2BState>()(
         }
       },
 
+      /**
+       * Only districts that clear the privacy floor carry a shade. The ones
+       * withheld come back in `suppressed` with their voice count, so the map
+       * can mark them "too few to report" — grey and "we will not say" are
+       * different claims.
+       */
       fetchHeatmapData: async (filters = {}) => {
         const { session } = get();
         if (!session?.token) return;
 
         try {
-          const queryParams = new URLSearchParams();
-          if (filters.category) queryParams.set('category', filters.category);
-          if (filters.party) queryParams.set('party', filters.party);
-          if (filters.minEngagement) queryParams.set('minEngagement', filters.minEngagement.toString());
+          const query = new URLSearchParams();
+          if (filters.category) query.set('category', filters.category);
+          if (filters.party) query.set('party', filters.party);
+          if (filters.minEngagement) query.set('minEngagement', String(filters.minEngagement));
 
-          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/heatmap?${queryParams}`, {
+          const response = await fetch(`${BACKEND_URL}/api/b2b/geo/heatmap?${query}`, {
             headers: { 'Authorization': `Bearer ${session.token}` },
           });
+          if (!response.ok) return;
 
-          if (response.ok) {
-            const data = await response.json();
-            set({ heatmapData: data });
-          }
+          const data = (await response.json()) as HeatmapResult;
+          set({ heatmapData: data, coverage: data.coverage ?? null });
         } catch {
-          // Ignore errors
+          // Same.
         }
       },
 

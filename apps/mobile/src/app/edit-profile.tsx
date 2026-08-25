@@ -32,6 +32,7 @@ import { ArrowLeft, Camera } from 'lucide-react-native';
 
 import { api, uploadMedia } from '@/lib/api/api';
 import { AuthGate } from '@/components/auth/AuthGate';
+import { DistrictPicker } from '@/components/civic/DistrictPicker';
 import { useCurrentUser } from '@/lib/auth/use-civic-auth';
 
 function Field({
@@ -224,6 +225,18 @@ function EditProfileContent() {
             placeholder="What you follow, and why."
           />
           <Field label="Location" value={location} onChangeText={setLocation} maxLength={100} />
+          {/* Free text, shown on the profile card, parsed by nothing. The
+              structured jurisdiction below is a separate question with a
+              separate answer — "Brooklyn, NY" cannot be counted and NY-8 can. */}
+          <Text className="text-slate-500 text-xs mb-4 -mt-2">
+            Shown on your profile. Not used to place your vote.
+          </Text>
+
+          {/* Saves on its own, immediately — it is a right rather than a form
+              field, and taking it back must not be queued behind a Save. */}
+          <View className="border-t border-slate-800 pt-4 mt-2">
+            <DistrictPicker />
+          </View>
 
           <Text className="text-slate-500 text-xs mt-2">
             Your positions and posts stay exactly as you made them.

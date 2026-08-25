@@ -54,7 +54,8 @@ import { useCurrentUser, useRequireAuth } from '@/lib/auth/use-civic-auth';
 import type { FeedItemWithDetails, Bill as SupabaseBill } from '@/lib/database.types';
 
 // Import new systems
-import { rankFeedItems, getTrendingItems, getGapItems, FEED_TYPES, type FeedType, type ScoredFeedItem, getRandomizedBillFeed, fisherYatesShuffle } from '@/lib/feed-algorithm';
+import { useJurisdiction } from '@/lib/use-jurisdiction';
+import { rankFeedItems, getTrendingItems, getGapItems, getLocalItems, FEED_TYPES, type FeedType, type ScoredFeedItem, getRandomizedBillFeed, fisherYatesShuffle } from '@/lib/feed-algorithm';
 import { useGamificationStore, selectCivicScore, selectStreak, CIVIC_LEVELS } from '@/lib/gamification';
 import { useEngagementStore, selectUnreadCount } from '@/lib/engagement';
 import { verifyBill, getTrustBadge } from '@/lib/trust-verification';
@@ -854,6 +855,11 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [feedType, setFeedType] = useState<FeedType>('for_you');
   const [branchFilter, setBranchFilter] = useState<GovernmentBranch | 'all'>('all');
+
+  // One reader for "where am I", shared with the web app and the district
+  // picker. Null is a complete answer and the Local tab renders it.
+  const { data: jurisdiction } = useJurisdiction();
+  const myState = jurisdiction?.stateCode ?? null;
   const [showShareModal, setShowShareModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ScoredFeedItem | null>(null);
   // Better Auth session. Was the Supabase context, which is never populated —
@@ -960,12 +966,23 @@ export default function HomeScreen() {
         scoredItems = getGapItems(rawItems, 20);
         break;
       case 'following':
-        // Filter to followed users (mock: just return all)
+        /*
+         * The backend decides who you follow, so this tab asks for that feed
+         * rather than re-deriving it here. Ranking only orders what came back.
+         * It previously carried the comment "mock: just return all" and did
+         * exactly that.
+         */
         scoredItems = rankFeedItems(rawItems, null, { diversityEnabled: false });
         break;
       case 'local':
-        // Would filter by user's location
-        scoredItems = rankFeedItems(rawItems, null);
+        /*
+         * Records introduced by a member from your state. Was: every item, with
+         * the comment "would filter by user's location" and no location to
+         * filter by. There is one now — self-declared and optional — and the
+         * screen says so when it is missing instead of showing the national
+         * feed under a Local heading.
+         */
+        scoredItems = myState ? getLocalItems(rawItems, { state: myState }, 50) : [];
         break;
       default:
         scoredItems = rankFeedItems(rawItems);
@@ -979,7 +996,7 @@ export default function HomeScreen() {
 
 
     return scoredItems;
-  }, [algorithmicFeed, feedType, branchFilter, seenBillIds.size]);
+  }, [algorithmicFeed, feedType, branchFilter, seenBillIds.size, myState]);
 
   // Track seen bills separately to avoid circular updates
   const lastSeenRef = React.useRef<string[]>([]);
@@ -1116,6 +1133,36 @@ export default function HomeScreen() {
                 >
                   <Text className="text-white text-sm">Try again</Text>
                 </Pressable>
+              </View>
+            ) : feedType === 'local' && !myState ? (
+              /*
+                 The Local tab, for somebody who has not said where they are. It
+                 used to show them the national feed under a Local heading —
+                 which is not an empty state, it is a wrong one.
+              */
+              <View className="items-center justify-center py-20 px-6">
+                <MapPin size={28} color="#64748B" />
+                <Text className="text-slate-300 text-lg mt-3">Local needs your state</Text>
+                <Text className="text-slate-500 text-sm mt-2 text-center">
+                  Pick your district in your profile and this fills with records introduced by the
+                  people who represent you. It is optional, it is only your state and district, and
+                  you can remove it whenever you like.
+                </Text>
+                <Pressable
+                  onPress={() => router.push('/edit-profile')}
+                  className="mt-4 bg-blue-600 px-5 py-2.5 rounded-xl"
+                >
+                  <Text className="text-white text-sm font-medium">Set my district</Text>
+                </Pressable>
+              </View>
+            ) : feedType === 'local' ? (
+              <View className="items-center justify-center py-20 px-6">
+                <MapPin size={28} color="#64748B" />
+                <Text className="text-slate-300 text-lg mt-3">Nothing local yet</Text>
+                <Text className="text-slate-500 text-sm mt-2 text-center">
+                  No stored record was introduced by a member from {myState}. This stays empty
+                  rather than showing you the national feed under a Local heading.
+                </Text>
               </View>
             ) : (
               /* A genuinely empty feed. The database has no posts yet, which is

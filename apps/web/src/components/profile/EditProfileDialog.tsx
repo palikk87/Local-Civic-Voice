@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { DistrictPicker } from "@/components/civic/DistrictPicker";
 
 interface EditableProfile {
   displayName: string;
@@ -203,6 +204,21 @@ export function EditProfileDialog({
               maxLength={100}
               onChange={(event) => setLocation(event.target.value)}
             />
+            {/*
+              Free text, shown on the profile card, parsed by nothing. The
+              structured jurisdiction below is a separate question with a
+              separate answer, because "Brooklyn, NY" cannot be counted and
+              NY-8 can.
+            */}
+            <p className="text-xs text-muted-foreground">
+              Shown on your profile. Not used to place your vote.
+            </p>
+          </div>
+
+          <div className="border-t border-border pt-4">
+            {/* Saves on its own, immediately — it is a right rather than a form
+                field, and taking it back must not be queued behind a Save. */}
+            <DistrictPicker />
           </div>
         </div>
 

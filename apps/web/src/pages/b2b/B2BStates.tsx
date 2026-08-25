@@ -1,333 +1,221 @@
-// Web port of webapp/mobile/src/app/b2b/states.tsx — state-by-state analysis.
+/**
+ * States, counted from the people in them.
+ *
+ * WHAT THIS SCREEN USED TO SHOW. All 51 states, always, each carrying the one
+ * national sentiment figure multiplied by its share of the 435 House seats — so
+ * every state displayed the identical score, and the vote counts were a
+ * division sum rather than a count. It looked like national coverage on an
+ * empty database.
+ *
+ * It now shows states somebody has actually declared, and says how many people
+ * that is. A state with too few voices to aggregate says so.
+ */
 import { useEffect, useState } from "react";
-import {
-  Search,
-  Building2,
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Vote,
-  FileText,
-  X,
-} from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Building2, ChevronRight, Loader2, MapPin, Users } from "lucide-react";
 import { B2BShell } from "@/components/b2b/B2BShell";
-import { useB2BStore, type StateData } from "@/lib/mobile/b2b-store";
+import {
+  useB2BStore,
+  type Coverage,
+  type DistrictRow,
+  type PlaceResult,
+  type StateRow,
+} from "@/lib/mobile/b2b-store";
 import { cn } from "@/lib/utils";
 
-type SortKey = "engagement" | "sentiment" | "alphabetical";
+/** One rendering of the union, used everywhere a Pulse appears. */
+function Pulse({ pulse, className }: { pulse: PlaceResult; className?: string }) {
+  if (!pulse.enough) {
+    return (
+      <span className={cn("text-sm text-slate-400", className)}>
+        {pulse.voices === 0
+          ? "No votes yet"
+          : `${pulse.voices} ${pulse.voices === 1 ? "voice" : "voices"} — too few to report`}
+      </span>
+    );
+  }
 
-function StateCard({
-  state,
-  rank,
-  onClick,
-}: {
-  state: StateData;
-  rank: number;
-  onClick: () => void;
-}) {
-  const isPositive = state.sentiment.overall > 0;
+  const leaning = pulse.score > 0;
+  return (
+    <span
+      className={cn(
+        "text-sm font-semibold",
+        pulse.score === 0 ? "text-slate-300" : leaning ? "text-emerald-400" : "text-red-400",
+        className,
+      )}
+    >
+      {leaning ? "+" : ""}
+      {(pulse.score * 100).toFixed(0)}%{" "}
+      <span className="font-normal text-slate-400">
+        ({pulse.support} for, {pulse.oppose} against)
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The honesty header.
+ *
+ * A map drawn from forty people out of twelve thousand looks exactly like a map
+ * drawn from everybody, and no amount of shading conveys the difference. So it
+ * is said in words, above the data, every time.
+ */
+function CoverageNote({ coverage }: { coverage: Coverage | null }) {
+  if (!coverage) return null;
 
   return (
-    <button
-      onClick={onClick}
-      className="mb-3 w-full rounded-2xl border border-slate-700/50 bg-slate-800/30 p-4 text-left transition-colors hover:bg-slate-800/60"
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center">
-          <div className="mr-3 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20">
-            <span className="font-bold text-indigo-400">{rank}</span>
-          </div>
-          <div>
-            <span className="block text-lg font-semibold text-white">{state.name}</span>
-            <span className="block text-sm text-slate-400">
-              {state.totalDistricts} districts
-            </span>
-          </div>
-        </div>
-        <div
-          className={cn(
-            "flex items-center rounded-full px-3 py-1",
-            isPositive ? "bg-emerald-500/20" : "bg-red-500/20",
-          )}
-        >
-          {isPositive ? (
-            <TrendingUp size={14} color="#34D399" />
-          ) : (
-            <TrendingDown size={14} color="#EF4444" />
-          )}
-          <span className={cn("ml-1 font-bold", isPositive ? "text-emerald-400" : "text-red-400")}>
-            {isPositive ? "+" : ""}
-            {(state.sentiment.overall * 100).toFixed(1)}%
-          </span>
-        </div>
+    <div className="mb-5 rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+      <div className="flex items-center">
+        <Users size={16} color="#818CF8" />
+        <span className="ml-2 font-medium text-white">What this is drawn from</span>
       </div>
-
-      <div className="mb-1 grid grid-cols-3 gap-3">
-        <div className="rounded-xl bg-slate-700/30 p-2">
-          <div className="flex items-center">
-            <Vote size={12} color="#818CF8" />
-            <span className="ml-1 text-xs text-slate-400">Votes</span>
-          </div>
-          <span className="font-bold text-white">
-            {state.engagement.totalVotes.toLocaleString()}
-          </span>
-        </div>
-        <div className="rounded-xl bg-slate-700/30 p-2">
-          <div className="flex items-center">
-            <Users size={12} color="#34D399" />
-            <span className="ml-1 text-xs text-slate-400">Active</span>
-          </div>
-          <span className="font-bold text-white">
-            {state.engagement.activeUsers.toLocaleString()}
-          </span>
-        </div>
-        <div className="rounded-xl bg-slate-700/30 p-2">
-          <div className="flex items-center">
-            <FileText size={12} color="#FBBF24" />
-            <span className="ml-1 text-xs text-slate-400">Posts</span>
-          </div>
-          <span className="font-bold text-white">
-            {state.engagement.postsCreated.toLocaleString()}
-          </span>
-        </div>
-      </div>
-
-      {state.topIssues && state.topIssues.length > 0 ? (
-        <div className="mt-3 flex items-center border-t border-slate-700/30 pt-3">
-          <span className="mr-2 text-xs text-slate-400">Top:</span>
-          {state.topIssues.slice(0, 3).map((issue) => (
-            <span
-              key={issue.id}
-              className={cn(
-                "mr-1 rounded-full px-2 py-0.5 text-xs",
-                issue.sentiment > 0
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : "bg-red-500/10 text-red-400",
-              )}
-            >
-              {issue.name}
-            </span>
-          ))}
-        </div>
-      ) : null}
-    </button>
+      <p className="mt-2 text-sm text-slate-300">
+        {coverage.placed.toLocaleString()} of {coverage.participants.toLocaleString()} members have
+        told us their district, across {coverage.districtsRepresented} of them.{" "}
+        {coverage.districtsReportable} have enough voices to report.
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        Nothing here is estimated from national totals. Districts with too few voters are withheld
+        rather than filled in.
+      </p>
+    </div>
   );
 }
 
 export default function B2BStates() {
-  const [search, setSearch] = useState<string>("");
-  const [sortBy, setSortBy] = useState<SortKey>("engagement");
-  const [selectedState, setSelectedState] = useState<StateData | null>(null);
-
   const states = useB2BStore((s) => s.states);
+  const coverage = useB2BStore((s) => s.coverage);
   const isAuthenticated = useB2BStore((s) => s.isAuthenticated);
   const fetchStates = useB2BStore((s) => s.fetchStates);
   const fetchStateDetails = useB2BStore((s) => s.fetchStateDetails);
 
+  const [loading, setLoading] = useState(true);
+  const [openState, setOpenState] = useState<string | null>(null);
+  const [districts, setDistricts] = useState<DistrictRow[]>([]);
+  const [loadingDistricts, setLoadingDistricts] = useState(false);
+
   useEffect(() => {
-    if (isAuthenticated) fetchStates();
+    if (!isAuthenticated) return;
+    void fetchStates().finally(() => setLoading(false));
   }, [isAuthenticated, fetchStates]);
 
-  const handleStateClick = async (state: StateData) => {
-    const details = await fetchStateDetails(state.stateCode);
-    setSelectedState(details ?? state);
+  const open = async (state: StateRow) => {
+    if (openState === state.stateCode) {
+      setOpenState(null);
+      return;
+    }
+    setOpenState(state.stateCode);
+    setLoadingDistricts(true);
+    const detail = await fetchStateDetails(state.stateCode);
+    setDistricts(detail?.districts ?? []);
+    setLoadingDistricts(false);
   };
 
-  const filteredStates = states
-    .filter(
-      (state) =>
-        state.name.toLowerCase().includes(search.toLowerCase()) ||
-        state.stateCode.toLowerCase().includes(search.toLowerCase()),
-    )
-    .sort((a, b) => {
-      switch (sortBy) {
-        case "engagement":
-          return b.engagement.totalVotes - a.engagement.totalVotes;
-        case "sentiment":
-          return Math.abs(b.sentiment.overall) - Math.abs(a.sentiment.overall);
-        case "alphabetical":
-          return a.name.localeCompare(b.name);
-        default:
-          return 0;
-      }
-    });
-
-  const sortOptions: Array<{ key: SortKey; label: string }> = [
-    { key: "engagement", label: "Engagement" },
-    { key: "sentiment", label: "Sentiment" },
-    { key: "alphabetical", label: "A-Z" },
-  ];
-
-  const totalVotes = states.reduce((sum, s) => sum + s.engagement.totalVotes, 0);
-  const totalActiveUsers = states.reduce((sum, s) => sum + s.engagement.activeUsers, 0);
-  const avgSentiment =
-    states.length > 0 ? states.reduce((sum, s) => sum + s.sentiment.overall, 0) / states.length : 0;
+  if (loading) {
+    return (
+      <B2BShell title="States">
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin" color="#818CF8" />
+        </div>
+      </B2BShell>
+    );
+  }
 
   return (
-    <B2BShell title="State Analysis">
-      <p className="-mt-4 mb-4 text-sm text-slate-400">State-by-state breakdown</p>
+    <B2BShell title="States">
+      <CoverageNote coverage={coverage} />
 
-      {/* Summary Stats */}
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-3">
-          <span className="block text-xs text-slate-400">Total Votes</span>
-          <span className="block text-xl font-bold text-white">{totalVotes.toLocaleString()}</span>
-        </div>
-        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-3">
-          <span className="block text-xs text-slate-400">Active Users</span>
-          <span className="block text-xl font-bold text-white">
-            {totalActiveUsers.toLocaleString()}
-          </span>
-        </div>
-        <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-3">
-          <span className="block text-xs text-slate-400">Avg Sentiment</span>
-          <span
-            className={cn(
-              "block text-xl font-bold",
-              avgSentiment > 0 ? "text-emerald-400" : "text-red-400",
-            )}
-          >
-            {avgSentiment > 0 ? "+" : ""}
-            {(avgSentiment * 100).toFixed(1)}%
-          </span>
-        </div>
-      </div>
-
-      {/* Search & Sort */}
-      <div className="mb-3 flex items-center rounded-xl bg-slate-800/50 px-4 py-1">
-        <Search size={20} color="#64748B" />
-        <input
-          className="flex-1 bg-transparent px-3 py-3 text-white outline-none placeholder:text-slate-500"
-          placeholder="Search states..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search.length > 0 ? (
-          <button onClick={() => setSearch("")} aria-label="Clear search">
-            <X size={18} color="#64748B" />
-          </button>
-        ) : null}
-      </div>
-
-      <div className="mb-4 flex gap-2">
-        {sortOptions.map((option) => (
-          <button
-            key={option.key}
-            onClick={() => setSortBy(option.key)}
-            className={cn(
-              "rounded-full px-4 py-2 text-sm transition-colors",
-              sortBy === option.key
-                ? "bg-indigo-500 font-medium text-white"
-                : "bg-slate-800/50 text-slate-400 hover:bg-slate-800",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-
-      {/* States List */}
-      {filteredStates.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <Building2 size={48} color="#475569" />
-          <span className="mt-4 text-lg text-slate-400">No states found</span>
+      {states.length === 0 ? (
+        /*
+          The honest empty state. Previously this screen could not be empty —
+          it always had 51 rows — which is precisely why nobody noticed there
+          was no data behind them.
+        */
+        <div className="rounded-2xl border border-slate-700/50 bg-slate-800/30 p-8 text-center">
+          <MapPin size={28} color="#64748B" className="mx-auto" />
+          <p className="mt-3 font-medium text-white">No state has voices in it yet.</p>
+          <p className="mx-auto mt-2 max-w-md text-sm text-slate-400">
+            Members choose their district themselves, and it is optional. As they do, states appear
+            here with real counts. Nothing is estimated in the meantime.
+          </p>
         </div>
       ) : (
-        <div className="md:columns-2 md:gap-4 [&>button]:break-inside-avoid">
-          {filteredStates.map((state, index) => (
-            <StateCard
+        <div className="space-y-3">
+          {states.map((state) => (
+            <div
               key={state.stateCode}
-              state={state}
-              rank={index + 1}
-              onClick={() => handleStateClick(state)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* State Detail Dialog */}
-      <Dialog open={!!selectedState} onOpenChange={(open) => !open && setSelectedState(null)}>
-        <DialogContent className="border-slate-700 bg-slate-800 text-white sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-white">
-              {selectedState?.name} ({selectedState?.stateCode})
-            </DialogTitle>
-          </DialogHeader>
-
-          {selectedState ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="rounded-xl bg-slate-700/30 p-3">
-                  <span className="block text-xs text-slate-400">Total Votes</span>
-                  <span className="block text-lg font-bold text-white">
-                    {selectedState.engagement.totalVotes.toLocaleString()}
-                  </span>
-                </div>
-                <div className="rounded-xl bg-slate-700/30 p-3">
-                  <span className="block text-xs text-slate-400">Active Users</span>
-                  <span className="block text-lg font-bold text-white">
-                    {selectedState.engagement.activeUsers.toLocaleString()}
-                  </span>
-                </div>
-                <div className="rounded-xl bg-slate-700/30 p-3">
-                  <span className="block text-xs text-slate-400">Districts</span>
-                  <span className="block text-lg font-bold text-white">
-                    {selectedState.totalDistricts}
-                  </span>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slate-700/30 p-4">
-                <span className="mb-2 block font-medium text-slate-300">
-                  Sentiment by Category
-                </span>
-                {Object.keys(selectedState.sentiment.byCategory ?? {}).length === 0 ? (
-                  <p className="text-sm text-slate-500">No category data</p>
-                ) : (
-                  Object.entries(selectedState.sentiment.byCategory).map(([category, value]) => (
-                    <div key={category} className="mb-2 flex items-center justify-between">
-                      <span className="text-sm capitalize text-slate-300">
-                        {category.replace(/_/g, " ")}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-sm font-medium",
-                          value > 0 ? "text-emerald-400" : "text-red-400",
-                        )}
-                      >
-                        {value > 0 ? "+" : ""}
-                        {(value * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {selectedState.topIssues && selectedState.topIssues.length > 0 ? (
-                <div>
-                  <span className="mb-2 block font-medium text-slate-300">Top Issues</span>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedState.topIssues.map((issue) => (
-                      <span
-                        key={issue.id}
-                        className={cn(
-                          "rounded-full px-3 py-1 text-sm",
-                          issue.sentiment > 0
-                            ? "bg-emerald-500/10 text-emerald-400"
-                            : "bg-red-500/10 text-red-400",
-                        )}
-                      >
-                        {issue.name}
-                      </span>
-                    ))}
+              className="rounded-2xl border border-slate-700/50 bg-slate-800/30"
+            >
+              <button
+                type="button"
+                onClick={() => void open(state)}
+                aria-label={`Districts in ${state.stateName}`}
+                className="flex w-full items-center justify-between p-4 text-left"
+              >
+                <div className="flex items-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/20">
+                    <Building2 size={18} color="#818CF8" />
                   </div>
+                  <div className="ml-3">
+                    <span className="block font-semibold text-white">{state.stateName}</span>
+                    <span className="text-xs text-slate-400">
+                      {state.residents.toLocaleString()}{" "}
+                      {state.residents === 1 ? "member" : "members"} across{" "}
+                      {state.districtsRepresented}{" "}
+                      {state.districtsRepresented === 1 ? "district" : "districts"}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Pulse pulse={state.pulse} />
+                  <ChevronRight
+                    size={18}
+                    color="#64748B"
+                    className={cn("transition-transform", openState === state.stateCode && "rotate-90")}
+                  />
+                </div>
+              </button>
+
+              {openState === state.stateCode ? (
+                <div className="border-t border-slate-700/50 p-4">
+                  {loadingDistricts ? (
+                    <Loader2 className="h-5 w-5 animate-spin" color="#818CF8" />
+                  ) : districts.length === 0 ? (
+                    <p className="text-sm text-slate-400">No districts declared here yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {districts.map((d) => (
+                        <li
+                          key={d.districtId}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-900/40 px-3 py-2"
+                        >
+                          <div>
+                            <span className="font-medium text-white">{d.districtId}</span>
+                            {/* A real name from the congress.gov roster. This was
+                                the literal string "Representative". */}
+                            {d.representative ? (
+                              <span className="ml-2 text-sm text-slate-400">
+                                {d.representative.name} ({d.representative.party})
+                              </span>
+                            ) : (
+                              <span className="ml-2 text-sm text-slate-500">seat vacant</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-slate-500">
+                              {d.residents} {d.residents === 1 ? "member" : "members"}
+                            </span>
+                            <Pulse pulse={d.pulse} />
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ) : null}
             </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+          ))}
+        </div>
+      )}
     </B2BShell>
   );
 }

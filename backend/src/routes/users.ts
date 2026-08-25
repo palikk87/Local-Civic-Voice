@@ -14,6 +14,7 @@ import {
 import type { auth } from "../auth";
 import { verifyPasswordOrDummy } from "../password-check";
 import { setUserPassword } from "../services/credentials";
+import { MIN_COHORT, listDistricts } from "../services/jurisdiction";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -787,6 +788,126 @@ usersRouter.patch("/me", zValidator("json", z.object({
     }
     throw err;
   }
+});
+
+/**
+ * GET /api/jurisdiction/districts
+ *
+ * Every district there actually is, with who holds it — so a person choosing
+ * theirs sees their representative's name and can tell at a glance whether they
+ * picked right.
+ *
+ * Public. It is the roster of Congress; it says nothing about anybody here.
+ */
+usersRouter.get("/jurisdiction/districts", async (c) => {
+  const { districts, source, congress } = await listDistricts();
+  return c.json({
+    districts,
+    congress,
+    source,
+    total: districts.length,
+  });
+});
+
+/**
+ * GET /api/users/me/jurisdiction
+ *
+ * Where this person has said their voice belongs, and what that means.
+ */
+usersRouter.get("/me/jurisdiction", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  const me = await prisma.user.findUnique({
+    where: { id: currentUser.id },
+    select: { stateCode: true, districtId: true, jurisdictionSetAt: true },
+  });
+  if (!me) return c.json({ error: "Account not found" }, 404);
+
+  const { districts } = await listDistricts();
+  const mine = me.districtId
+    ? (districts.find((d) => d.districtId === me.districtId) ?? null)
+    : null;
+
+  return c.json({
+    /** Null means they have not said, which is a complete answer, not a gap. */
+    stateCode: me.stateCode,
+    districtId: me.districtId,
+    setAt: me.jurisdictionSetAt?.toISOString() ?? null,
+    district: mine,
+    /**
+     * Said plainly on the screen, because a person handing over their district
+     * is owed the reason and the limit. Bill of Rights Article IV authorises
+     * collecting jurisdiction and caps collection at exactly that.
+     */
+    explanation: {
+      why: "It places your vote in your own district, so the Pulse can be compared with how your representative actually voted.",
+      collected: "Your state and district. Nothing else — no address, no ZIP kept, no location from your device.",
+      shared:
+        "Business clients only ever see totals for a district, and only where at least " +
+        `${MIN_COHORT} people have voted. Never who you are, never how you voted.`,
+      optional: "You can vote without this, and you can remove it at any time.",
+    },
+  });
+});
+
+/**
+ * PUT /api/users/me/jurisdiction
+ *
+ * Declare where you are. Self-declared and validated against the real roster —
+ * nothing geolocates anybody, and a district nobody represents is refused.
+ */
+usersRouter.put(
+  "/me/jurisdiction",
+  zValidator("json", z.object({ districtId: z.string().min(3).max(8) })),
+  async (c) => {
+    const currentUser = c.get("user");
+    if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+    const districtId = c.req.valid("json").districtId.toUpperCase();
+    const { districts } = await listDistricts();
+    const match = districts.find((d) => d.districtId === districtId);
+
+    // Refused rather than stored. "CA-99" is well-formed and does not exist,
+    // and a row pointing at a district nobody represents is a row no aggregate
+    // could ever honestly place.
+    if (!match) {
+      return c.json({ error: "That is not a district in the current Congress." }, 400);
+    }
+
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: {
+        stateCode: match.stateCode,
+        districtId: match.districtId,
+        jurisdictionSetAt: new Date(),
+      },
+    });
+
+    return c.json({ success: true, district: match });
+  },
+);
+
+/**
+ * DELETE /api/users/me/jurisdiction
+ *
+ * Take it back.
+ *
+ * Article IV is a right, not a setting, so withdrawing has to be as easy as
+ * giving — one call, no confirmation, no cooling-off. Their votes stay exactly
+ * where they are and keep counting nationally; they simply stop being placed on
+ * a map.
+ */
+usersRouter.delete("/me/jurisdiction", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  await prisma.user.update({
+    where: { id: currentUser.id },
+    data: { stateCode: null, districtId: null, jurisdictionSetAt: null },
+  });
+
+  return c.json({ success: true, districtId: null });
 });
 
 export { usersRouter };
