@@ -83,7 +83,7 @@ const MIME_TO_EXTENSION: Record<string, string> = {
  * file, and on a shared host the default would let it.
  */
 async function makeScratchDir(): Promise<string> {
-  const dir = join(tmpdir(), `civicvoice-upload-${randomBytes(12).toString("base64url")}`);
+  const dir = join(tmpdir(), `ayeandnay-upload-${randomBytes(12).toString("base64url")}`);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   return dir;
 }

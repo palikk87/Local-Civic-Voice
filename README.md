@@ -1,4 +1,4 @@
-# Civic Voice
+# AYE & NAY
 
 Civics app for the USA: a mobile app and a web app sharing one backend and one
 Supabase Postgres database.

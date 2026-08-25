@@ -20,7 +20,7 @@ export interface BillOfRights {
 }
 
 export const BILL_OF_RIGHTS: BillOfRights = {
-  preamble: `We, the Users of Civic Voice, in order to form a more perfect Union of citizens and technology, do hereby establish these fundamental rights to ensure the integrity of our collective voice and the security of our individual sovereignty.`,
+  preamble: `We, the Users of AYE & NAY, in order to form a more perfect Union of citizens and technology, do hereby establish these fundamental rights to ensure the integrity of our collective voice and the security of our individual sovereignty.`,
 
   articles: [
     {
@@ -70,7 +70,7 @@ export const BILL_OF_RIGHTS: BillOfRights = {
       number: 'IV',
       title: 'The Right to Data Security & Anonymity',
       subtitle: 'Digital Privacy',
-      content: `The right of the people to be secure in their digital persons, papers, and effects shall not be violated. Civic Voice shall collect only the minimum data necessary to verify citizenship and jurisdiction. Personal identity shall remain shielded from the federal government and third parties, ensuring that the "Public Pulse" is a reflection of honest conviction, not a target for surveillance.`,
+      content: `The right of the people to be secure in their digital persons, papers, and effects shall not be violated. AYE & NAY shall collect only the minimum data necessary to verify citizenship and jurisdiction. Personal identity shall remain shielded from the federal government and third parties, ensuring that the "Public Pulse" is a reflection of honest conviction, not a target for surveillance.`,
       principles: [
         'Minimal data collection',
         'No government data sharing',

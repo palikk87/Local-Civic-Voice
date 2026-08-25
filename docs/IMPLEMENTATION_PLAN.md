@@ -1,4 +1,4 @@
-# Civic Voice - Implementation Plan
+# AYE & NAY - Implementation Plan
 ## Complete Feature Build from A-Z
 
 ---

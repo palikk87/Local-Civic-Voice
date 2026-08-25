@@ -245,7 +245,7 @@ export default function ExecutiveOrderDetailScreen() {
 
     try {
       await Share.share({
-        message: `Check out this Executive Order: ${eo.title}\n\nVote on Civic Voice!`,
+        message: `Check out this Executive Order: ${eo.title}\n\nVote on AYE & NAY!`,
       });
     } catch (error) {
       console.log('Error sharing:', error);

@@ -107,7 +107,7 @@ const WEIGHTS = {
   delegateBoost: 4.0, // Liquid Democracy weight
   localBoost: 2.5,
 
-  // Representation gap bonus (unique to Civic Voice - TRANSPARENT)
+  // Representation gap bonus (unique to AYE & NAY - TRANSPARENT)
   // This is the "verifiable weight of Liquid Democracy"
   gapMultiplier: 2.0,
   gapThreshold: 20, // % difference to trigger bonus

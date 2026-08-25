@@ -206,7 +206,7 @@ strings.
 ## 7. Apple / EAS — the mobile build
 
 `apps/mobile/eas.json` exists and the app is named, slugged and identified
-(`com.civicvoice.app`). What is left needs your Apple Developer account:
+(`com.ayeandnay.app`). What is left needs your Apple Developer account:
 
 - Enrol / sign in to Apple Developer
 - `eas build --platform ios --profile production`

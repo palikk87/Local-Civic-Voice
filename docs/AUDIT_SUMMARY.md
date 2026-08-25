@@ -1,4 +1,4 @@
-# CIVIC VOICE APP - AUDIT SUMMARY
+# AYE & NAY APP - AUDIT SUMMARY
 ## What's Built vs. What's Missing
 
 **Generated:** July 23, 2026

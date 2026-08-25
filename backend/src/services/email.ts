@@ -99,19 +99,19 @@ async function sendEmail({ to, subject, html, text }: SendEmailArgs): Promise<vo
 
 const PURPOSE_COPY: Record<OtpPurpose, { subject: string; lead: string }> = {
   "sign-in": {
-    subject: "Your Civic Voice sign-in code",
-    lead: "Use this code to sign in to Civic Voice.",
+    subject: "Your AYE & NAY sign-in code",
+    lead: "Use this code to sign in to AYE & NAY.",
   },
   "email-verification": {
-    subject: "Verify your Civic Voice email",
+    subject: "Verify your AYE & NAY email",
     lead: "Use this code to verify your email address.",
   },
   "forget-password": {
-    subject: "Reset your Civic Voice password",
+    subject: "Reset your AYE & NAY password",
     lead: "Use this code to reset your password.",
   },
   "change-email": {
-    subject: "Confirm your new Civic Voice email",
+    subject: "Confirm your new AYE & NAY email",
     lead: "Use this code to confirm your new email address.",
   },
 };
@@ -140,7 +140,7 @@ export async function sendOtpEmail(
 
   const html = `
     <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;color:#0F172A">
-      <h1 style="font-size:20px;margin:0 0 8px">Civic Voice</h1>
+      <h1 style="font-size:20px;margin:0 0 8px">AYE & NAY</h1>
       <p style="margin:0 0 24px;color:#475569">${copy.lead}</p>
       <div style="font-size:32px;font-weight:700;letter-spacing:6px;padding:16px 0;text-align:center;background:#F1F5F9;border-radius:12px">${otp}</div>
       <p style="margin:24px 0 0;color:#64748B;font-size:13px">
@@ -214,12 +214,12 @@ export async function trySendingEmail(to: string): Promise<
   try {
     await sendEmail({
       to,
-      subject: "Civic Voice mail check",
+      subject: "AYE & NAY mail check",
       text:
-        "This is a test message from the Civic Voice admin console.\n\n" +
+        "This is a test message from the AYE & NAY admin console.\n\n" +
         "If it arrived, sign-up codes, sign-in codes and password resets will too.",
       html:
-        "<p>This is a test message from the Civic Voice admin console.</p>" +
+        "<p>This is a test message from the AYE & NAY admin console.</p>" +
         "<p>If it arrived, sign-up codes, sign-in codes and password resets will too.</p>",
     });
     return { ok: true };

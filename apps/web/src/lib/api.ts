@@ -13,7 +13,7 @@ class ApiError extends Error {
 }
 
 /**
- * Civic Voice backend returns RAW shapes (NOT wrapped in { data }).
+ * AYE & NAY backend returns RAW shapes (NOT wrapped in { data }).
  * This helper parses JSON as-is and keeps credentials for the auth session.
  */
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {

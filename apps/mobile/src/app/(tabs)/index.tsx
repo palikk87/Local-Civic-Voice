@@ -1074,7 +1074,7 @@ export default function HomeScreen() {
         <View className="px-4 py-3 border-b border-slate-800">
           <View className="flex-row items-center justify-between">
             <View>
-              <Text className="text-2xl font-bold text-white">Civic Voice</Text>
+              <Text className="text-2xl font-bold text-white">AYE & NAY</Text>
               <Text className="text-slate-400 text-sm">All 3 branches of government</Text>
             </View>
             <View className="flex-row items-center">

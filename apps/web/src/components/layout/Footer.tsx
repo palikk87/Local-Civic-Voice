@@ -9,7 +9,7 @@ export function Footer() {
           <div>
             <Link to="/feed" className="flex items-center gap-2.5">
               <Seal className="h-8 w-8 text-accent" />
-              <span className="font-display text-xl font-semibold">Civic Voice</span>
+              <span className="font-display text-xl font-semibold">AYE & NAY</span>
             </Link>
             <p className="mt-3 max-w-sm text-sm text-primary-foreground/70">
               A high-trust civic platform where citizens engage with all three
@@ -65,7 +65,7 @@ export function Footer() {
         </div>
 
         <div className="mt-10 flex flex-col gap-2 border-t border-primary-foreground/15 pt-6 text-xs text-primary-foreground/60 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Civic Voice. The Will of the People is the supreme authority.</p>
+          <p>© {new Date().getFullYear()} AYE & NAY. The Will of the People is the supreme authority.</p>
           <p>Votes shown are simulated for civic engagement.</p>
         </div>
       </div>

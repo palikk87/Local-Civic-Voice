@@ -1,7 +1,7 @@
 /**
  * Seeds sample citizen accounts and posts so the social feed feels alive.
  * Posts are attached to real government references (bills / orders / rulings),
- * matching the Civic Voice model where every post is commentary on legislation.
+ * matching the AYE & NAY model where every post is commentary on legislation.
  *
  * Idempotent: skips users/posts that already exist.
  */
@@ -28,14 +28,14 @@ const POST_TEMPLATES = [
 ];
 
 async function ensureCitizen(c: (typeof CITIZENS)[number]) {
-  const email = `${c.username}@civicvoice.app`;
+  const email = `${c.username}@ayeandnay.com`;
   const existing = await prisma.user.findFirst({
     where: { OR: [{ email }, { username: c.username }] },
   });
   if (existing) return existing;
 
   await auth.api.signUpEmail({
-    body: { email, password: "CivicVoice2024!", name: c.name },
+    body: { email, password: "AyeAndNay2024!", name: c.name },
   });
   return prisma.user.update({
     where: { email },

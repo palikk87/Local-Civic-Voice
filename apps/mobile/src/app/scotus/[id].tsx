@@ -311,7 +311,7 @@ export default function SupremeCourtDetailScreen() {
 
     try {
       await Share.share({
-        message: `Check out this Supreme Court case: ${scotusCase.caseName}\n\nVote on Civic Voice!`,
+        message: `Check out this Supreme Court case: ${scotusCase.caseName}\n\nVote on AYE & NAY!`,
       });
     } catch (error) {
       console.log('Error sharing:', error);

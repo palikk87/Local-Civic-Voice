@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 /**
- * Civic Voice seed data.
+ * AYE & NAY seed data.
  *
  * Populates the canonical GovernmentReference model with real-world items from
  * all three branches of government (Legislative bills, Executive orders, SCOTUS
@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
  * GovernmentReferenceVote rows. To keep the seeded Pulse durable (so it does not
  * reset to ~0 the first time a real user votes) we back every seeded count with
  * real vote rows cast by clearly-labelled sample citizens
- * (email domain @sample.civicvoice.app). These can be safely deleted before the
+ * (email domain @sample.ayeandnay.com). These can be safely deleted before the
  * app launches.
  */
 
@@ -369,12 +369,22 @@ function pickDistinct<T>(arr: T[], n: number): T[] {
 }
 
 async function seed() {
-  console.log("🌱 Seeding Civic Voice database...");
+  console.log("🌱 Seeding AYE & NAY database...");
 
   // Clean prior seed data (idempotent). Only removes sample citizens + references.
   await prisma.governmentReferenceVote.deleteMany({});
   await prisma.governmentReference.deleteMany({});
-  await prisma.user.deleteMany({ where: { email: { endsWith: "@sample.civicvoice.app" } } });
+  // Both suffixes. These rows were seeded when the platform was called Civic
+  // Voice, and clearing only the new one would leave every old sample account
+  // behind — indistinguishable, from then on, from a real citizen.
+  await prisma.user.deleteMany({
+    where: {
+      OR: [
+        { email: { endsWith: "@sample.ayeandnay.com" } },
+        { email: { endsWith: "@sample.civicvoice.app" } },
+      ],
+    },
+  });
 
   // Create a pool of sample citizens to back the Public Pulse with real vote rows.
   const NUM_CITIZENS = 400;
@@ -387,13 +397,13 @@ async function seed() {
   await prisma.user.createMany({
     data: Array.from({ length: NUM_CITIZENS }, (_, i) => ({
       name: `Citizen ${i + 1}`,
-      email: `citizen${i + 1}@sample.civicvoice.app`,
+      email: `citizen${i + 1}@sample.ayeandnay.com`,
       emailVerified: true,
       location: cities[i % cities.length],
     })),
   });
   const citizens = await prisma.user.findMany({
-    where: { email: { endsWith: "@sample.civicvoice.app" } },
+    where: { email: { endsWith: "@sample.ayeandnay.com" } },
     select: { id: true },
   });
   const citizenIds = citizens.map((c) => c.id);

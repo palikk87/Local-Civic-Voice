@@ -307,7 +307,7 @@ describe("the test population", () => {
     expect(() => assertPopulationDatabase("postgresql://u:p@host:5432/railway")).toThrow(
       /Refusing/,
     );
-    expect(() => assertPopulationDatabase("postgresql://u:p@host:5432/civicvoice")).toThrow(
+    expect(() => assertPopulationDatabase("postgresql://u:p@host:5432/ayeandnay")).toThrow(
       /Refusing/,
     );
     expect(() => assertPopulationDatabase("postgresql://u:p@host:5432/production")).toThrow(

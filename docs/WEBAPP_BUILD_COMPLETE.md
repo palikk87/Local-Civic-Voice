@@ -1,4 +1,4 @@
-# Civic Voice Webapp - Build Complete
+# AYE & NAY Webapp - Build Complete
 
 ## Overview
 The webapp has been systematically rebuilt to expose all backend functionality through a complete, polished React UI. Every API route and feature from the backend is now accessible to users through the webapp interface.
@@ -338,7 +338,7 @@ These are fully functional but could be expanded:
 
 ## Summary
 
-**The webapp now provides complete access to all Civic Voice backend functionality through a polished, production-ready React interface.**
+**The webapp now provides complete access to all AYE & NAY backend functionality through a polished, production-ready React interface.**
 
 Every backend route has a corresponding UI, every feature is accessible, and the app is ready for real users to engage with the platform for:
 - Voting on legislation

@@ -93,7 +93,7 @@ async function startBackend(): Promise<void> {
       DIRECT_URL: DATABASE_URL,
       BACKEND_URL: SITE_ORIGIN,
       APP_ORIGINS: SITE_ORIGIN,
-      APP_SCHEMES: "civicvoice",
+      APP_SCHEMES: "ayeandnay",
       BETTER_AUTH_SECRET: "system-check-secret-not-used-anywhere-else",
       MEDIA_STORAGE: "local",
       UPLOADS_DIR: resolve(import.meta.dir, "../../.system-check-uploads"),

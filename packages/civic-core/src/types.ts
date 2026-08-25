@@ -216,7 +216,7 @@ export interface UserVote {
 export interface RepresentationGap {
   billId: string;
   billTitle: string;
-  publicApprovalPct: number; // Civic Voice users' approval %
+  publicApprovalPct: number; // AYE & NAY users' approval %
   officialApprovalPct: number; // Congress official vote %
   gapPercentage: number; // Absolute difference
   hasSignificantGap: boolean; // True if gap > 30%

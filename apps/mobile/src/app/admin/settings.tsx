@@ -169,7 +169,7 @@ export default function AdminSettingsScreen() {
         <View className="mt-6 items-center py-8">
           <View className="flex-row items-center">
             <Info size={16} color="#64748B" />
-            <Text className="text-slate-500 text-sm ml-2">Civic Voice Admin v1.0.0</Text>
+            <Text className="text-slate-500 text-sm ml-2">AYE & NAY Admin v1.0.0</Text>
           </View>
           <Text className="text-slate-600 text-xs mt-2">Built with React Native & Expo</Text>
         </View>

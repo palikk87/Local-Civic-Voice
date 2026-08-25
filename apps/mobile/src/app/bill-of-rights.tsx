@@ -223,7 +223,7 @@ export default function BillOfRightsScreen() {
               <Scroll size={32} color="#F59E0B" />
             </View>
             <Text className="text-amber-500 text-xs font-bold tracking-[4px] mb-2">
-              THE CIVIC VOICE
+              THE AYE & NAY
             </Text>
             <Text className="text-white text-2xl font-bold text-center">
               Bill of Rights

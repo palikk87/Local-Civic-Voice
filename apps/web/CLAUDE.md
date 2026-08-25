@@ -115,7 +115,7 @@
 </data>
 
 <index_html>
-  Title, description and the og:/twitter: tags describe Civic Voice. If a change
+  Title, description and the og:/twitter: tags describe AYE & NAY. If a change
   makes them wrong, fix them in the same change.
 </index_html>
 

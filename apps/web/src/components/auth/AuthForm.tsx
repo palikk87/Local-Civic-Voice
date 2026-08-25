@@ -33,7 +33,7 @@ interface AuthFormProps {
 }
 
 /**
- * Shared Civic Voice auth form. Email + password (matches the mobile app and
+ * Shared AYE & NAY auth form. Email + password (matches the mobile app and
  * the backend's email/password provider). Sign up additionally collects a
  * display name and username; the username is persisted via
  * PATCH /api/users/me after the account is created.

@@ -12,7 +12,7 @@ import { useAuthUI } from "@/hooks/use-civic-auth";
 
 /**
  * App-wide auth dialog opened via `useAuthUI().openAuth`.
- * Wraps the shared <AuthForm /> in a Civic Voice–styled modal.
+ * Wraps the shared <AuthForm /> in a AYE & NAY–styled modal.
  */
 export function AuthDialog() {
   const { open, reason, closeAuth } = useAuthUI();
@@ -40,7 +40,7 @@ export function AuthDialog() {
             </DialogTitle>
             <DialogDescription className="text-primary-foreground/70">
               {reason ??
-                "Join Civic Voice to cast simulated votes and shape the Public Pulse."}
+                "Join AYE & NAY to cast simulated votes and shape the Public Pulse."}
             </DialogDescription>
           </DialogHeader>
         </div>

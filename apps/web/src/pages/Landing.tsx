@@ -47,7 +47,7 @@ export default function Landing() {
               </div>
             </div>
             <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-              Civic Voice
+              AYE & NAY
             </h1>
           </div>
           <Button

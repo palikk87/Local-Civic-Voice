@@ -1,4 +1,4 @@
-# Migrating Civic Voice onto its own infrastructure
+# Migrating AYE & NAY onto its own infrastructure
 
 The old plan was to repair the existing Supabase database and stop whatever kept
 rewriting it. That plan is abandoned. This one starts from an empty database on
@@ -49,7 +49,7 @@ the connection string from that template is deleted with it. The datasource
 reads `DATABASE_URL` and `DIRECT_URL` like any other project.
 
 `scripts/start` is rewritten around `NODE_ENV` alone. App identity is Civic
-Voice: slug `civic-voice`, scheme `civicvoice`, bundle id `com.civicvoice.app`.
+Voice: slug `civic-voice`, scheme `ayeandnay`, bundle id `com.ayeandnay.app`.
 
 ### No vendor is load-bearing
 

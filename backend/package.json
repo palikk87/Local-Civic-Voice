@@ -1,5 +1,5 @@
 {
-  "name": "civic-voice-api",
+  "name": "ayeandnay-api",
   "module": "src/index.ts",
   "type": "module",
   "private": true,

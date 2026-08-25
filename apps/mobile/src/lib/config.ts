@@ -17,7 +17,7 @@
 const RAW_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
 /**
- * Base URL of the Civic Voice API.
+ * Base URL of the AYE & NAY API.
  *
  * Falls back to localhost only in development. In a release build a missing
  * value throws at import time — loudly, at startup — rather than letting every

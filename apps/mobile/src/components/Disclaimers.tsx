@@ -42,7 +42,7 @@ export function MockVotingDisclaimer({ variant = 'banner', onDismiss }: Disclaim
 
       <View className="p-4">
         <Text className="text-slate-300 text-sm leading-5 mb-3">
-          Civic Voice is an <Text className="font-semibold text-white">educational mock-voting platform</Text>.
+          AYE & NAY is an <Text className="font-semibold text-white">educational mock-voting platform</Text>.
           Votes cast here have <Text className="font-semibold text-white">no effect</Text> on actual legislation
           or official government processes.
         </Text>
@@ -151,7 +151,7 @@ export function UserAgreementContent() {
   return (
     <View className="p-4">
       <Text className="text-white font-bold text-xl mb-4">
-        Welcome to Civic Voice
+        Welcome to AYE & NAY
       </Text>
 
       <Text className="text-slate-300 leading-5 mb-4">
@@ -169,7 +169,7 @@ export function UserAgreementContent() {
         />
         <AgreementPoint
           title="No Government Affiliation"
-          description="Civic Voice is not affiliated with any government entity or election authority."
+          description="AYE & NAY is not affiliated with any government entity or election authority."
         />
         <AgreementPoint
           title="Data Sources"
@@ -182,7 +182,7 @@ export function UserAgreementContent() {
       </View>
 
       <Text className="text-slate-500 text-xs leading-4">
-        By using Civic Voice, you acknowledge that this is an educational platform
+        By using AYE & NAY, you acknowledge that this is an educational platform
         and that your mock votes have no legal or governmental effect. For official
         voting information, visit vote.gov.
       </Text>

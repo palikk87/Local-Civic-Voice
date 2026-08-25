@@ -5,10 +5,10 @@
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
     <title>%WEB_TITLE%</title>
-    <meta name="description" content="Civic Voice — read what your government is actually doing." />
-    <meta name="author" content="Civic Voice" />
+    <meta name="description" content="AYE &amp; NAY — read what your government is actually doing." />
+    <meta name="author" content="AYE &amp; NAY" />
     <meta property="og:title" content="%WEB_TITLE%" />
-    <meta property="og:description" content="Civic Voice — read what your government is actually doing." />
+    <meta property="og:description" content="AYE &amp; NAY — read what your government is actually doing." />
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/og-base.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -32,7 +32,7 @@
             try {
               var msg = String(message || 'Unknown error');
               var now = Date.now();
-              if (lastPosted[msg] && now - lastPosted[msg] < 1000) return;
+              if (lastPosted[msg] &amp;&amp; now - lastPosted[msg] < 1000) return;
               if (lastPostedCount > 50) { lastPosted = {}; lastPostedCount = 0; }
               lastPosted[msg] = now;
               lastPostedCount++;
@@ -45,7 +45,7 @@
               // longer runs inside, and a wildcard postMessage that any
               // embedding frame could read. The console is where an error
               // belongs when there is nowhere it is meant to be sent.
-              if (window.console && window.console.error) {
+              if (window.console &amp;&amp; window.console.error) {
                 window.console.error('[startup] ' + msg, stack || '');
               }
             } catch (e) {}
@@ -53,9 +53,9 @@
 
           window.addEventListener('error', function (event) {
             try {
-              if (event && event.target && event.target !== window && event.target.tagName) return;
-              var msg = event && event.message ? event.message : (event && event.error ? String(event.error) : 'Script error');
-              var stack = event && event.error && event.error.stack ? event.error.stack : null;
+              if (event &amp;&amp; event.target &amp;&amp; event.target !== window &amp;&amp; event.target.tagName) return;
+              var msg = event &amp;&amp; event.message ? event.message : (event &amp;&amp; event.error ? String(event.error) : 'Script error');
+              var stack = event &amp;&amp; event.error &amp;&amp; event.error.stack ? event.error.stack : null;
               report(msg, stack);
             } catch (e) {}
           }, true);
@@ -63,14 +63,14 @@
           window.addEventListener('unhandledrejection', function (event) {
             try {
               var reason = event ? event.reason : null;
-              var msg = reason && reason.message ? reason.message : String(reason);
-              report('Unhandled promise rejection: ' + msg, reason && reason.stack ? reason.stack : null);
+              var msg = reason &amp;&amp; reason.message ? reason.message : String(reason);
+              report('Unhandled promise rejection: ' + msg, reason &amp;&amp; reason.stack ? reason.stack : null);
             } catch (e) {}
           });
 
           function rootMounted() {
             var root = document.getElementById('root');
-            return root && (root.children.length > 0 || (root.textContent && root.textContent.replace(/\s/g, '') !== ''));
+            return root &amp;&amp; (root.children.length > 0 || (root.textContent &amp;&amp; root.textContent.replace(/\s/g, '') !== ''));
           }
 
           function maybeShowFallback() {
@@ -78,7 +78,7 @@
               if (document.getElementById('startup-error-fallback')) return;
               if (rootMounted() || errorCount === 0) return;
               var dark = false;
-              try { dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
+              try { dark = window.matchMedia &amp;&amp; window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
               var cardBg = dark ? '#27272a' : '#f4f4f5';
               var red = dark ? '#f87171' : '#dc2626';
               var redSub = dark ? 'rgba(248,113,113,0.8)' : 'rgba(220,38,38,0.8)';
@@ -126,7 +126,7 @@
                   if (!rootMounted()) return;
                   clearInterval(clearCheck);
                   var el = document.getElementById('startup-error-fallback');
-                  if (el && el.parentNode) el.parentNode.removeChild(el);
+                  if (el &amp;&amp; el.parentNode) el.parentNode.removeChild(el);
                 } catch (e) {}
               }, 1000);
             } catch (e) {}

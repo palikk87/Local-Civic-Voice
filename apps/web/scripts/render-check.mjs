@@ -73,7 +73,7 @@ for (const path of ["/", "/discover", "/government", "/people"]) {
 
   if (rootChildren === 0) problems.push(`${path}: #root is empty (white screen)`);
   if (text.length < 20) problems.push(`${path}: rendered only ${text.length} chars of text`);
-  if (/Loading Civic Voice/.test(text) && text.length < 40) problems.push(`${path}: stuck on the loading screen`);
+  if (/Loading AYE & NAY/.test(text) && text.length < 40) problems.push(`${path}: stuck on the loading screen`);
 
   console.log(`${path.padEnd(12)} root children=${rootChildren} text=${text.length} chars  js chunks=${[...chunkRequests].filter(c=>c.startsWith(path+" ")).length}`);
   await page.close();

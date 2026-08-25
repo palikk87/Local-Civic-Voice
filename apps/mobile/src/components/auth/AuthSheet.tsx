@@ -63,7 +63,7 @@ export function AuthSheet() {
               <Text className="text-2xl font-bold text-white">Claim your voice</Text>
               <Text className="text-slate-400 mt-1">
                 {reason ??
-                  'Join Civic Voice to cast simulated votes and shape the Public Pulse.'}
+                  'Join AYE & NAY to cast simulated votes and shape the Public Pulse.'}
               </Text>
             </View>
 

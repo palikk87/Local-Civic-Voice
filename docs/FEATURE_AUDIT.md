@@ -1,4 +1,4 @@
-# Civic Voice App - Complete Feature Audit (A-Z)
+# AYE & NAY App - Complete Feature Audit (A-Z)
 
 **Audit Date:** July 23, 2026  
 **Status:** Current codebase analysis vs. required functionality

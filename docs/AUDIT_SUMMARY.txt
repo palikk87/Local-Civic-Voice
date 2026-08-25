@@ -1,5 +1,5 @@
 ================================================================================
-CIVIC VOICE MOBILE APP - FEATURE AUDIT SUMMARY
+AYE & NAY MOBILE APP - FEATURE AUDIT SUMMARY
 ================================================================================
 
 AUDIT CONDUCTED: July 24, 2026

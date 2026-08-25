@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "Civic Voice",
-    "slug": "civic-voice",
-    "scheme": "civicvoice",
+    "name": "AYE & NAY",
+    "slug": "ayeandnay",
+    "scheme": "ayeandnay",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.civicvoice.app"
+      "bundleIdentifier": "com.ayeandnay.app"
     },
     "android": {
       "edgeToEdgeEnabled": true,
-      "package": "com.civicvoice.app"
+      "package": "com.ayeandnay.app"
     },
     "plugins": ["expo-router"],
     "experiments": {

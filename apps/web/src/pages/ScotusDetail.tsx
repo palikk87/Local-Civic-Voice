@@ -255,7 +255,7 @@ export default function ScotusDetail() {
 
   const handleShare = async () => {
     if (!requireAuth("Sign in to share this case.")) return;
-    const shareText = `Check out this Supreme Court case: ${scotusCase.caseName}\n\nVote on Civic Voice!`;
+    const shareText = `Check out this Supreme Court case: ${scotusCase.caseName}\n\nVote on AYE & NAY!`;
     try {
       if (navigator.share) {
         await navigator.share({ text: shareText });

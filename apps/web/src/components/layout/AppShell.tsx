@@ -100,7 +100,7 @@ export function AppShell({
         <Link to="/feed" className="flex items-center gap-2.5 px-2">
           <Seal className="h-8 w-8 text-accent" />
           <span className="font-display text-lg font-semibold tracking-tight text-foreground">
-            Civic Voice
+            AYE & NAY
           </span>
         </Link>
 
@@ -166,7 +166,7 @@ export function AppShell({
         <Link to="/feed" className="flex items-center gap-2">
           <Seal className="h-7 w-7 text-accent" />
           <span className="font-display text-base font-semibold tracking-tight text-foreground">
-            Civic Voice
+            AYE & NAY
           </span>
         </Link>
         {isAuthenticated && user ? (

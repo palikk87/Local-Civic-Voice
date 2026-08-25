@@ -24,7 +24,7 @@ export type DataSourceType =
   | 'opensecrets' // Campaign finance
   | 'ballotpedia' // Election data
   | 'fec' // Federal Election Commission
-  | 'community' // Civic Voice community data
+  | 'community' // AYE & NAY community data
   | 'ai_generated'; // AI-summarized content
 
 export interface DataSource {
@@ -94,8 +94,8 @@ export const OFFICIAL_SOURCES: Record<DataSourceType, DataSource> = {
   },
   community: {
     type: 'community',
-    name: 'Civic Voice Community',
-    url: 'https://civicvoice.app',
+    name: 'AYE & NAY Community',
+    url: 'https://ayeandnay.com',
     lastUpdated: new Date().toISOString(),
     trustScore: 70,
     isOfficial: false,
@@ -393,19 +393,19 @@ export function generateAccountabilityShareText(
   gapPct: number,
   rep?: RepresentativeAccountability
 ): string {
-  const baseText = `🗳️ CIVIC VOICE GAP ALERT\n\n"${bill.shortTitle}"\n\n📊 ${Math.round(gapPct)}% gap between citizens and Congress!\n`;
+  const baseText = `🗳️ AYE & NAY GAP ALERT\n\n"${bill.shortTitle}"\n\n📊 ${Math.round(gapPct)}% gap between citizens and Congress!\n`;
 
   if (rep) {
     const alignment = rep.alignmentScore >= 70 ? 'often aligns' : 'frequently disagrees';
     return baseText +
       `\n👤 ${rep.name} (${rep.party}-${rep.state}) ${alignment} with constituents (${rep.alignmentScore}% alignment)\n` +
       `\n📞 Contact: ${rep.contactMethods.phone || 'N/A'}\n` +
-      `\n#CivicVoice #Accountability #YourVoteMatters`;
+      `\n#AyeAndNay #Accountability #YourVoteMatters`;
   }
 
   return baseText +
     `\nCongress isn't listening. Make YOUR voice heard.\n` +
-    `\n#CivicVoice #RepresentationGap #Democracy`;
+    `\n#AyeAndNay #RepresentationGap #Democracy`;
 }
 
 export function generateBillShareText(bill: Bill, verification: BillVerification): string {
@@ -426,8 +426,8 @@ export function generateBillShareText(bill: Bill, verification: BillVerification
     `📊 Community: ${yeaPct}% support (${bill.communityVotes.totalVoters.toLocaleString()} votes)\n` +
     `🔍 Trust Score: ${verification.overallTrustScore}%\n` +
     `📎 ${verification.officialLink}\n\n` +
-    `Have YOUR say on Civic Voice!\n` +
-    `#CivicVoice #${bill.category}`;
+    `Have YOUR say on AYE & NAY!\n` +
+    `#AyeAndNay #${bill.category}`;
 }
 
 // ==========================================

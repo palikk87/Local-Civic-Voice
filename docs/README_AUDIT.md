@@ -1,8 +1,8 @@
-# Civic Voice Mobile App - Complete Feature Audit
+# AYE & NAY Mobile App - Complete Feature Audit
 
 ## Overview
 
-This is a comprehensive audit of the Civic Voice mobile app (React Native/Expo) to identify all features that need to be ported to the web app.
+This is a comprehensive audit of the AYE & NAY mobile app (React Native/Expo) to identify all features that need to be ported to the web app.
 
 **Audit Date:** July 24, 2026  
 **Status:** Complete  
@@ -305,7 +305,7 @@ Before starting implementation:
 
 ## Summary
 
-The Civic Voice mobile app is a comprehensive civic engagement platform with sophisticated algorithms for bill ranking, liquid democracy delegations, and user engagement tracking. The web app currently lacks 80% of these features.
+The AYE & NAY mobile app is a comprehensive civic engagement platform with sophisticated algorithms for bill ranking, liquid democracy delegations, and user engagement tracking. The web app currently lacks 80% of these features.
 
 **Key insight:** The feed algorithm and social system are the highest-impact missing features—implementing these two would bring the web app to 60-70% feature parity and significantly boost engagement.
 

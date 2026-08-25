@@ -589,7 +589,7 @@ export default function BillDetailScreen() {
 
     try {
       await Share.share({
-        message: `Check out this bill: ${bill.title}\n\nVote on Civic Voice!`,
+        message: `Check out this bill: ${bill.title}\n\nVote on AYE & NAY!`,
       });
     } catch (error) {
       console.log('Error sharing:', error);

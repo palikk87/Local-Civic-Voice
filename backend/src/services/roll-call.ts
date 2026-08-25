@@ -460,7 +460,7 @@ export async function fetchSenateRollCall(
 ): Promise<ParsedRollCall | null> {
   const url = senateRollCallUrl(congress, session, roll, origin);
   const response = await fetch(url, {
-    headers: { "User-Agent": "CivicVoice/1.0 (civic transparency; contact via app)" },
+    headers: { "User-Agent": "AyeAndNay/1.0 (civic transparency; contact via app)" },
   });
   if (!response.ok) return null;
   return parseSenateRollCall(await response.text(), url);
@@ -474,7 +474,7 @@ export async function fetchHouseRollCall(
 ): Promise<ParsedRollCall | null> {
   const url = houseRollCallUrl(year, roll, origin);
   const response = await fetch(url, {
-    headers: { "User-Agent": "CivicVoice/1.0 (civic transparency; contact via app)" },
+    headers: { "User-Agent": "AyeAndNay/1.0 (civic transparency; contact via app)" },
   });
   if (!response.ok) return null;
   return parseHouseRollCall(await response.text(), url);
@@ -488,7 +488,7 @@ export async function fetchSenateMenu(
 ): Promise<SenateMenuEntry[]> {
   const url = senateMenuUrl(congress, session, origin);
   const response = await fetch(url, {
-    headers: { "User-Agent": "CivicVoice/1.0 (civic transparency; contact via app)" },
+    headers: { "User-Agent": "AyeAndNay/1.0 (civic transparency; contact via app)" },
   });
   if (!response.ok) return [];
   return parseSenateMenu(await response.text(), congress);

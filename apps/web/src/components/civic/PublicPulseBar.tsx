@@ -18,7 +18,7 @@ const HEIGHTS: Record<string, string> = {
 };
 
 /**
- * The signature Civic Voice motif: a two-tone bar showing the balance of
+ * The signature AYE & NAY motif: a two-tone bar showing the balance of
  * support vs. oppose across the aggregated Public Pulse.
  * Uses a CSS width transition (mount -> target) to avoid motion prop typing edge cases.
  */

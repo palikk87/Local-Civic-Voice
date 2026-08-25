@@ -1,7 +1,7 @@
 /**
  * Representation Gap Calculator
  *
- * Calculates the discrepancy between public sentiment (Civic Voice votes)
+ * Calculates the discrepancy between public sentiment (AYE & NAY votes)
  * and official Congressional votes on bills.
  *
  * A "significant gap" is defined as > 30% difference between public and official approval.
@@ -24,7 +24,7 @@ export function calculateApprovalPct(yea: number, nay: number): number {
  * Calculate the Representation Gap for a single bill
  */
 export function calculateRepresentationGap(bill: Bill): RepresentationGap {
-  // Calculate public (Civic Voice) approval percentage
+  // Calculate public (AYE & NAY) approval percentage
   const publicApprovalPct = calculateApprovalPct(
     bill.communityVotes.yea,
     bill.communityVotes.nay
@@ -107,14 +107,14 @@ export function getGapDescription(gap: RepresentationGap): string {
  */
 export function generateShareText(gap: RepresentationGap): string {
   if (!gap.hasSignificantGap) {
-    return `On "${gap.billTitle}", public opinion (${Math.round(gap.publicApprovalPct)}%) aligns with Congress (${Math.round(gap.officialApprovalPct)}%). See how your voice matches at Civic Voice.`;
+    return `On "${gap.billTitle}", public opinion (${Math.round(gap.publicApprovalPct)}%) aligns with Congress (${Math.round(gap.officialApprovalPct)}%). See how your voice matches at AYE & NAY.`;
   }
 
   if (gap.gapDirection === 'public_higher') {
-    return `REPRESENTATION GAP: ${Math.round(gap.publicApprovalPct)}% of Civic Voice users support "${gap.billTitle}", but Congress only voted ${Math.round(gap.officialApprovalPct)}% YES. Your voice matters. #CivicVoice`;
+    return `REPRESENTATION GAP: ${Math.round(gap.publicApprovalPct)}% of AYE & NAY users support "${gap.billTitle}", but Congress only voted ${Math.round(gap.officialApprovalPct)}% YES. Your voice matters. #AyeAndNay`;
   }
 
-  return `REPRESENTATION GAP: Only ${Math.round(gap.publicApprovalPct)}% of Civic Voice users support "${gap.billTitle}", yet Congress voted ${Math.round(gap.officialApprovalPct)}% YES. Make your voice heard. #CivicVoice`;
+  return `REPRESENTATION GAP: Only ${Math.round(gap.publicApprovalPct)}% of AYE & NAY users support "${gap.billTitle}", yet Congress voted ${Math.round(gap.officialApprovalPct)}% YES. Make your voice heard. #AyeAndNay`;
 }
 
 /**

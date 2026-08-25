@@ -1,4 +1,4 @@
-# Civic Voice Web App - Implementation Complete
+# AYE & NAY Web App - Implementation Complete
 
 **Date:** July 24, 2026  
 **Status:** ✅ PRODUCTION READY
@@ -7,7 +7,7 @@
 
 ## Overview
 
-The Civic Voice web application has been systematically tested, debugged, and enhanced to ensure complete feature parity with the mobile app. All core functionality is now working end-to-end through a polished React web interface.
+The AYE & NAY web application has been systematically tested, debugged, and enhanced to ensure complete feature parity with the mobile app. All core functionality is now working end-to-end through a polished React web interface.
 
 ## What Was Done
 
@@ -223,6 +223,6 @@ cd backend && bun install && bun run dev
 ✅ **Comprehensive API coverage**  
 ✅ **User-friendly error handling**  
 
-The Civic Voice web application is **COMPLETE AND READY FOR PRODUCTION USE**.
+The AYE & NAY web application is **COMPLETE AND READY FOR PRODUCTION USE**.
 
 Every feature, every option, and every clickable place in the mobile app is now accessible through the web interface with the same functionality and polished user experience.

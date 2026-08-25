@@ -154,7 +154,7 @@ function env(): Record<string, string | undefined> {
     // signs nothing that outlives the process.
     BETTER_AUTH_SECRET: "test-only-secret-value-not-used-anywhere-else",
     APP_ORIGINS: BASE_URL,
-    APP_SCHEMES: "civicvoice",
+    APP_SCHEMES: "ayeandnay",
     MEDIA_STORAGE: "local",
     UPLOADS_DIR: TEST_UPLOADS_DIR,
     // No caching of the schema-state read: a test changes Prisma's ledger and

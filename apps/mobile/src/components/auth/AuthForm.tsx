@@ -35,7 +35,7 @@ interface SignInResponse {
 }
 
 /**
- * Shared Civic Voice auth form — the phone twin of webapp/src/components/auth/AuthForm.tsx.
+ * Shared AYE & NAY auth form — the phone twin of webapp/src/components/auth/AuthForm.tsx.
  *
  * Same accounts, same endpoints, same rules as the web app:
  *   sign up → POST /api/auth/sign-up/email (Better Auth), then PATCH /api/users/me for the username

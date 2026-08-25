@@ -66,7 +66,7 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1, "BETTER_AUTH_SECRET is required"),
 
   // Comma-separated list of web origins allowed to make credentialed requests,
-  // e.g. "https://civicvoice.app,https://www.civicvoice.app".
+  // e.g. "https://ayeandnay.com,https://www.ayeandnay.com".
   //
   // Both the CORS allowlist (index.ts) and Better Auth's trustedOrigins
   // (auth.ts) are derived from this. They used to be maintained as two separate
@@ -75,7 +75,7 @@ const envSchema = z.object({
   // useful error. One variable, both lists.
   APP_ORIGINS: z.string().optional().default(""),
 
-  // Comma-separated deep-link schemes for the native app, e.g. "civicvoice".
+  // Comma-separated deep-link schemes for the native app, e.g. "ayeandnay".
   // Must match expo.scheme in app.json and the scheme passed to expoClient().
   APP_SCHEMES: z.string().optional().default(""),
 
@@ -99,14 +99,14 @@ const envSchema = z.object({
   // like a missing key when it is not one. Resend refuses any message whose
   // From address is on a domain the account has not verified — a correct key
   // and an unverified sender fail identically from outside. The default below
-  // is a placeholder: unless civicvoice.app is verified in the Resend account
+  // is a placeholder: unless ayeandnay.com is verified in the Resend account
   // this key belongs to, every send is refused. Use onboarding@resend.dev while
   // testing; it needs no DNS and delivers only to the address the account was
   // opened with.
   EMAIL_FROM: z
     .string()
     .optional()
-    .default("Civic Voice <noreply@civicvoice.app>")
+    .default("AYE & NAY <noreply@ayeandnay.com>")
     .transform((value) => value.trim()),
   // Where the message is actually POSTed. Overridable for one reason: the test
   // suite points it at a local Bun.serve and reads the body, which is the only

@@ -1,4 +1,4 @@
-# Civic Voice workspace
+# AYE & NAY workspace
 
 A mobile app, a web app, and the backend both of them read from.
 

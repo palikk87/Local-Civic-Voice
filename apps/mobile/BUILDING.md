@@ -1,4 +1,4 @@
-# Building the Civic Voice app
+# Building the AYE & NAY app
 
 Until now no binary could be produced from this repo at all — there was no
 `eas.json`, and Expo's build service refuses to start without one. There is one
@@ -81,7 +81,7 @@ These are not needed for internal builds and will block a store review:
 - **Apple Developer Program** ($99/year) and **Google Play Console** ($25 once).
   Both must be Khalid's own accounts, enrolled under his own identity — store
   ownership is very hard to transfer later.
-- **Deep links.** `app.json` sets `scheme: "civicvoice"`, so `civicvoice://…`
+- **Deep links.** `app.json` sets `scheme: "ayeandnay"`, so `ayeandnay://…`
   already opens the app once installed. Universal links (an `https://` link
   opening the app instead of the browser) additionally need
   `ios.associatedDomains` and `android.intentFilters` here, plus
@@ -94,9 +94,9 @@ never completes the callback, and nothing logs an error:
 
 | Where | Value |
 |---|---|
-| `app.json` → `expo.scheme` | `civicvoice` |
-| `src/lib/auth/auth-client.ts` → `expoClient({ scheme })` | `civicvoice` |
-| Backend env → `APP_SCHEMES` | `civicvoice` |
+| `app.json` → `expo.scheme` | `ayeandnay` |
+| `src/lib/auth/auth-client.ts` → `expoClient({ scheme })` | `ayeandnay` |
+| Backend env → `APP_SCHEMES` | `ayeandnay` |
 
 ---
 

@@ -26,7 +26,7 @@ export default function Auth() {
             <Vote className="h-12 w-12 text-accent" />
           </div>
           <h1 className="font-display text-3xl font-semibold tracking-tight text-white">
-            Civic Voice
+            AYE & NAY
           </h1>
           <p className="mt-2 text-slate-400">
             Sign in or create your account to make your voice heard.

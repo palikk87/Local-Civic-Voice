@@ -83,7 +83,7 @@
   <never_db_push>
     NEVER run `prisma db push` against this database, with or without --accept-data-loss.
 
-    This database is SHARED with the Civic Voice mobile project. `db push` makes the database
+    This database is SHARED with the AYE & NAY mobile project. `db push` makes the database
     match whichever schema is pushed and DELETES everything that schema lacks. Two projects
     pushing two different schemas means every boot destroys the other side's objects. On
     2026-08-08 this dropped User.banned here (423 rows) and dropped AdminSession plus three

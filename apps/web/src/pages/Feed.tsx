@@ -990,7 +990,7 @@ export default function HomeScreen() {
         <div className="px-4 py-3 border-b border-slate-800">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Civic Voice</h1>
+              <h1 className="text-2xl font-bold text-white">AYE & NAY</h1>
               <p className="text-slate-400 text-sm">All 3 branches of government</p>
             </div>
             <div className="flex items-center">

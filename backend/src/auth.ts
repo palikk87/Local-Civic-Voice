@@ -7,9 +7,18 @@ import { env, trustedOrigins } from "./env";
 import { sendOtpEmail } from "./services/email";
 import { sendVerificationCode } from "./services/email-verification";
 
-/** Seeded sample accounts, so signup logs only report real people. */
+/**
+ * Seeded sample accounts, so signup logs only report real people.
+ *
+ * Both domains, and the old one is not going away. The platform was called
+ * Civic Voice when these rows were seeded, and a row already in the database
+ * does not rename itself — dropping the old suffix would quietly reclassify
+ * every existing sample account as a real person.
+ */
+const SAMPLE_DOMAINS = ["@sample.ayeandnay.com", "@sample.civicvoice.app"] as const;
+
 function isSampleAccount(user: { email: string }): boolean {
-  return user.email.endsWith("@sample.civicvoice.app");
+  return SAMPLE_DOMAINS.some((domain) => user.email.endsWith(domain));
 }
 
 export const auth = betterAuth({

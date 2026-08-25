@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sparkles } from "lucide-react";
 
-const STORAGE_KEY = "civicvoice:seen-beta-welcome";
+const STORAGE_KEY = "ayeandnay:seen-beta-welcome";
 
 export function BetaWelcomeDialog() {
   const [open, setOpen] = useState(false);
@@ -33,7 +33,7 @@ export function BetaWelcomeDialog() {
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600">
             <Sparkles className="h-6 w-6 text-white" />
           </div>
-          <DialogTitle className="text-center text-xl">Welcome to CivicVoice</DialogTitle>
+          <DialogTitle className="text-center text-xl">Welcome to AyeAndNay</DialogTitle>
           <DialogDescription className="text-center">
             We're still in pre-beta and launching for your feedback. Together, we can reclaim democracy.
           </DialogDescription>

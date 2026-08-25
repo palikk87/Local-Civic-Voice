@@ -1,4 +1,4 @@
-# Civic Voice
+# AYE & NAY
 
 A high-trust civic engagement and voting ecosystem that enables citizens to engage with all 3 branches of government: **Legislative**, **Executive**, and **Judicial**. Cast simulated votes on bills, executive orders, and Supreme Court cases while tracking how your representatives vote. Built with React Native and powered by AI for intelligent analysis.
 
@@ -48,7 +48,7 @@ The "Public Pulse" shall not be manipulated for profit, engagement, or bias. The
 The "Vote Details" of any federal action shall be a public record within the platform. Every user has the right to see the mathematical path of a decision—to know exactly how many direct votes and delegated weights formed the Pulse. No "Dark Money" or bot-driven influence shall be permitted to obscure the true will of the people.
 
 ### Article IV: The Right to Data Security & Anonymity
-The right of the people to be secure in their digital persons, papers, and effects shall not be violated. Civic Voice shall collect only the minimum data necessary to verify citizenship and jurisdiction. Personal identity shall remain shielded from the federal government and third parties, ensuring that the "Public Pulse" is a reflection of honest conviction, not a target for surveillance.
+The right of the people to be secure in their digital persons, papers, and effects shall not be violated. AYE & NAY shall collect only the minimum data necessary to verify citizenship and jurisdiction. Personal identity shall remain shielded from the federal government and third parties, ensuring that the "Public Pulse" is a reflection of honest conviction, not a target for surveillance.
 
 ### Article V: The Right to Meritocratic Leadership
 The status of "Civil Leader" is a privilege granted by the community, not a right of the platform. A Leader's magnification is tied directly to their Trust Score. The community retains the right to "Impeach" or demote any leader who violates the platform's integrity or spreads verifiable falsehoods, as determined by the collective will of their followers.
@@ -90,8 +90,8 @@ The Article V screen (`/article-v`) implements constitutional accountability:
 - Triggers platform neutrality review if passed
 
 ### Representation Gap
-The cornerstone feature of Civic Voice - showing the separation between:
-- **The People's Pulse**: How Civic Voice users voted on legislation
+The cornerstone feature of AYE & NAY - showing the separation between:
+- **The People's Pulse**: How AYE & NAY users voted on legislation
 - **Official Government Vote**: How Congress actually voted
 
 This gap is displayed on:
@@ -177,7 +177,7 @@ Shared contracts are Zod schemas in `backend/src/types.ts`; both apps consume th
 - **Admin Authentication**: Separate admin login for platform management
 
 ### Admin Console
-A comprehensive administrative dashboard for managing the Civic Voice platform:
+A comprehensive administrative dashboard for managing the AYE & NAY platform:
 
 - **Dashboard Overview**
   - Total users, posts, votes, and comments statistics
@@ -686,7 +686,7 @@ A media literacy feature that tracks news coverage across the political spectrum
 ### Representation Gap Tracking
 The core accountability feature showing discrepancies between public sentiment and official votes:
 
-- **Pulse Gap Visualization**: Side-by-side comparison of Civic Voice community votes vs Congressional votes
+- **Pulse Gap Visualization**: Side-by-side comparison of AYE & NAY community votes vs Congressional votes
 - **Gap Detection**: Bills with > 30% discrepancy are highlighted as "Representation Gaps"
 - **Statistical Verification**: Confidence levels based on sample size (95% confidence at 100+ votes)
 - **Share the Gap**: Generate social media posts to raise awareness of voting discrepancies

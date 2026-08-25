@@ -16,7 +16,7 @@
  * Usage — set the variables in your shell, not in a committed file:
  *
  *   ADMIN_USERNAME=palikk87 \
- *   ADMIN_EMAIL=palikk87@civicvoice.app \
+ *   ADMIN_EMAIL=palikk87@ayeandnay.com \
  *   ADMIN_PASSWORD='…' \
  *   bun run scripts/seed-admin.ts
  *

@@ -1,4 +1,4 @@
-# Deploying Civic Voice
+# Deploying AYE & NAY
 
 > **Before anything else, read [SHIPPING.md](SHIPPING.md).** It is one page and
 > it answers the question this document cannot: whether the code you deployed is
@@ -343,7 +343,7 @@ Provider quirks, since they cost time otherwise:
    the API host from step 2 — no `https://`, just the hostname:
 
    ```json
-   "destination": "https://civic-voice-api.up.railway.app/api/:path*"
+   "destination": "https://ayeandnay-api.up.railway.app/api/:path*"
    ```
 
    Skip this and every page loads while nothing works, because the app asks a
@@ -411,8 +411,8 @@ application code.
 - **To leave:** dump from the old provider, restore into the new one, change the
   two variables, redeploy.
   ```bash
-  pg_dump "$OLD_DIRECT_URL" -Fc -f civicvoice.dump
-  pg_restore -d "$NEW_DIRECT_URL" civicvoice.dump
+  pg_dump "$OLD_DIRECT_URL" -Fc -f ayeandnay.dump
+  pg_restore -d "$NEW_DIRECT_URL" ayeandnay.dump
   ```
   On a database with no data worth keeping it is simpler still: point
   `DATABASE_URL` at the empty one and let `migrate deploy` build it.
@@ -451,7 +451,7 @@ application code.
 - **To leave:** copy the bucket, change the variables, redeploy. Because the
   database stores object *keys* rather than URLs, no rows need rewriting.
   ```bash
-  rclone sync old:civicvoice-media new:civicvoice-media
+  rclone sync old:ayeandnay-media new:ayeandnay-media
   ```
 
 ### Resend — transactional email
@@ -467,7 +467,7 @@ application code.
   sender domain.** Resend refuses any message whose `From` is on a domain the
   account has not verified, and that refusal is indistinguishable from a bad key
   from the outside. The default `EMAIL_FROM` is a placeholder
-  (`noreply@civicvoice.app`) — unless that domain is verified in the Resend
+  (`noreply@ayeandnay.com`) — unless that domain is verified in the Resend
   account the key belongs to, every send is refused.
 
   Two ways to find out which it is, without guessing:
@@ -544,6 +544,67 @@ it at one.
 Add it on the web host, then add it to `APP_ORIGINS` on the API — comma-separated,
 no trailing slash, including both apex and `www` if both resolve — and redeploy
 the API.
+
+### Moving to ayeandnay.com
+
+The order below is chosen so the site keeps working throughout. Nothing here is
+reversible-in-a-hurry: `APP_ORIGINS` is what lets a browser complete a
+credentialed login, so an origin removed before its replacement resolves signs
+everybody out with no useful error. Every step adds before it removes.
+
+**1. Point the domain at the web host.** Vercel → the project → Settings →
+Domains → add `ayeandnay.com` and `www.ayeandnay.com`, then add the DNS records
+it gives you at the registrar. The existing `.vercel.app` address keeps serving
+the whole time.
+
+**2. Widen `APP_ORIGINS` before narrowing it.** On the API host, set it to hold
+the old address *and* the new one:
+
+```
+APP_ORIGINS=https://ayeandnay.com,https://www.ayeandnay.com,https://<the old vercel address>
+```
+
+Leave it that way until the new domain has been serving for a day. Then drop the
+old entry — not before, because DNS takes as long as it takes and a stale cache
+somewhere is still a real visitor.
+
+**3. Verify the domain in Resend.** Resend → Domains → add `ayeandnay.com` →
+add the DKIM and SPF records it gives you at the registrar → wait for "verified".
+This is the step that actually fixes sign-up email: until a domain is verified,
+`onboarding@resend.dev` is the only sender that works, and it delivers **only**
+to the address the Resend account was opened with. Everyone else gets nothing,
+and the send still reports success.
+
+**4. Then, and only then, move the sender.**
+
+```
+EMAIL_FROM=AYE & NAY <noreply@ayeandnay.com>
+```
+
+Moving it before step 3 finishes is worse than leaving it: `onboarding@resend.dev`
+at least reaches one inbox, and an unverified domain reaches none.
+
+**5. Confirm it with a send, not with a setting.** Admin console → Settings →
+**API keys and email** → Send test. It reports what Resend actually said.
+
+**6. The deep-link scheme, when the mobile app is next built.** `expo.scheme` in
+`apps/mobile/app.json` is now `ayeandnay`. `APP_SCHEMES` on the API must list
+every scheme that any installed build uses, or sign-in on a device fails
+silently:
+
+```
+APP_SCHEMES=ayeandnay,civicvoice
+```
+
+Keep `civicvoice` for as long as any build carrying the old scheme is installed
+anywhere. It costs nothing to keep and it is the difference between an old build
+signing in and an old build appearing broken.
+
+**Not required, and deliberately not done here:** moving the API itself to
+`api.ayeandnay.com`. The web app reaches it through the `/api/*` rewrite in
+`apps/web/vercel.json`, so the API's hostname is not user-visible and moving it
+is a separate change with its own way of breaking. If you do move it, that
+rewrite destination and `BACKEND_URL` change together.
 
 ## After the first deploy
 

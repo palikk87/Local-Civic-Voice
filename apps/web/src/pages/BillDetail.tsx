@@ -417,7 +417,7 @@ export default function BillDetail() {
 
   const handleShare = async () => {
     if (!requireAuth("Sign in to share this bill.")) return;
-    const shareText = `Check out this bill: ${bill!.title}\n\nVote on Civic Voice!`;
+    const shareText = `Check out this bill: ${bill!.title}\n\nVote on AYE & NAY!`;
     try {
       if (navigator.share) {
         await navigator.share({ text: shareText });

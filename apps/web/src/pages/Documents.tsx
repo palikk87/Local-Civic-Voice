@@ -26,7 +26,7 @@ export default function Documents() {
         <div className="relative">
           <Seal className="mx-auto h-12 w-12 text-accent" />
           <p className="mt-4 text-xs font-semibold uppercase tracking-institutional text-accent">
-            The Civic Voice
+            The AYE & NAY
           </p>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
             Founding Documents

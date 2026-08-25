@@ -31,7 +31,7 @@ const expoPlugin = expoClient({
   // the backend, which feeds Better Auth's trustedOrigins. If those three ever
   // disagree the deep-link auth callback fails silently in new builds — no
   // error, the app simply never completes sign-in.
-  scheme: "civicvoice",
+  scheme: "ayeandnay",
   storagePrefix: "civic",
   storage: SecureStore,
 }) as unknown as BetterAuthClientPlugin;

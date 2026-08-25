@@ -341,7 +341,7 @@ export default function AdminDashboardScreen() {
         {/* Footer */}
         <View className="mt-6 mb-8 items-center">
           <Text className="text-slate-500 text-xs">
-            Civic Voice Admin Console v1.0
+            AYE & NAY Admin Console v1.0
           </Text>
           <Text className="text-slate-600 text-xs mt-1">
             All admin actions are logged for security

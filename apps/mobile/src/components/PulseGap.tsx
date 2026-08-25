@@ -2,7 +2,7 @@
  * PulseGap Component
  *
  * Visualizes the "Representation Gap" - the discrepancy between
- * public sentiment (Civic Voice votes) and official Congressional votes.
+ * public sentiment (AYE & NAY votes) and official Congressional votes.
  *
  * Design: Editorial/Data journalism aesthetic with bold typography
  * and dramatic visual hierarchy. Red alert state for significant gaps.
@@ -296,7 +296,7 @@ export function PulseGap({ gap, onPress, compact = false }: PulseGapProps) {
                   </View>
                   <View>
                     <Text className="text-white font-semibold text-sm">Public Voice</Text>
-                    <Text className="text-gray-400 text-xs">Civic Voice Users</Text>
+                    <Text className="text-gray-400 text-xs">AYE & NAY Users</Text>
                   </View>
                 </View>
                 <Text className="text-2xl font-black text-blue-400">

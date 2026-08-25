@@ -253,7 +253,7 @@ describe("sign up, read the code out of the message, and take part", () => {
     await startServer({
       RESEND_API_KEY: "test-resend-key-not-a-real-one",
       RESEND_ENDPOINT: endpoint,
-      EMAIL_FROM: "Civic Voice Test <test@example.invalid>",
+      EMAIL_FROM: "AYE & NAY Test <test@example.invalid>",
     });
   });
 
@@ -275,8 +275,8 @@ describe("sign up, read the code out of the message, and take part", () => {
     expect(inbox.length).toBe(1);
 
     const mail = inbox[0]!;
-    expect(mail.subject).toBe("Verify your Civic Voice email");
-    expect(mail.from).toBe("Civic Voice Test <test@example.invalid>");
+    expect(mail.subject).toBe("Verify your AYE & NAY email");
+    expect(mail.from).toBe("AYE & NAY Test <test@example.invalid>");
     // Sent as the provider requires, not merely constructed.
     expect(mail.authorization).toBe("Bearer test-resend-key-not-a-real-one");
     // Both parts carry the code — a text-only client is not left with nothing.

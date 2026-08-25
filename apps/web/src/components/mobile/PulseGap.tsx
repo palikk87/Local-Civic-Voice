@@ -2,7 +2,7 @@
  * PulseGap Component (web port of mobile/src/components/PulseGap.tsx)
  *
  * Visualizes the "Representation Gap" - the discrepancy between
- * public sentiment (Civic Voice votes) and official Congressional votes.
+ * public sentiment (AYE & NAY votes) and official Congressional votes.
  */
 import { AlertTriangle, Users, Building2, Share2, ChevronRight } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
@@ -179,7 +179,7 @@ export function PulseGap({ gap, onPress, compact = false }: PulseGapProps) {
                   </div>
                   <div>
                     <p className="text-white font-semibold text-sm">Public Voice</p>
-                    <p className="text-gray-400 text-xs">Civic Voice Users</p>
+                    <p className="text-gray-400 text-xs">AYE & NAY Users</p>
                   </div>
                 </div>
                 <span className="text-2xl font-black text-blue-400">

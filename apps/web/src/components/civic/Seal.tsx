@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The Civic Voice mark — three interlocking arcs for the three branches of
+ * The AYE & NAY mark — three interlocking arcs for the three branches of
  * government surrounding a central node (the citizen).
  */
 export function Seal({ className }: { className?: string }) {
