@@ -284,6 +284,127 @@ export async function rotateB2BCredentials(
 }
 
 // ---------------------------------------------------------------------------
+// B2B seats
+// ---------------------------------------------------------------------------
+
+/**
+ * A seat is a person at a client company. It carries its own password, so it
+ * comes through this file like every other credential in the system.
+ *
+ * WHY SEATS AT ALL. One B2BClient row used to be the entire account: one
+ * username, one password, shared by everybody at the firm. Withdrawing one
+ * person's access meant changing the password on all of them — which is the
+ * very event, a login that stopped working with no explanation, that this file
+ * was written to make impossible. A seat can be disabled on its own.
+ */
+export interface NewB2BMember {
+  clientId: string;
+  username: string;
+  name: string;
+  email?: string | null;
+  /** owner | admin | analyst */
+  role: string;
+  password: string;
+}
+
+export const B2B_MEMBER_PUBLIC_FIELDS = {
+  id: true,
+  clientId: true,
+  username: true,
+  name: true,
+  email: true,
+  role: true,
+  disabled: true,
+  lastAccessAt: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+export type B2BMemberPublicRow = {
+  id: string;
+  clientId: string;
+  username: string;
+  name: string;
+  email: string | null;
+  role: string;
+  disabled: boolean;
+  lastAccessAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** Add a seat. Fails if the username is taken by any client's seat. */
+export async function createB2BMember(
+  input: NewB2BMember,
+  change: CredentialChange
+): Promise<B2BMemberPublicRow> {
+  requireReason(change);
+
+  const created = await prisma.b2BMember.create({
+    data: {
+      clientId: input.clientId,
+      // Lowercased on the way in, matched lowercased at login — same rule as
+      // B2BClient.username, because both are typed into the same box.
+      username: input.username.toLowerCase(),
+      name: input.name,
+      email: input.email ?? null,
+      role: input.role,
+      passwordHash: await hashPassword(input.password),
+    },
+    select: B2B_MEMBER_PUBLIC_FIELDS,
+  });
+
+  await record(
+    "create_b2b_member",
+    change,
+    created.clientId,
+    `Added B2B seat ${created.username} (${created.role})`
+  );
+
+  return created;
+}
+
+export interface B2BMemberPasswordResult {
+  member: B2BMemberPublicRow;
+  /** Live sessions ended for this seat. Always, on any password change. */
+  revokedSessions: number;
+}
+
+/**
+ * Set a seat's password.
+ *
+ * Revokes that seat's sessions and no one else's. The whole point of a seat is
+ * that what happens to it happens to one person, so this deletes by memberId
+ * rather than by clientId — signing the entire company out because one analyst
+ * changed their password would reintroduce the shared-credential problem in a
+ * different costume.
+ */
+export async function setB2BMemberPassword(
+  memberId: string,
+  password: string,
+  change: CredentialChange
+): Promise<B2BMemberPasswordResult> {
+  requireReason(change);
+
+  const member = await prisma.b2BMember.update({
+    where: { id: memberId },
+    data: { passwordHash: await hashPassword(password) },
+    select: B2B_MEMBER_PUBLIC_FIELDS,
+  });
+
+  const revokedSessions = (await prisma.b2BSession.deleteMany({ where: { memberId } })).count;
+
+  await record(
+    "set_b2b_member_password",
+    change,
+    member.clientId,
+    `Set the password on B2B seat ${member.username}`
+  );
+
+  return { member, revokedSessions };
+}
+
+// ---------------------------------------------------------------------------
 // People
 // ---------------------------------------------------------------------------
 

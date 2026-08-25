@@ -137,11 +137,22 @@ model B2BSession {
   clientName String
   /// basic | professional | enterprise
   tier       String
+  /// The B2BMember this session belongs to, or null when the account's own
+  /// username (or an API key) was used — that login is the owner.
+  memberId   String?
+  /// owner | admin | analyst, copied at login. Copied rather than joined so an
+  /// authorisation check is the same single row read every other B2B request
+  /// already does; a role change takes effect at the seat holder's next login,
+  /// or immediately if the change revokes their sessions, which demoting and
+  /// disabling both do.
+  memberRole String?
+  memberName String?
   createdAt  DateTime @default(now())
   expiresAt  DateTime
 
   @@index([clientId])
   @@index([expiresAt])
+  @@index([memberId])
 }
 
 /// Site-wide notices written by an admin and read by both clients.
@@ -1225,4 +1236,42 @@ model BugReport {
 
   @@index([status, createdAt])
   @@index([userId])
+}
+
+/// A person at a B2B client company who can sign in to the portal.
+///
+/// WHY THIS EXISTS. A B2BClient row was the whole account: one username, one
+/// password, one company. Everybody at the firm shared it. That is why the
+/// portal had no settings screen worth building — there was nothing to
+/// administer, and no way to answer "who signed in on Tuesday" beyond "the
+/// company did". It also meant the only way to remove somebody's access was to
+/// change the password on everybody at once, which is the exact event that
+/// started the credential audit work in services/credentials.ts.
+///
+/// A seat is a person. Removing one removes one. The company's own owner does
+/// that, in the portal, without filing a ticket with us.
+///
+/// The B2BClient row remains the account and its username is still a valid
+/// login — that login is the owner and cannot be removed, because an account
+/// that can lock itself out is an account we get a support call about.
+model B2BMember {
+  id       String @id @default(cuid())
+  clientId String
+  /// Unique across the whole table, not per client: it is typed into the same
+  /// login box as a B2BClient username, so two companies cannot both have an
+  /// "analyst".
+  username String @unique
+  name     String
+  email    String?
+  /// owner | admin | analyst. owner and admin can manage seats; analyst reads.
+  role     String @default("analyst")
+  passwordHash String
+  /// Kept rather than deleted when access is withdrawn, so the activity log
+  /// still resolves the name of whoever did something last month.
+  disabled Boolean @default(false)
+  lastAccessAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
 }

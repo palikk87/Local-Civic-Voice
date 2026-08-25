@@ -423,7 +423,7 @@ export async function resetData(): Promise<void> {
           "Session", "Account", "Verification",
           "GovernmentReferenceVote", "ReferenceMergeCandidate", "ReferenceName", "GovernmentReference",
           "Message", "ConversationParticipant", "Conversation",
-          "AdminSession", "B2BSession", "AdminActivityLog", "Announcement",
+          "AdminSession", "B2BSession", "B2BMember", "AdminActivityLog", "Announcement",
           "User"
         RESTART IDENTITY CASCADE
       `);

@@ -4,7 +4,16 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { verifyPasswordOrDummy } from "../password-check";
 import { generateB2BToken } from "../session-token";
-import { hashApiKey } from "../services/credentials";
+import {
+  B2B_MEMBER_PUBLIC_FIELDS,
+  createB2BMember,
+  generateApiKey,
+  generatePassword,
+  hashApiKey,
+  rotateB2BCredentials,
+  setB2BMemberPassword,
+  type B2BMemberPublicRow,
+} from "../services/credentials";
 
 /**
  * What a paying client is told about participation here.
@@ -64,6 +73,67 @@ async function getPlatformCounts() {
     yeaVotes: legacyYea + referenceYea,
     nayVotes: legacyNay + referenceNay,
   };
+}
+
+/**
+ * Support and opposition, per branch of government, actually counted.
+ *
+ * WHAT THIS REPLACES. Both dashboards showed a legislative / executive /
+ * judicial breakdown that did not exist: the client took the one national
+ * total and multiplied it by 0.4, 0.35 and 0.25. Those three numbers were
+ * written once by somebody who needed the chart to have three bars, and every
+ * business that has looked at this dashboard has been reading them as
+ * measurements. A number nobody measured, shown to somebody paying for
+ * measurements, is the worst thing this product can do.
+ *
+ * It is a real question with a real answer, and a cheap one. Every vote lands
+ * on a GovernmentReference, and every reference knows which branch it belongs
+ * to, so this is one grouped count.
+ *
+ * The legacy Vote table has no branch — it predates GovernmentReference and its
+ * rows are all bills — so its counts are added to the legislative side, where
+ * they honestly belong, rather than being dropped or spread.
+ */
+type BranchKey = "legislative" | "executive" | "judicial";
+
+const BRANCH_OF_REFERENCE: Record<string, BranchKey> = {
+  bill: "legislative",
+  executive_order: "executive",
+  scotus_case: "judicial",
+};
+
+async function getBranchCounts(): Promise<Record<BranchKey, { support: number; oppose: number }>> {
+  const empty = () => ({ support: 0, oppose: 0 });
+  const branches: Record<BranchKey, { support: number; oppose: number }> = {
+    legislative: empty(),
+    executive: empty(),
+    judicial: empty(),
+  };
+
+  const [rows, legacySupport, legacyOppose] = await Promise.all([
+    prisma.$queryRaw<{ referenceType: string; position: string; count: bigint }[]>`
+      SELECT r."referenceType", v."position", COUNT(*)::bigint AS count
+      FROM "GovernmentReferenceVote" v
+      JOIN "GovernmentReference" r ON r."id" = v."governmentReferenceId"
+      GROUP BY r."referenceType", v."position"
+    `,
+    prisma.vote.count({ where: { position: "support" } }),
+    prisma.vote.count({ where: { position: "oppose" } }),
+  ]);
+
+  for (const row of rows) {
+    const branch = BRANCH_OF_REFERENCE[row.referenceType];
+    // A reference type nobody has taught this about is skipped rather than
+    // guessed at. An uncounted vote is a smaller lie than a miscounted one.
+    if (!branch) continue;
+    if (row.position === "support") branches[branch].support += Number(row.count);
+    if (row.position === "oppose") branches[branch].oppose += Number(row.count);
+  }
+
+  branches.legislative.support += legacySupport;
+  branches.legislative.oppose += legacyOppose;
+
+  return branches;
 }
 
 /**
@@ -161,24 +231,82 @@ interface B2BClient {
   lastAccess?: string;
 }
 
+/** owner and admin can manage seats. analyst reads the dashboards only. */
+type B2BRole = "owner" | "admin" | "analyst";
+
 interface B2BSession {
   token: string;
   clientId: string;
   clientName: string;
   tier: "basic" | "professional" | "enterprise";
+  /**
+   * Null when the account's own username or an API key was used. That login is
+   * the account itself, and it is always an owner — see `roleOf`.
+   */
+  memberId: string | null;
+  memberName: string | null;
+  role: B2BRole;
   createdAt: string;
   expiresAt: string;
 }
 
+/**
+ * A stored session's role.
+ *
+ * Sessions that predate seats have memberRole NULL, and so does every API-key
+ * and account-username login. All of those are the account acting as itself,
+ * which is the owner — so NULL reads as "owner" rather than as "no permission".
+ * Getting this backwards would sign every existing customer out of their own
+ * settings page the moment this deployed.
+ */
+function roleOf(memberRole: string | null | undefined): B2BRole {
+  if (memberRole === "admin") return "admin";
+  if (memberRole === "analyst") return "analyst";
+  return "owner";
+}
+
+/** Managing seats is an owner/admin action. Reading the dashboards is not. */
+function canManageSeats(session: B2BSession): boolean {
+  return session.role === "owner" || session.role === "admin";
+}
+
+/**
+ * What a sentiment figure honestly consists of.
+ *
+ * THREE FIELDS WERE REMOVED FROM EVERY RESPONSE THAT BUILT ONE OF THESE, and
+ * they are worth naming because each was shown to a paying customer as a
+ * measurement:
+ *
+ *   confidence — was `total > 10 ? 0.85 : 0.5`. Two literals. The Issues screen
+ *   rendered it as "85%", which reads as a statistical confidence level. It was
+ *   not derived from a sample size, a variance, or anything else; it was a
+ *   number that made the panel look finished. What a reader actually wants from
+ *   it is "how many people is this based on", and that is `total`, which is
+ *   real and is now what the screens show.
+ *
+ *   trend — was `score > 0.1 ? "rising" : score < -0.1 ? "falling" : "stable"`,
+ *   which is not a trend. It is the current level wearing the word for a
+ *   direction: a bill sitting steadily at 70% support was labelled "rising"
+ *   forever, having risen nowhere. Movement needs two points in time and
+ *   nothing here stored the earlier one.
+ *
+ *   changePercent — was the literal 0, drawn as "no change". Null now, and the
+ *   clients render nothing for null, because "we did not measure this" and "we
+ *   measured it and it did not move" are different statements and only one of
+ *   them was true.
+ *
+ * The overview endpoint's weekly and monthly change ARE measured — two windows,
+ * counted — and they are still there.
+ */
 interface SentimentData {
   support: number;
   oppose: number;
   neutral: number;
   total: number;
   score: number;
-  confidence: number;
-  trend: "rising" | "falling" | "stable";
-  changePercent: number;
+  confidence?: number;
+  trend?: "rising" | "falling" | "stable";
+  changePercent: number | null;
 }
 
 // ==========================================
@@ -368,6 +496,9 @@ async function getClientFromToken(
       clientId: row.clientId,
       clientName: row.clientName,
       tier: row.tier as B2BSession["tier"],
+      memberId: row.memberId,
+      memberName: row.memberName,
+      role: roleOf(row.memberRole),
       createdAt: row.createdAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
     };
@@ -383,6 +514,11 @@ async function getClientFromToken(
       clientId: client.id,
       clientName: client.name,
       tier: client.tier as B2BSession["tier"],
+      // The API key belongs to the account, not to any one person at it, so it
+      // authenticates as the account: owner, no seat.
+      memberId: null,
+      memberName: null,
+      role: "owner",
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
     };
@@ -442,6 +578,59 @@ const issueIdParamSchema = z.object({
   issueId: z.string().min(1, "Issue ID is required"),
 });
 
+// --- Settings and seats ----------------------------------------------------
+//
+// MINIMUM 12 CHARACTERS, everywhere a password is chosen. The admin console
+// uses the same floor (routes/admin.ts), and it is checked on the server rather
+// than only in the form, because the form is not the only thing that can call
+// this.
+
+const B2B_PASSWORD = z.string().min(12, "Password must be at least 12 characters");
+
+const changeOwnPasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Your current password is required"),
+  newPassword: B2B_PASSWORD,
+});
+
+const rotateOwnApiKeySchema = z.object({
+  currentPassword: z.string().min(1, "Your current password is required"),
+});
+
+const B2B_ROLE = z.enum(["admin", "analyst"]);
+
+const createMemberSchema = z.object({
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .max(64)
+    .regex(/^[a-zA-Z0-9._-]+$/, "Letters, numbers, dot, dash and underscore only"),
+  name: z.string().min(1, "Name is required").max(120),
+  email: z.string().email("Enter a valid email").optional(),
+  role: B2B_ROLE.default("analyst"),
+  /**
+   * Optional. Supplied means an administrator typed it; omitted means generate
+   * one. Both are returned exactly once, in the create response, and never
+   * again — the column holds a scrypt hash and there is nothing to read back.
+   */
+  password: B2B_PASSWORD.optional(),
+});
+
+const updateMemberSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  email: z.string().email("Enter a valid email").nullable().optional(),
+  role: B2B_ROLE.optional(),
+  disabled: z.boolean().optional(),
+});
+
+const setMemberPasswordSchema = z.object({
+  /** Omit to have one generated. */
+  password: B2B_PASSWORD.optional(),
+});
+
+const memberIdParamSchema = z.object({
+  memberId: z.string().min(1, "Member ID is required"),
+});
+
 // ==========================================
 // Router
 // ==========================================
@@ -469,7 +658,14 @@ const b2bRouter = new Hono();
  * analytics call, which is a lot of write traffic for a timestamp nobody reads
  * in real time.
  */
-async function startSession(row: B2BClientRow) {
+async function startSession(
+  row: B2BClientRow,
+  /**
+   * The seat that signed in, when one did. Omitted for the account's own
+   * username and for API keys, which are the account acting as itself.
+   */
+  member?: { id: string; name: string; role: string }
+) {
   const token = generateB2BToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -479,12 +675,25 @@ async function startSession(row: B2BClientRow) {
     data: { lastAccessAt: now },
   });
 
+  // A seat's own last-seen time. Written here for the same reason the account's
+  // is: at login, not per request. It is what makes "who has not used this in
+  // three months" answerable, which is the question that gets a seat removed.
+  if (member) {
+    await prisma.b2BMember.update({
+      where: { id: member.id },
+      data: { lastAccessAt: now },
+    });
+  }
+
   await prisma.b2BSession.create({
     data: {
       token,
       clientId: updated.id,
       clientName: updated.name,
       tier: updated.tier,
+      memberId: member?.id ?? null,
+      memberRole: member?.role ?? null,
+      memberName: member?.name ?? null,
       createdAt: now,
       expiresAt,
     },
@@ -498,6 +707,8 @@ async function startSession(row: B2BClientRow) {
     success: true,
     token,
     client: toPublicClient(updated),
+    member: member ? { id: member.id, name: member.name, role: member.role } : null,
+    role: member?.role ?? "owner",
     expiresAt: expiresAt.toISOString(),
   };
 }
@@ -515,25 +726,57 @@ b2bRouter.post("/auth/login", zValidator("json", loginSchema), async (c) => {
 
 b2bRouter.post("/auth/credential-login", zValidator("json", credentialLoginSchema), async (c) => {
   const { username, password } = c.req.valid("json");
+  const lookup = username.toLowerCase();
 
-  // Usernames are stored lowercased by scripts/seed-b2b.ts, so this is the
-  // case-insensitive match the fixture array's Object.keys().find() did — minus
-  // the scan.
-  const client = await prisma.b2BClient.findUnique({
-    where: { username: username.toLowerCase() },
-  });
+  // TWO KINDS OF LOGIN, ONE BOX. The account's own username signs in as the
+  // owner; a seat's username signs in as that person. Both are stored
+  // lowercased and both are looked up here, because whoever is typing does not
+  // know or care which kind of row they are.
+  //
+  // Both lookups run regardless of whether the first hits: `await
+  // Promise.all` means the response takes the same time either way. Doing them
+  // in sequence with an early return would make an account username measurably
+  // faster than a seat username, which is a small enumeration oracle for free.
+  const [client, member] = await Promise.all([
+    prisma.b2BClient.findUnique({ where: { username: lookup } }),
+    prisma.b2BMember.findUnique({ where: { username: lookup } }),
+  ]);
 
   // Same 401 whether the account is missing or the password is wrong, and the
   // password is verified either way — otherwise the response time says which of
   // the two happened, and that is an account-enumeration oracle. Shared with
   // the admin console; see src/password-check.ts.
-  const passwordOk = await verifyPasswordOrDummy(client?.passwordHash, password, "B2B");
+  const hash = client?.passwordHash ?? member?.passwordHash;
+  const passwordOk = await verifyPasswordOrDummy(hash, password, "B2B");
 
-  if (!client || !passwordOk) {
+  if (!passwordOk) {
     return c.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  return c.json(await startSession(client));
+  if (client) {
+    return c.json(await startSession(client));
+  }
+
+  if (!member) {
+    return c.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  // A withdrawn seat is told the same thing a wrong password is told, and only
+  // after the password has been checked. Saying "this account is disabled"
+  // confirms the username exists to anyone who guesses it.
+  if (member.disabled) {
+    return c.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  const owner = await prisma.b2BClient.findUnique({ where: { id: member.clientId } });
+  if (!owner) {
+    // The company the seat belongs to is gone. Nothing to sign in to.
+    return c.json({ error: "Invalid credentials" }, { status: 401 });
+  }
+
+  return c.json(
+    await startSession(owner, { id: member.id, name: member.name, role: member.role })
+  );
 });
 
 b2bRouter.get("/auth/verify", async (c) => {
@@ -551,6 +794,11 @@ b2bRouter.get("/auth/verify", async (c) => {
       name: session.clientName,
       tier: session.tier,
     },
+    member: session.memberId
+      ? { id: session.memberId, name: session.memberName, role: session.role }
+      : null,
+    role: session.role,
+    canManageSeats: canManageSeats(session),
     expiresAt: session.expiresAt,
   });
 });
@@ -632,6 +880,529 @@ b2bRouter.get("/account/security", async (c) => {
   });
 });
 
+// ==========================================
+// Settings: what a client can change about itself
+// ==========================================
+//
+// THE RULE THIS SECTION LIVES UNDER. Nothing in the backend rotates a
+// credential on its own — no scheduled refresh, no rotate-on-startup, no
+// environment flag that re-keys an account because a deploy happened. Every
+// change below is somebody pressing a button and typing their current password
+// first. That is the whole difference between a system a business can trust and
+// one whose logins stop working for reasons nobody can name.
+//
+// The writing itself happens in services/credentials.ts, which is the only file
+// in the repository allowed to hash a password, and which records who and why
+// before it reports success.
+
+/** The seat and account behind the current session, or a 401 response. */
+function requireSeatAdmin(session: B2BSession) {
+  return canManageSeats(session)
+    ? null
+    : { error: "Only an owner or admin on this account can manage seats." };
+}
+
+/** Never returns a hash. What the seat list shows. */
+function toPublicMember(row: B2BMemberPublicRow) {
+  return {
+    id: row.id,
+    username: row.username,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    disabled: row.disabled,
+    lastAccessAt: row.lastAccessAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/**
+ * GET /api/b2b/account
+ *
+ * Everything the settings screen needs in one call: the company, who you are
+ * signed in as, and what you are allowed to do.
+ */
+b2bRouter.get("/account", async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  const [client, seatCount] = await Promise.all([
+    prisma.b2BClient.findUnique({
+      where: { id: session.clientId },
+      select: { id: true, username: true, name: true, type: true, tier: true, createdAt: true, lastAccessAt: true },
+    }),
+    prisma.b2BMember.count({ where: { clientId: session.clientId, disabled: false } }),
+  ]);
+
+  if (!client) {
+    return c.json({ error: "Account not found" }, { status: 404 });
+  }
+
+  const member = session.memberId
+    ? await prisma.b2BMember.findUnique({
+        where: { id: session.memberId },
+        select: B2B_MEMBER_PUBLIC_FIELDS,
+      })
+    : null;
+
+  return c.json({
+    account: {
+      id: client.id,
+      username: client.username,
+      name: client.name,
+      type: client.type,
+      tier: client.tier,
+      createdAt: client.createdAt.toISOString(),
+      lastAccessAt: client.lastAccessAt?.toISOString() ?? null,
+      // Seats currently able to sign in, plus the account's own login, which is
+      // always one and cannot be removed.
+      activeSeats: seatCount + 1,
+    },
+    signedInAs: member
+      ? { kind: "member" as const, ...toPublicMember(member) }
+      : {
+          kind: "account" as const,
+          username: client.username,
+          name: client.name,
+          role: "owner" as const,
+        },
+    role: session.role,
+    canManageSeats: canManageSeats(session),
+    // Only the account itself holds an API key. A seat signs in with a password
+    // and has nothing to rotate here.
+    canRotateApiKey: session.memberId === null,
+  });
+});
+
+/**
+ * POST /api/b2b/account/password
+ *
+ * Change your own password. Requires the current one — this endpoint is
+ * reachable with a live session, and a session left open on an unattended
+ * laptop should not be enough to lock its owner out of their own account.
+ */
+b2bRouter.post("/account/password", zValidator("json", changeOwnPasswordSchema), async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  const { currentPassword, newPassword } = c.req.valid("json");
+
+  if (session.memberId) {
+    const member = await prisma.b2BMember.findUnique({ where: { id: session.memberId } });
+    const ok = await verifyPasswordOrDummy(member?.passwordHash, currentPassword, "B2B");
+    if (!member || !ok) {
+      return c.json({ error: "That is not your current password." }, { status: 401 });
+    }
+
+    const { revokedSessions } = await setB2BMemberPassword(member.id, newPassword, {
+      actor: { kind: "self", userId: member.id, username: member.username },
+      reason: "Seat holder changed their own password from B2B settings",
+    });
+
+    // Their other sessions are gone, including this one. Signing the person out
+    // of the device they are standing at, on the change they just made, is
+    // hostile — so a fresh session is issued to replace it.
+    const owner = await prisma.b2BClient.findUnique({ where: { id: member.clientId } });
+    if (!owner) {
+      return c.json({ error: "Account not found" }, { status: 404 });
+    }
+
+    const next = await startSession(owner, {
+      id: member.id,
+      name: member.name,
+      role: member.role,
+    });
+
+    return c.json({
+      success: true,
+      changed: "password",
+      // Every device except this one. The one being replaced is not a loss.
+      otherSessionsEnded: Math.max(0, revokedSessions - 1),
+      token: next.token,
+      expiresAt: next.expiresAt,
+    });
+  }
+
+  const client = await prisma.b2BClient.findUnique({ where: { id: session.clientId } });
+  const ok = await verifyPasswordOrDummy(client?.passwordHash, currentPassword, "B2B");
+  if (!client || !ok) {
+    return c.json({ error: "That is not your current password." }, { status: 401 });
+  }
+
+  const { revokedSessions } = await rotateB2BCredentials(
+    client.id,
+    { password: newPassword },
+    {
+      actor: { kind: "self", userId: client.id, username: client.username },
+      reason: "Account owner changed the account password from B2B settings",
+    }
+  );
+
+  const next = await startSession(client);
+
+  return c.json({
+    success: true,
+    changed: "password",
+    otherSessionsEnded: Math.max(0, revokedSessions - 1),
+    token: next.token,
+    expiresAt: next.expiresAt,
+  });
+});
+
+/**
+ * POST /api/b2b/account/api-key
+ *
+ * Issue a new API key for the account, and invalidate the old one.
+ *
+ * RETURNED EXACTLY ONCE. The column holds a SHA-256 digest; there is no way to
+ * read the key back, by us or by anyone with the database. Owner only: the key
+ * authenticates as the whole company, so handing an analyst the ability to mint
+ * one would make the seat distinction decorative.
+ */
+b2bRouter.post("/account/api-key", zValidator("json", rotateOwnApiKeySchema), async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+
+  if (session.memberId !== null) {
+    return c.json(
+      { error: "The API key belongs to the account. Sign in with the account login to change it." },
+      { status: 403 }
+    );
+  }
+
+  const client = await prisma.b2BClient.findUnique({ where: { id: session.clientId } });
+  const ok = await verifyPasswordOrDummy(
+    client?.passwordHash,
+    c.req.valid("json").currentPassword,
+    "B2B"
+  );
+  if (!client || !ok) {
+    return c.json({ error: "That is not your current password." }, { status: 401 });
+  }
+
+  const apiKey = generateApiKey();
+  await rotateB2BCredentials(
+    client.id,
+    { apiKey },
+    {
+      actor: { kind: "self", userId: client.id, username: client.username },
+      reason: "Account owner issued a new API key from B2B settings",
+    }
+  );
+
+  return c.json({
+    success: true,
+    changed: "apiKey",
+    apiKey,
+    warning: "Copy this now. It is stored as a digest and cannot be shown again.",
+  });
+});
+
+// ==========================================
+// The account's own admin portal: seats
+// ==========================================
+
+/** GET /api/b2b/admin/members — who at this company can sign in. */
+b2bRouter.get("/admin/members", async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+  const denied = requireSeatAdmin(session);
+  if (denied) return c.json(denied, { status: 403 });
+
+  const [client, members] = await Promise.all([
+    prisma.b2BClient.findUnique({
+      where: { id: session.clientId },
+      select: { username: true, name: true, lastAccessAt: true },
+    }),
+    prisma.b2BMember.findMany({
+      where: { clientId: session.clientId },
+      select: B2B_MEMBER_PUBLIC_FIELDS,
+      orderBy: [{ disabled: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
+
+  return c.json({
+    // Listed alongside the seats and marked, because from the seat list's point
+    // of view it is one more login that exists — leaving it out is how somebody
+    // concludes there are two ways in when there are three.
+    accountLogin: client
+      ? {
+          username: client.username,
+          name: client.name,
+          role: "owner" as const,
+          lastAccessAt: client.lastAccessAt?.toISOString() ?? null,
+          removable: false,
+        }
+      : null,
+    members: members.map(toPublicMember),
+    total: members.length,
+  });
+});
+
+/**
+ * POST /api/b2b/admin/members — add a seat.
+ *
+ * The password is returned once, here, and never again. Supplying one means an
+ * administrator typed it; omitting it generates one. Both paths exist because
+ * "here is the password I chose for you" and "here is a random one" are both
+ * things real administrators do, and forcing the second produces a password
+ * that gets pasted into a chat window to be readable.
+ */
+b2bRouter.post("/admin/members", zValidator("json", createMemberSchema), async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+  const denied = requireSeatAdmin(session);
+  if (denied) return c.json(denied, { status: 403 });
+
+  const body = c.req.valid("json");
+  const username = body.username.toLowerCase();
+
+  // Checked against both tables: a seat username and an account username go in
+  // the same login box, so a collision between them is a real collision even
+  // though the unique index cannot see it.
+  const [seatTaken, accountTaken] = await Promise.all([
+    prisma.b2BMember.findUnique({ where: { username }, select: { id: true } }),
+    prisma.b2BClient.findUnique({ where: { username }, select: { id: true } }),
+  ]);
+  if (seatTaken || accountTaken) {
+    return c.json({ error: "That username is already in use." }, { status: 409 });
+  }
+
+  const password = body.password ?? generatePassword();
+
+  const member = await createB2BMember(
+    {
+      clientId: session.clientId,
+      username,
+      name: body.name,
+      email: body.email ?? null,
+      role: body.role,
+      password,
+    },
+    {
+      actor: { kind: "admin", adminId: session.memberId ?? session.clientId, username: session.memberName ?? session.clientName },
+      reason: `Seat added from the ${session.clientName} B2B admin portal`,
+    }
+  );
+
+  return c.json({
+    success: true,
+    member: toPublicMember(member),
+    credentials: { username: member.username, password },
+    warning: "This password is shown once. It is stored hashed and cannot be recovered.",
+  }, { status: 201 });
+});
+
+/** PATCH /api/b2b/admin/members/:memberId — name, email, role, access. */
+b2bRouter.patch(
+  "/admin/members/:memberId",
+  zValidator("param", memberIdParamSchema),
+  zValidator("json", updateMemberSchema),
+  async (c) => {
+    const session = await getClientFromToken(c.req.header("Authorization"));
+    if (!session) {
+      return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+    }
+    const denied = requireSeatAdmin(session);
+    if (denied) return c.json(denied, { status: 403 });
+
+    const { memberId } = c.req.valid("param");
+    const body = c.req.valid("json");
+
+    // Scoped to this account. Without the clientId in the where clause, one
+    // company's admin could edit another company's seat by guessing an id.
+    const existing = await prisma.b2BMember.findFirst({
+      where: { id: memberId, clientId: session.clientId },
+    });
+    if (!existing) {
+      return c.json({ error: "Seat not found on this account" }, { status: 404 });
+    }
+
+    if (Object.keys(body).length === 0) {
+      return c.json({ error: "Nothing to change" }, { status: 400 });
+    }
+
+    const member = await prisma.b2BMember.update({
+      where: { id: memberId },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.email !== undefined ? { email: body.email } : {}),
+        ...(body.role !== undefined ? { role: body.role } : {}),
+        ...(body.disabled !== undefined ? { disabled: body.disabled } : {}),
+      },
+      select: B2B_MEMBER_PUBLIC_FIELDS,
+    });
+
+    // A role that shrinks, or access withdrawn, has to take effect now rather
+    // than whenever their current session happens to expire. Sessions carry a
+    // copy of the role, so the only way to make that copy wrong is to delete it.
+    const demoted = body.role !== undefined && body.role !== existing.role;
+    const revoked =
+      demoted || body.disabled === true
+        ? (await prisma.b2BSession.deleteMany({ where: { memberId } })).count
+        : 0;
+
+    await prisma.adminActivityLog.create({
+      data: {
+        action: "update_b2b_member",
+        adminId: session.memberId ?? session.clientId,
+        adminUsername: session.memberName ?? session.clientName,
+        targetType: "system",
+        targetId: session.clientId,
+        details:
+          `Updated B2B seat ${member.username}: ` +
+          Object.keys(body).join(", ") +
+          (revoked ? ` — ${revoked} session(s) ended` : ""),
+      },
+    }).catch(() => {});
+
+    return c.json({ success: true, member: toPublicMember(member), sessionsEnded: revoked });
+  }
+);
+
+/**
+ * POST /api/b2b/admin/members/:memberId/password
+ *
+ * An administrator sets a seat's password, typed or generated. Ends that seat's
+ * sessions and nobody else's.
+ */
+b2bRouter.post(
+  "/admin/members/:memberId/password",
+  zValidator("param", memberIdParamSchema),
+  zValidator("json", setMemberPasswordSchema),
+  async (c) => {
+    const session = await getClientFromToken(c.req.header("Authorization"));
+    if (!session) {
+      return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+    }
+    const denied = requireSeatAdmin(session);
+    if (denied) return c.json(denied, { status: 403 });
+
+    const { memberId } = c.req.valid("param");
+
+    const existing = await prisma.b2BMember.findFirst({
+      where: { id: memberId, clientId: session.clientId },
+      select: { id: true, username: true },
+    });
+    if (!existing) {
+      return c.json({ error: "Seat not found on this account" }, { status: 404 });
+    }
+
+    const password = c.req.valid("json").password ?? generatePassword();
+
+    const { member, revokedSessions } = await setB2BMemberPassword(existing.id, password, {
+      actor: {
+        kind: "admin",
+        adminId: session.memberId ?? session.clientId,
+        username: session.memberName ?? session.clientName,
+      },
+      reason: `Password set from the ${session.clientName} B2B admin portal`,
+    });
+
+    return c.json({
+      success: true,
+      member: toPublicMember(member),
+      credentials: { username: member.username, password },
+      sessionsEnded: revokedSessions,
+      warning: "This password is shown once. It is stored hashed and cannot be recovered.",
+    });
+  }
+);
+
+/**
+ * DELETE /api/b2b/admin/members/:memberId
+ *
+ * Removes the seat outright. Disabling is the gentler option and is what the
+ * portal offers first — a disabled seat keeps its name, so last month's
+ * activity log still resolves to a person. This exists for the case where the
+ * row should not have been created at all.
+ */
+b2bRouter.delete("/admin/members/:memberId", zValidator("param", memberIdParamSchema), async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+  const denied = requireSeatAdmin(session);
+  if (denied) return c.json(denied, { status: 403 });
+
+  const { memberId } = c.req.valid("param");
+
+  const existing = await prisma.b2BMember.findFirst({
+    where: { id: memberId, clientId: session.clientId },
+    select: { id: true, username: true },
+  });
+  if (!existing) {
+    return c.json({ error: "Seat not found on this account" }, { status: 404 });
+  }
+
+  // You cannot remove the seat you are signed in with. Not a safety rail for
+  // its own sake: the account login always remains, so an account can never be
+  // orphaned — but removing your own seat mid-session produces a live token
+  // pointing at a row that is gone, and every request after it 401s with no
+  // explanation.
+  if (session.memberId === memberId) {
+    return c.json({ error: "You cannot remove the seat you are signed in with." }, { status: 400 });
+  }
+
+  await prisma.b2BSession.deleteMany({ where: { memberId } });
+  await prisma.b2BMember.delete({ where: { id: memberId } });
+
+  await prisma.adminActivityLog.create({
+    data: {
+      action: "delete_b2b_member",
+      adminId: session.memberId ?? session.clientId,
+      adminUsername: session.memberName ?? session.clientName,
+      targetType: "system",
+      targetId: session.clientId,
+      details: `Removed B2B seat ${existing.username}`,
+    },
+  }).catch(() => {});
+
+  return c.json({ success: true, removed: existing.username });
+});
+
+/**
+ * GET /api/b2b/admin/activity
+ *
+ * What has happened to this account: seats added, roles changed, credentials
+ * moved. Same rows /account/security reads, widened to the seat actions, so the
+ * company can answer "who did that" without asking us.
+ */
+b2bRouter.get("/admin/activity", async (c) => {
+  const session = await getClientFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid B2B credentials required." }, { status: 401 });
+  }
+  const denied = requireSeatAdmin(session);
+  if (denied) return c.json(denied, { status: 403 });
+
+  const events = await prisma.adminActivityLog.findMany({
+    where: { targetType: "system", targetId: session.clientId },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
+  return c.json({
+    events: events.map((event) => ({
+      action: event.action,
+      at: event.createdAt.toISOString(),
+      by: event.adminUsername,
+      details: event.details,
+    })),
+    total: events.length,
+  });
+});
+
 b2bRouter.post("/auth/logout", async (c) => {
   const authHeader = c.req.header("Authorization");
   if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -654,7 +1425,8 @@ b2bRouter.get("/sentiment/overview", async (c) => {
   }
 
   try {
-    const { totalVotes, totalUsers, yeaVotes, nayVotes } = await getPlatformCounts();
+    const [{ totalVotes, totalUsers, totalPosts, totalComments, yeaVotes, nayVotes }, branches] =
+      await Promise.all([getPlatformCounts(), getBranchCounts()]);
 
     const total = totalVotes || 0;
     const support = yeaVotes || 0;
@@ -688,16 +1460,34 @@ b2bRouter.get("/sentiment/overview", async (c) => {
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
 
-    const [thisWeekVotes, lastWeekVotes] = await Promise.all([
+    // Thirty days, measured, rather than the weekly figure multiplied by four.
+    // A month is not four weeks and the votes of the last thirty days are
+    // sitting right there — the multiplication was arithmetic standing in for
+    // a query nobody had written.
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+    const twoMonthsAgo = new Date();
+    twoMonthsAgo.setDate(twoMonthsAgo.getDate() - 60);
+
+    const [thisWeekVotes, lastWeekVotes, thisMonthVotes, lastMonthVotes] = await Promise.all([
       votesBetween(oneWeekAgo),
       votesBetween(twoWeeksAgo, oneWeekAgo),
+      votesBetween(oneMonthAgo),
+      votesBetween(twoMonthsAgo, oneMonthAgo),
     ]);
 
-    const thisWeek = thisWeekVotes || 0;
-    const lastWeek = lastWeekVotes || 0;
-    const weeklyChange = lastWeek > 0
-      ? parseFloat((((thisWeek - lastWeek) / lastWeek) * 100).toFixed(1))
-      : 0;
+    /**
+     * Null, not zero, when there is nothing to compare against.
+     *
+     * A brand-new platform with no votes last week has an undefined change, not
+     * a 0% change, and "0%" on a dashboard reads as "measured, and flat". The
+     * clients render nothing for null.
+     */
+    const percentChange = (now: number, before: number): number | null =>
+      before > 0 ? parseFloat((((now - before) / before) * 100).toFixed(1)) : null;
+
+    const weeklyChange = percentChange(thisWeekVotes || 0, lastWeekVotes || 0);
+    const monthlyChange = percentChange(thisMonthVotes || 0, lastMonthVotes || 0);
 
     return c.json({
       overview: {
@@ -707,13 +1497,37 @@ b2bRouter.get("/sentiment/overview", async (c) => {
         opposePercentage: total > 0 ? parseFloat(((oppose / total) * 100).toFixed(1)) : 0,
         neutralPercentage: total > 0 ? parseFloat(((neutral / total) * 100).toFixed(1)) : 0,
       },
+      // Counted per branch, not apportioned from the national total. See
+      // getBranchCounts.
+      byBranch: branches,
+      engagement: {
+        totalVotes: total,
+        totalPosts,
+        totalComments,
+        participants: totalUsers,
+      },
       trends: {
+        // Null means "not enough history to say", and the clients show nothing
+        // rather than a zero that reads as a measurement.
         weeklyChange,
-        monthlyChange: weeklyChange * 4,
+        monthlyChange,
       },
       topIssues,
-      activeDistricts: Object.keys(stateInfo).length,
-      activeStates: Object.keys(stateInfo).length,
+      /**
+       * REMOVED, not replaced: activeDistricts and activeStates.
+       *
+       * Both were `Object.keys(stateInfo).length` — the number of rows in a
+       * hardcoded table of state names and coordinates in this file. It was 51
+       * on an empty database and it would be 51 on a busy one, because it never
+       * touched a vote. The web and mobile stores read it into "Active Users",
+       * which is where the dashboard's 51 came from.
+       *
+       * There is no honest replacement today. Nothing on User records a state
+       * or a district, so how many states are active is a question this
+       * database cannot answer — see the note on /geo/states. When it can, it
+       * gets counted here. Until then the clients show the participant count,
+       * which is real.
+       */
       lastUpdated: new Date().toISOString(),
     });
   } catch (error) {
@@ -752,9 +1566,9 @@ b2bRouter.get("/sentiment/issues", zValidator("query", paginationQuerySchema), a
           neutral,
           total,
           score,
-          confidence: total > 10 ? 0.85 : 0.5,
-          trend: score > 0.1 ? "rising" as const : score < -0.1 ? "falling" as const : "stable" as const,
-          changePercent: 0,
+          // See sentimentFields() below for why confidence, trend and a zero
+          // changePercent are gone from every one of these.
+          changePercent: null,
         },
         trending: total > 5,
       };
@@ -818,9 +1632,7 @@ b2bRouter.get("/sentiment/bills/:billId", zValidator("param", billIdParamSchema)
         neutral,
         total,
         score,
-        confidence: total > 10 ? 0.85 : 0.5,
-        trend: score > 0.1 ? "rising" : score < -0.1 ? "falling" : "stable",
-        changePercent: 0,
+        changePercent: null,
       },
       timeline,
       lastUpdated: new Date().toISOString(),
@@ -1276,9 +2088,9 @@ b2bRouter.get("/issues", zValidator("query", paginationQuerySchema), async (c) =
           neutral,
           total,
           score,
-          confidence: total > 10 ? 0.85 : 0.5,
-          trend: score > 0.1 ? "rising" as const : score < -0.1 ? "falling" as const : "stable" as const,
-          changePercent: 0,
+          // See sentimentFields() below for why confidence, trend and a zero
+          // changePercent are gone from every one of these.
+          changePercent: null,
         },
         engagementCount: total,
         relatedBills: [bill.id],
@@ -1335,9 +2147,7 @@ b2bRouter.get("/issues/:issueId", zValidator("param", issueIdParamSchema), async
         neutral,
         total,
         score,
-        confidence: total > 10 ? 0.85 : 0.5,
-        trend: score > 0.1 ? "rising" : score < -0.1 ? "falling" : "stable",
-        changePercent: 0,
+        changePercent: null,
       },
       engagementCount: total,
       relatedBills: [bill.id],

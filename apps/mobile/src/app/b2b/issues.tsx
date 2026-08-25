@@ -118,23 +118,27 @@ function IssueCard({ issue, onPress }: IssueCardProps) {
           </View>
         </View>
 
-        {/* Trend Indicator */}
-        <View className={`flex-row items-center px-2 py-1 rounded-full ${
-          sentiment.trend === 'rising' ? 'bg-emerald-500/10' :
-          sentiment.trend === 'falling' ? 'bg-red-500/10' : 'bg-slate-700/50'
-        }`}>
-          {sentiment.trend === 'rising' ? (
-            <Zap size={12} color="#34D399" />
-          ) : sentiment.trend === 'falling' ? (
-            <TrendingDown size={12} color="#EF4444" />
-          ) : null}
-          <Text className={`text-xs ml-1 capitalize ${
-            sentiment.trend === 'rising' ? 'text-emerald-400' :
-            sentiment.trend === 'falling' ? 'text-red-400' : 'text-slate-400'
+        {/*
+          Nothing at all when there is no measured direction, rather than a grey
+          "stable" pill. "Stable" is a finding; the absence of a second
+          measurement is not.
+        */}
+        {sentiment.trend === 'rising' || sentiment.trend === 'falling' ? (
+          <View className={`flex-row items-center px-2 py-1 rounded-full ${
+            sentiment.trend === 'rising' ? 'bg-emerald-500/10' : 'bg-red-500/10'
           }`}>
-            {sentiment.trend}
-          </Text>
-        </View>
+            {sentiment.trend === 'rising' ? (
+              <Zap size={12} color="#34D399" />
+            ) : (
+              <TrendingDown size={12} color="#EF4444" />
+            )}
+            <Text className={`text-xs ml-1 capitalize ${
+              sentiment.trend === 'rising' ? 'text-emerald-400' : 'text-red-400'
+            }`}>
+              {sentiment.trend}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Hotspots */}
@@ -154,7 +158,13 @@ export default function B2BIssuesScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState<'sentiment' | 'volume' | 'trending'>('volume');
+  /*
+   * "Trending" is gone. It sorted on sentiment.trend, which the API derived
+   * from the current score rather than from any movement, so it duplicated
+   * Sentiment while claiming to measure direction. Nothing records an earlier
+   * score to compare against yet.
+   */
+  const [sortBy, setSortBy] = useState<'sentiment' | 'volume'>('volume');
   const [selectedIssue, setSelectedIssue] = useState<IssueData | null>(null);
 
   const issues = useB2BStore((s) => s.issues);
@@ -191,8 +201,6 @@ export default function B2BIssuesScreen() {
           return Math.abs(b.sentiment.score) - Math.abs(a.sentiment.score);
         case 'volume':
           return b.sentiment.total - a.sentiment.total;
-        case 'trending':
-          return (b.sentiment.trend === 'rising' ? 1 : 0) - (a.sentiment.trend === 'rising' ? 1 : 0);
         default:
           return 0;
       }
@@ -201,7 +209,6 @@ export default function B2BIssuesScreen() {
   const sortOptions = [
     { key: 'volume', label: 'Volume' },
     { key: 'sentiment', label: 'Sentiment' },
-    { key: 'trending', label: 'Trending' },
   ];
 
   return (
@@ -246,7 +253,7 @@ export default function B2BIssuesScreen() {
             {sortOptions.map((option) => (
               <TouchableOpacity
                 key={option.key}
-                onPress={() => setSortBy(option.key as 'sentiment' | 'volume' | 'trending')}
+                onPress={() => setSortBy(option.key as 'sentiment' | 'volume')}
                 className={`px-4 py-2 rounded-full mx-1 ${
                   sortBy === option.key ? 'bg-indigo-500' : 'bg-slate-800/50'
                 }`}
@@ -358,10 +365,17 @@ export default function B2BIssuesScreen() {
                         {selectedIssue.relatedBills}
                       </Text>
                     </View>
+                    {/*
+                      WAS "Confidence — 85%": the literal 0.85, written into the
+                      API for any issue with more than ten votes. It read as a
+                      statistical confidence level and stood on nothing. The
+                      honest version of that panel is how many people the number
+                      is based on.
+                    */}
                     <View className="flex-1 bg-slate-700/30 rounded-xl p-3">
-                      <Text className="text-slate-400 text-xs">Confidence</Text>
+                      <Text className="text-slate-400 text-xs">Votes counted</Text>
                       <Text className="text-white font-bold text-lg">
-                        {(selectedIssue.sentiment.confidence * 100).toFixed(0)}%
+                        {(selectedIssue.sentiment.total ?? 0).toLocaleString()}
                       </Text>
                     </View>
                   </View>

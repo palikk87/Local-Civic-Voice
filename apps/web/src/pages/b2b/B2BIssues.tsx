@@ -29,7 +29,17 @@ const CATEGORY_COLORS: Record<string, string> = {
   Crime: "#DC2626",
 };
 
-type SortKey = "sentiment" | "volume" | "trending";
+/**
+ * "Trending" is gone.
+ *
+ * It sorted on `sentiment.trend`, which the API derived from the CURRENT score
+ * rather than from any movement — an issue sitting steadily at 70% support was
+ * labelled "rising" forever, having risen nowhere. Sorting by it therefore
+ * sorted by "score above 0.1", which is what Sentiment already does. Nothing in
+ * this database records an earlier score to compare against, so there is no
+ * honest version of this sort yet.
+ */
+type SortKey = "sentiment" | "volume";
 
 function IssueCard({ issue, onClick }: { issue: IssueData; onClick: () => void }) {
   const sentiment = issue.sentiment;
@@ -104,34 +114,33 @@ function IssueCard({ issue, onClick }: { issue: IssueData; onClick: () => void }
           </div>
         </div>
 
-        <div
-          className={cn(
-            "flex items-center rounded-full px-2 py-1",
-            sentiment.trend === "rising"
-              ? "bg-emerald-500/10"
-              : sentiment.trend === "falling"
-                ? "bg-red-500/10"
-                : "bg-slate-700/50",
-          )}
-        >
-          {sentiment.trend === "rising" ? (
-            <Zap size={12} color="#34D399" />
-          ) : sentiment.trend === "falling" ? (
-            <TrendingDown size={12} color="#EF4444" />
-          ) : null}
-          <span
+        {/*
+          Nothing at all when there is no measured direction, rather than a grey
+          "stable" pill. "Stable" is a finding; the absence of a second
+          measurement is not.
+        */}
+        {sentiment.trend === "rising" || sentiment.trend === "falling" ? (
+          <div
             className={cn(
-              "ml-1 text-xs capitalize",
-              sentiment.trend === "rising"
-                ? "text-emerald-400"
-                : sentiment.trend === "falling"
-                  ? "text-red-400"
-                  : "text-slate-400",
+              "flex items-center rounded-full px-2 py-1",
+              sentiment.trend === "rising" ? "bg-emerald-500/10" : "bg-red-500/10",
             )}
           >
-            {sentiment.trend}
-          </span>
-        </div>
+            {sentiment.trend === "rising" ? (
+              <Zap size={12} color="#34D399" />
+            ) : (
+              <TrendingDown size={12} color="#EF4444" />
+            )}
+            <span
+              className={cn(
+                "ml-1 text-xs capitalize",
+                sentiment.trend === "rising" ? "text-emerald-400" : "text-red-400",
+              )}
+            >
+              {sentiment.trend}
+            </span>
+          </div>
+        ) : null}
       </div>
 
       {issue.hotspots && issue.hotspots.length > 0 ? (
@@ -177,10 +186,6 @@ export default function B2BIssues() {
           return Math.abs(b.sentiment.score) - Math.abs(a.sentiment.score);
         case "volume":
           return b.sentiment.total - a.sentiment.total;
-        case "trending":
-          return (
-            (b.sentiment.trend === "rising" ? 1 : 0) - (a.sentiment.trend === "rising" ? 1 : 0)
-          );
         default:
           return 0;
       }
@@ -189,7 +194,6 @@ export default function B2BIssues() {
   const sortOptions: Array<{ key: SortKey; label: string }> = [
     { key: "volume", label: "Volume" },
     { key: "sentiment", label: "Sentiment" },
-    { key: "trending", label: "Trending" },
   ];
 
   return (
@@ -315,10 +319,17 @@ export default function B2BIssues() {
                     {selectedIssue.relatedBills}
                   </span>
                 </div>
+                {/*
+                  WAS "Confidence — 85%". That figure was the literal 0.85,
+                  written into the API for any issue with more than ten votes.
+                  It read as a statistical confidence level and was not derived
+                  from anything. What a reader wants from that panel is how many
+                  people the number stands on, which is a real count.
+                */}
                 <div className="rounded-xl bg-slate-700/30 p-3">
-                  <span className="block text-xs text-slate-400">Confidence</span>
+                  <span className="block text-xs text-slate-400">Votes counted</span>
                   <span className="block text-lg font-bold text-white">
-                    {(selectedIssue.sentiment.confidence * 100).toFixed(0)}%
+                    {(selectedIssue.sentiment.total ?? 0).toLocaleString()}
                   </span>
                 </div>
               </div>

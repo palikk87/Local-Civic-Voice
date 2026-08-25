@@ -143,6 +143,8 @@ describe("only one file may write a credential", () => {
     expect(src).toContain("export async function rotateB2BCredentials");
     expect(src).toContain("export async function setUserPassword");
     expect(src).toContain("export async function createB2BClient");
+    expect(src).toContain("export async function createB2BMember");
+    expect(src).toContain("export async function setB2BMemberPassword");
   });
 });
 
@@ -190,7 +192,7 @@ describe("no backend process can re-key anybody", () => {
     // the shape of the original bug. Every legitimate caller sits behind an
     // authenticated route or is the create path.
     const callers = backendFiles().filter((file) =>
-      /\b(rotateB2BCredentials|setUserPassword)\s*\(/.test(code(file)),
+      /\b(rotateB2BCredentials|setUserPassword|setB2BMemberPassword)\s*\(/.test(code(file)),
     );
 
     expect(callers.sort()).toEqual(
@@ -199,6 +201,22 @@ describe("no backend process can re-key anybody", () => {
         "src/routes/admin.ts",
         // The account holder: change your own password.
         "src/routes/users.ts",
+        /**
+         * The B2B settings screen and the account's own seat admin.
+         *
+         * ADDED DELIBERATELY, and this list is why. Every call in that file is
+         * behind an authenticated session AND asks for the current password
+         * again before it changes anything — a session left open on a laptop is
+         * not enough to lock its owner out. The seat calls additionally require
+         * an owner or admin role on the same account, and are scoped by
+         * clientId so one company cannot reach another's seats.
+         *
+         * Nothing in that file rotates on a schedule, at boot, or in response
+         * to anything other than a person pressing a button. That is the
+         * distinction this whole rule exists to hold, and adding a route to
+         * this list is not a weakening of it — silently adding a job would be.
+         */
+        "src/routes/b2b.ts",
         // Give a credential to an admin account that has none.
         "scripts/seed-admin.ts",
       ].sort(),

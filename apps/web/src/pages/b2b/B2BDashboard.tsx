@@ -267,32 +267,38 @@ export default function B2BDashboard() {
 
       {/* Engagement Metrics */}
       <span className="mb-3 mt-6 block text-lg font-bold text-white">Engagement Metrics</span>
+      {/*
+        NO `change` ON ANY OF THESE. They used to carry change={12}, change={8},
+        change={15} and change={-3} — four literals, drawn as green and red
+        arrows, that had never been computed from anything and never moved. A
+        made-up trend arrow on a dashboard somebody is paying for is worse than
+        no arrow: it is a claim. The one change figure that is measured is the
+        weekly one below, and MetricCard already renders nothing when `change`
+        is absent.
+      */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <MetricCard
           title="Total Votes"
           value={(sentimentOverview?.engagement?.totalVotes ?? 0).toLocaleString()}
-          change={12}
+          change={sentimentOverview?.overall?.changePercent ?? undefined}
           icon={<Vote size={20} color="#818CF8" />}
           color="#818CF8"
         />
         <MetricCard
-          title="Active Users"
-          value={(sentimentOverview?.engagement?.activeUsers24h ?? 0).toLocaleString()}
-          change={8}
+          title="Participants"
+          value={(sentimentOverview?.engagement?.participants ?? 0).toLocaleString()}
           icon={<Users size={20} color="#34D399" />}
           color="#34D399"
         />
         <MetricCard
           title="Posts"
           value={(sentimentOverview?.engagement?.totalPosts ?? 0).toLocaleString()}
-          change={15}
           icon={<FileText size={20} color="#FBBF24" />}
           color="#FBBF24"
         />
         <MetricCard
           title="Comments"
           value={(sentimentOverview?.engagement?.totalComments ?? 0).toLocaleString()}
-          change={-3}
           icon={<MessageSquare size={20} color="#F472B6" />}
           color="#F472B6"
         />

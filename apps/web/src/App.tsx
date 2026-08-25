@@ -44,6 +44,8 @@ const B2BHeatmap = lazy(() => import("./pages/b2b/B2BHeatmap"));
 const B2BForecast = lazy(() => import("./pages/b2b/B2BForecast"));
 const B2BReports = lazy(() => import("./pages/b2b/B2BReports"));
 const B2BStates = lazy(() => import("./pages/b2b/B2BStates"));
+const B2BSettings = lazy(() => import("./pages/b2b/B2BSettings"));
+const B2BAdmin = lazy(() => import("./pages/b2b/B2BAdmin"));
 const Search = lazy(() => import("./pages/Search"));
 const BillDetail = lazy(() => import("./pages/BillDetail"));
 const ExecutiveOrderDetail = lazy(() => import("./pages/ExecutiveOrderDetail"));
@@ -186,6 +188,8 @@ const App = () => (
               <Route path="/b2b/forecast" element={<B2BForecast />} />
               <Route path="/b2b/reports" element={<B2BReports />} />
               <Route path="/b2b/states" element={<B2BStates />} />
+              <Route path="/b2b/settings" element={<B2BSettings />} />
+              <Route path="/b2b/admin" element={<B2BAdmin />} />
               <Route path="/auth" element={<Auth />} />
               {/* Same path as the mobile route, so a reset link works on either client. */}
               <Route path="/forgot-password" element={<ForgotPassword />} />

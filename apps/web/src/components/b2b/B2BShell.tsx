@@ -14,8 +14,10 @@ import {
   LogOut,
   Loader2,
   LayoutDashboard,
+  Settings,
+  Users,
 } from "lucide-react";
-import { useB2BStore } from "@/lib/mobile/b2b-store";
+import { canManageSeats, useB2BStore } from "@/lib/mobile/b2b-store";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -25,7 +27,17 @@ const NAV_ITEMS = [
   { path: "/b2b/states", label: "States", icon: Building2 },
   { path: "/b2b/forecast", label: "Forecast", icon: Activity },
   { path: "/b2b/reports", label: "Reports", icon: FileText },
+  { path: "/b2b/settings", label: "Settings", icon: Settings },
 ];
+
+/**
+ * Shown to an owner or admin only.
+ *
+ * Hiding it is a courtesy, not the control — /api/b2b/admin/* refuses an
+ * analyst with a 403 whether or not they ever saw this link, and the page
+ * itself renders an explanation rather than an empty list if they reach it.
+ */
+const SEAT_ADMIN_ITEM = { path: "/b2b/admin", label: "Team", icon: Users };
 
 function tierBadge(tier: string): { color: string; label: string } {
   switch (tier) {
@@ -80,6 +92,7 @@ export function B2BShell({ children, title }: { children: ReactNode; title?: str
   }
 
   const badge = tierBadge(session?.tier ?? "basic");
+  const navItems = canManageSeats(session) ? [...NAV_ITEMS, SEAT_ADMIN_ITEM] : NAV_ITEMS;
 
   return (
     <div className="min-h-screen bg-slate-950 bg-gradient-to-b from-[#0F172A] via-[#1E1B4B] to-[#0F172A] text-white">
@@ -124,7 +137,7 @@ export function B2BShell({ children, title }: { children: ReactNode; title?: str
 
         {/* Nav */}
         <nav className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 pb-2">
-          {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+          {navItems.map(({ path, label, icon: Icon }) => {
             const active = location.pathname === path;
             return (
               <Link

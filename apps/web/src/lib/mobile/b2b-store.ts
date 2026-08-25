@@ -14,12 +14,69 @@ export interface B2BClient {
   lastAccess?: string;
 }
 
+/** owner and admin can manage seats; analyst reads the dashboards. */
+export type B2BRole = 'owner' | 'admin' | 'analyst';
+
 export interface B2BSession {
   token: string;
   clientId: string;
   clientName: string;
   tier: 'basic' | 'professional' | 'enterprise';
   expiresAt: string;
+  /**
+   * Who is signed in. Null when the account's own username was used — that
+   * login is the company itself and is always an owner.
+   *
+   * Optional on the type because a session persisted by an older build has
+   * neither field, and `undefined` has to mean owner for the same reason the
+   * backend reads a NULL memberRole as owner: otherwise this build signs
+   * existing customers out of their own settings on the day it ships.
+   */
+  memberId?: string | null;
+  memberName?: string | null;
+  role?: B2BRole;
+}
+
+/** A stored session's role, with the same NULL-means-owner rule as the API. */
+export function sessionRole(session: B2BSession | null): B2BRole {
+  if (session?.role === 'admin') return 'admin';
+  if (session?.role === 'analyst') return 'analyst';
+  return 'owner';
+}
+
+export function canManageSeats(session: B2BSession | null): boolean {
+  const role = sessionRole(session);
+  return role === 'owner' || role === 'admin';
+}
+
+export interface B2BMemberRow {
+  id: string;
+  username: string;
+  name: string;
+  email: string | null;
+  role: string;
+  disabled: boolean;
+  lastAccessAt: string | null;
+  createdAt: string;
+}
+
+export interface B2BAccountInfo {
+  account: {
+    id: string;
+    username: string;
+    name: string;
+    type: string;
+    tier: string;
+    createdAt: string;
+    lastAccessAt: string | null;
+    activeSeats: number;
+  };
+  signedInAs:
+    | { kind: 'account'; username: string; name: string; role: 'owner' }
+    | ({ kind: 'member' } & B2BMemberRow);
+  role: B2BRole;
+  canManageSeats: boolean;
+  canRotateApiKey: boolean;
 }
 
 export interface SentimentData {
@@ -28,9 +85,17 @@ export interface SentimentData {
   neutral: number;
   total: number;
   score: number;
-  confidence: number;
-  trend: 'rising' | 'falling' | 'stable';
-  changePercent: number;
+  /**
+   * Optional, and absent wherever nothing measures it.
+   *
+   * It used to be a required number, which meant every construction site had to
+   * supply one, which meant every site made one up. A field that cannot be left
+   * out is a field that gets invented.
+   */
+  confidence?: number;
+  trend?: 'rising' | 'falling' | 'stable';
+  /** Null when there is no earlier period to compare against. */
+  changePercent: number | null;
 }
 
 export interface DistrictData {
@@ -97,8 +162,14 @@ export interface SentimentOverview {
     totalVotes: number;
     totalPosts: number;
     totalComments: number;
-    activeUsers24h: number;
-    growthRate: number;
+    /**
+     * Accounts somebody can sign in with. Was `activeUsers24h`, which was fed
+     * the number of rows in a hardcoded table of US states — 51, on an empty
+     * database and a busy one alike.
+     */
+    participants: number;
+    /** Null when there is no earlier month to compare against. */
+    growthRate: number | null;
   };
   topIssues: Array<{ id: string; name: string; sentiment: number; volume: number }>;
 }
@@ -171,6 +242,43 @@ interface B2BState {
   fetchBillSentiment: (billId: string) => Promise<SentimentData | null>;
 }
 
+/**
+ * Turn the server's per-branch counts into the shape the dashboard renders.
+ *
+ * `score` here is computed from this branch's own votes rather than copied from
+ * the national figure, which is what made the old breakdown three identical
+ * numbers in different colours.
+ */
+function branchTotals(
+  byBranch:
+    | Record<'legislative' | 'executive' | 'judicial', { support: number; oppose: number }>
+    | undefined,
+): SentimentOverview['byBranch'] {
+  const one = (counts?: { support: number; oppose: number }): SentimentData => {
+    const support = counts?.support ?? 0;
+    const oppose = counts?.oppose ?? 0;
+    const total = support + oppose;
+    return {
+      support,
+      oppose,
+      // Every recorded position is support or oppose. There is no third
+      // option to cast, so this is 0 because it is 0.
+      neutral: 0,
+      total,
+      score: total > 0 ? parseFloat(((support - oppose) / total).toFixed(3)) : 0,
+      // No `confidence` and no `trend`: nothing measures either per branch, and
+      // a plausible-looking default is the thing being removed here.
+      changePercent: null,
+    };
+  };
+
+  return {
+    legislative: one(byBranch?.legislative),
+    executive: one(byBranch?.executive),
+    judicial: one(byBranch?.judicial),
+  };
+}
+
 export const useB2BStore = create<B2BState>()(
   persist(
     (set, get) => ({
@@ -213,6 +321,9 @@ export const useB2BStore = create<B2BState>()(
             clientName: data.client.name,
             tier: data.client.tier,
             expiresAt: data.expiresAt,
+            memberId: data.member?.id ?? null,
+            memberName: data.member?.name ?? null,
+            role: (data.role as B2BRole) ?? 'owner',
           };
 
           set({
@@ -276,6 +387,23 @@ export const useB2BStore = create<B2BState>()(
             return false;
           }
 
+          // Refresh the role from the server on every check. A demotion revokes
+          // the seat's sessions, so this normally never sees a changed value —
+          // but a stale role in localStorage showing an Admin tab that 403s is
+          // a worse failure than one extra field copied here.
+          const data = await response.json();
+          const current = get().session;
+          if (current) {
+            set({
+              session: {
+                ...current,
+                memberId: data.member?.id ?? null,
+                memberName: data.member?.name ?? null,
+                role: (data.role as B2BRole) ?? 'owner',
+              },
+            });
+          }
+
           return true;
         } catch {
           return false;
@@ -310,6 +438,8 @@ export const useB2BStore = create<B2BState>()(
             const oppose = Math.round((opposePercent / 100) * total);
             const neutral = total - support - oppose;
 
+            const weeklyChange: number | null | undefined = data.trends?.weeklyChange;
+
             const sentimentOverview: SentimentOverview = {
               overall: {
                 support,
@@ -317,48 +447,46 @@ export const useB2BStore = create<B2BState>()(
                 neutral: Math.max(0, neutral),
                 total,
                 score: overview.sentimentScore || 0,
-                confidence: 0.8,
-                trend: (data.trends?.weeklyChange || 0) > 0 ? 'rising' : (data.trends?.weeklyChange || 0) < 0 ? 'falling' : 'stable',
-                changePercent: data.trends?.weeklyChange || 0,
+                /*
+                 * `confidence: 0.8` used to sit here — a literal, nothing
+                 * measured it, and nothing reads it now.
+                 *
+                 * weeklyChange is genuinely measured (two counted windows), but
+                 * it is null when there is no earlier week to compare against.
+                 * `|| 0` turned that into a confident "stable, 0%", which is a
+                 * claim about a period nobody has data for.
+                 */
+                trend:
+                  weeklyChange === null || weeklyChange === undefined
+                    ? undefined
+                    : weeklyChange > 0
+                      ? 'rising'
+                      : weeklyChange < 0
+                        ? 'falling'
+                        : 'stable',
+                changePercent: weeklyChange ?? null,
               },
-              byBranch: {
-                legislative: {
-                  support: Math.round(support * 0.4),
-                  oppose: Math.round(oppose * 0.4),
-                  neutral: Math.round(neutral * 0.4),
-                  total: Math.round(total * 0.4),
-                  score: overview.sentimentScore || 0,
-                  confidence: 0.75,
-                  trend: 'stable',
-                  changePercent: 0,
-                },
-                executive: {
-                  support: Math.round(support * 0.35),
-                  oppose: Math.round(oppose * 0.35),
-                  neutral: Math.round(neutral * 0.35),
-                  total: Math.round(total * 0.35),
-                  score: overview.sentimentScore || 0,
-                  confidence: 0.7,
-                  trend: 'stable',
-                  changePercent: 0,
-                },
-                judicial: {
-                  support: Math.round(support * 0.25),
-                  oppose: Math.round(oppose * 0.25),
-                  neutral: Math.round(neutral * 0.25),
-                  total: Math.round(total * 0.25),
-                  score: overview.sentimentScore || 0,
-                  confidence: 0.65,
-                  trend: 'stable',
-                  changePercent: 0,
-                },
-              },
+              /**
+               * Counted, not apportioned.
+               *
+               * This used to be the national total multiplied by 0.4, 0.35 and
+               * 0.25 — three numbers written once so the chart would have three
+               * bars, read ever since by paying customers as measurements. The
+               * server counts votes per branch now; see getBranchCounts in
+               * backend/src/routes/b2b.ts.
+               */
+              byBranch: branchTotals(data.byBranch),
               engagement: {
-                totalVotes: total,
-                totalPosts: Math.round(total * 0.1),
-                totalComments: Math.round(total * 0.3),
-                activeUsers24h: data.activeDistricts || 0,
-                growthRate: data.trends?.monthlyChange || 0,
+                totalVotes: data.engagement?.totalVotes ?? total,
+                // Real counts. These were total * 0.1 and total * 0.3.
+                totalPosts: data.engagement?.totalPosts ?? 0,
+                totalComments: data.engagement?.totalComments ?? 0,
+                // Was data.activeDistricts, which was the length of a hardcoded
+                // 51-entry table of US states — the source of the dashboard's
+                // 51. Participants is the same definition the admin portal
+                // uses: an account somebody can sign in with.
+                participants: data.engagement?.participants ?? 0,
+                growthRate: data.trends?.monthlyChange ?? null,
               },
               topIssues,
             };

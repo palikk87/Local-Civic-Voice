@@ -28,9 +28,10 @@ import {
   Globe,
   Building2,
   AlertCircle,
+  Settings,
 } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useB2BStore } from '@/lib/b2b-store';
+import { canManageSeats, useB2BStore } from '@/lib/b2b-store';
 import * as Haptics from 'expo-haptics';
 
 const { width } = Dimensions.get('window');
@@ -310,28 +311,31 @@ export default function B2BDashboardScreen() {
             <MetricCard
               title="Total Votes"
               value={(sentimentOverview?.engagement?.totalVotes ?? 0).toLocaleString()}
-              change={12}
+              change={sentimentOverview?.overall?.changePercent ?? undefined}
               icon={<Vote size={20} color="#818CF8" />}
               color="#818CF8"
             />
+            {/*
+              NO `change` BELOW. These carried change={8}, change={15} and
+              change={-3} — literals drawn as green and red arrows that had
+              never been computed and never moved. A made-up trend on a
+              dashboard somebody is paying for is a claim, not decoration.
+            */}
             <MetricCard
-              title="Active Users"
-              value={(sentimentOverview?.engagement?.activeUsers24h ?? 0).toLocaleString()}
-              change={8}
+              title="Participants"
+              value={(sentimentOverview?.engagement?.participants ?? 0).toLocaleString()}
               icon={<Users size={20} color="#34D399" />}
               color="#34D399"
             />
             <MetricCard
               title="Posts"
               value={(sentimentOverview?.engagement?.totalPosts ?? 0).toLocaleString()}
-              change={15}
               icon={<FileText size={20} color="#FBBF24" />}
               color="#FBBF24"
             />
             <MetricCard
               title="Comments"
               value={(sentimentOverview?.engagement?.totalComments ?? 0).toLocaleString()}
-              change={-3}
               icon={<MessageSquare size={20} color="#F472B6" />}
               color="#F472B6"
             />
@@ -427,6 +431,29 @@ export default function B2BDashboardScreen() {
             onPress={() => router.push('/b2b/reports')}
             gradient={['#7C3AED', '#8B5CF6']}
           />
+
+          <Text className="text-white text-lg font-bold mb-3 mt-6">Your account</Text>
+
+          <QuickLink
+            title="Settings"
+            subtitle="Your password, API key and credential history"
+            icon={<Settings size={24} color="white" />}
+            onPress={() => router.push('/b2b/settings')}
+            gradient={['#0F766E', '#14B8A6']}
+          />
+
+          {/* Owner and admin only. Hiding it is a courtesy — /api/b2b/admin/*
+              refuses an analyst regardless, and the screen itself explains
+              rather than showing an empty list. */}
+          {canManageSeats(session) ? (
+            <QuickLink
+              title="Team"
+              subtitle="Who at your company can sign in"
+              icon={<Users size={24} color="white" />}
+              onPress={() => router.push('/b2b/team')}
+              gradient={['#4338CA', '#818CF8']}
+            />
+          ) : null}
 
           {/* Privacy Notice */}
           <View className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 mt-4 mb-8">

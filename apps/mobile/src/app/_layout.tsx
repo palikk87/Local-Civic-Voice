@@ -10,6 +10,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AuthUIProvider } from '@/lib/auth/use-civic-auth';
 import { AuthSheet } from '@/components/auth/AuthSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { BugReporter } from '@/components/support/BugReporter';
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -56,6 +57,8 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="b2b/states" options={{ headerShown: false }} />
         <Stack.Screen name="b2b/forecast" options={{ headerShown: false }} />
         <Stack.Screen name="b2b/reports" options={{ headerShown: false }} />
+        <Stack.Screen name="b2b/settings" options={{ headerShown: false }} />
+        <Stack.Screen name="b2b/team" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
       {/*
@@ -64,6 +67,12 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         lib/permissions.ts.
       */}
       <AuthSheet />
+      {/*
+        On every screen, including the ones a guest is on. The people most
+        likely to hit a blocking bug are the ones who could not get past
+        sign-up, and a gate would silence exactly them.
+      */}
+      <BugReporter />
     </ThemeProvider>
   );
 }
