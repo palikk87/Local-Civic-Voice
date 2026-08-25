@@ -5,6 +5,7 @@ import { searchCongressBills } from "../services/congress-search";
 import { searchExecutiveDocuments } from "../services/executive-search";
 import { searchJudicialOpinions } from "../services/judicial-search";
 import type { CongressSearchResponse, Member, Official } from "../types";
+import { env } from "../env";
 
 const governmentRouter = new Hono();
 
@@ -60,7 +61,7 @@ governmentRouter.get(
   zValidator("query", searchQuerySchema),
   async (c) => {
     const { q, limit, offset } = c.req.valid("query");
-    const apiKey = process.env.CONGRESS_API_KEY;
+    const apiKey = env.CONGRESS_API_KEY;
 
     if (!apiKey) {
       return c.json(
@@ -171,7 +172,7 @@ governmentRouter.get(
   async (c) => {
     const { q, limit } = c.req.valid("query");
 
-    if (!process.env.COURTLISTENER_API_KEY) {
+    if (!env.COURTLISTENER_API_KEY) {
       return c.json({ error: "CourtListener API key not configured" }, { status: 500 });
     }
 

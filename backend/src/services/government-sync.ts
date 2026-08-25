@@ -24,6 +24,7 @@ import {
   stripFederalRegisterFurniture,
 } from "./reference-content";
 import { notifyLawUpdate } from "./notification-service";
+import { env } from "../env";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -261,7 +262,7 @@ interface CongressListResponse {
 }
 
 async function syncBills(): Promise<number> {
-  const apiKey = process.env.CONGRESS_API_KEY;
+  const apiKey = env.CONGRESS_API_KEY;
   if (!apiKey) {
     console.warn("[GovSync] CONGRESS_API_KEY not set — skipping bills");
     return 0;
@@ -404,7 +405,7 @@ interface CourtListenerSearchResponse {
 const COURTLISTENER_MAX_PAGES = 4;
 
 async function syncScotusCases(): Promise<number> {
-  const apiKey = process.env.COURTLISTENER_API_KEY;
+  const apiKey = env.COURTLISTENER_API_KEY;
   if (!apiKey) {
     console.warn("[GovSync] COURTLISTENER_API_KEY not set — skipping SCOTUS cases");
     return 0;

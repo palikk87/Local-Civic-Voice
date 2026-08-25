@@ -10,6 +10,29 @@ import { z } from "zod";
  * so the server looked healthy while every account was written to disposable
  * container storage.
  */
+/**
+ * A secret, as it actually arrives: pasted.
+ *
+ * Trimmed, and an empty string treated as absent. A trailing newline survives
+ * every dashboard that stores it and produces a 401 from the provider, which
+ * reads to whoever set it as "the key I definitely set does not work" — and
+ * sends everybody looking for a bug in the code instead of a space in the box.
+ *
+ * Every key on this platform goes through this, in one place, because the
+ * alternative was the situation this replaced: half the keys read straight off
+ * process.env with no trimming and no schema, and two of them
+ * (OPENAI_API_KEY, GEMINI_API_KEY) named nowhere at all — not here, not in
+ * .env.example — while every Citizen's Brief depended on one of them.
+ */
+const secret = () =>
+  z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = value?.trim();
+      return trimmed ? trimmed : undefined;
+    });
+
 const envSchema = z.object({
   // Server Configuration
   PORT: z.string().optional().default("3000"),
@@ -68,13 +91,7 @@ const envSchema = z.object({
   // provider that reads, to whoever set it, as "the key I definitely set does
   // not work". An empty string after trimming is treated as unset rather than
   // as a key that happens to be blank.
-  RESEND_API_KEY: z
-    .string()
-    .optional()
-    .transform((value) => {
-      const trimmed = value?.trim();
-      return trimmed ? trimmed : undefined;
-    }),
+  RESEND_API_KEY: secret(),
   // Must be a verified sender on a domain you control in Resend, or delivery
   // fails even with a valid key.
   //
@@ -98,12 +115,29 @@ const envSchema = z.object({
   RESEND_ENDPOINT: z.url().optional().default("https://api.resend.com/emails"),
 
   // Government API Keys
-  CONGRESS_API_KEY: z.string().optional(),
-  COURTLISTENER_API_KEY: z.string().optional(),
+  //
+  // congress.gov: bills. Without it there is no legislative text at all.
+  CONGRESS_API_KEY: secret(),
+  // CourtListener: Supreme Court opinions. Not optional in practice — the
+  // opinion endpoint answers 401 without a token.
+  COURTLISTENER_API_KEY: secret(),
 
   // Live web-search grounding for legislative search (services/web-search.ts).
   // Optional — search falls back to unaided AI interpretation without it.
-  TAVILY_API_KEY: z.string().optional(),
+  TAVILY_API_KEY: secret(),
+
+  // ---------------------------------------------------------------------------
+  // Model keys. At least one, or no Citizen's Brief can be written for any law.
+  // ---------------------------------------------------------------------------
+  //
+  // THESE WERE NAMED NOWHERE. Not in this file, not in .env.example — the file
+  // that is supposed to be the complete list of what to set. services/
+  // ai-generate.ts read them straight off process.env, so anybody setting this
+  // deployment up by following the documentation would never set one, and every
+  // brief would fail with no indication that a variable was missing. That is
+  // not a key that could not be found; that is a key nobody was told existed.
+  GEMINI_API_KEY: secret(),
+  OPENAI_API_KEY: secret(),
 
   // ---------------------------------------------------------------------------
   // NOT HERE ANY MORE: the six B2B_* variables
@@ -145,9 +179,52 @@ function validateEnv() {
 }
 
 /**
- * Validated and typed environment variables
+ * Every secret this platform reads. Kept as a list so the live-read wrapper
+ * below and the key report cannot drift apart from the schema.
  */
-export const env = validateEnv();
+const SECRET_KEYS = [
+  "RESEND_API_KEY",
+  "CONGRESS_API_KEY",
+  "COURTLISTENER_API_KEY",
+  "TAVILY_API_KEY",
+  "GEMINI_API_KEY",
+  "OPENAI_API_KEY",
+] as const;
+
+/**
+ * Validated and typed environment variables.
+ *
+ * SECRETS ARE READ LIVE, EVERYTHING ELSE IS THE BOOT SNAPSHOT.
+ *
+ * The distinction matters and it was learned the hard way. Parsing once at
+ * import is right for DATABASE_URL: it must be present or the process has no
+ * business starting, and it cannot meaningfully change afterwards. Applying the
+ * same rule to keys made `env.CONGRESS_API_KEY` a value frozen at whatever
+ * moment this module happened to be imported — which is an import-order
+ * landmine, and import-order landmines are precisely the family of bug that
+ * produced "the key is definitely set and it still does not work" three times
+ * on this project.
+ *
+ * So a key is read from process.env on every access and trimmed on the way out.
+ * Same one name, same one trimming rule, same schema documenting it — and no
+ * dependence on when anything was imported.
+ */
+function liveSecrets<T extends object>(snapshot: T): T {
+  const live = { ...snapshot };
+  for (const key of SECRET_KEYS) {
+    Object.defineProperty(live, key, {
+      enumerable: true,
+      get(): string | undefined {
+        const raw = process.env[key];
+        const trimmed = raw?.trim();
+        return trimmed ? trimmed : undefined;
+      },
+    });
+  }
+  return live;
+}
+
+export const env = liveSecrets(validateEnv());
 
 /**
  * Type of the validated environment variables

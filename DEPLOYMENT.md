@@ -97,8 +97,21 @@ Railway-specific.
 4. Add the variables tagged `[API]` in `.env.example`. At minimum:
    `DATABASE_URL`, `DIRECT_URL`, `BETTER_AUTH_SECRET`, `BACKEND_URL`,
    `APP_ORIGINS`, `APP_SCHEMES`, `NODE_ENV=production`, the `S3_*` set,
-   `RESEND_API_KEY`, `EMAIL_FROM`, `CONGRESS_API_KEY`, and
-   `COURTLISTENER_API_KEY`.
+   `RESEND_API_KEY`, `EMAIL_FROM`, `CONGRESS_API_KEY`,
+   `COURTLISTENER_API_KEY`, at least one of `GEMINI_API_KEY` /
+   `OPENAI_API_KEY`, and optionally `TAVILY_API_KEY`.
+
+   The two model keys are not optional in practice: without one, no Citizen's
+   Brief can be written for any law on any branch. They were absent from this
+   list and from `.env.example` for a long time while the brief pipeline
+   depended on them, so a by-the-book deployment produced an app whose central
+   feature silently did nothing. `backend/tests/env-keys.test.ts` now fails if a
+   key in the schema is missing from either document.
+
+   Once deployed, **`GET /api/admin/keys`** reports which keys this API process
+   actually holds — presence, a four-character fingerprint so you can tell
+   whether the server has the value you pasted, and what stops working without
+   each. It never returns a key.
 
    The six `B2B_*` values are **not** service variables. They are tagged
    `[SEED]` in `.env.example` and belong in the shell that runs

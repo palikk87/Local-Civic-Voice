@@ -27,6 +27,7 @@ import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 import { fetchCourtListener } from "./courtlistener";
 import { markSettled, markWorking } from "./brief-state";
+import { env } from "../env";
 
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -230,12 +231,12 @@ export function officialSources(): {
   const ai = aiAvailability();
   return {
     // Bills. Without it there is no legislative text at all.
-    congress: !!process.env.CONGRESS_API_KEY,
+    congress: !!env.CONGRESS_API_KEY,
     // Supreme Court opinions. NOT optional, and it used to be described here as
     // if it were: CourtListener answers 401 on the opinion endpoint without a
     // token and serves a bot check on its public page, so a missing key means
     // no judicial text at all.
-    courtListener: !!process.env.COURTLISTENER_API_KEY,
+    courtListener: !!env.COURTLISTENER_API_KEY,
     // Executive orders. Public API, no key exists to be missing.
     federalRegister: true,
     // Having the text is half of it. With no model key there is no brief for
@@ -403,7 +404,7 @@ export function stripGpoHeader(text: string): string {
 }
 
 export async function fetchBillText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
-  const apiKey = process.env.CONGRESS_API_KEY;
+  const apiKey = env.CONGRESS_API_KEY;
   const parsed = parseBillId(ref.masterReferenceId, ref.congress);
 
   // Loud, and specific about whose problem it is. This used to fall through to
@@ -763,7 +764,7 @@ async function opinionsInCluster(
 }
 
 export async function fetchScotusText(ref: ReferenceRow, deadlineAt: number): Promise<TextResult | null> {
-  const apiKey = process.env.COURTLISTENER_API_KEY;
+  const apiKey = env.COURTLISTENER_API_KEY;
 
   if (!apiKey) {
     console.error(

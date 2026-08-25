@@ -45,6 +45,7 @@ import { initializeProcessors } from "./services/job-processors";
 // Import cache stats
 import { getCacheStats } from "./services/cache";
 import { emailConfiguration, isEmailConfigured } from "./services/email";
+import { keySummary, keyWarnings } from "./services/key-report";
 
 // Type the Hono app with user/session variables
 const app = new Hono<{
@@ -426,6 +427,18 @@ void checkStorage().then(({ ok, driver, detail }) => {
 // It was invisible for exactly as long as it took somebody to try signing up,
 // because Better Auth's own send path answers success either way. Now it says
 // so at boot, and /health carries the same fact for whatever polls it.
+// One line naming every key this process actually holds, and one line per
+// thing that will not work. Printed at boot because the alternative — which
+// this project lived through with three separate keys — is somebody being sure
+// a key is set while the feature it powers fails silently, and no way to tell
+// which of the two is wrong without reading source code.
+{
+  console.log(`[Keys] ${keySummary()}`);
+  for (const warning of keyWarnings()) {
+    console.warn(`[Keys] ⚠️  ${warning}`);
+  }
+}
+
 {
   const mail = emailConfiguration();
   if (!mail.configured) {

@@ -22,6 +22,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { env } from "../src/env";
 
 const FIXTURE_DIR = join(import.meta.dir, "..", "tests", "fixtures", "congress");
 
@@ -63,7 +64,7 @@ const SUBJECTS: Array<{ id: string; congress: number; type: string; number: stri
 ];
 
 async function main(): Promise<void> {
-  const apiKey = process.env.CONGRESS_API_KEY;
+  const apiKey = env.CONGRESS_API_KEY;
   if (!apiKey) {
     console.error(
       "CONGRESS_API_KEY is not set. Get one free at https://api.congress.gov/sign-up/ and\n" +

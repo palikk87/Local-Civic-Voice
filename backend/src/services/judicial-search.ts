@@ -30,6 +30,7 @@
 import { fetchCourtListener } from "./courtlistener";
 import type { SearchIntent } from "./search-intent";
 import { interpretSearch } from "./search-intent";
+import { env } from "../env";
 
 export interface JudicialResult {
   /** The opinion id, which addresses the text; falls back to the cluster id. */
@@ -263,7 +264,7 @@ export async function searchJudicialOpinions(
   const intent = await interpretSearch(query, "judicial");
   const ladder = buildLadder(intent);
   const deadlineAt = Date.now() + DEADLINE_MS;
-  const apiKey = process.env.COURTLISTENER_API_KEY;
+  const apiKey = env.COURTLISTENER_API_KEY;
 
   const found = new Map<
     string,

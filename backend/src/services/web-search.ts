@@ -15,6 +15,7 @@
  * the caller silently falls back to unaided interpretation. A slow or dead
  * search provider must never stall or break the search box.
  */
+import { env } from "../env";
 
 export interface WebSnippet {
   title: string;
@@ -74,7 +75,7 @@ interface TavilyResponse {
  * @param query The user's raw search query.
  */
 export async function searchWebForContext(query: string): Promise<WebSnippet[]> {
-  const apiKey = process.env.TAVILY_API_KEY;
+  const apiKey = env.TAVILY_API_KEY;
   if (!apiKey) {
     // Grounding is optional — not configured is not an error, but it IS the
     // difference between resolving a slang query to a real bill and guessing
@@ -133,7 +134,7 @@ export async function searchWebForContext(query: string): Promise<WebSnippet[]> 
 
 /** True when grounding is configured. Used only for logging/diagnostics. */
 export function webSearchAvailable(): boolean {
-  return !!process.env.TAVILY_API_KEY;
+  return !!env.TAVILY_API_KEY;
 }
 
 /** Render snippets as the prompt block the interpreter model consumes. */

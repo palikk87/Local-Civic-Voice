@@ -13,6 +13,7 @@
 
 import type { Chamber, Member, Party } from "../types";
 import { FALLBACK_MEMBERS } from "../data/congress-fallback";
+import { env } from "../env";
 
 const API_BASE = "https://api.congress.gov/v3";
 const PAGE_SIZE = 250;
@@ -134,7 +135,7 @@ let cache: Roster | null = null;
 let inFlight: Promise<Roster> | null = null;
 
 function apiKey(): string | undefined {
-  const key = process.env.CONGRESS_API_KEY;
+  const key = env.CONGRESS_API_KEY;
   return key && key.trim() ? key.trim() : undefined;
 }
 

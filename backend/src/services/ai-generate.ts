@@ -12,6 +12,7 @@
  *
  * Provider API keys never leave the server.
  */
+import { env } from "../env";
 
 export type AIProvider = "gemini" | "openai";
 
@@ -57,8 +58,8 @@ export type AIGenerateResult =
 
 export function aiAvailability(): { gemini: boolean; openai: boolean } {
   return {
-    gemini: !!process.env.GEMINI_API_KEY,
-    openai: !!process.env.OPENAI_API_KEY,
+    gemini: !!env.GEMINI_API_KEY,
+    openai: !!env.OPENAI_API_KEY,
   };
 }
 
@@ -384,8 +385,8 @@ async function runProvider(
  */
 export async function generateAI(params: AIGenerateParams): Promise<AIGenerateResult> {
   const keys: Record<AIProvider, string | undefined> = {
-    gemini: process.env.GEMINI_API_KEY,
-    openai: process.env.OPENAI_API_KEY,
+    gemini: env.GEMINI_API_KEY,
+    openai: env.OPENAI_API_KEY,
   };
 
   if (!keys.gemini && !keys.openai) {

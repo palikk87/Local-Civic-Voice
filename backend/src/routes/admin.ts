@@ -7,6 +7,7 @@ import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { emailConfiguration, trySendingEmail } from "../services/email";
+import { keyReport, keyWarnings } from "../services/key-report";
 import { purgeMediaObjects } from "../services/media-objects";
 import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
 import { LOOK_ALIKE } from "../services/reference-lineage";
@@ -1436,6 +1437,44 @@ adminRouter.get("/content-health", async (c) => {
  * domain nobody verified — which the provider refuses in a way indistinguishable
  * from a bad key.
  */
+/**
+ * GET /api/admin/keys
+ *
+ * Every API key this deployment uses: is it set, does it look right, and what
+ * stops working without it. Never returns a key — the fingerprint is four hex
+ * characters of its digest, which is enough to compare against what you pasted
+ * and worth nothing to anybody who reads it.
+ *
+ * This is the answer to "the key is definitely set and the feature still does
+ * not work", which was true more than once here, with three different keys, and
+ * could only be resolved by reading source code.
+ */
+adminRouter.get("/keys", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  const keys = keyReport();
+  return c.json({
+    data: {
+      keys,
+      warnings: keyWarnings(keys),
+      // Where the values come from, because "I set it" and "this process can
+      // see it" are different statements and the gap between them is usually
+      // the whole problem: set on the web host instead of the API, set in a
+      // build-time variable rather than a runtime one, or set on a service that
+      // was redeployed since.
+      note:
+        "These are read from this API process's own environment at boot. A key set " +
+        "anywhere else — the web host, a build-time variable, another service — is " +
+        "not visible here and is not used.",
+      verifyEmailWith: "POST /api/admin/email-health/test { to }",
+    },
+  });
+});
+
 adminRouter.get("/email-health", async (c) => {
   const authHeader = c.req.header("Authorization");
   const session = await getAdminFromToken(authHeader);
