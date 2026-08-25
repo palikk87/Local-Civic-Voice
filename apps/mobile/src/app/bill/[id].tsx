@@ -46,6 +46,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { bills, categoryColors, categoryLabels } from '@/lib/mock-data';
+import { shareMessage } from '@/lib/config';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
   castReferenceVote,
@@ -594,7 +595,7 @@ export default function BillDetailScreen() {
 
     try {
       await Share.share({
-        message: `Check out this bill: ${bill.title}\n\nVote on AYE & NAY!`,
+        message: shareMessage(bill.title, `/reference/${bill.id}`),
       });
     } catch (error) {
       console.log('Error sharing:', error);

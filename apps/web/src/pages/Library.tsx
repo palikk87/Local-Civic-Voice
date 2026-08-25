@@ -17,17 +17,13 @@ import {
   executiveToSearchResult,
   judicialToSearchResult,
   type LibraryBranch,
-  type CongressResult,
-  type ExecutiveResult,
-  type JudicialResult,
+  type LibraryRow,
 } from "@/lib/library";
 import {
   determineStatusLabel,
   type GovernmentSearchResult,
 } from "@/lib/mobile/government-api";
 import { useTimelineStore } from "@/lib/mobile/timeline-store";
-
-type LibraryResult = CongressResult | ExecutiveResult | JudicialResult;
 
 function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   useEffect(() => {
@@ -49,13 +45,19 @@ function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () =
 }
 
 const PLACEHOLDER: Record<LibraryBranch, string> = {
+  all: 'Search all three branches (e.g., "healthcare", "immigration")...',
   congress: 'Search bills (e.g., "healthcare", "tax")...',
   executive: "Search executive orders...",
   judicial: "Search court cases...",
 };
 
 export default function Library() {
-  const [branch, setBranch] = useState<LibraryBranch>("congress");
+  /*
+   * "all" by default. It was "congress", and the search only ever queried the
+   * selected branch — so two thirds of the corpus was excluded by a default
+   * nobody chose, silently.
+   */
+  const [branch, setBranch] = useState<LibraryBranch>("all");
 
   // Two pieces of state on purpose: what is in the box, and what was actually
   // searched for.
@@ -78,17 +80,71 @@ export default function Library() {
 
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ["library", branch, submitted],
-    queryFn: async (): Promise<{ results: LibraryResult[] }> => {
+    queryFn: async (): Promise<LibraryRow[]> => {
       const q = submitted.trim();
-      if (branch === "congress") return libraryApi.congress(q);
-      if (branch === "executive") return libraryApi.executive(q);
-      return libraryApi.judicial(q);
+
+      if (branch === "congress") {
+        const { results } = await libraryApi.congress(q);
+        return results.map((item) => ({ branch: "congress", item }));
+      }
+      if (branch === "executive") {
+        const { results } = await libraryApi.executive(q);
+        return results.map((item) => ({ branch: "executive", item }));
+      }
+      if (branch === "judicial") {
+        const { results } = await libraryApi.judicial(q);
+        return results.map((item) => ({ branch: "judicial", item }));
+      }
+
+      /*
+       * All three, in parallel, interleaved.
+       *
+       * `allSettled` rather than `all`: one branch's source being down must not
+       * blank the other two. A partial answer clearly drawn from what responded
+       * beats an error page that hides two working branches.
+       *
+       * Interleaved rather than concatenated, so a search does not open with
+       * fifteen bills and bury the executive orders and court cases below the
+       * fold — which is the same exclusion the old default caused, just softer.
+       *
+       * Each row carries its branch. The three sources return three unrelated
+       * shapes and nothing downstream can tell them apart by inspection, so the
+       * tag goes on here, where which source answered is still known.
+       */
+      const [congress, executive, judicial] = await Promise.allSettled([
+        libraryApi.congress(q),
+        libraryApi.executive(q),
+        libraryApi.judicial(q),
+      ]);
+
+      const lists: LibraryRow[][] = [
+        congress.status === "fulfilled"
+          ? congress.value.results.map((item) => ({ branch: "congress", item }))
+          : [],
+        executive.status === "fulfilled"
+          ? executive.value.results.map((item) => ({ branch: "executive", item }))
+          : [],
+        judicial.status === "fulfilled"
+          ? judicial.value.results.map((item) => ({ branch: "judicial", item }))
+          : [],
+      ];
+
+      const interleaved: LibraryRow[] = [];
+      const longest = Math.max(...lists.map((list) => list.length), 0);
+      for (let i = 0; i < longest; i++) {
+        for (const list of lists) {
+          const row = list[i];
+          if (row) interleaved.push(row);
+        }
+      }
+
+      return interleaved;
     },
     enabled,
     staleTime: 60_000,
   });
 
-  const results = data?.results ?? [];
+  const rows = data ?? [];
   const loading = enabled && (isLoading || isFetching);
 
   // Citizen's Brief preview — same flow as the mobile library screen.
@@ -191,12 +247,9 @@ export default function Library() {
         {/* Results */}
         {enabled ? (
           <LibraryResults
-            branch={branch}
+            rows={rows}
             isLoading={loading}
             isError={isError}
-            congress={branch === "congress" ? (results as CongressResult[]) : []}
-            executive={branch === "executive" ? (results as ExecutiveResult[]) : []}
-            judicial={branch === "judicial" ? (results as JudicialResult[]) : []}
             statusLabelFor={(item) => determineStatusLabel(item.latestAction?.text)}
             onOpenCongress={(item) => setSelectedResult(congressToSearchResult(item))}
             onOpenExecutive={(item) => setSelectedResult(executiveToSearchResult(item))}

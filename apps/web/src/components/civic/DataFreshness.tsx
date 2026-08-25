@@ -43,7 +43,18 @@ export function DataFreshness() {
     retry: false,
   });
 
-  if (!data) return null;
+  /*
+   * A payload that is not the shape this expects renders NOTHING.
+   *
+   * This used to read `Object.values(data.counts)` the moment `data` was
+   * truthy, and `Object.values(undefined)` throws — so a response missing one
+   * key took down the whole Government page through the error boundary. A
+   * strip that says how fresh the records are is the least important thing on
+   * that page; it must never be the reason the page is blank. Saying nothing
+   * is also the honest answer here: with no counts there is no freshness to
+   * report, and a zero would assert we hold no records at all.
+   */
+  if (!data || !data.counts || !data.cadence) return null;
 
   const synced = ago(data.syncedAt);
   const total = Object.values(data.counts).reduce((sum, n) => sum + n, 0);

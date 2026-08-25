@@ -3,6 +3,13 @@ import { Search } from "lucide-react";
 import type { LibraryBranch } from "@/lib/library";
 
 const BRANCH_INFO: Record<LibraryBranch, { name: string; source: string; suggestions: string[] }> = {
+  all: {
+    name: "All three branches",
+    source: "Congress.gov, Federal Register and CourtListener",
+    // Subjects that genuinely span the branches, so the default search
+    // demonstrates what "all" means rather than returning one branch's results.
+    suggestions: ["immigration", "healthcare", "free speech", "climate change", "voting rights"],
+  },
   congress: {
     name: "Congressional Bills",
     source: "Congress.gov",

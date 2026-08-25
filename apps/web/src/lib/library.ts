@@ -32,7 +32,32 @@ export type {
 
 // ---------- Library branch metadata ----------
 
-export type LibraryBranch = "congress" | "executive" | "judicial";
+/**
+ * "all" is the default, and the reason is a bug this fixes.
+ *
+ * The Library preselected "congress" and searched only the selected branch, so
+ * a reader typing "immigration" silently got no executive orders and no court
+ * cases — two thirds of the platform's own subject matter, excluded by a
+ * default nobody chose. A branch tab should NARROW a search somebody asked to
+ * narrow, not quietly define it.
+ */
+export type LibraryBranch = "all" | "congress" | "executive" | "judicial";
+
+/**
+ * One search result, carrying which branch it came from.
+ *
+ * The three sources return three unrelated shapes, and the Library used to keep
+ * them in three parallel arrays and render whichever one matched the selected
+ * tab. That worked only because exactly one tab could ever be selected — and
+ * the moment "All" existed, all three arrays were empty and a search that had
+ * fetched thirty records displayed none of them. Tagging each row with its
+ * branch makes the mixed case the ordinary case rather than a fourth branch of
+ * an if-statement that nobody remembers to add.
+ */
+export type LibraryRow =
+  | { branch: "congress"; item: CongressResult }
+  | { branch: "executive"; item: ExecutiveResult }
+  | { branch: "judicial"; item: JudicialResult };
 
 interface CongressResponse {
   results: CongressResult[];

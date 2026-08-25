@@ -1,52 +1,79 @@
 import { useEffect, useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
 
 const STORAGE_KEY = "ayeandnay:seen-beta-welcome";
 
+/**
+ * The pre-beta notice. A banner, not a modal — and that change IS the fix.
+ *
+ * WHAT WAS REPORTED: "the Timeline sidebar item does not navigate." The link
+ * was fine. This component was a blocking Dialog whose overlay covered the
+ * whole viewport, so the first click anywhere — including on the sidebar —
+ * landed on the overlay, closed the dialog, and went no further. From the
+ * reader's side: you press Timeline, something flickers, you are still on the
+ * Feed. Press it again and it works, but by then it has already read as broken.
+ *
+ * Proven in a browser rather than reasoned about: Playwright reported
+ * `<div class="fixed inset-0 z-50 bg-black/80"> intercepts pointer events`
+ * on the sidebar link, and every link navigated correctly once the dialog was
+ * dismissed.
+ *
+ * A pre-beta notice does not need to take the app hostage to be read. As a
+ * banner it says the same thing, stays until dismissed, and never eats a click
+ * meant for something else.
+ *
+ * The name was wrong too: "AyeAndNay" is not the platform's name.
+ */
 export function BetaWelcomeDialog() {
-  const [open, setOpen] = useState(false);
+  const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem(STORAGE_KEY)) {
-      setOpen(true);
+    try {
+      if (!localStorage.getItem(STORAGE_KEY)) setShow(true);
+    } catch {
+      // Private mode, or storage disabled. Showing it every visit is a worse
+      // failure than not showing it at all.
     }
   }, []);
 
   const dismiss = () => {
-    localStorage.setItem(STORAGE_KEY, "true");
-    setOpen(false);
+    try {
+      localStorage.setItem(STORAGE_KEY, "true");
+    } catch {
+      // Same. The banner still closes for this session.
+    }
+    setShow(false);
   };
 
+  if (!show) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(next) => !next && dismiss()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600">
-            <Sparkles className="h-6 w-6 text-white" />
-          </div>
-          <DialogTitle className="text-center text-xl">Welcome to AyeAndNay</DialogTitle>
-          <DialogDescription className="text-center">
-            We're still in pre-beta and launching for your feedback. Together, we can reclaim democracy.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="sm:justify-center">
-          <Button
-            onClick={dismiss}
-            className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white border-0 font-semibold"
-          >
-            Got it
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <div
+      role="status"
+      className="mb-4 flex items-start gap-3 rounded-xl border border-accent/30 bg-accent/10 p-4"
+    >
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600">
+        <Sparkles className="h-4.5 w-4.5 text-white" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-foreground">Welcome to AYE &amp; NAY</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          We&rsquo;re still in pre-beta and launching for your feedback. Together, we can reclaim
+          democracy.
+        </p>
+        <Button size="sm" onClick={dismiss} className="mt-3">
+          Got it
+        </Button>
+      </div>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss the pre-beta notice"
+        className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
   );
 }

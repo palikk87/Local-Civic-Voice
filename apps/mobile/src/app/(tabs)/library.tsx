@@ -17,6 +17,7 @@ import { useRouter } from 'expo-router';
 import {
   Search,
   Landmark,
+  Layers,
   FileText,
   Scale,
   ChevronRight,
@@ -46,6 +47,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
 import {
   searchGovernment,
+  searchAllBranches,
   type GovernmentSearchResult,
   type SearchBranch,
 } from '@/lib/government-api';
@@ -58,7 +60,18 @@ import { useResponsive } from '@/lib/useResponsive';
 // TYPES
 // ===========================================
 
-type LibraryTab = 'legislative' | 'executive' | 'judicial';
+/**
+ * 'all' is the default, and the reason is a bug this fixes.
+ *
+ * The Library opened on Congress and searched only the selected branch, so a
+ * reader typing "immigration" got no executive orders and no court cases — two
+ * thirds of the platform's own subject matter, excluded by a default nobody
+ * chose and with nothing on screen to say so. A branch tab should NARROW a
+ * search somebody asked to narrow, not quietly define it.
+ *
+ * Web twin: apps/web/src/lib/library.ts (LibraryBranch).
+ */
+type LibraryTab = 'all' | 'legislative' | 'executive' | 'judicial';
 
 // ===========================================
 // TAB SELECTOR
@@ -71,7 +84,8 @@ function LibraryTabSelector({
   activeTab: LibraryTab;
   onChangeTab: (tab: LibraryTab) => void;
 }) {
-  const tabs: { id: LibraryTab; label: string; color: string; icon: 'landmark' | 'file' | 'scale' }[] = [
+  const tabs: { id: LibraryTab; label: string; color: string; icon: 'layers' | 'landmark' | 'file' | 'scale' }[] = [
+    { id: 'all', label: 'All', color: '#F59E0B', icon: 'layers' },
     { id: 'legislative', label: 'Congress', color: '#3B82F6', icon: 'landmark' },
     { id: 'executive', label: 'Executive', color: '#F59E0B', icon: 'file' },
     { id: 'judicial', label: 'Judicial', color: '#8B5CF6', icon: 'scale' },
@@ -110,6 +124,7 @@ function LibraryTabSelector({
                 }}
               />
             )}
+            {tab.icon === 'layers' && <Layers size={18} color={iconColor} />}
             {tab.icon === 'landmark' && <Landmark size={18} color={iconColor} />}
             {tab.icon === 'file' && <FileText size={18} color={iconColor} />}
             {tab.icon === 'scale' && <Scale size={18} color={iconColor} />}
@@ -564,6 +579,13 @@ function SlideOverPreview({
 
 function EmptyState({ activeTab, onSuggestionPress }: { activeTab: LibraryTab; onSuggestionPress: (suggestion: string) => void }) {
   const branchInfo: Record<LibraryTab, { name: string; source: string; suggestions: string[] }> = {
+    all: {
+      name: 'All Three Branches',
+      source: 'Congress.gov, Federal Register and CourtListener',
+      // Subjects that genuinely span the branches, so the default search shows
+      // what "all" means rather than returning one branch's results.
+      suggestions: ['immigration', 'healthcare', 'free speech', 'climate change', 'voting rights']
+    },
     legislative: {
       name: 'Congressional Bills',
       source: 'Congress.gov',
@@ -665,7 +687,7 @@ function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () =
 export default function LibraryScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<LibraryTab>('legislative');
+  const [activeTab, setActiveTab] = useState<LibraryTab>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [selectedResult, setSelectedResult] = useState<GovernmentSearchResult | null>(null);
@@ -696,7 +718,10 @@ export default function LibraryScreen() {
   } = useQuery({
     queryKey: ['government-search', activeTab, submittedQuery],
     queryFn: async () => {
-      const results = await searchGovernment(activeTab as SearchBranch, submittedQuery, 20);
+      const results =
+        activeTab === 'all'
+          ? await searchAllBranches(submittedQuery, 20)
+          : await searchGovernment(activeTab, submittedQuery, 20);
       // Deduplicate results by ID before returning
       const uniqueResults = Array.from(
         new Map(results.map(r => [r.id, r])).values()
@@ -764,6 +789,7 @@ export default function LibraryScreen() {
   );
 
   const placeholders: Record<LibraryTab, string> = {
+    all: 'Search all three branches (e.g., "healthcare")...',
     legislative: 'Search bills (e.g., "healthcare", "tax")...',
     executive: 'Search executive orders...',
     judicial: 'Search court cases...',

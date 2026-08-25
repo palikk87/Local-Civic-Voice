@@ -306,6 +306,48 @@ export async function searchGovernment(
   }
 }
 
+/**
+ * All three branches at once, interleaved.
+ *
+ * The Library used to open with one branch preselected and search only that
+ * branch, so a reader typing "immigration" got no executive orders and no court
+ * cases — two thirds of the platform's own subject matter, excluded by a
+ * default nobody chose and with nothing on screen to say so.
+ *
+ * `allSettled`, not `all`: one source being down must not blank the other two.
+ * A partial answer visibly drawn from what responded beats an error page that
+ * hides two working branches.
+ *
+ * Interleaved, not concatenated, so a search does not open with twenty bills
+ * and bury the other two branches below the fold — the same exclusion as
+ * before, just softer.
+ */
+export async function searchAllBranches(
+  query: string,
+  limit = 20
+): Promise<GovernmentSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+
+  const settled = await Promise.allSettled([
+    searchLegislation(trimmed, limit),
+    searchExecutive(trimmed, limit),
+    searchJudicial(trimmed, limit),
+  ]);
+
+  const lists = settled.map((outcome) => (outcome.status === 'fulfilled' ? outcome.value : []));
+
+  const interleaved: GovernmentSearchResult[] = [];
+  const longest = Math.max(...lists.map((list) => list.length), 0);
+  for (let i = 0; i < longest; i++) {
+    for (const list of lists) {
+      const item = list[i];
+      if (item) interleaved.push(item);
+    }
+  }
+  return interleaved;
+}
+
 // ===========================================
 // BILL SPONSOR
 // ===========================================

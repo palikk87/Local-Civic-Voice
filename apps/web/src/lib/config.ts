@@ -36,3 +36,20 @@ export const BACKEND_URL: string = RAW_BACKEND_URL.replace(/\/+$/, "");
  * build relative URLs it cannot resolve.
  */
 export const AUTH_BASE_URL: string | undefined = BACKEND_URL || undefined;
+
+/**
+ * A link a recipient can actually open.
+ *
+ * WHY THIS EXISTS. Every share sheet on the platform sent
+ * "Check out this bill: {title}\n\nVote on AYE & NAY!" and no URL at all — so
+ * the person receiving it had a title and an instruction and no way to reach
+ * the thing. A share with nowhere to go is not a share.
+ *
+ * window.location.origin rather than a configured host: the app is served from
+ * whichever origin the reader is already on, so a link built this way works in
+ * every deployment — including previews — without a variable that can drift.
+ */
+export function publicUrlFor(path: string): string {
+  const suffix = path.startsWith("/") ? path : `/${path}`;
+  return `${window.location.origin}${suffix}`;
+}

@@ -1,4 +1,5 @@
 // Web port of mobile/src/components/CreatePostModal.tsx
+import { useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useCallback, type ChangeEvent } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -98,6 +99,7 @@ export default function CreatePostModal({
   const videoInputRef = useRef<HTMLInputElement>(null);
 
   const createPost = useTimelineStore((s) => s.createPost);
+  const queryClient = useQueryClient();
   const shareContent = useTimelineStore((s) => s.shareContent);
   const searchUsers = useTimelineStore((s) => s.searchUsers);
 
@@ -264,6 +266,20 @@ export default function CreatePostModal({
           uploadedMediaIds
         );
       }
+
+      /*
+       * TELL THE CACHE. This was the whole of "a new post does not appear on
+       * the timeline without a manual page refresh".
+       *
+       * Posting goes through the zustand timeline store, but every surface that
+       * DISPLAYS posts reads TanStack Query — two caches that had never been
+       * introduced. The write succeeded, the server had the post, and the
+       * screen kept showing the list it fetched before you wrote it. Reloading
+       * "fixed" it, which is exactly what made it look like a save failure.
+       */
+      await queryClient.invalidateQueries({ queryKey: ["algorithmic-feed"] });
+      await queryClient.invalidateQueries({ queryKey: ["timeline"] });
+      await queryClient.invalidateQueries({ queryKey: ["posts"] });
 
       // Reset and close
       resetState();

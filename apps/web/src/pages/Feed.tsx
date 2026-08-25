@@ -1,6 +1,6 @@
 // Web port of mobile/src/app/(tabs)/index.tsx (Home screen)
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Heart,
   MessageCircle,
@@ -251,7 +251,17 @@ function FeedTypeTabs({
 }) {
   return (
     <div className="mb-2">
-      <div className="flex items-center overflow-x-auto scrollbar-none px-3" style={{ height: 36 }}>
+      {/*
+        These are tabs, so they say so. Screen readers announce which one is
+        selected instead of reading seven unlabelled buttons in a row, and a
+        check can ask for "the Gaps tab" rather than guessing at the markup.
+      */}
+      <div
+        role="tablist"
+        aria-label="Feed"
+        className="flex items-center overflow-x-auto scrollbar-none px-3"
+        style={{ height: 36 }}
+      >
         {FEED_TYPES.map((feed, index) => {
           const isActive = activeType === feed.type;
           const iconColor = isActive ? "#F59E0B" : "#64748B";
@@ -259,6 +269,9 @@ function FeedTypeTabs({
           return (
             <button
               key={feed.type}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
               onClick={() => onChangeType(feed.type)}
               className="flex items-center shrink-0 rounded-full border px-2.5 py-1.5"
               style={{
@@ -787,8 +800,47 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
 
 export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
-  const [feedType, setFeedType] = useState<FeedType>("for_you");
-  const [branchFilter, setBranchFilter] = useState<GovernmentBranch | "all">("all");
+  /*
+   * TAB STATE LIVES IN THE URL.
+   *
+   * It was useState only, so /feed was the whole address of every tab: you
+   * could not link somebody to Gaps, could not open two in different windows,
+   * and refreshing threw you back to For You having lost your place. Back and
+   * forward did not move between tabs either — the browser had never been told
+   * anything happened.
+   *
+   * `replace` rather than push on the branch filter: a tab is a place worth a
+   * history entry, a filter within it is not, and pushing both makes the back
+   * button feel broken in the other direction.
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const feedType = ((): FeedType => {
+    const requested = searchParams.get("tab");
+    return FEED_TYPES.some((t) => t.type === requested) ? (requested as FeedType) : "for_you";
+  })();
+
+  const setFeedType = (next: FeedType) => {
+    const params = new URLSearchParams(searchParams);
+    // "for_you" is the default, so it stays out of the address entirely rather
+    // than making the plain /feed link look like a filtered one.
+    if (next === "for_you") params.delete("tab");
+    else params.set("tab", next);
+    setSearchParams(params);
+  };
+  const branchFilter = ((): GovernmentBranch | "all" => {
+    const requested = searchParams.get("branch");
+    return requested === "legislative" || requested === "executive" || requested === "judicial"
+      ? requested
+      : "all";
+  })();
+
+  const setBranchFilter = (next: GovernmentBranch | "all") => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "all") params.delete("branch");
+    else params.set("branch", next);
+    setSearchParams(params, { replace: true });
+  };
 
   // One reader for "where am I", shared with the Representation Gap and the
   // district picker. Null is a complete answer and the Local tab renders it.

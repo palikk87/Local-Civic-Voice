@@ -138,7 +138,8 @@ const CHECKS: Check[] = [
     cwd: "apps/web",
     cmd: ["bun", "run", "library-search-check"],
     guards:
-      "the Library searches when asked and never on its own — typing is not a request",
+      "the Library searches when asked and never on its own — typing is not a request — " +
+      "and one search reaches all three branches, not only the preselected one",
   },
   {
     name: "web verify-email-check",
@@ -155,6 +156,14 @@ const CHECKS: Check[] = [
     guards:
       "a law can be shared to your own timeline from where you found it, resolved to the " +
       "master reference, and never posted on your behalf",
+  },
+  {
+    name: "web nav-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "nav-check"],
+    guards:
+      "on a first visit nothing covers the viewport, every sidebar destination is reached " +
+      "on the first click, and the feed tab lives in the URL and survives a reload",
   },
   {
     name: "web every-page-check",

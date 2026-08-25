@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { MessageCircle, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { MessageCircle, ChevronRight, PenSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 import { AppShell } from "@/components/layout/AppShell";
@@ -7,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/hooks/use-civic-auth";
 import { useConversations, otherParticipant } from "@/lib/api/messages";
+import { ComposeDialog } from "@/components/messages/ComposeDialog";
 
 /**
  * Conversation list.
@@ -20,6 +22,7 @@ import { useConversations, otherParticipant } from "@/lib/api/messages";
  * here. Everything you can *do* is the same.
  */
 export default function Messages() {
+  const [composing, setComposing] = useState(false);
   // Signed-out visitors never reach here — App.tsx wraps this route in
   // RouteGuard capability="viewMessages", same as every other private page.
   const { user } = useCurrentUser();
@@ -28,7 +31,17 @@ export default function Messages() {
   return (
     <AppShell>
       <div className="mx-auto w-full max-w-2xl p-4">
-        <h1 className="mb-4 text-xl font-semibold">Messages</h1>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-xl font-semibold">Messages</h1>
+          {/* The screen had no way to start a conversation at all — the only
+              route in was already having one. */}
+          <Button size="sm" onClick={() => setComposing(true)}>
+            <PenSquare className="mr-1.5 h-4 w-4" />
+            New message
+          </Button>
+        </div>
+
+        <ComposeDialog open={composing} onOpenChange={setComposing} />
 
         {isLoading && (
           <div className="space-y-3">
@@ -53,7 +66,7 @@ export default function Messages() {
           <div className="rounded-lg border border-border p-8 text-center">
             <MessageCircle className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 text-sm text-muted-foreground">
-              No conversations yet. Open someone&apos;s profile to start one.
+              No conversations yet. Press New message to write to somebody.
             </p>
           </div>
         )}

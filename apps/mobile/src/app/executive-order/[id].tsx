@@ -38,6 +38,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
+import { shareMessage } from '@/lib/config';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
   castReferenceVote,
@@ -246,7 +247,7 @@ export default function ExecutiveOrderDetailScreen() {
 
     try {
       await Share.share({
-        message: `Check out this Executive Order: ${eo.title}\n\nVote on AYE & NAY!`,
+        message: shareMessage(eo.title, `/reference/${eo.id}`),
       });
     } catch (error) {
       console.log('Error sharing:', error);

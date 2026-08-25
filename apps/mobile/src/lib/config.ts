@@ -32,3 +32,39 @@ export const BACKEND_URL: string = (() => {
       "runtime has no effect."
   );
 })();
+
+const RAW_WEB_URL = process.env.EXPO_PUBLIC_WEB_URL || "";
+
+/**
+ * Where a shared link points.
+ *
+ * WHY THIS EXISTS. Every share sheet sent "Check out this bill: {title}\n\nVote
+ * on AYE & NAY!" and no URL — so the recipient had a title, an instruction, and
+ * no way to reach the thing. A share with nowhere to go is not a share.
+ *
+ * The web app can use window.location.origin; a native bundle has no origin, so
+ * the public site has to be named at build time like the backend is.
+ *
+ * NOT THROWING when it is unset, unlike BACKEND_URL. A missing backend breaks
+ * every screen and should stop the app at startup; a missing web URL breaks
+ * sharing only, and taking the whole app down over it would be the larger
+ * fault. shareUrlFor returns null instead, and the callers send the title
+ * alone — which is what they did before this existed.
+ */
+export const WEB_URL: string | null = RAW_WEB_URL
+  ? RAW_WEB_URL.replace(/\/+$/, "")
+  : __DEV__
+    ? "http://localhost:5173"
+    : null;
+
+/** A link a recipient can open, or null when no public site is configured. */
+export function shareUrlFor(path: string): string | null {
+  if (!WEB_URL) return null;
+  return `${WEB_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+/** The share body: the title, and the link when there is one. */
+export function shareMessage(title: string, path: string): string {
+  const url = shareUrlFor(path);
+  return url ? `${title}\n\n${url}` : title;
+}

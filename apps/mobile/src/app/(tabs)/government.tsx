@@ -46,6 +46,7 @@ import {
   type Party,
 } from '@/lib/government-service';
 import { cn } from '@/lib/cn';
+import { DataFreshness } from '@/components/civic/DataFreshness';
 
 type Section = 'congress' | 'executive' | 'judicial' | 'leadership';
 
@@ -650,6 +651,11 @@ export default function GovernmentScreen() {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F59E0B" />
             }
           >
+            {/* How current this is, stated rather than assumed. See the
+                component for why: a stale snapshot and a live one look
+                identical. Web twin: apps/web/src/pages/Government.tsx. */}
+            <DataFreshness />
+
             {section === 'congress' ? (
               <>
                 {/* Chamber counts */}

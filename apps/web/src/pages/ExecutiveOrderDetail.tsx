@@ -25,11 +25,13 @@ import {
   Sparkles,
 } from "lucide-react";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
+import { publicUrlFor } from "@/lib/config";
 import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import { useRequireAuth } from "@/hooks/use-civic-auth";
 import { cn } from "@/lib/utils";
 import type { ExecutiveOrder } from "@/lib/mobile/types";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
+import { ShareToTimeline } from "@/components/civic/ShareToTimeline";
 import { PulseBar } from "@/components/civic/PulseBar";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import {
@@ -188,10 +190,11 @@ export default function ExecutiveOrderDetail() {
 
   const handleShare = async () => {
     if (!requireAuth("Sign in to share this executive order.")) return;
-    const shareText = `Check out this Executive Order: ${eo.title}\n\nVote on AYE & NAY!`;
+    const shareUrl = publicUrlFor(`/reference/${eo.id}`);
+    const shareText = `${eo.title}\n\n${shareUrl}`;
     try {
       if (navigator.share) {
-        await navigator.share({ text: shareText });
+        await navigator.share({ text: shareText, url: shareUrl });
       } else {
         await navigator.clipboard.writeText(shareText);
       }
@@ -224,9 +227,23 @@ export default function ExecutiveOrderDetail() {
             <button onClick={handleBookmark} className="bg-slate-800 p-2 rounded-full mr-2">
               <Bookmark size={20} color="#64748B" />
             </button>
-            <button onClick={handleShare} className="bg-slate-800 p-2 rounded-full">
+            <button onClick={handleShare} className="bg-slate-800 p-2 rounded-full mr-2">
               <Share2 size={20} color="#64748B" />
             </button>
+            {/*
+              SHARE TO TIMELINE, which this page did not have at all.
+              ShareToTimeline was only on the Discover cards, so the one screen
+              where somebody has actually read the law was the one screen they
+              could not say anything about it from.
+            */}
+            <ShareToTimeline
+              target={{
+                branch: "executive",
+                title: eo.title,
+                masterReferenceId: eo.id,
+              }}
+              label=""
+            />
           </div>
         </div>
 

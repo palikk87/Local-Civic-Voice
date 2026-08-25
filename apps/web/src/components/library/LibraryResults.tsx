@@ -6,6 +6,7 @@ import type {
   ExecutiveResult,
   JudicialResult,
   LibraryBranch,
+  LibraryRow,
 } from "@/lib/library";
 import type { LegislativeStatus } from "@/lib/mobile/government-api";
 import { BRANCH_TABS } from "./BranchTabs";
@@ -218,12 +219,10 @@ function EmptyState({ message }: { message: string }) {
 }
 
 interface LibraryResultsProps {
-  branch: LibraryBranch;
+  /** One list, in the order the page wants them read, each row saying where it came from. */
+  rows: LibraryRow[];
   isLoading: boolean;
   isError: boolean;
-  congress: CongressResult[];
-  executive: ExecutiveResult[];
-  judicial: JudicialResult[];
   onOpenCongress: (item: CongressResult) => void;
   onOpenExecutive: (item: ExecutiveResult) => void;
   onOpenJudicial: (item: JudicialResult) => void;
@@ -232,12 +231,9 @@ interface LibraryResultsProps {
 }
 
 export function LibraryResults({
-  branch,
+  rows,
   isLoading,
   isError,
-  congress,
-  executive,
-  judicial,
   onOpenCongress,
   onOpenExecutive,
   onOpenJudicial,
@@ -250,41 +246,39 @@ export function LibraryResults({
     return <EmptyState message="Something went wrong" />;
   }
 
-  const count =
-    branch === "congress"
-      ? congress.length
-      : branch === "executive"
-        ? executive.length
-        : judicial.length;
-
-  if (count === 0) return <EmptyState message="No results" />;
+  if (rows.length === 0) return <EmptyState message="No results" />;
 
   return (
     <div className={cn("space-y-3", className)}>
-      {branch === "congress"
-        ? congress.map((item) => (
-            <CongressCard
-              key={`${item.congress}-${item.type}-${item.number}`}
-              item={item}
-              statusLabel={statusLabelFor(item)}
-              onOpen={() => onOpenCongress(item)}
-            />
-          ))
-        : null}
-      {branch === "executive"
-        ? executive.map((item) => (
-            <ExecutiveCard
-              key={item.document_number}
-              item={item}
-              onOpen={() => onOpenExecutive(item)}
-            />
-          ))
-        : null}
-      {branch === "judicial"
-        ? judicial.map((item) => (
-            <JudicialCard key={item.id} item={item} onOpen={() => onOpenJudicial(item)} />
-          ))
-        : null}
+      {rows.map((row) => {
+        switch (row.branch) {
+          case "congress":
+            return (
+              <CongressCard
+                key={`congress-${row.item.congress}-${row.item.type}-${row.item.number}`}
+                item={row.item}
+                statusLabel={statusLabelFor(row.item)}
+                onOpen={() => onOpenCongress(row.item)}
+              />
+            );
+          case "executive":
+            return (
+              <ExecutiveCard
+                key={`executive-${row.item.document_number}`}
+                item={row.item}
+                onOpen={() => onOpenExecutive(row.item)}
+              />
+            );
+          case "judicial":
+            return (
+              <JudicialCard
+                key={`judicial-${row.item.id}`}
+                item={row.item}
+                onOpen={() => onOpenJudicial(row.item)}
+              />
+            );
+        }
+      })}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Landmark, FileText, Scale, type LucideIcon } from "lucide-react";
+import { Landmark, FileText, Scale, Layers, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LibraryBranch } from "@/lib/library";
 
@@ -10,6 +10,16 @@ interface BranchMeta {
 }
 
 export const BRANCH_TABS: BranchMeta[] = [
+  /*
+   * "All" first, and selected by default.
+   *
+   * The Library preselected Congress and searched ONLY the selected branch, so
+   * a reader typing "immigration" silently got no executive orders and no
+   * court cases — two thirds of the platform's own subject matter, excluded by
+   * a default nobody chose. A tab should narrow a search somebody asked to
+   * narrow, not quietly define it.
+   */
+  { key: "all", label: "All", icon: Layers, color: "hsl(var(--accent))" },
   { key: "congress", label: "Congress", icon: Landmark, color: "hsl(var(--legislative))" },
   { key: "executive", label: "Executive", icon: FileText, color: "hsl(var(--executive))" },
   { key: "judicial", label: "Judicial", icon: Scale, color: "hsl(var(--judicial))" },

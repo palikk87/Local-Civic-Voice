@@ -40,6 +40,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { justices } from '@/lib/government-data';
+import { shareMessage } from '@/lib/config';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
@@ -312,7 +313,7 @@ export default function SupremeCourtDetailScreen() {
 
     try {
       await Share.share({
-        message: `Check out this Supreme Court case: ${scotusCase.caseName}\n\nVote on AYE & NAY!`,
+        message: shareMessage(scotusCase.caseName, `/reference/${scotusCase.id}`),
       });
     } catch (error) {
       console.log('Error sharing:', error);
