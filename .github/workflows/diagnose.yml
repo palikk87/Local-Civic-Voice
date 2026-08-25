@@ -1,0 +1,67 @@
+name: Diagnose
+
+# Ask the deployed service what it actually has.
+#
+# WHY THIS IS A WORKFLOW AND NOT A COMMAND SOMEBODY RUNS. The credential that
+# can read the deployment is a GitHub Actions secret. That is the right place
+# for it — it is not in the repository, which is public, and it has never been
+# pasted into a chat or a terminal history. The consequence is that the only
+# thing able to ask Railway a question is a workflow run, so the question gets
+# asked here.
+#
+# It answers what could not be answered from outside: is the key on the service
+# at all, and is it under the name the code reads. Three separate times a key
+# was "definitely set" while the feature it powers did nothing, and every
+# attempt to settle it was guesswork.
+#
+# NOTHING SECRET IS PRINTED. This repository is public, so these logs are
+# public, and Railway's variables are not registered GitHub secrets — nothing
+# masks them automatically. scripts/diagnose-deploy.ts derives every value
+# before printing: names, lengths, and a four-character digest fingerprint. The
+# raw output is written to a file, read by the script, and never echoed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  variables:
+    name: what the service has
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - name: Read the service variables
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
+        run: |
+          set -o pipefail
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "No RAILWAY_TOKEN secret, so there is nothing to ask." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Redirected to a file, never to the log. `railway variables --json`
+          # prints every value in full, and one stray `set -x` or error dump
+          # would put the whole environment into a public build log.
+          bunx --bun @railway/cli@latest variables --json \
+            ${RAILWAY_SERVICE:+--service "$RAILWAY_SERVICE"} \
+            > variables.json 2> cli-error.txt \
+            || {
+              echo "The Railway CLI could not read the variables." >> "$GITHUB_STEP_SUMMARY"
+              # The CLI writes errors to stderr and values to stdout, so this is
+              # safe to show — and it is where "wrong token type" surfaces.
+              sed -e 's/[A-Za-z0-9_-]\{20,\}/<redacted>/g' cli-error.txt >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            }
+
+      - name: Report, without printing anything secret
+        run: bun scripts/diagnose-deploy.ts variables.json
+
+      - name: Leave nothing behind
+        if: always()
+        run: rm -f variables.json cli-error.txt
