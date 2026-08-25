@@ -1178,3 +1178,51 @@ model MergeJournalRow {
 
   @@index([journalId, model])
 }
+
+/// A bug report from somebody using the app.
+///
+/// Named BugReport rather than Report because Report already means "this post
+/// breaks the rules" — a moderation queue, a different inbox, and a different
+/// urgency. Two things called the same word in one schema is how the wrong
+/// queue gets checked.
+model BugReport {
+  id       String  @id @default(cuid())
+  /// Null for a signed-out visitor. A bug that only strangers hit is still a bug.
+  userId   String?
+  /// Copied in rather than joined, so the report survives the account closing.
+  username String?
+
+  /// Where they were when it happened.
+  pageUrl  String
+  pagePath String
+
+  /// What they pointed at. Null when they wrote a note without picking anything.
+  /// A short human description ("the Vote Nay button"), not a selector — the
+  /// selector is in `elementPath` for whoever has to find it.
+  elementLabel String?
+  elementPath  String?
+
+  /// Their words, in two parts, because "what is wrong" and "what would be
+  /// right" are different questions and the second one is the useful one.
+  problem String
+  wanted  String?
+
+  /// Set by the app, not typed: browser, viewport, and the commit being served.
+  /// A bug report without these costs a round trip to become actionable.
+  userAgent String?
+  viewport  String?
+  appCommit String?
+
+  /// open | acknowledged | fixed | declined
+  status     String    @default("open")
+  /// Free text from whoever triaged it.
+  adminNote  String?
+  resolvedBy String?
+  resolvedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId])
+}

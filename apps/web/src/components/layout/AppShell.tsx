@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { VerifyEmailBanner } from "@/components/auth/VerifyEmailBanner";
+import { BugReporter } from "@/components/support/BugReporter";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -204,6 +205,10 @@ export function AppShell({
           ) : null}
         </div>
       </div>
+
+      {/* On every page, because the page somebody cannot get past is exactly
+          the one they need to report from. */}
+      <BugReporter />
 
       {/* ---------- Mobile bottom tab bar ---------- */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-background/95 backdrop-blur lg:hidden">

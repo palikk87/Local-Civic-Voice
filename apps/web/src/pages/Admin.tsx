@@ -26,6 +26,7 @@ import {
   GitMerge,
   ScrollText,
   Settings,
+  Bug,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/AppShell";
@@ -40,6 +41,7 @@ import { B2BClientsTab } from "@/components/admin/B2BClientsTab";
 import { MergeReviewTab } from "@/components/admin/MergeReviewTab";
 import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
+import { BugReportsTab } from "@/components/admin/BugReportsTab";
 import { LoadingScreen } from "@/components/LoadingScreen";
 
 /** Tabs this console renders — and, one-for-one, mobile's /admin/* screen names. */
@@ -148,6 +150,10 @@ export default function Admin() {
               <Building2 className="mr-2 h-4 w-4" />
               B2B clients
             </TabsTrigger>
+            <TabsTrigger value="bug-reports">
+              <Bug className="mr-2 h-4 w-4" />
+              Bug reports
+            </TabsTrigger>
             <TabsTrigger value="logs">
               <ScrollText className="mr-2 h-4 w-4" />
               Logs
@@ -182,6 +188,10 @@ export default function Admin() {
           <TabsContent value="logs" className="mt-6">
             <LogsTab />
           </TabsContent>
+          <TabsContent value="bug-reports" className="mt-6">
+            <BugReportsTab />
+          </TabsContent>
+
           <TabsContent value="settings" className="mt-6">
             <SettingsTab />
           </TabsContent>

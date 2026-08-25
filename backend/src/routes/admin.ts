@@ -1475,6 +1475,94 @@ adminRouter.get("/keys", async (c) => {
   });
 });
 
+const bugReportQuerySchema = z.object({
+  status: z.enum(["open", "acknowledged", "fixed", "declined", "all"]).optional().default("open"),
+  limit: z.string().optional().transform((v) => (v ? Math.min(parseInt(v, 10), 100) : 50)),
+  offset: z.string().optional().transform((v) => (v ? parseInt(v, 10) : 0)),
+});
+
+/**
+ * GET /api/admin/bug-reports
+ *
+ * The inbox. Open first, newest first, because a report nobody has looked at
+ * is the only kind that is costing anything.
+ */
+adminRouter.get("/bug-reports", zValidator("query", bugReportQuerySchema), async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  const { status, limit, offset } = c.req.valid("query");
+  const where = status === "all" ? {} : { status };
+
+  const [reports, total, openCount] = await Promise.all([
+    prisma.bugReport.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      skip: offset,
+    }),
+    prisma.bugReport.count({ where }),
+    prisma.bugReport.count({ where: { status: "open" } }),
+  ]);
+
+  return c.json({ reports, total, openCount, limit, offset });
+});
+
+const triageSchema = z.object({
+  status: z.enum(["open", "acknowledged", "fixed", "declined"]),
+  adminNote: z.string().max(2000).optional(),
+});
+
+/**
+ * PATCH /api/admin/bug-reports/:id
+ *
+ * Triage. Every transition records who made it — a queue where things change
+ * state anonymously is a queue nobody trusts.
+ */
+adminRouter.patch(
+  "/bug-reports/:id",
+  zValidator("param", idParamSchema),
+  zValidator("json", triageSchema),
+  async (c) => {
+    const authHeader = c.req.header("Authorization");
+    const session = await getAdminFromToken(authHeader);
+    if (!session) {
+      return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+    }
+
+    const { id } = c.req.valid("param");
+    const body = c.req.valid("json");
+
+    const existing = await prisma.bugReport.findUnique({ where: { id } });
+    if (!existing) return c.json({ error: "Report not found" }, { status: 404 });
+
+    const settled = body.status === "fixed" || body.status === "declined";
+    const report = await prisma.bugReport.update({
+      where: { id },
+      data: {
+        status: body.status,
+        adminNote: body.adminNote ?? existing.adminNote,
+        resolvedBy: settled ? session.username : null,
+        resolvedAt: settled ? new Date() : null,
+      },
+    });
+
+    createActivityLog(
+      "triage_bug_report",
+      session.adminId,
+      session.username,
+      "system",
+      id,
+      `Bug report marked ${body.status}`
+    );
+
+    return c.json({ success: true, report });
+  }
+);
+
 adminRouter.get("/email-health", async (c) => {
   const authHeader = c.req.header("Authorization");
   const session = await getAdminFromToken(authHeader);

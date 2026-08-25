@@ -22,6 +22,7 @@ import { representativesRouter } from "./routes/representatives";
 import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
 import { verificationRouter } from "./routes/verification";
+import { bugReportsRouter } from "./routes/bug-reports";
 import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
@@ -225,6 +226,7 @@ app.route("/api/representatives", representativesRouter);
 app.route("/api/delegations", delegationsRouter);
 app.route("/api/ai", aiRouter);
 app.route("/api/verification", verificationRouter);
+app.route("/api/bug-reports", bugReportsRouter);
 
 // Serve user uploads — only when storage is local disk.
 //
