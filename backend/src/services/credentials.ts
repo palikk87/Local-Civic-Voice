@@ -164,6 +164,14 @@ export interface NewB2BClient {
   tier: string;
   password: string;
   apiKey: string;
+  /**
+   * The citizen account this business account is being created for, when it is
+   * being created by converting one. Omitted for a client minted from nothing.
+   *
+   * A LINK, NOT A TRANSFORMATION: the citizen account is not touched, not
+   * consumed, and not given a role. See routes/admin.ts.
+   */
+  userId?: string;
 }
 
 /** Everything about a client except its secrets. */
@@ -176,11 +184,14 @@ export const B2B_PUBLIC_FIELDS = {
   lastAccessAt: true,
   createdAt: true,
   updatedAt: true,
+  /** Null unless this account was converted from a citizen account. */
+  userId: true,
 } as const;
 
 export type B2BPublicRow = {
   id: string;
   username: string;
+  userId?: string | null;
   name: string;
   type: string;
   tier: string;
@@ -206,11 +217,19 @@ export async function createB2BClient(
       tier: input.tier,
       passwordHash: await hashPassword(input.password),
       apiKeyHash: hashApiKey(input.apiKey),
+      ...(input.userId ? { userId: input.userId } : {}),
     },
     select: B2B_PUBLIC_FIELDS,
   });
 
-  await record("create_b2b_client", change, created.id, `Created B2B client ${created.username}`);
+  await record(
+    "create_b2b_client",
+    change,
+    created.id,
+    input.userId
+      ? `Created B2B client ${created.username} from an existing account`
+      : `Created B2B client ${created.username}`,
+  );
 
   return created;
 }

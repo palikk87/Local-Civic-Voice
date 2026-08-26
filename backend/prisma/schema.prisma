@@ -146,6 +146,21 @@ model B2BClient {
   id           String    @id @default(cuid())
   username     String    @unique
   name         String
+
+  /// The citizen account this business account was created for, when it was
+  /// created by converting one. Null for a client minted from nothing.
+  ///
+  /// A LINK, NOT A TRANSFORMATION. Converting somebody does not consume their
+  /// citizen account: their votes, posts and civic record stay exactly where
+  /// they were and keep belonging to them. This column exists so the admin
+  /// console can say which account a client came from, and so one person
+  /// cannot quietly end up behind two business accounts.
+  ///
+  /// Deliberately NOT a foreign key with a cascade. If the person ever closes
+  /// their citizen account, the business account and everything billed against
+  /// it must not vanish with it — the company is not the person. The link goes
+  /// stale and reads as null-ish, which is the truth.
+  userId       String?   @unique
   /// research | media | campaign | government
   type         String
   /// basic | professional | enterprise

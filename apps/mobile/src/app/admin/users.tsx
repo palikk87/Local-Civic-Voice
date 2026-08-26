@@ -20,6 +20,7 @@ import {
   UserCheck,
   Shield,
   Trash2,
+  Briefcase,
   MoreVertical,
   X,
   Ban,
@@ -36,10 +37,19 @@ interface UserCardProps {
   onUnban: () => void;
   onDelete: () => void;
   onMakeAdmin: () => void;
+  onGiveBusinessAccount: () => void;
   isSuperAdmin: boolean;
 }
 
-function UserCard({ user, onBan, onUnban, onDelete, onMakeAdmin, isSuperAdmin }: UserCardProps) {
+function UserCard({
+  user,
+  onBan,
+  onUnban,
+  onDelete,
+  onMakeAdmin,
+  onGiveBusinessAccount,
+  isSuperAdmin,
+}: UserCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   const getStatusColor = (status: string) => {
@@ -183,6 +193,24 @@ function UserCard({ user, onBan, onUnban, onDelete, onMakeAdmin, isSuperAdmin }:
               </TouchableOpacity>
             )}
 
+            {/* ADDS an account, never replaces one. Their citizen login,
+                votes, posts and role are untouched — the Public Pulse is a
+                count of citizens, and reclassifying one would corrupt the only
+                number this platform exists to report. The wording says so
+                because a menu item called "Convert" would imply otherwise. */}
+            {isSuperAdmin && (
+              <TouchableOpacity
+                onPress={() => {
+                  setShowMenu(false);
+                  onGiveBusinessAccount();
+                }}
+                className="flex-row items-center p-4 bg-indigo-500/20 rounded-xl mb-3"
+              >
+                <Briefcase size={20} color="#818CF8" />
+                <Text className="text-indigo-300 font-medium ml-3">Add a business account</Text>
+              </TouchableOpacity>
+            )}
+
             {isSuperAdmin && (
               <TouchableOpacity
                 onPress={() => {
@@ -228,6 +256,7 @@ export default function AdminUsersScreen() {
   const unbanUser = useAdminStore((s) => s.unbanUser);
   const deleteUser = useAdminStore((s) => s.deleteUser);
   const makeAdmin = useAdminStore((s) => s.makeAdmin);
+  const giveBusinessAccount = useAdminStore((s) => s.giveBusinessAccount);
 
   const isSuperAdmin = session?.role === 'superadmin';
 
@@ -289,6 +318,44 @@ export default function AdminUsersScreen() {
           },
         },
       ]
+    );
+  };
+
+  /**
+   * Add a business login for somebody who already has an account.
+   *
+   * Two prompts rather than a form, because this screen has no room for one and
+   * the defaults are almost always right: their own username becomes the
+   * business login, and the tier is the thing anyone actually chooses. The
+   * credentials come back once and are shown in an alert that has to be
+   * dismissed — a toast would carry an unrecoverable secret away with it.
+   */
+  const handleGiveBusinessAccount = (user: ManagedUser) => {
+    Alert.alert(
+      'Add a business account',
+      `This gives @${user.username} a separate login for the analytics portal. Their citizen ` +
+        'account is untouched — same password, same votes, same posts, same role.\n\nWhich tier?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        ...(['basic', 'professional', 'enterprise'] as const).map((tier) => ({
+          text: tier,
+          onPress: async () => {
+            const result = await giveBusinessAccount(user.id, { type: 'research', tier });
+            if (result.success && result.credentials) {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert(
+                'Copy these now',
+                `username: ${result.credentials.username}\n` +
+                  `password: ${result.credentials.password}\n` +
+                  `api key: ${result.credentials.apiKey}\n\n` +
+                  'Stored hashed. They cannot be shown again — only rotated.',
+              );
+            } else {
+              Alert.alert('Error', result.error || 'Could not create the business account');
+            }
+          },
+        })),
+      ],
     );
   };
 
@@ -422,6 +489,7 @@ export default function AdminUsersScreen() {
                 onUnban={() => handleUnban(user)}
                 onDelete={() => handleDelete(user)}
                 onMakeAdmin={() => setAdminRoleModal(user)}
+                onGiveBusinessAccount={() => handleGiveBusinessAccount(user)}
                 isSuperAdmin={isSuperAdmin}
               />
             ))

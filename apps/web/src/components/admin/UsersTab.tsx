@@ -1,7 +1,7 @@
 // Web port of mobile/src/app/admin/users.tsx — user management against /api/admin/users.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, Ban, Trash2, ShieldCheck, Users } from "lucide-react";
+import { Search, Ban, Trash2, ShieldCheck, Users, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { adminAuthHeader, useAdminStore } from "@/lib/mobile/admin-store";
@@ -55,6 +55,16 @@ export function UsersTab() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState<string>("");
   const [offset, setOffset] = useState<number>(0);
+  const [convertTarget, setConvertTarget] = useState<ManagedUser | null>(null);
+  const [convertType, setConvertType] = useState("research");
+  const [convertTier, setConvertTier] = useState("basic");
+  const [convertName, setConvertName] = useState("");
+  const [issued, setIssued] = useState<{
+    username: string;
+    password: string;
+    apiKey: string;
+  } | null>(null);
+
   const [banTarget, setBanTarget] = useState<ManagedUser | null>(null);
   const [banReason, setBanReason] = useState<string>("");
   const [banDays, setBanDays] = useState<string>("");
@@ -86,6 +96,32 @@ export function UsersTab() {
       invalidate();
     },
     onError: (e: Error) => toast.error("Ban failed", { description: e.message }),
+  });
+
+  /**
+   * Give somebody a business account without taking away their citizenship.
+   *
+   * The wording matters and the button says it: this ADDS an account. It does
+   * not move their data, change their role, or mark them as a customer. Their
+   * votes are a citizen's votes and stay that way — the Public Pulse is a count
+   * of people, and reclassifying one would corrupt the only number this
+   * platform exists to report.
+   */
+  const convertMutation = useMutation({
+    mutationFn: (input: { userId: string; name?: string; type: string; tier: string }) =>
+      api.post<{
+        client: { username: string };
+        credentials: { username: string; password: string; apiKey: string };
+      }>("/api/admin/b2b-clients/from-user", input, { headers: adminAuthHeader() }),
+    onSuccess: (response) => {
+      // Shown once and unrecoverable, so it replaces the dialog rather than
+      // appearing behind a toast that disappears on its own.
+      setIssued(response.credentials);
+      setConvertTarget(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "b2b-clients"] });
+    },
+    onError: (e: Error) =>
+      toast.error("Could not create the business account", { description: e.message }),
   });
 
   const unbanMutation = useMutation({
@@ -193,6 +229,21 @@ export function UsersTab() {
                   </Button>
                 )}
                 {isSuperadmin ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setConvertTarget(user);
+                      setConvertName(user.displayName);
+                      setConvertType("research");
+                      setConvertTier("basic");
+                    }}
+                  >
+                    <Briefcase className="mr-1.5 h-4 w-4" />
+                    Business account
+                  </Button>
+                ) : null}
+                {isSuperadmin ? (
                   <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(user)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -225,6 +276,120 @@ export function UsersTab() {
           Next
         </Button>
       </div>
+
+      {/* Give an existing account a business login */}
+      <Dialog open={!!convertTarget} onOpenChange={(open) => !open && setConvertTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Business account for {convertTarget?.displayName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              This adds a separate business login for the analytics portal. Their citizen account
+              is untouched — same password, same votes, same posts, same role. It is a second
+              account alongside theirs, not a replacement for it.
+            </p>
+            <div>
+              <label className="mb-1 block text-sm text-muted-foreground">
+                Business name (usually a company, not a person)
+              </label>
+              <Input
+                value={convertName}
+                onChange={(e) => setConvertName(e.target.value)}
+                placeholder="Acme Research"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">Type</label>
+                <select
+                  value={convertType}
+                  onChange={(e) => setConvertType(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {["research", "media", "campaign", "government"].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm text-muted-foreground">Tier</label>
+                <select
+                  value={convertTier}
+                  onChange={(e) => setConvertTier(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  {["basic", "professional", "enterprise"].map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The login is <span className="font-mono">@{convertTarget?.username}</span> with a
+              newly generated password and API key, shown once.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!convertName.trim() || convertMutation.isPending}
+              onClick={() =>
+                convertTarget &&
+                convertMutation.mutate({
+                  userId: convertTarget.id,
+                  name: convertName.trim(),
+                  type: convertType,
+                  tier: convertTier,
+                })
+              }
+            >
+              {convertMutation.isPending ? "Creating…" : "Create business account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* The credentials, once. Not a toast: a toast that vanishes takes an
+          unrecoverable secret with it. */}
+      <Dialog open={!!issued} onOpenChange={(open) => !open && setIssued(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Copy these now</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Stored hashed. They cannot be shown again — only rotated.
+            </p>
+            <pre className="overflow-x-auto rounded-md border border-border bg-muted p-3 text-xs">
+              {`username: ${issued?.username}\npassword: ${issued?.password}\napi key : ${issued?.apiKey}`}
+            </pre>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(
+                    `username: ${issued?.username}\npassword: ${issued?.password}\napi key: ${issued?.apiKey}`,
+                  )
+                  .then(() => toast.success("Copied"))
+                  .catch(() => toast.error("Could not copy — select the text and copy it manually"));
+              }}
+            >
+              Copy
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setIssued(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Ban Dialog */}
       <Dialog open={!!banTarget} onOpenChange={(open) => !open && setBanTarget(null)}>

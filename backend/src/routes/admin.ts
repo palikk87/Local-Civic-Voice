@@ -1033,6 +1033,7 @@ function toAdminB2BClient(row: {
   lastAccessAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  userId?: string | null;
 }) {
   return {
     id: row.id,
@@ -1043,6 +1044,12 @@ function toAdminB2BClient(row: {
     lastAccessAt: row.lastAccessAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    /**
+     * The citizen account this was converted from, or null when it was minted
+     * from nothing. The console shows it so that "where did this account come
+     * from" has an answer that is not a guess.
+     */
+    convertedFromUserId: row.userId ?? null,
   };
 }
 
@@ -1103,6 +1110,143 @@ adminRouter.get("/b2b-clients", async (c) => {
       activeSessions: activeByClient.get(row.id) ?? 0,
     })),
   });
+});
+
+const convertUserSchema = z.object({
+  userId: z.string().min(1, "Which account is being converted"),
+  /** Defaults to the person's own username, which is almost always right. */
+  username: z
+    .string()
+    .min(3, "Username must be at least 3 characters")
+    .max(64, "Username too long")
+    .regex(/^[A-Za-z0-9_.-]+$/, "Username may contain only letters, digits, and _ . -")
+    .optional(),
+  /** Defaults to their display name. A company name is usually wanted instead. */
+  name: z.string().min(1).max(200).optional(),
+  type: b2bTypeSchema,
+  tier: b2bTierSchema,
+  password: z.string().min(12, "Password must be at least 12 characters").optional(),
+});
+
+/**
+ * POST /api/admin/b2b-clients/from-user
+ *
+ * Give an existing citizen a business account.
+ *
+ * WHAT "CONVERSION" MEANS HERE, AND WHAT IT DOES NOT. It does not transform the
+ * person into a customer, move their data, or spend their account. Their votes,
+ * their posts and their civic record stay exactly where they are and keep
+ * belonging to them — the Public Pulse is a count of citizens, and quietly
+ * reclassifying one would corrupt the only number this platform exists to
+ * report. What is created is a second, separate thing: a B2BClient row, linked
+ * back to the account it was created for so the console can say where it came
+ * from.
+ *
+ * SEPARATE CREDENTIALS, ON PURPOSE. The business account gets its own username,
+ * password and API key, generated and shown exactly once, like every other
+ * client. It would be friendlier to let them sign in with the password they
+ * already have, and it would be wrong: two auth systems sharing one secret
+ * means a citizen changing their own password silently re-keys a business
+ * account, which is precisely the class of surprise this codebase made
+ * structurally impossible. Their citizen login is untouched and keeps working.
+ *
+ * NO ROLE IS GRANTED. Holding a business account says nothing about what
+ * somebody may do as a citizen, and the two must not start leaking into each
+ * other.
+ *
+ * Superadmin only, and one account cannot be converted twice — the link column
+ * is unique, so a second attempt is a conflict rather than a second account
+ * nobody knows about.
+ */
+adminRouter.post("/b2b-clients/from-user", zValidator("json", convertUserSchema), async (c) => {
+  const session = c.get("adminSession");
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Only superadmin can create a B2B client" }, { status: 403 });
+  }
+
+  const body = c.req.valid("json");
+
+  const user = await prisma.user.findUnique({
+    where: { id: body.userId },
+    select: { id: true, name: true, username: true, email: true },
+  });
+  if (!user) {
+    return c.json({ error: "That account does not exist" }, { status: 404 });
+  }
+
+  const alreadyLinked = await prisma.b2BClient.findFirst({
+    where: { userId: user.id },
+    select: { username: true },
+  });
+  if (alreadyLinked) {
+    return c.json(
+      {
+        error: `${user.username ?? user.email} already has the business account "${alreadyLinked.username}".`,
+      },
+      { status: 409 },
+    );
+  }
+
+  // Their own username is the obvious default and is almost always what is
+  // wanted; anything not usable as a B2B username has to be given explicitly
+  // rather than mangled into one.
+  const proposed = (body.username ?? user.username ?? "").toLowerCase();
+  if (!/^[a-z0-9_.-]{3,64}$/.test(proposed)) {
+    return c.json(
+      {
+        error:
+          "This account has no username that can be used for a business login. Supply one.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const taken = await prisma.b2BClient.findUnique({ where: { username: proposed } });
+  if (taken) {
+    return c.json({ error: "A B2B client with that username already exists" }, { status: 409 });
+  }
+
+  const password = body.password ?? generatePassword();
+  const apiKey = generateApiKey();
+
+  const created = await createB2BClient(
+    {
+      username: proposed,
+      name: body.name ?? user.name,
+      type: body.type,
+      tier: body.tier,
+      password,
+      apiKey,
+      userId: user.id,
+    },
+    {
+      actor: { kind: "admin", adminId: session.adminId, username: session.username },
+      reason: `Converted the account ${user.username ?? user.email} to a ${body.tier} tier business account`,
+    },
+  );
+
+  createActivityLog(
+    "convert_user_to_b2b",
+    session.adminId,
+    session.username,
+    "user",
+    user.id,
+    `Gave ${user.username ?? user.email} the business account "${created.username}". Their citizen account is unchanged.`,
+  );
+
+  return c.json(
+    {
+      success: true,
+      client: toAdminB2BClient(created),
+      convertedFrom: { id: user.id, username: user.username, name: user.name },
+      credentials: { username: created.username, password, apiKey },
+      warning: "Copy these now. They cannot be shown again — only rotated.",
+      note:
+        "Their citizen account is untouched: same login, same votes, same posts, same role. " +
+        "This is a second account alongside it, not a replacement for it.",
+    },
+    { status: 201 },
+  );
 });
 
 adminRouter.post("/b2b-clients", zValidator("json", createB2BClientSchema), async (c) => {

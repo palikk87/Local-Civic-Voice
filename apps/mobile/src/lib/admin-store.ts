@@ -112,6 +112,22 @@ interface AdminState {
   unbanUser: (id: string) => Promise<{ success: boolean; error?: string }>;
   deleteUser: (id: string) => Promise<{ success: boolean; error?: string }>;
   makeAdmin: (id: string, role: 'admin' | 'moderator') => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Give an existing account a separate business login for the analytics
+   * portal. Web twin: apps/web/src/components/admin/UsersTab.tsx.
+   *
+   * ADDS, NEVER REPLACES. The citizen account keeps its login, its role, its
+   * votes and its posts. The credentials come back exactly once and cannot be
+   * recovered, so the caller must show them rather than log them.
+   */
+  giveBusinessAccount: (
+    id: string,
+    input: { name?: string; type: string; tier: string },
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    credentials?: { username: string; password: string; apiKey: string };
+  }>;
 
   // Content moderation
   fetchPosts: (params?: { search?: string; status?: string; reported?: boolean; page?: number; limit?: number }) => Promise<void>;
@@ -441,6 +457,33 @@ export const useAdminStore = create<AdminState>()(
 
           await get().fetchUsers();
           return { success: true };
+        } catch {
+          return { success: false, error: 'Network error' };
+        }
+      },
+
+      giveBusinessAccount: async (id, input) => {
+        const { session } = get();
+        if (!session?.token) return { success: false, error: 'Not authenticated' };
+
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/admin/b2b-clients/from-user`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${session.token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ userId: id, ...input }),
+          });
+
+          const data = await response.json();
+          if (!response.ok) {
+            return { success: false, error: data.error || 'Could not create the business account' };
+          }
+
+          // Deliberately does NOT refetch users: nothing about the citizen
+          // account changed, and a refresh here would imply it had.
+          return { success: true, credentials: data.credentials };
         } catch {
           return { success: false, error: 'Network error' };
         }
