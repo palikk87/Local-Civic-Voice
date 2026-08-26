@@ -244,6 +244,67 @@ describe("converting an account", () => {
   });
 });
 
+describe("the thread back from the citizen account", () => {
+  /**
+   * The two logins are separate secrets on purpose. Without something joining
+   * them, that becomes two separate WORLDS: somebody given a business account
+   * has to be told out of band that they have one, and then find the portal
+   * themselves. The profile card is the thread, and this is what feeds it.
+   */
+  test("the owner can see that they have one, and which one", async () => {
+    const response = await fetch(`${BASE_URL}/api/users/me/business-account`, {
+      headers: { Cookie: citizenCookie },
+    });
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as {
+      businessAccount: { username: string; name: string; tier: string } | null;
+    };
+    expect(body.businessAccount?.username).toBe(CITIZEN_USERNAME);
+    expect(body.businessAccount?.tier).toBe("professional");
+  });
+
+  test("NO SECRET COMES BACK WITH IT", async () => {
+    const response = await fetch(`${BASE_URL}/api/users/me/business-account`, {
+      headers: { Cookie: citizenCookie },
+    });
+    const raw = await response.text();
+
+    // Not the password, not the API key, not a hash, not a hint of one.
+    expect(raw).not.toContain(PASSWORD);
+    expect(raw.toLowerCase()).not.toContain("passwordhash");
+    expect(raw.toLowerCase()).not.toContain("apikey");
+    expect(raw.toLowerCase()).not.toContain("hash");
+  });
+
+  test("somebody without one is told null, not given an error", async () => {
+    // Having no business account is the ordinary state for almost everybody. A
+    // 404 here would read to the client as a failed request and the card would
+    // flicker into an error state on every profile on the platform.
+    const signIn = await fetch(`${BASE_URL}/api/auth/sign-in/email`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ email: CITIZEN2_EMAIL, password: PASSWORD }),
+    });
+    expect(signIn.status).toBe(200);
+
+    const response = await fetch(`${BASE_URL}/api/users/me/business-account`, {
+      headers: { Cookie: signIn.headers.get("set-cookie") ?? "" },
+    });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { businessAccount: unknown }).businessAccount).toBeNull();
+  });
+
+  test("a stranger cannot ask about somebody else's", async () => {
+    // THE SHAPE THAT MUST NOT EXIST. There is no id-taking variant of this
+    // endpoint, so the only way to learn that a citizen runs a research firm,
+    // a campaign or a news desk is to be them. Signed out, there is no answer
+    // at all.
+    const response = await fetch(`${BASE_URL}/api/users/me/business-account`);
+    expect(response.status).toBe(401);
+  });
+});
+
 describe("what the console can say afterwards", () => {
   test("the client list reports which account it came from", async () => {
     const response = await fetch(`${BASE_URL}/api/admin/b2b-clients`, {

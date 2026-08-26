@@ -205,6 +205,32 @@ export default function Profile() {
   // Admin tier comes from the separate admin-console session, never from a citizen
   // account — a brand-new signup is `user`, so the console card stays hidden.
   const { can, isStaff } = usePermissions();
+
+  /**
+   * The business account this person holds, if any.
+   *
+   * Self only — there is no endpoint that answers this about anybody else, on
+   * purpose. Whether a citizen runs a research firm or a campaign is not a
+   * public fact about them, and the only reason to show it is so its owner can
+   * reach it.
+   */
+  const { data: business } = useQuery({
+    queryKey: ["me", "business-account"],
+    queryFn: () =>
+      api.get<{
+        businessAccount: {
+          username: string;
+          name: string;
+          tier: string;
+          type: string;
+        } | null;
+      }>("/api/users/me/business-account"),
+    // Nothing here changes minute to minute, and a failure is silent by design:
+    // no card is the honest answer when we could not ask.
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const businessAccount = business?.businessAccount ?? null;
   const mockUser = useAuthStore((s) => s.user);
   const mockSignOut = useAuthStore((s) => s.signOut);
   const queryClient = useQueryClient();
@@ -620,9 +646,53 @@ export default function Profile() {
           </div>
           ) : null}
 
-          {/* B2B Analytics Portal — same rule. A business client signs in at
-              /b2b directly; they have no citizen profile to reach it from. */}
-          {isStaff ? (
+          {/* THEIR OWN BUSINESS ACCOUNT.
+              This card used to say "a business client signs in at /b2b
+              directly; they have no citizen profile to reach it from", and that
+              stopped being true the moment an existing account could be given a
+              business login. The two logins stay separate secrets — a citizen
+              changing their password must never re-key a business account — but
+              separate credentials had become separate worlds, with nothing
+              joining them. This is the thread.
+
+              It names the business and the username to sign in with, because
+              the one thing somebody cannot guess is WHICH of their two logins
+              this door wants. */}
+          {businessAccount ? (
+            <div className="px-4 mb-6">
+              <button
+                onClick={() => navigate("/b2b/login")}
+                className="w-full text-left rounded-xl overflow-hidden border border-indigo-700/30 bg-gradient-to-br from-[#312E81] to-[#1E1B4B] p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center flex-1">
+                    <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3 shrink-0">
+                      <BarChart3 size={24} color="#818CF8" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="block text-indigo-100 font-semibold text-lg truncate">
+                        {businessAccount.name}
+                      </span>
+                      <span className="block text-indigo-300/70 text-sm">
+                        Sign in as{" "}
+                        <span className="font-mono">{businessAccount.username}</span> ·{" "}
+                        {businessAccount.tier}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight size={20} color="#818CF8" />
+                </div>
+              </button>
+              <p className="mt-2 text-xs text-muted-foreground">
+                A separate password from this account&apos;s. Changing one never changes the other.
+              </p>
+            </div>
+          ) : null}
+
+          {/* The generic entry point, for staff who need to reach the portal
+              without holding an account of their own. Hidden from somebody who
+              has one, so they are not offered the same door twice. */}
+          {isStaff && !businessAccount ? (
           <div className="px-4 mb-6">
             <button
               onClick={() => navigate("/b2b/login")}

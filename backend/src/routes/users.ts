@@ -810,6 +810,53 @@ usersRouter.get("/jurisdiction/districts", async (c) => {
 });
 
 /**
+ * GET /api/users/me/business-account
+ *
+ * Whether this person has a business account, and enough about it to recognise
+ * which one — nothing more.
+ *
+ * WHY THIS EXISTS. The two logins are deliberately separate secrets: a citizen
+ * changing their own password must never silently re-key a business account.
+ * But separate credentials became separate WORLDS, with no way to get from one
+ * to the other. Somebody given a business account had to be told out of band
+ * that they had one, and then find /b2b themselves. The profile card this feeds
+ * is the missing thread between the two.
+ *
+ * SELF ONLY, and there is no variant that takes an id. A business account is
+ * not a public fact about a citizen: the platform has no business announcing on
+ * a public profile that this person runs a research firm, a campaign, or a news
+ * desk. The only reason to show it is so its owner can reach it, which is a
+ * question only they can ask.
+ *
+ * NO SECRET LEAVES HERE. Not the password, not the API key, not a hash, not a
+ * hint. The username is returned because it is the one they will be typing, and
+ * because they already know it.
+ */
+usersRouter.get("/me/business-account", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  const client = await prisma.b2BClient.findFirst({
+    where: { userId: currentUser.id },
+    select: { username: true, name: true, tier: true, type: true, createdAt: true },
+  });
+
+  // Null rather than 404: not having one is an ordinary state for almost
+  // everybody, and a 404 would read to the client as a failed request.
+  return c.json({
+    businessAccount: client
+      ? {
+          username: client.username,
+          name: client.name,
+          tier: client.tier,
+          type: client.type,
+          since: client.createdAt.toISOString(),
+        }
+      : null,
+  });
+});
+
+/**
  * GET /api/users/me/jurisdiction
  *
  * Where this person has said their voice belongs, and what that means.

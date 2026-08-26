@@ -45,6 +45,7 @@ import { AuthGate } from '@/components/auth/AuthGate';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/api';
 import { authClient } from '@/lib/auth/auth-client';
+import { BACKEND_URL } from '@/lib/config';
 import * as SecureStore from 'expo-secure-store';
 
 // Where the Better Auth expo plugin keeps the session (see auth-client.ts:
@@ -302,6 +303,32 @@ function ProfileContent() {
   // cards on their own profile. It also unlocked them for one hardcoded
   // username, which is an account identifier committed to a public repository.
   const { isStaff } = usePermissions();
+
+  /**
+   * The business account this person holds, if any.
+   * Web twin: apps/web/src/pages/Profile.tsx.
+   *
+   * Self only — there is no endpoint that answers this about anybody else, on
+   * purpose. Whether a citizen runs a research firm or a campaign is not a
+   * public fact about them.
+   */
+  const { data: business } = useQuery({
+    queryKey: ['me', 'business-account'],
+    queryFn: async () => {
+      const response = await fetch(`${BACKEND_URL}/api/users/me/business-account`, {
+        headers: { Cookie: authClient.getCookie() },
+      });
+      if (!response.ok) return { businessAccount: null };
+      return (await response.json()) as {
+        businessAccount: { username: string; name: string; tier: string } | null;
+      };
+    },
+    staleTime: 5 * 60_000,
+    // A failure is silent by design: no card is the honest answer when we
+    // could not ask.
+    retry: false,
+  });
+  const businessAccount = business?.businessAccount ?? null;
 
   const yeaVotes = positions?.summary.support ?? 0;
   const nayVotes = positions?.summary.oppose ?? 0;
@@ -745,9 +772,56 @@ function ProfileContent() {
           </View>
           ) : null}
 
-          {/* B2B Analytics Portal — same rule. A business client signs in at the
-              B2B portal directly; they have no citizen profile to reach it from. */}
-          {isStaff ? (
+          {/* THEIR OWN BUSINESS ACCOUNT.
+              This said "a business client has no citizen profile to reach it
+              from", which stopped being true the moment an existing account
+              could be given a business login. The logins stay separate secrets;
+              this is the thread between them. It names the business and the
+              username, because the one thing somebody cannot guess is WHICH of
+              their two logins this door wants. */}
+          {businessAccount ? (
+            <View className="px-4 mb-6">
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/b2b/login');
+                }}
+                className="rounded-xl overflow-hidden border border-indigo-700/30"
+              >
+                <LinearGradient
+                  colors={['#312E81', '#1E1B4B']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ padding: 16 }}
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center flex-1">
+                      <View className="w-12 h-12 rounded-full bg-indigo-500/20 items-center justify-center mr-3">
+                        <BarChart3 size={24} color="#818CF8" />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-indigo-100 font-semibold text-lg" numberOfLines={1}>
+                          {businessAccount.name}
+                        </Text>
+                        <Text className="text-indigo-300/70 text-sm">
+                          Sign in as {businessAccount.username} · {businessAccount.tier}
+                        </Text>
+                      </View>
+                    </View>
+                    <ChevronRight size={20} color="#818CF8" />
+                  </View>
+                </LinearGradient>
+              </Pressable>
+              <Text className="text-slate-500 text-xs mt-2">
+                A separate password from this account&apos;s. Changing one never changes the other.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* The generic entry point, for staff who need the portal without
+              holding an account of their own. Hidden from somebody who has one,
+              so they are not offered the same door twice. */}
+          {isStaff && !businessAccount ? (
           <View className="px-4 mb-6">
             <Pressable
               onPress={() => {
