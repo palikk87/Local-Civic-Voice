@@ -3,20 +3,11 @@ import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { Bookmark, Heart, MessageCircle, Repeat2, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
 import { postsApi, branchOf, relativeTime, type Post, type ReferenceType } from "@/lib/civic";
 import { cn } from "@/lib/utils";
 
-function initialsOf(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-}
 
 function branchColor(type: ReferenceType | null): string {
   if (type === "bill") return "hsl(var(--legislative))";
@@ -153,7 +144,6 @@ export function PostCard({ post }: { post: Post }) {
 
   const branch = post.referenceType ? branchOf(post.referenceType) : null;
   const color = branchColor(post.referenceType);
-  const initials = initialsOf(post.author.displayName || post.author.username || "?");
 
   return (
     <article className="space-y-3 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-accent/40">
@@ -162,26 +152,27 @@ export function PostCard({ post }: { post: Post }) {
       {post.repostOf ? (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Repeat2 className="h-3.5 w-3.5" aria-hidden="true" />
-          {post.author.displayName} passed this on
+          <PersonName person={post.author} /> passed this on
         </p>
       ) : null}
 
-      {/* Header */}
+      {/* Header.
+          The name and the face go to the person. They were plain text, on every
+          card, so you could read somebody's argument and have no way to find out
+          what they had ever voted for — on a platform whose premise is that
+          positions are public and attributable. */}
       <div className="flex items-center gap-3">
-        <Avatar className="h-10 w-10 border border-border">
-          {post.author.avatar ? (
-            <AvatarImage src={post.author.avatar} alt={post.author.displayName} />
-          ) : null}
-          <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <PersonAvatar
+          person={post.author}
+          className="h-10 w-10 border border-border"
+          fallbackClassName="bg-primary text-xs font-semibold text-primary-foreground"
+        />
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-sm font-semibold text-foreground">
-            {post.author.displayName}
+            <PersonName person={post.author} />
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            @{post.author.username} · {relativeTime(post.createdAt)}
+            <PersonHandle person={post.author} /> · {relativeTime(post.createdAt)}
           </p>
         </div>
       </div>
@@ -210,7 +201,7 @@ export function PostCard({ post }: { post: Post }) {
       {post.repostOf ? (
         <div className="rounded-xl border border-border bg-background/50 p-3">
           <p className="text-xs font-semibold text-foreground">
-            {post.repostOf.author.displayName}{" "}
+            <PersonName person={post.repostOf.author} />{" "}
             <span className="font-normal text-muted-foreground">
               @{post.repostOf.author.username}
             </span>

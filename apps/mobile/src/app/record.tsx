@@ -5,7 +5,7 @@
 import React from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, Stack } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
@@ -227,7 +227,24 @@ function PositionRow({ entry }: { entry: PositionRecord }) {
 function RecordContent() {
   const router = useRouter();
   const { user } = useCurrentUser();
-  const userId = user?.id;
+
+  /*
+   * SOMEBODY ELSE'S RECORD, when asked for.
+   *
+   * This screen only ever showed your own, so a public profile had no route to
+   * the one thing this platform exists to record — you could read somebody's
+   * posts and never find out what they had stood for. The web twin embeds the
+   * record directly in the profile; a phone has less room, so the profile links
+   * here with ?user=<id>.
+   *
+   * The privacy rule is unchanged and lives in the server: positions are
+   * public, the anonymous ones come back only to their author. The two private
+   * sections below — where you stand alone, and what was said in your name —
+   * are not requested at all for anybody else.
+   */
+  const { user: viewingId } = useLocalSearchParams<{ user?: string }>();
+  const userId = viewingId ?? user?.id;
+  const isMine = !viewingId || viewingId === user?.id;
 
   const { data, isLoading } = useQuery({
     queryKey: ['positions', userId],
@@ -241,7 +258,7 @@ function RecordContent() {
   const { data: review } = useQuery({
     queryKey: ['positions-review'],
     queryFn: () => api.get<{ results: NeedingReview[] }>('/api/users/me/positions/review'),
-    enabled: Boolean(userId),
+    enabled: isMine && Boolean(userId),
   });
 
   // What was said in your name is not somebody else's business, even though
@@ -249,13 +266,13 @@ function RecordContent() {
   const { data: receipts } = useQuery({
     queryKey: ['voice-receipts'],
     queryFn: () => api.get<{ results: VoiceReceipt[] }>('/api/delegations/receipts'),
-    enabled: Boolean(userId),
+    enabled: isMine && Boolean(userId),
   });
 
   const { data: standing } = useQuery({
     queryKey: ['standing'],
     queryFn: () => api.get<Standing>('/api/users/me/standing'),
-    enabled: Boolean(userId),
+    enabled: isMine && Boolean(userId),
   });
 
   const summary = data?.summary;
@@ -273,9 +290,13 @@ function RecordContent() {
           <ArrowLeft size={22} color="#F8FAFC" />
         </Pressable>
         <View>
-          <Text className="text-white text-xl font-semibold">Your record</Text>
+          <Text className="text-white text-xl font-semibold">
+            {isMine ? 'Your record' : 'Their record'}
+          </Text>
           <Text className="text-slate-400 text-xs">
-            Every position you have taken, and everything said in your name.
+            {isMine
+              ? 'Every position you have taken, and everything said in your name.'
+              : "Every position they have taken on the government's business."}
           </Text>
         </View>
       </View>

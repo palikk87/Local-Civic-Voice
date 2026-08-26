@@ -13,6 +13,7 @@ import { civicApi, postsApi, type GovReference, type PostSearchResult } from "@/
 import { api } from "@/lib/api";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { PersonHandle, PersonName } from "@/components/people/PersonLink";
 
 interface SearchResults {
   references: GovReference[];
@@ -198,31 +199,40 @@ export default function Search() {
                 </div>
               ) : (
                 <div className="space-y-3">
+                  {/* The author row sits OUTSIDE the card's link rather than
+                      inside it. A link within a link is invalid markup and the
+                      inner one does not reliably win the click — so the name
+                      gets its own row and the rest of the card stays one target
+                      for the law it is about. */}
                   {posts.map((post) => (
-                    <Link
+                    <div
                       key={post.id}
-                      to={
-                        post.governmentReferenceId
-                          ? `/reference/${post.governmentReferenceId}`
-                          : "/timeline"
-                      }
-                      className="block rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40"
+                      className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40"
                     >
                       <p className="text-sm font-semibold text-foreground">
-                        {post.author.displayName}{" "}
+                        <PersonName person={post.author} />{" "}
                         <span className="font-normal text-muted-foreground">
-                          @{post.author.username}
+                          <PersonHandle person={post.author} />
                         </span>
                       </p>
-                      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                        {post.content}
-                      </p>
-                      {post.referenceTitle ? (
-                        <p className="mt-2 truncate text-xs text-muted-foreground">
-                          on {post.referenceTitle}
+                      <Link
+                        to={
+                          post.governmentReferenceId
+                            ? `/reference/${post.governmentReferenceId}`
+                            : "/timeline"
+                        }
+                        className="block"
+                      >
+                        <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                          {post.content}
                         </p>
-                      ) : null}
-                    </Link>
+                        {post.referenceTitle ? (
+                          <p className="mt-2 truncate text-xs text-muted-foreground">
+                            on {post.referenceTitle}
+                          </p>
+                        ) : null}
+                      </Link>
+                    </div>
                   ))}
                 </div>
               )}

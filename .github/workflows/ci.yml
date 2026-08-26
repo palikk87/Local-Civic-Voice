@@ -151,6 +151,10 @@ jobs:
       - run: bun run nav-check
         working-directory: apps/web
 
+      # A name is a link, and a profile is a record. Both were plain text.
+      - run: bun run profile-check
+        working-directory: apps/web
+
       # Forty-three routes, opened for real, signed out and signed in. This is
       # the only check that visits a page it was not written to know about: it
       # reads the route table, so a page added tomorrow is covered tomorrow.

@@ -106,7 +106,10 @@ function Replies({ postId, comment }: { postId: string; comment: CommentRow }) {
           <ul className="mt-2 space-y-2 border-l border-slate-700/50 pl-3">
             {(Array.isArray(data?.comments) ? data.comments : []).map((reply) => (
               <li key={reply.id} className="flex gap-2">
-                <img src={reply.author.avatar} alt="" className="h-7 w-7 rounded-full" />
+                {/* The one avatar on this page that was not a link. */}
+                <Link to={`/user/${reply.author.id}`} className="shrink-0">
+                  <img src={reply.author.avatar} alt="" className="h-7 w-7 rounded-full" />
+                </Link>
                 <div>
                   <Link
                     to={`/user/${reply.author.id}`}

@@ -166,6 +166,14 @@ const CHECKS: Check[] = [
       "on the first click, and the feed tab lives in the URL and survives a reload",
   },
   {
+    name: "web profile-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "profile-check"],
+    guards:
+      "an author's name reaches their profile, that profile shows their record without " +
+      "the two sections that are only for its owner, and Message opens a conversation",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],

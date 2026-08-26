@@ -18,6 +18,7 @@
     "library-search-check": "node scripts/library-search-check.mjs dist",
     "share-check": "node scripts/share-check.mjs",
     "nav-check": "node scripts/nav-check.mjs",
+    "profile-check": "node scripts/profile-check.mjs",
     "every-page-check": "node scripts/every-page-check.mjs",
     "verify-email-check": "node scripts/verify-email-check.mjs dist"
   },

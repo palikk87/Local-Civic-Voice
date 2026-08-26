@@ -20,6 +20,7 @@ import {
   FileText,
   MapPin,
   ShieldCheck,
+  MessageCircle,
   UserMinus,
   UserPlus,
   AlertCircle,
@@ -31,6 +32,7 @@ import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/cn';
 import { CommonGroundPanel } from '@/components/CivicPanels';
+import { useStartConversation } from '@/lib/api/messages';
 
 interface PublicUser {
   id: string;
@@ -78,6 +80,7 @@ function referenceRoute(post: UserPost): string {
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const startConversation = useStartConversation();
   const queryClient = useQueryClient();
   const requireAuth = useRequireAuth();
   const me = useAuthStore((s) => s.user);
@@ -228,10 +231,19 @@ export default function UserProfileScreen() {
                   <Text className="text-white font-bold text-lg">{profile.following}</Text>
                   <Text className="text-slate-400 text-sm">Following</Text>
                 </View>
-                <View className="items-center">
+                {/* A citizen's positions are public. That is the premise: this
+                    platform asks for public positions on public business, and a
+                    position nobody can look up is a poll answer. The count was
+                    inert text and there was no route to the record behind it.
+                    Web twin embeds the record in the profile; a phone has less
+                    room, so this pushes to it. */}
+                <Pressable
+                  onPress={() => router.push(`/record?user=${id}`)}
+                  className="items-center"
+                >
                   <Text className="text-white font-bold text-lg">{profile.votesCount}</Text>
-                  <Text className="text-slate-400 text-sm">Votes</Text>
-                </View>
+                  <Text className="text-slate-400 text-sm underline">Positions</Text>
+                </Pressable>
               </View>
 
               {/* Actions */}
@@ -261,6 +273,30 @@ export default function UserProfileScreen() {
                     >
                       {profile.isFollowing ? 'Unfollow' : 'Follow'}
                     </Text>
+                  </Pressable>
+
+                  {/* MESSAGE. There was no way to start a conversation with
+                      somebody from their profile — the only route into a thread
+                      was a thread that already existed, so two people who had
+                      never spoken could not begin. The backend returns the
+                      existing conversation when there is one, so this is safe
+                      to press twice. Web twin: apps/web/src/pages/UserProfile.tsx. */}
+                  <Pressable
+                    onPress={() => {
+                      if (!requireAuth('Sign in to send a message.')) return;
+                      startConversation.mutate(
+                        { participantId: id },
+                        {
+                          onSuccess: (data) =>
+                            router.push(`/conversation/${data.conversation.id}`),
+                        },
+                      );
+                    }}
+                    disabled={startConversation.isPending}
+                    className="flex-1 flex-row items-center justify-center rounded-xl py-3 mx-2 bg-slate-800 border border-slate-600"
+                  >
+                    <MessageCircle size={16} color="#94A3B8" />
+                    <Text className="text-slate-200 font-semibold ml-1.5">Message</Text>
                   </Pressable>
 
                   <Pressable

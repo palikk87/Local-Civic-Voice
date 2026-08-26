@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/hooks/use-civic-auth";
 import { api } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
 import { ComposeComment } from "./ComposeComment";
+import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 
 interface Comment {
   id: string;
@@ -66,17 +67,16 @@ export function CommentCard({ comment, postId }: CommentCardProps) {
       {/* Header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <img
-            src={comment.author.avatar}
-            alt={comment.author.displayName}
-            className="h-8 w-8 rounded-full"
-          />
+          {/* The commenter's name and face reach their profile. Reading an
+              argument and being unable to look up who made it is the opposite
+              of what a public record is for. */}
+          <PersonAvatar person={comment.author} className="h-8 w-8" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">
-              {comment.author.displayName}
+              <PersonName person={comment.author} />
             </p>
             <p className="text-xs text-muted-foreground">
-              @{comment.author.username} •{" "}
+              <PersonHandle person={comment.author} /> •{" "}
               {formatDistanceToNow(new Date(comment.createdAt), {
                 addSuffix: true,
               })}

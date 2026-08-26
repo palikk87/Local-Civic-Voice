@@ -11,6 +11,7 @@ import {
   Loader2,
   MapPin,
   ShieldCheck,
+  MessageCircle,
   UserMinus,
   UserPlus,
 } from "lucide-react";
@@ -22,6 +23,8 @@ import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
 import { api } from "@/lib/api";
 import { safetyApi } from "@/lib/civic";
 import { CommonGround } from "@/components/civic/CommonGround";
+import { CivicRecord } from "@/components/record/CivicRecord";
+import { useStartConversation } from "@/lib/api/messages";
 
 interface PublicUser {
   id: string;
@@ -75,6 +78,7 @@ export default function UserProfile() {
   const { user: me, isAuthenticated } = useCurrentUser();
   const { openAuth } = useAuthUI();
   const isSelf = me?.id === id;
+  const startConversation = useStartConversation();
 
   const { data: profile, isLoading, isError } = useQuery({
     queryKey: ["public-user", id],
@@ -88,7 +92,15 @@ export default function UserProfile() {
       api.get<{ pagination: { total: number } }>(`/api/users/${id}/friends?limit=1`),
     enabled: !!id,
   });
-  const friendCount = friendsData?.pagination.total ?? 0;
+  /*
+   * Optional all the way down, not just past `friendsData`.
+   *
+   * `friendsData?.pagination.total` guards the response and then dereferences
+   * `pagination` unconditionally, so any answer without that key threw and the
+   * ENTIRE PROFILE went to the error boundary — a blank page, because a number
+   * next to the word "Friends" could not be read. One count is not worth a page.
+   */
+  const friendCount = friendsData?.pagination?.total ?? 0;
 
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ["public-user-posts", id],
@@ -234,15 +246,18 @@ export default function UserProfile() {
               <span className="text-lg font-bold text-white">{profile.following}</span>
               <span className="text-sm text-slate-400">Following</span>
             </div>
-            <Link to={`/record?user=${id}`} className="flex flex-col items-center">
+            {/* A citizen's positions are public. That is the premise: this
+                platform asks for public positions on public business, and a
+                position nobody can look up is a poll answer.
+
+                This used to point at /record?user=<id>, a separate page. The
+                record is on this page now, so the count jumps to it. */}
+            <a href="#record" className="flex flex-col items-center">
               <span className="text-lg font-bold text-white">{profile.votesCount}</span>
-              {/* A citizen's positions are public. That is the premise: this
-                  platform asks for public positions on public business, and a
-                  position nobody can look up is a poll answer. */}
               <span className="text-sm text-slate-400 underline-offset-2 hover:underline">
                 Positions
               </span>
-            </Link>
+            </a>
           </div>
 
           {/* Actions */}
@@ -271,6 +286,33 @@ export default function UserProfile() {
                     Follow
                   </>
                 )}
+              </Button>
+              {/* MESSAGE. There was no way to start a conversation with
+                  somebody from their profile — the only route into a thread was
+                  a thread that already existed, so two people who had never
+                  spoken could not begin. The backend returns the existing
+                  conversation when there is one, so this is safe to press
+                  twice. */}
+              <Button
+                className="flex-1"
+                variant="outline"
+                disabled={startConversation.isPending}
+                onClick={() => {
+                  if (!isAuthenticated) {
+                    openAuth("Sign in to send a message.");
+                    return;
+                  }
+                  startConversation.mutate(
+                    { participantId: id! },
+                    {
+                      onSuccess: (data) => navigate(`/conversation/${data.conversation.id}`),
+                      onError: () => toast.error("Couldn't open a conversation"),
+                    },
+                  );
+                }}
+              >
+                <MessageCircle className="mr-1.5 h-4 w-4" />
+                Message
               </Button>
               <Button
                 className="flex-1"
@@ -376,6 +418,16 @@ export default function UserProfile() {
             above their timeline: knowing you are with somebody on three
             records changes how their posts read. */}
         {isSelf ? null : <CommonGround userId={id!} name={profile.displayName} />}
+
+        {/* THEIR RECORD — the whole point of a public profile here.
+            Until now this page showed a bio, follower counts and a list of
+            posts: everything a generic social profile shows and nothing this
+            platform exists for. Positions are public; the anonymous ones are
+            withheld from everybody but their author, and the two private
+            sections do not render for a visitor. See the component. */}
+        <div id="record" className="scroll-mt-4 px-4 pb-8">
+          <CivicRecord userId={id} isMine={isSelf} />
+        </div>
 
         {/* Their timeline */}
         <div className="px-4 pb-8">

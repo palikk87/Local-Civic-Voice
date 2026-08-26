@@ -10,6 +10,7 @@ import {
 import { useSignedInIdentity } from "@/lib/mobile/signed-in-identity";
 import type { User } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
+import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 
 // Parse content to highlight @mentions
 function parseContentWithMentions(content: string, taggedUsers: TaggedUser[]) {
@@ -89,10 +90,11 @@ function CommentItem({
       className={cn("mb-3", depth > 0 && "ml-10")}
     >
       <div className="flex items-start">
-        <img
-          src={comment.author.avatar}
-          alt={comment.author.displayName}
-          className={cn("rounded-full", depth === 0 ? "w-10 h-10" : "w-8 h-8")}
+        {/* Name and face reach the person. Reading an argument and being unable
+            to look up who made it is the opposite of a public record. */}
+        <PersonAvatar
+          person={comment.author}
+          className={cn(depth === 0 ? "w-10 h-10" : "w-8 h-8")}
         />
 
         <div className="flex-1 ml-3">
@@ -100,9 +102,11 @@ function CommentItem({
           <div className="bg-slate-800/60 rounded-2xl rounded-tl-sm px-3 py-2">
             <div className="flex items-center mb-1">
               <span className="text-white font-semibold text-sm">
-                {comment.author.displayName}
+                <PersonName person={comment.author} />
               </span>
-              <span className="text-slate-500 text-xs ml-2">@{comment.author.username}</span>
+              <span className="text-slate-500 text-xs ml-2">
+                <PersonHandle person={comment.author} />
+              </span>
             </div>
             {parseContentWithMentions(comment.content, comment.taggedUsers)}
           </div>
