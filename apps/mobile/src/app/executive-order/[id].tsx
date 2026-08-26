@@ -448,7 +448,7 @@ export default function ExecutiveOrderDetailScreen() {
                 style={{ flexGrow: 0 }}
               >
                 <ViewModeButton
-                  label="Brief"
+                  label="Citizen's Brief"
                   isActive={viewMode === 'brief'}
                   onPress={() => setViewMode('brief')}
                   iconType="brief"

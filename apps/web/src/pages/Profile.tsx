@@ -26,7 +26,8 @@ import { MotionDiv } from "@/components/civic/Motion";
 import { EditProfileDialog } from "@/components/profile/EditProfileDialog";
 import { AppShell } from "@/components/layout/AppShell";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
-import { useVotingStore } from "@/lib/mobile/voting-store";
+import { CivicRecord } from "@/components/record/CivicRecord";
+import { recordApi } from "@/lib/civic";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
 import { api } from "@/lib/api";
 import { queryKeys } from "@/lib/mobile/api-hooks";
@@ -238,11 +239,24 @@ export default function Profile() {
   const followerCount = liveProfile?.followers ?? 0;
   const followingCount = liveProfile?.following ?? 0;
 
-  // Votes
-  const mockUserVotes = useVotingStore((s) => s.userVotes);
-  // useUserVoteHistory was the Supabase half. It was only ever passed a user id
-  // when isSupabaseConfigured() was true, which it has not been since the client
-  // was removed — so it always ran disabled and returned nothing.
+  /*
+   * THE VOTE COUNTS COME FROM THE SERVER NOW.
+   *
+   * They were read from `voting-store`, a zustand store persisted to this
+   * browser's localStorage. So the three numbers on a person's own profile —
+   * Yea, Nay, Total — described one device. Sign in on a phone after voting all
+   * week on a laptop and the profile said you had never voted, on a platform
+   * whose entire subject is the record of what you have stood for.
+   *
+   * `/api/users/:id/positions` is where positions actually live; it is the same
+   * source the record below reads, so the headline numbers and the list under
+   * them can no longer disagree.
+   */
+  const { data: positions } = useQuery({
+    queryKey: ["positions", sessionUser?.id],
+    queryFn: () => recordApi.positions(sessionUser!.id),
+    enabled: Boolean(sessionUser?.id),
+  });
 
   // The real count, from the server that holds them.
   //
@@ -256,18 +270,17 @@ export default function Profile() {
   });
   const activeDelegationsCount = myDelegations?.activeCount ?? 0;
 
-  // Calculate vote stats
-  const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
-    const entries = Object.entries(mockUserVotes) as [string, "yea" | "nay"][];
-    const yea = entries.filter(([, v]) => v === "yea").length;
-    const nay = entries.filter(([, v]) => v === "nay").length;
-    return {
-      yeaVotes: yea,
-      nayVotes: nay,
-      totalVotes: entries.length,
-      voteEntries: entries,
-    };
-  }, [mockUserVotes]);
+  /*
+   * Optional all the way down, not just past `positions`.
+   *
+   * `positions?.summary.support` guards the response and then dereferences
+   * `summary` unconditionally, so any response without that key throws and the
+   * whole profile goes to the error boundary — a blank page, from a number in
+   * a corner. Three counts are not worth a page.
+   */
+  const yeaVotes = positions?.summary?.support ?? 0;
+  const nayVotes = positions?.summary?.oppose ?? 0;
+  const totalVotes = positions?.summary?.total ?? 0;
 
   const handleSignOut = async () => {
     // One click = one sign-out. Matches mobile: without the guard the button fired
@@ -628,38 +641,17 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Vote History */}
+          {/* Your record — positions, changes of mind, and what was said in
+              your name. It used to live on its own page at /record, behind its
+              own sidebar item, which is why a profile could be read end to end
+              without seeing a single thing the person had ever stood for. */}
           <div className="px-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-white font-semibold text-lg">Voting History</h2>
-              <span className="text-slate-400 text-sm">{totalVotes} votes</span>
-            </div>
-
-            {/*
-              The spinner that used to sit here was driven by a Supabase query
-              gated on a flag that has been a hardcoded false since the client
-              was removed, so it never ran and never resolved. Votes come from
-              the local store, which is synchronous.
-            */}
-            {voteEntries.length > 0 ? (
-              voteEntries.map(([billId, vote], index) => (
-                <VoteHistoryCard
-                  key={billId}
-                  billId={billId}
-                  vote={vote}
-                  index={index}
-                />
-              ))
-            ) : (
-              <div className="bg-slate-800/40 rounded-xl p-8 flex flex-col items-center border border-slate-700/30">
-                <Bookmark size={40} color="#64748B" />
-                <span className="text-slate-400 text-lg mt-4">No votes yet</span>
-                <span className="text-slate-500 text-sm mt-1 text-center">
-                  Start voting on bills to see your history here
-                </span>
-              </div>
-            )}
+            <CivicRecord userId={sessionUser?.id} isMine />
           </div>
+
+          {/* The browser-only vote list that used to sit here is gone. It read
+              zustand's `voting-store`, so it showed this device's votes and
+              called them your history. The record above is the server's. */}
         </div>
       </div>
 

@@ -312,7 +312,6 @@ export function convertCongressBillToAppBill(
     officialVotes: officialVotes
       ? { yea: officialVotes.yea, nay: officialVotes.nay, abstain: officialVotes.present, notVoting: officialVotes.notVoting }
       : undefined,
-    projectedOutcome: 'uncertain',
   };
 }
 

@@ -115,13 +115,6 @@ function referenceToFeedBill(post: AlgorithmicFeedPost): Bill {
           totalVoters: reference.votes.total,
         }
       : { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: reference
-      ? reference.votes.support > reference.votes.oppose
-        ? "likely_pass"
-        : reference.votes.oppose > reference.votes.support
-          ? "likely_fail"
-          : "uncertain"
-      : "uncertain",
     branch,
   };
 }

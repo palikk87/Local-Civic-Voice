@@ -243,11 +243,27 @@ function ProfileContent() {
 
   const user = storedUser;
 
-  // Votes
-  const mockUserVotes = useVotingStore((s) => s.userVotes);
-  // useUserVoteHistory was the Supabase half. It was only ever passed a user id
-  // when isSupabaseConfigured() was true, which it has not been since the client
-  // was removed — so it always ran disabled and returned nothing.
+  /*
+   * THE VOTE COUNTS COME FROM THE SERVER NOW.
+   *
+   * They were read from `voting-store`, a zustand store persisted to this
+   * device. So the three numbers on a person's own profile — Yea, Nay, Total —
+   * described one phone. Sign in on the web after voting all week here and the
+   * profile said you had never voted, on a platform whose entire subject is the
+   * record of what you have stood for.
+   *
+   * `/api/users/:id/positions` is where positions actually live; it is the same
+   * source the record screen reads, so the headline numbers and the list behind
+   * "Your record" can no longer disagree. Web twin: apps/web/src/pages/Profile.tsx.
+   */
+  const { data: positions } = useQuery({
+    queryKey: ['positions', sessionUser?.id ?? ''],
+    queryFn: () =>
+      api.get<{ summary: { total: number; support: number; oppose: number } }>(
+        `/api/users/${sessionUser?.id}/positions`,
+      ),
+    enabled: Boolean(sessionUser?.id),
+  });
 
   // The real count, from the server that holds them. This used to read a
   // device-only store that nothing ever filled, so a citizen who had lent their
@@ -287,18 +303,9 @@ function ProfileContent() {
   // username, which is an account identifier committed to a public repository.
   const { isStaff } = usePermissions();
 
-  // Calculate vote stats
-  const { yeaVotes, nayVotes, totalVotes, voteEntries } = useMemo(() => {
-    const entries = Object.entries(mockUserVotes);
-    const yea = entries.filter(([_, v]) => v === 'yea').length;
-    const nay = entries.filter(([_, v]) => v === 'nay').length;
-    return {
-      yeaVotes: yea,
-      nayVotes: nay,
-      totalVotes: entries.length,
-      voteEntries: entries,
-    };
-  }, [mockUserVotes]);
+  const yeaVotes = positions?.summary.support ?? 0;
+  const nayVotes = positions?.summary.oppose ?? 0;
+  const totalVotes = positions?.summary.total ?? 0;
 
   const handleSignOut = async () => {
     // One tap = one sign-out. Without this the button fired again on every tap while
@@ -772,44 +779,13 @@ function ProfileContent() {
             </ScrollView>
           </View>
 
-          {/* Vote History */}
-          <View className="px-4">
-            <View className="flex-row items-center justify-between mb-3">
-              <Text className="text-white font-semibold text-lg">
-                Voting History
-              </Text>
-              <Text className="text-slate-400 text-sm">{totalVotes} votes</Text>
-            </View>
-
-            {/*
-              One branch, because there is only one source.
-
-              This used to be a three-way: a Supabase vote history, a local one,
-              and an empty state — with the first two gated on a flag that has
-              been a hardcoded false since the client was removed. The local
-              branch additionally required `Array.isArray(voteEntries) === false`,
-              which was never true, so BOTH branches were unreachable and the
-              screen showed the empty state to people who had voted.
-            */}
-            {voteEntries.length > 0 ? (
-              voteEntries.map(([billId, vote], index) => (
-                <VoteHistoryCard
-                  key={billId}
-                  billId={billId}
-                  vote={vote}
-                  index={index}
-                />
-              ))
-            ) : (
-              <View className="bg-slate-800/40 rounded-xl p-8 items-center border border-slate-700/30">
-                <Bookmark size={40} color="#64748B" />
-                <Text className="text-slate-400 text-lg mt-4">No votes yet</Text>
-                <Text className="text-slate-500 text-sm mt-1 text-center">
-                  Start voting on bills to see your history here
-                </Text>
-              </View>
-            )}
-          </View>
+          {/* THE DEVICE-ONLY VOTE LIST THAT USED TO SIT HERE IS GONE.
+              It read zustand's `voting-store` and called it "Voting History",
+              so it showed this phone's votes. The counts above and the "Your
+              record" card higher up both read the server, which is the one
+              place a position exists. Web twin: apps/web/src/pages/Profile.tsx,
+              where the record is embedded rather than linked because a browser
+              has the room for it. */}
         </ScrollView>
       </SafeAreaView>
     </View>

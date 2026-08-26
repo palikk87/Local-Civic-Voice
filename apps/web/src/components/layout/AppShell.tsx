@@ -13,7 +13,6 @@ import {
   LogOut,
   Newspaper,
   MessageCircle,
-  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { Seal } from "@/components/civic/Seal";
@@ -40,9 +39,9 @@ const NAV: NavItem[] = [
   { to: "/people", label: "People", icon: Users },
   { to: "/messages", label: "Messages", icon: MessageCircle, capability: "viewMessages" },
   { to: "/government", label: "Government", icon: Landmark },
-  // Where you stood, and what was said in your name. Behind the same
-  // capability as the profile: it is a signed-in view of yourself.
-  { to: "/record", label: "My record", icon: Scale, capability: "viewProfile" },
+  // "My record" used to sit here. It is on the profile now — where you stood
+  // is not a separate destination from who you are, and having it as one meant
+  // a profile could be read without ever seeing a single position.
   { to: "/profile", label: "Profile", icon: User, capability: "viewProfile" },
 ];
 

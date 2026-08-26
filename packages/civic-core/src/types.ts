@@ -32,7 +32,24 @@ export interface Bill {
   realWorldImpact: string;
   relatedLaws: RelatedLaw[];
   communityVotes: VoteTally;
-  projectedOutcome: 'likely_pass' | 'likely_fail' | 'uncertain' | 'unlikely_pass';
+  /*
+   * PROJECTED OUTCOME IS GONE, AND NOT REPLACED.
+   *
+   * It was computed as `votes.support > votes.oppose ? 'likely_pass' :
+   * 'uncertain'` — the app's own users' opinions, relabelled as a prediction
+   * about what Congress will do. A reader saw "Likely to Pass" on a bill
+   * sitting in committee with eleven votes on it, and nothing on the card said
+   * where that came from, because there was nowhere honest for it to come from.
+   *
+   * There is no column for it in the database and never was; the field was
+   * invented at the edge, in three different mappers, three different ways.
+   * Whether a bill will pass is a real question with a real answer nobody has,
+   * and a platform whose claim is that its records are the true ones cannot
+   * answer it by taking a poll of its own readers.
+   *
+   * Status, sponsor, introduction date and last action are all real, all from
+   * congress.gov, and all still shown. They are what we actually know.
+   */
   officialVotes?: OfficialVoteTally;
   citizensBrief?: CitizensBrief; // AI-generated brief
   branch?: GovernmentBranch; // Default to 'legislative'

@@ -190,7 +190,7 @@ export function CitizensBriefCard({
               <Sparkles className="h-5 w-5" />
             )}
             <span className="text-base">
-              {unavailable ? "Check the source again" : "Get Citizen Brief"}
+              {unavailable ? "Check the source again" : "Get the Citizen's Brief"}
             </span>
           </button>
 

@@ -130,6 +130,10 @@ async function firstVisit(path = "/feed") {
 
 // ------------------------------------------------------------ 2. first clicks
 
+// "My record" used to be here. It is on the profile now — where you stood is
+// not a separate destination from who you are, and having it as one meant a
+// profile could be read end to end without seeing a single position.
+
 const DESTINATIONS = [
   ["Timeline", "/timeline"],
   ["Library", "/library"],
@@ -137,7 +141,7 @@ const DESTINATIONS = [
   ["People", "/people"],
   ["Messages", "/messages"],
   ["Government", "/government"],
-  ["My record", "/record"],
+  ["Profile", "/profile"],
 ];
 
 for (const [label, expected] of DESTINATIONS) {

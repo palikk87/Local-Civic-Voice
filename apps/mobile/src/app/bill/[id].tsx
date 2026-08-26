@@ -158,7 +158,6 @@ function mapSupabaseBillToBill(
       nay: bill.nay_count ?? 0,
       totalVoters: bill.total_votes ?? 0,
     },
-    projectedOutcome: bill.projected_outcome,
     officialVotes: hasOfficialVotes
       ? {
           yea: bill.official_yea ?? 0,
@@ -504,7 +503,6 @@ export default function BillDetailScreen() {
         nay: 0,
         totalVoters: 0,
       },
-      projectedOutcome: 'uncertain',
       branch: 'legislative',
       // Don't set citizensBrief - let the CitizensBrief component generate it if needed
     };
@@ -838,40 +836,13 @@ export default function BillDetailScreen() {
                   </View>
                 </View>
 
-                {/* Projected vs Community */}
-                <View className="flex-row items-center justify-between mt-4 pt-4 border-t border-slate-700/50">
-                  <View>
-                    <Text className="text-slate-400 text-xs mb-1">Projected Outcome</Text>
-                    <View
-                      className={cn(
-                        'px-3 py-1.5 rounded-full',
-                        bill.projectedOutcome === 'likely_pass'
-                          ? 'bg-emerald-900/50'
-                          : bill.projectedOutcome === 'likely_fail'
-                          ? 'bg-red-900/50'
-                          : 'bg-slate-700'
-                      )}
-                    >
-                      <Text
-                        className={cn(
-                          'font-medium',
-                          bill.projectedOutcome === 'likely_pass'
-                            ? 'text-emerald-400'
-                            : bill.projectedOutcome === 'likely_fail'
-                            ? 'text-red-400'
-                            : 'text-slate-400'
-                        )}
-                      >
-                        {bill.projectedOutcome === 'likely_pass'
-                          ? 'Likely to Pass'
-                          : bill.projectedOutcome === 'likely_fail'
-                          ? 'Likely to Fail'
-                          : 'Uncertain'}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {bill.officialVotes && (
+                {/* THE PROJECTION IS GONE, AND NOT REPLACED.
+                    It read `votes.support > votes.oppose ? 'Likely to Pass'`
+                    — our own readers' opinions relabelled as a forecast of
+                    Congress. The official vote below is a real recorded fact
+                    and stays. See packages/civic-core/src/types.ts. */}
+                {bill.officialVotes ? (
+                  <View className="flex-row items-center justify-end mt-4 pt-4 border-t border-slate-700/50">
                     <View>
                       <Text className="text-slate-400 text-xs mb-1 text-right">
                         Official Vote
@@ -885,8 +856,8 @@ export default function BillDetailScreen() {
                         </Text>
                       </View>
                     </View>
-                  )}
-                </View>
+                  </View>
+                ) : null}
               </View>
             </Animated.View>
 
@@ -940,7 +911,7 @@ export default function BillDetailScreen() {
               >
                 <ViewModeButton
                   mode="simplified"
-                  label="Simple"
+                  label="Citizen's Brief"
                   isActive={viewMode === 'simplified'}
                   onPress={() => setViewMode('simplified')}
                   iconType="simplified"

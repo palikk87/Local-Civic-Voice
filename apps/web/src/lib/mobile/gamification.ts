@@ -29,8 +29,25 @@ export type CivicLevel =
   | 'champion' // 750-899
   | 'leader'; // 900-1000
 
+/**
+ * "Civic Newcomer" is gone. It was the first thing the app said to a person.
+ *
+ * A brand-new visitor opened the Feed and was greeted by a grey zero and a
+ * label ranking them at the bottom of a ladder they had not asked to be on,
+ * for a platform they had been using for four seconds. It read as a verdict on
+ * them rather than a description of anything, and the one thing a civic
+ * platform cannot afford to tell somebody on arrival is that they do not count
+ * yet.
+ *
+ * The titles now describe WHAT SOMEBODY HAS DONE HERE, which is all this number
+ * has ever measured — and 'New here' is a fact rather than a rank.
+ *
+ * NOTE, and it belongs in the badge audit rather than here: this score is
+ * persisted to the browser/device by zustand, so it describes one device and
+ * not one person. Signing in elsewhere starts it at zero again.
+ */
 export const CIVIC_LEVELS: Record<CivicLevel, { min: number; max: number; title: string; color: string }> = {
-  newcomer: { min: 0, max: 99, title: 'Civic Newcomer', color: '#94A3B8' },
+  newcomer: { min: 0, max: 99, title: 'New here', color: '#94A3B8' },
   citizen: { min: 100, max: 249, title: 'Engaged Citizen', color: '#22C55E' },
   advocate: { min: 250, max: 499, title: 'Democracy Advocate', color: '#3B82F6' },
   activist: { min: 500, max: 749, title: 'Civic Activist', color: '#8B5CF6' },

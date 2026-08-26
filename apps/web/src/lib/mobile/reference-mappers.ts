@@ -120,7 +120,6 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
             notVoting: ref.officialVotes.notVoting,
           }
         : undefined,
-    projectedOutcome: ref.votes.support > ref.votes.oppose ? "likely_pass" : "uncertain",
     branch: "legislative",
   };
 }

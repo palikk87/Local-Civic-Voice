@@ -176,7 +176,7 @@ export function CitizensBriefCard({
               <Sparkles size={20} color="#0F172A" />
             )}
             <Text className="text-slate-900 font-bold text-base ml-2">
-              {unavailable ? 'Check the source again' : 'Get Citizen Brief'}
+              {unavailable ? 'Check the source again' : 'Get the Citizen\'s Brief'}
             </Text>
           </Pressable>
 

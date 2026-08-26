@@ -51,6 +51,7 @@ import { safetyApi } from "@/lib/civic";
 import { useCurrentUser, useRequireAuth } from "@/hooks/use-civic-auth";
 import GlobalPulseDrawer from "@/components/mobile/GlobalPulseDrawer";
 import { cn } from "@/lib/utils";
+import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 
 // Time ago helper
 function getTimeAgo(dateString: string): string {
@@ -330,16 +331,23 @@ function PostCard({
       {!isLibraryPost && post.type === "share" && post.sharedContent?.originalAuthor ? (
         <div className="flex items-center px-4 pt-3 pb-1">
           <Repeat2 size={14} color="#64748B" />
-          <span className="text-slate-500 text-xs ml-2">{post.author.displayName} shared</span>
+          <span className="text-slate-500 text-xs ml-2">
+            <PersonName person={post.author} /> shared
+          </span>
         </div>
       ) : null}
 
       {/* Author header with Follow button */}
       <div className="flex items-center p-4 pb-2">
-        <img src={post.author.avatar} alt={post.author.displayName} className="w-12 h-12 rounded-full" />
+        {/* Name and face reach the person's profile — they were plain text
+            here, so a timeline could be read without any route to who wrote
+            it. */}
+        <PersonAvatar person={post.author} className="w-12 h-12" />
         <div className="flex-1 ml-3 min-w-0">
           <div className="flex items-center">
-            <span className="text-white font-semibold">{post.author.displayName}</span>
+            <span className="text-white font-semibold">
+              <PersonName person={post.author} />
+            </span>
             {/* The timestamp is the permalink, the way it is everywhere else.
                 Until now a post had no address at all and this was plain
                 text. */}
@@ -350,7 +358,9 @@ function PostCard({
               · {timeAgo}
             </Link>
           </div>
-          <span className="text-slate-400 text-sm">@{post.author.username}</span>
+          <span className="text-slate-400 text-sm">
+            <PersonHandle person={post.author} />
+          </span>
         </div>
 
         {/* Follow button - show for other users' posts */}
@@ -489,7 +499,7 @@ function PostCard({
                   />
                 </div>
 
-                {/* Vote Buttons Row with Projected Outcome */}
+                {/* Vote buttons */}
                 <div className="flex justify-between items-center">
                   <div className="flex items-center">
                     <button
@@ -543,34 +553,16 @@ function PostCard({
                     </button>
                   </div>
 
-                  {/* Projected Outcome Badge */}
-                  <div
-                    className={cn(
-                      "px-2 py-1 rounded-full",
-                      supportCount > opposeCount
-                        ? "bg-emerald-900/50"
-                        : opposeCount > supportCount
-                        ? "bg-red-900/50"
-                        : "bg-slate-700"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "text-xs font-medium",
-                        supportCount > opposeCount
-                          ? "text-emerald-400"
-                          : opposeCount > supportCount
-                          ? "text-red-400"
-                          : "text-slate-400"
-                      )}
-                    >
-                      {supportCount > opposeCount
-                        ? "Likely Pass"
-                        : opposeCount > supportCount
-                        ? "Likely Fail"
-                        : "Uncertain"}
-                    </span>
-                  </div>
+                  {/* THE "LIKELY PASS" BADGE IS GONE, AND NOT REPLACED.
+                      It was computed from supportCount vs opposeCount — the
+                      people on this platform who happened to have voted on
+                      this post's law — and presented as a forecast of what
+                      Congress will do. Eleven readers leaning yes is not a
+                      prediction, and nothing on the badge said where the
+                      claim came from because there was nowhere honest for it
+                      to come from. The vote bar above is the real number and
+                      it is labelled as what it is: this platform's readers.
+                      See packages/civic-core/src/types.ts. */}
                 </div>
               </div>
             ) : null}
@@ -583,16 +575,15 @@ function PostCard({
           <div className="bg-slate-700/60 rounded-xl p-4 border border-slate-600/50 mb-3">
             {post.sharedContent.originalAuthor ? (
               <div className="flex items-center mb-2">
-                <img
-                  src={post.sharedContent.originalAuthor.avatar}
-                  alt={post.sharedContent.originalAuthor.displayName}
-                  className="w-6 h-6 rounded-full"
+                <PersonAvatar
+                  person={post.sharedContent.originalAuthor}
+                  className="w-6 h-6"
                 />
                 <span className="text-slate-400 text-sm ml-2">
-                  {post.sharedContent.originalAuthor.displayName}
+                  <PersonName person={post.sharedContent.originalAuthor} />
                 </span>
                 <span className="text-slate-500 text-sm ml-1">
-                  @{post.sharedContent.originalAuthor.username}
+                  <PersonHandle person={post.sharedContent.originalAuthor} />
                 </span>
               </div>
             ) : null}

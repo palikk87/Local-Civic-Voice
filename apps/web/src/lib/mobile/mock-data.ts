@@ -244,7 +244,6 @@ For New Retirees: Future public sector retirees would receive the full Social Se
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'likely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -312,7 +311,6 @@ For Disaster Victims: Special tax provisions would help families and businesses 
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'uncertain',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -382,7 +380,6 @@ For Legal System: Immigration courts would see reformed procedures. Backlogs cou
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -450,7 +447,6 @@ For Weight-Loss Industry: Would legitimize medical treatment of obesity and pote
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'likely_pass',
   },
   {
     id: 'hr-7521',
@@ -517,7 +513,6 @@ For Free Speech: Critics argue the ban raises First Amendment concerns and sets 
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'likely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -591,7 +586,6 @@ For Tech Companies: Would require significant redesign of products for minor use
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'likely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -656,7 +650,6 @@ For Veterans: Includes provisions for veteran healthcare and transition programs
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'likely_pass',
   },
   {
     id: 'hr-6090',
@@ -718,7 +711,6 @@ For Civil Rights: Supporters say it clarifies existing civil rights law; opponen
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'uncertain',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   // CONTROVERSIAL BILLS WITH LARGE VOTING GAPS
@@ -778,7 +770,6 @@ For Democracy: Would test whether powerful people truly face equal justice under
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -837,7 +828,6 @@ For Corruption: Would eliminate one of the most visible forms of legal corruptio
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -893,7 +883,6 @@ For Lobbying: Pharma spends more on lobbying than any other industry. This bill 
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -948,7 +937,6 @@ For Political Reality: Most Americans support this (61% in polls) but small stat
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -1003,7 +991,6 @@ For Popular Support: 82% of Americans support term limits. Yet Congress has neve
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -1058,7 +1045,6 @@ For Reality Check: 75% of Americans want this. Both parties' bases agree. Yet it
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -1114,7 +1100,6 @@ For Fed: Claims audit would politicize monetary policy. Critics say they just do
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
   {
@@ -1173,7 +1158,6 @@ For Accountability: Government claims to want accountability but prosecutes thos
       },
     ],
     communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-    projectedOutcome: 'unlikely_pass',
     officialVotes: { yea: 0, nay: 0, abstain: 0, notVoting: 0 },
   },
 ];

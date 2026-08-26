@@ -109,7 +109,6 @@ function convertApiBillToLegacy(bill: ApiBill): Bill {
       nay: bill.votes.oppose,
       totalVoters: bill.votes.total || 1,
     },
-    projectedOutcome: bill.votes.support > bill.votes.oppose ? 'likely_pass' : 'uncertain',
   };
 }
 

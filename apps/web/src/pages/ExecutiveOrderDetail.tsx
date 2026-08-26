@@ -348,7 +348,7 @@ export default function ExecutiveOrderDetail() {
           {/* View Mode Tabs */}
           <div className="px-4 mb-4">
             <div className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <ViewModeButton label="Brief" isActive={viewMode === "brief"} onPress={() => setViewMode("brief")} iconType="brief" />
+              <ViewModeButton label="Citizen's Brief" isActive={viewMode === "brief"} onPress={() => setViewMode("brief")} iconType="brief" />
               <ViewModeButton label="Full Text" isActive={viewMode === "full"} onPress={() => setViewMode("full")} iconType="full" />
               <ViewModeButton label="Impact" isActive={viewMode === "impact"} onPress={() => setViewMode("impact")} iconType="impact" />
             </div>

@@ -549,7 +549,7 @@ function PostCard({
                   />
                 </View>
 
-                {/* Vote Buttons Row with Projected Outcome */}
+                {/* Vote buttons */}
                 <View className="flex-row justify-between items-center">
                   <View className="flex-row items-center">
                     <Pressable
@@ -605,34 +605,16 @@ function PostCard({
                     </Pressable>
                   </View>
 
-                  {/* Projected Outcome Badge */}
-                  <View
-                    className={cn(
-                      'px-2 py-1 rounded-full',
-                      supportCount > opposeCount
-                        ? 'bg-emerald-900/50'
-                        : opposeCount > supportCount
-                        ? 'bg-red-900/50'
-                        : 'bg-slate-700'
-                    )}
-                  >
-                    <Text
-                      className={cn(
-                        'text-xs font-medium',
-                        supportCount > opposeCount
-                          ? 'text-emerald-400'
-                          : opposeCount > supportCount
-                          ? 'text-red-400'
-                          : 'text-slate-400'
-                      )}
-                    >
-                      {supportCount > opposeCount
-                        ? 'Likely Pass'
-                        : opposeCount > supportCount
-                        ? 'Likely Fail'
-                        : 'Uncertain'}
-                    </Text>
-                  </View>
+                  {/* THE "LIKELY PASS" BADGE IS GONE, AND NOT REPLACED.
+                      It was computed from supportCount vs opposeCount — the
+                      people on this platform who happened to have voted on
+                      this post's law — and presented as a forecast of what
+                      Congress will do. Eleven readers leaning yes is not a
+                      prediction, and nothing on the badge said where the
+                      claim came from because there was nowhere honest for it
+                      to come from. The vote row above is the real number and
+                      it is labelled as what it is: this platform's readers.
+                      Web twin: apps/web/src/pages/Timeline.tsx. */}
                 </View>
               </View>
             )}

@@ -454,7 +454,7 @@ export default function ScotusDetail() {
           {/* View Mode Tabs */}
           <div className="px-4 mb-4">
             <div className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <ViewModeButton label="Brief" isActive={viewMode === "brief"} onPress={() => setViewMode("brief")} iconType="brief" />
+              <ViewModeButton label="Citizen's Brief" isActive={viewMode === "brief"} onPress={() => setViewMode("brief")} iconType="brief" />
               <ViewModeButton label="Question" isActive={viewMode === "question"} onPress={() => setViewMode("question")} iconType="question" />
               {scotusCase.majorityOpinion || scotusCase.dissentOpinion ? (
                 <ViewModeButton label="Opinions" isActive={viewMode === "opinion"} onPress={() => setViewMode("opinion")} iconType="opinion" />

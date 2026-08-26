@@ -144,7 +144,6 @@ function convertBillToLegacy(bill: SupabaseBill): Bill {
       nay: bill.nay_count,
       totalVoters: bill.total_votes,
     },
-    projectedOutcome: bill.projected_outcome,
     branch: "legislative", // Supabase bills are always legislative
   };
 }
@@ -185,7 +184,11 @@ function CivicScoreHeader() {
               </span>
             </span>
             <div className="flex-1">
+              {/* What the number is, said out loud. It is a count of what you
+                  have done on this platform, kept in this browser — not a
+                  standing, a rank, or anything congress.gov knows about. */}
               <p className="text-white font-semibold text-sm">{levelInfo.title}</p>
+              <p className="text-slate-400 text-[11px]">Your activity here</p>
               <div className="flex items-center mt-1">
                 <span className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden mr-2">
                   <span
@@ -1045,10 +1048,13 @@ export default function HomeScreen() {
         {/* Header */}
         <div className="px-4 py-3 border-b border-slate-800">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-white">AYE & NAY</h1>
-              <p className="text-slate-400 text-sm">All 3 branches of government</p>
-            </div>
+            {/* THE APP'S NAME IS NOT PRINTED HERE ANY MORE.
+                The shell already shows "AYE & NAY" — in the sidebar on desktop
+                and in the header on mobile — so the Feed printed it a third
+                time, directly beneath the second, and pushed the actual content
+                further down on the smallest screens. A page inside an app does
+                not need to introduce the app. */}
+            <div />
             <div className="flex items-center">
               {/* Bill of Rights Badge */}
               <BillOfRightsBadge variant="compact" className="mr-2" />
@@ -1088,7 +1094,7 @@ export default function HomeScreen() {
         {/* Feed */}
         <div className="pt-2 pb-5">
           {/* List Header */}
-          <DailyBillDigest limit={8} title="Daily Bill Digest" showHeader={true} />
+          <DailyBillDigest limit={8} title="Daily Digest" showHeader={true} />
 
           {feedLoading ? (
             <div className="flex flex-col items-center justify-center py-20">

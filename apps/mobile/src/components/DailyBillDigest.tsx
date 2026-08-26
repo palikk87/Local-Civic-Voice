@@ -33,7 +33,8 @@ import {
   type WeightTier,
 } from '@/lib/voice-weight';
 import type { Bill, BillCategory } from '@/lib/types';
-import type { BillStatus, ProjectedOutcome } from '@/lib/database.types';
+import type { BillStatus } from '@/lib/database.types';
+import type { ReferenceType } from '@/lib/api/references';
 import { cn } from '@/lib/cn';
 
 // Map app bill status to database status
@@ -42,14 +43,17 @@ function mapStatusToDbStatus(status: Bill['status']): BillStatus {
   return status as BillStatus;
 }
 
-// Map app projected outcome to database type
-function mapOutcomeToDbOutcome(outcome: Bill['projectedOutcome']): ProjectedOutcome {
-  if (outcome === 'unlikely_pass') return 'likely_fail';
-  return outcome as ProjectedOutcome;
-}
+/** Where this record lives, so a card can route to it and say which branch it is. */
+type DigestRow = DailyDigestBill & { weightTier: WeightTier; referenceType: ReferenceType };
 
-// Convert mock bill to digest bill with calculated weight
-function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: WeightTier } {
+const BRANCH_OF: Record<ReferenceType, { label: string; color: string; route: string }> = {
+  bill: { label: 'Congress', color: '#3B82F6', route: 'bill' },
+  executive_order: { label: 'Executive', color: '#F59E0B', route: 'executive-order' },
+  scotus_case: { label: 'Supreme Court', color: '#8B5CF6', route: 'scotus' },
+};
+
+// Convert a reference-shaped bill into a digest row with its calculated weight.
+function convertToDigestBill(bill: Bill, referenceType: ReferenceType): DigestRow {
   // COSPONSORS AND AMENDMENTS ARE GONE, AND NOT REPLACED.
   //
   // They were invented twice over: a lookup table that guessed a count from the
@@ -72,7 +76,6 @@ function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: Weight
   });
 
   const dbStatus = mapStatusToDbStatus(bill.status);
-  const dbOutcome = mapOutcomeToDbOutcome(bill.projectedOutcome);
 
   return {
     id: bill.id,
@@ -91,7 +94,9 @@ function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: Weight
     full_text: bill.fullText,
     simplified_text: bill.simplifiedText,
     real_world_impact: bill.realWorldImpact,
-    projected_outcome: dbOutcome,
+    // Nothing projects an outcome any more. See packages/civic-core/src/types.ts:
+    // it was our own readers' votes relabelled as a forecast of Congress.
+    projected_outcome: 'uncertain',
     yea_count: bill.communityVotes.yea,
     nay_count: bill.communityVotes.nay,
     total_votes: bill.communityVotes.totalVoters,
@@ -106,6 +111,7 @@ function convertToDigestBill(bill: Bill): DailyDigestBill & { weightTier: Weight
     created_at: bill.introducedDate ?? null,
     updated_at: bill.lastActionDate ?? null,
     weightTier: getWeightTier(weightResult.weightScore),
+    referenceType,
   };
 }
 
@@ -143,15 +149,16 @@ function WeightBadge({ weightScore, size = 'sm' }: WeightBadgeProps) {
   );
 }
 
-interface DigestBillCardProps {
-  bill: DailyDigestBill & { weightTier: WeightTier };
+interface DigestCardProps {
+  row: DigestRow;
   index: number;
   onPress: () => void;
 }
 
-function DigestBillCard({ bill, index, onPress }: DigestBillCardProps) {
+function DigestCard({ row: bill, index, onPress }: DigestCardProps) {
   const categoryColor = categoryColors[bill.category as BillCategory] || '#64748B';
   const tierColor = getWeightTierColor(bill.weightTier);
+  const branch = BRANCH_OF[bill.referenceType];
 
   return (
     <Animated.View entering={FadeInRight.delay(index * 80).springify()}>
@@ -176,12 +183,14 @@ function DigestBillCard({ bill, index, onPress }: DigestBillCardProps) {
             </View>
             <WeightBadge weightScore={bill.weight_score} />
           </View>
+          {/* Which branch this came from. The digest used to ask only for
+              bills, so every card was a bill and no card had to say so. */}
           <View
             className="px-2 py-0.5 rounded-full"
-            style={{ backgroundColor: `${categoryColor}30` }}
+            style={{ backgroundColor: `${branch.color}30` }}
           >
-            <Text style={{ color: categoryColor }} className="text-xs font-medium">
-              {categoryLabels[bill.category as BillCategory]}
+            <Text style={{ color: branch.color }} className="text-xs font-medium">
+              {branch.label}
             </Text>
           </View>
         </View>
@@ -195,7 +204,15 @@ function DigestBillCard({ bill, index, onPress }: DigestBillCardProps) {
             The cosponsor and amendment counts that used to sit here are gone —
             both were invented, and neither had a label, so they announced two
             bare numbers that even this project's owner could not identify. */}
-        <View className="flex-row items-center justify-end">
+        <View className="flex-row items-center justify-between">
+          <View
+            className="px-2 py-0.5 rounded-full"
+            style={{ backgroundColor: `${categoryColor}30` }}
+          >
+            <Text style={{ color: categoryColor }} className="text-xs font-medium">
+              {categoryLabels[bill.category as BillCategory]}
+            </Text>
+          </View>
           <View
             className={cn(
               'px-2 py-0.5 rounded-full',
@@ -225,7 +242,7 @@ function DigestBillCard({ bill, index, onPress }: DigestBillCardProps) {
   );
 }
 
-interface DailyBillDigestProps {
+interface DailyDigestProps {
   limit?: number;
   category?: BillCategory;
   showHeader?: boolean;
@@ -236,47 +253,50 @@ export function DailyBillDigest({
   limit = 10,
   category,
   showHeader = true,
-  title = 'Daily Bill Digest',
-}: DailyBillDigestProps) {
+  title = 'Daily Digest',
+}: DailyDigestProps) {
   const router = useRouter();
 
   // The Supabase digest query used to sit here as a second source. It is gated
   // on isSupabaseConfigured(), which has returned a hardcoded false since the
   // client was removed, so it never ran.
 
-  // Live daily-synced bills — the SAME source and query cache the Discover tab
-  // uses, so whatever Discover pulls each day shows up here automatically.
-  const { data: latestRefs, isLoading: latestLoading } = useLatestReferences('bill', 30);
-  const { data: trendingRefs, isLoading: trendingLoading } = useTrendingReferences('bill', 10);
+  /*
+   * ALL THREE BRANCHES, not just Congress.
+   *
+   * This asked for 'bill' and was called "Daily Bill Digest", so the one ranked
+   * list on the home tab silently excluded every executive order and every
+   * Supreme Court case the platform holds — the same shape of bug the Library
+   * had. The reference type is now omitted, which the list and trending routes
+   * both read as "all", and each card says which branch it came from.
+   *
+   * Same source and query cache the Discover tab uses, so whatever Discover
+   * pulls each day shows up here automatically.
+   */
+  const { data: latestRefs, isLoading: latestLoading } = useLatestReferences(undefined, 30);
+  const { data: trendingRefs, isLoading: trendingLoading } = useTrendingReferences(undefined, 10);
   const isLoading = latestLoading || trendingLoading;
 
-  // Calculate weights for bills from the live daily-synced references.
-  const digestBills = useMemo(() => {
+  const digestRows = useMemo(() => {
     const seen = new Set<string>();
-    const liveBills: Bill[] = [
-      ...(latestRefs?.references ?? []).map(referenceToBill),
-      ...(trendingRefs?.references ?? []).map(referenceToBill),
-    ].filter((bill) => {
-      if (seen.has(bill.id)) return false;
-      seen.add(bill.id);
-      return true;
-    });
-
-    if (liveBills.length > 0) {
-      return liveBills
-        .filter((bill) => !category || bill.category === category)
-        .map(convertToDigestBill)
-        .sort((a, b) => b.weight_score - a.weight_score)
-        .slice(0, limit);
-    }
+    const rows = [...(latestRefs?.references ?? []), ...(trendingRefs?.references ?? [])]
+      .filter((ref) => {
+        if (seen.has(ref.id)) return false;
+        seen.add(ref.id);
+        return true;
+      })
+      .map((ref) => convertToDigestBill(referenceToBill(ref), ref.referenceType));
 
     // Nothing from the API means nothing to show. A hardcoded array used to
     // stand in here, so an unreachable backend produced a full digest of
     // invented bills.
-    return [];
+    return rows
+      .filter((row) => !category || row.category === category)
+      .sort((a, b) => b.weight_score - a.weight_score)
+      .slice(0, limit);
   }, [latestRefs, trendingRefs, category, limit]);
 
-  if (digestBills.length === 0 && isLoading) {
+  if (digestRows.length === 0 && isLoading) {
     return (
       <View className="px-4 py-6">
         <ActivityIndicator size="small" color="#F59E0B" />
@@ -284,7 +304,7 @@ export function DailyBillDigest({
     );
   }
 
-  if (digestBills.length === 0) {
+  if (digestRows.length === 0) {
     return null;
   }
 
@@ -324,12 +344,12 @@ export function DailyBillDigest({
         contentContainerStyle={{ paddingHorizontal: 16 }}
         style={{ flexGrow: 0 }}
       >
-        {digestBills.map((bill, index) => (
-          <DigestBillCard
-            key={bill.id}
-            bill={bill as DailyDigestBill & { weightTier: WeightTier }}
+        {digestRows.map((row, index) => (
+          <DigestCard
+            key={row.id}
+            row={row}
             index={index}
-            onPress={() => router.push(`/bill/${bill.id}`)}
+            onPress={() => router.push(`/${BRANCH_OF[row.referenceType].route}/${row.id}`)}
           />
         ))}
       </ScrollView>
@@ -358,21 +378,18 @@ export function CompactDailyDigest({ limit = 5 }: { limit?: number }) {
   // from a Supabase digest query gated on isSupabaseConfigured(), which has
   // returned a hardcoded false since the client was removed — so the spinner
   // was driven by a request that never ran.
-  const { data: latestRefs, isLoading } = useLatestReferences('bill', 30);
+  const { data: latestRefs, isLoading } = useLatestReferences(undefined, 30);
 
-  const digestBills = useMemo(() => {
-    const liveBills = (latestRefs?.references ?? []).map(referenceToBill);
-    if (liveBills.length > 0) {
-      return liveBills
-        .map(convertToDigestBill)
+  const digestRows = useMemo(
+    () =>
+      (latestRefs?.references ?? [])
+        .map((ref) => convertToDigestBill(referenceToBill(ref), ref.referenceType))
         .sort((a, b) => b.weight_score - a.weight_score)
-        .slice(0, limit);
-    }
+        .slice(0, limit),
+    [latestRefs, limit],
+  );
 
-    return [];
-  }, [latestRefs, limit]);
-
-  if (digestBills.length === 0 && isLoading) {
+  if (digestRows.length === 0 && isLoading) {
     return (
       <View className="py-2">
         <ActivityIndicator size="small" color="#F59E0B" />
@@ -384,12 +401,12 @@ export function CompactDailyDigest({ limit = 5 }: { limit?: number }) {
     <View className="bg-slate-800/60 rounded-xl p-3 border border-slate-700/50">
       <View className="flex-row items-center mb-2">
         <Award size={14} color="#F59E0B" />
-        <Text className="text-white font-medium text-sm ml-1.5">Top Weighted Bills</Text>
+        <Text className="text-white font-medium text-sm ml-1.5">Top Weighted Records</Text>
       </View>
-      {digestBills.slice(0, 3).map((bill, index) => (
+      {digestRows.slice(0, 3).map((bill, index) => (
         <Pressable
           key={bill.id}
-          onPress={() => router.push(`/bill/${bill.id}`)}
+          onPress={() => router.push(`/${BRANCH_OF[bill.referenceType].route}/${bill.id}`)}
           className="flex-row items-center py-2 border-b border-slate-700/30 last:border-b-0"
         >
           <View

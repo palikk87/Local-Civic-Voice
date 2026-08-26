@@ -348,7 +348,6 @@ export default function BillDetail() {
       // Math.random() — invented numbers rendered as real citizen votes, and
       // different on every page load.
       communityVotes: { yea: 0, nay: 0, totalVoters: 0 },
-      projectedOutcome: "uncertain",
       branch: "legislative",
     };
   }
@@ -674,7 +673,7 @@ export default function BillDetail() {
           {/* View Mode Tabs */}
           <div className="px-4 mb-4">
             <div className="flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <ViewModeButton label="Simple" isActive={viewMode === "simplified"} onPress={() => setViewMode("simplified")} iconType="simplified" />
+              <ViewModeButton label="Citizen's Brief" isActive={viewMode === "simplified"} onPress={() => setViewMode("simplified")} iconType="simplified" />
               <ViewModeButton label="Full Text" isActive={viewMode === "full"} onPress={() => setViewMode("full")} iconType="full" />
               <ViewModeButton label="Impact" isActive={viewMode === "impact"} onPress={() => setViewMode("impact")} iconType="impact" />
               <ViewModeButton label="Related" isActive={viewMode === "related"} onPress={() => setViewMode("related")} iconType="related" />

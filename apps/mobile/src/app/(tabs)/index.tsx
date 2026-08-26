@@ -130,7 +130,6 @@ function convertBillToLegacy(bill: SupabaseBill): Bill {
       nay: bill.nay_count,
       totalVoters: bill.total_votes,
     },
-    projectedOutcome: bill.projected_outcome,
     branch: 'legislative', // Supabase bills are always legislative
   };
 }
@@ -166,7 +165,11 @@ function CivicScoreHeader() {
               </Text>
             </View>
             <View className="flex-1">
+              {/* What the number is, said out loud. It is a count of what you
+                  have done on this platform, kept on this device — not a
+                  standing, a rank, or anything congress.gov knows about. */}
               <Text className="text-white font-semibold text-sm">{levelInfo.title}</Text>
+              <Text className="text-slate-400 text-[11px]">Your activity here</Text>
               <View className="flex-row items-center mt-1">
                 <View className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden mr-2">
                   <View
@@ -1111,7 +1114,7 @@ export default function HomeScreen() {
           ListHeaderComponent={
             <DailyBillDigest
               limit={8}
-              title="Daily Bill Digest"
+              title="Daily Digest"
               showHeader={true}
             />
           }

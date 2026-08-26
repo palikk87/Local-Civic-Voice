@@ -11,26 +11,34 @@ import {
 } from "@/lib/civic";
 
 export const referenceKeys = {
-  trending: (referenceType: ReferenceType, limit: number) =>
+  trending: (referenceType: ReferenceType | "all", limit: number) =>
     ["government-references", "trending", referenceType, limit] as const,
-  latest: (referenceType: ReferenceType, limit: number) =>
+  latest: (referenceType: ReferenceType | "all", limit: number) =>
     ["government-references", "latest", referenceType, limit] as const,
   detail: (id: string) => ["government-references", "detail", id] as const,
 };
 
-/** Top N references for one branch, ranked by community engagement then recency. */
-export function useTrendingReferences(referenceType: ReferenceType, limit = 10) {
+/**
+ * Top N references, ranked by community engagement then recency.
+ *
+ * Omit `referenceType` for all three branches. Both routes treat the filter as
+ * optional server-side, and a caller that wants everything should not have to
+ * fire three requests and stitch them — the digest did exactly that by asking
+ * only for bills, which is why executive orders and court cases never appeared
+ * in it.
+ */
+export function useTrendingReferences(referenceType?: ReferenceType, limit = 10) {
   return useQuery({
-    queryKey: referenceKeys.trending(referenceType, limit),
+    queryKey: referenceKeys.trending(referenceType ?? "all", limit),
     queryFn: () => civicApi.trending(limit, referenceType),
     staleTime: 5 * 60 * 1000,
   });
 }
 
-/** Newest references for one branch — surfaces freshly synced items that have no votes yet. */
-export function useLatestReferences(referenceType: ReferenceType, limit = 30) {
+/** Newest references — surfaces freshly synced items that have no votes yet. */
+export function useLatestReferences(referenceType?: ReferenceType, limit = 30) {
   return useQuery({
-    queryKey: referenceKeys.latest(referenceType, limit),
+    queryKey: referenceKeys.latest(referenceType ?? "all", limit),
     queryFn: () =>
       civicApi.listReferences({ referenceType, sortBy: "createdAt", sortOrder: "desc", limit }),
     staleTime: 5 * 60 * 1000,

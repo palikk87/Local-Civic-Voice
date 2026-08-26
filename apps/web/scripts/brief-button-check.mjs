@@ -173,7 +173,7 @@ async function open(id) {
 async function read(page) {
   return page.evaluate(() => {
     const button = [...document.querySelectorAll("button")].find((b) =>
-      /Get Citizen Brief|Check the source again/i.test(b.textContent ?? ""),
+      /Get the Citizen's Brief|Check the source again/i.test(b.textContent ?? ""),
     );
     const text = document.body.innerText;
     return {
@@ -199,12 +199,12 @@ function check(label, condition, detail) {
   const state = await read(page);
   check("opening a law makes no brief request", briefRequests.length === 0,
     `requests=${briefRequests.length}`);
-  check("the button is offered", state.buttonLabel === "Get Citizen Brief",
+  check("the button is offered", state.buttonLabel === "Get the Citizen's Brief",
     `button=${JSON.stringify(state.buttonLabel)}`);
   check("nothing is spinning", !state.spinning);
 
   // 2. Pressing it asks once and renders the result.
-  await page.getByRole("button", { name: "Get Citizen Brief" }).click();
+  await page.getByRole("button", { name: "Get the Citizen's Brief" }).click();
   await page.waitForSelector("text=upgrading the rail network", { timeout: 15_000 });
   const after = await read(page);
   check("pressing it makes exactly one request", briefRequests.length === 1,
@@ -222,7 +222,7 @@ function check(label, condition, detail) {
 {
   briefRequests.length = 0;
   const page = await open("unpublished");
-  await page.getByRole("button", { name: "Get Citizen Brief" }).click();
+  await page.getByRole("button", { name: "Get the Citizen's Brief" }).click();
   await page.waitForSelector("text=isn't published anywhere", { timeout: 15_000 });
   const state = await read(page);
   check("unavailable says why", state.saysUnavailable);
@@ -240,14 +240,14 @@ function check(label, condition, detail) {
   const page = await open("stuck");
   const state = await read(page);
   check("a stalled record shows the button, not a spinner",
-    state.buttonLabel === "Get Citizen Brief" && !state.spinning,
+    state.buttonLabel === "Get the Citizen's Brief" && !state.spinning,
     `button=${JSON.stringify(state.buttonLabel)} spinning=${state.spinning}`);
 
   // And it stays that way — no background poll quietly restarting.
   await page.waitForTimeout(6000);
   const later = await read(page);
   check("and it stays that way with no polling",
-    later.buttonLabel === "Get Citizen Brief" && briefRequests.length === 0,
+    later.buttonLabel === "Get the Citizen's Brief" && briefRequests.length === 0,
     `requests=${briefRequests.length}`);
   await page.close();
 }
