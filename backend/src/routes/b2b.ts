@@ -784,18 +784,25 @@ b2bRouter.get("/auth/verify", async (c) => {
  * Every change ever made to this account's password or API key: when, and by
  * whom.
  *
- * WHY A CLIENT CAN SEE THIS. A B2B password changed here once and nobody could
- * account for it. From the outside — from the desk of the business paying for
- * the dashboard — a working login that stops working for no stated reason is
- * indistinguishable from a breach, and no explanation offered afterwards buys
- * back the week they spent wondering. The prevention side of that is in
- * services/credentials.ts, which is the only thing in this codebase that can
- * change a credential and records every change before it returns. This is the
- * other half: the record is readable by the party it is about, without having
- * to ask anyone.
+ * WHY THE FACT, AND NOT THE LIST. A B2B password changed here once and nobody
+ * could account for it. From the desk of the business paying for the dashboard,
+ * a working login that stops working for no stated reason is indistinguishable
+ * from a breach, and no explanation offered afterwards buys back the week they
+ * spent wondering. So this still answers "has anything moved, and when" — that
+ * was the question that went unanswered, and it is answered by
+ * lastRotatedAt and rotationCount.
  *
- * Scoped to this client's own id. It reveals nothing about any other account,
- * and nothing about the secrets themselves — only that they moved.
+ * IT NO LONGER RETURNS THE EVENT LIST. A per-event log of who touched which
+ * credential is an audit trail, and an audit trail belongs where it can be
+ * scoped to the people entitled to read it — not on a settings page every seat
+ * holder can open. The company's own record lives at GET /api/b2b/admin/activity,
+ * behind requireSeatAdmin. Taking it out of the response rather than merely
+ * hiding the card is the point: a card hidden in the client is one devtools tab
+ * from being visible again.
+ *
+ * services/credentials.ts is still the only thing in this codebase that can
+ * change a credential, and it still records every change before it returns.
+ * Nothing about what is RECORDED has changed here — only who is handed it.
  */
 b2bRouter.get("/account/security", async (c) => {
   const authHeader = c.req.header("Authorization");
@@ -810,12 +817,16 @@ b2bRouter.get("/account/security", async (c) => {
       where: { id: session.clientId },
       select: { username: true, name: true, tier: true, createdAt: true, lastAccessAt: true },
     }),
+    // Only the rotations, and only their timestamps: this answers "has anything
+    // moved, and when" without carrying the actor or the detail line, neither
+    // of which leaves this endpoint any more.
     prisma.adminActivityLog.findMany({
       where: {
         targetType: "system",
         targetId: session.clientId,
-        action: { in: ["create_b2b_client", "rotate_b2b_client"] },
+        action: "rotate_b2b_client",
       },
+      select: { createdAt: true },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
@@ -825,7 +836,7 @@ b2bRouter.get("/account/security", async (c) => {
     return c.json({ error: "Account not found" }, { status: 404 });
   }
 
-  const rotations = events.filter((event) => event.action === "rotate_b2b_client");
+  const rotations = events;
 
   return c.json({
     account: {
@@ -842,16 +853,16 @@ b2bRouter.get("/account/security", async (c) => {
       rotationCount: rotations.length,
     },
     /**
-     * `changedBy` is the actor as recorded, not a display name: an admin's
-     * username, or "cli:scripts/seed-b2b.ts" when it was done from a shell.
-     * Which one it was is exactly the question worth answering.
+     * NO `history` HERE ANY MORE. The per-event trail — who touched which
+     * credential, and when — moved to GET /api/b2b/admin/activity, which is
+     * gated by requireSeatAdmin. This endpoint is read by the settings page,
+     * which any seat holder can open, and the answer it needs is whether
+     * anything moved, not a log of everyone who has ever moved something.
+     *
+     * The rows are still written by services/credentials.ts, unchanged. What
+     * changed is who is handed them.
      */
-    history: events.map((event) => ({
-      action: event.action,
-      at: event.createdAt.toISOString(),
-      changedBy: event.adminUsername,
-      details: event.details,
-    })),
+    auditTrailAt: "GET /api/b2b/admin/activity (owner or admin seats only)",
   });
 });
 

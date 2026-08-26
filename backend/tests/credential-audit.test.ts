@@ -470,7 +470,6 @@ describe("the client can read its own credential history", () => {
     return (await response.json()) as {
       account: { username: string };
       credentials: { lastRotatedAt: string | null; rotationCount: number };
-      history: Array<{ action: string; changedBy: string; details: string }>;
     };
   }
 
@@ -481,7 +480,26 @@ describe("the client can read its own credential history", () => {
     expect(body.credentials.rotationCount).toBe(0);
   });
 
-  test("after a rotation the client can see when, and by whom", async () => {
+  /**
+   * CHANGED DELIBERATELY, and this test changed with it.
+   *
+   * It used to assert that the settings endpoint hands the client the whole
+   * credential log — who changed what, and why — and that was the right call
+   * for the problem it was written for: a B2B password once moved with no
+   * explanation, and from the paying customer's desk that is indistinguishable
+   * from a breach.
+   *
+   * Khalid's call is that the per-event log does not belong on the settings
+   * page, which opens for every seat holder. That question — has anything
+   * moved, and when — is what the settings page has to answer, and it still
+   * does. The trail of WHO is an audit trail, and it now reads through
+   * GET /api/b2b/admin/activity, behind owner-or-admin access.
+   *
+   * The recording side is untouched: services/credentials.ts is still the only
+   * thing that can change a credential and still writes the row first. What
+   * changed is who is handed it.
+   */
+  test("after a rotation the client can see THAT it moved, and when", async () => {
     const client = await prisma.b2BClient.findUniqueOrThrow({
       where: { username: B2B_TEST.demoUsername },
       select: { id: true },
@@ -496,8 +514,11 @@ describe("the client can read its own credential history", () => {
     const body = await security(await b2bToken());
     expect(body.credentials.rotationCount).toBe(1);
     expect(body.credentials.lastRotatedAt).not.toBeNull();
-    expect(body.history[0]!.changedBy).toBe("rosa");
-    expect(body.history[0]!.details).toContain("Scheduled rotation");
+
+    // And the actor does not leave through this door at all — not in a field
+    // somebody adds back later without thinking about it.
+    expect(JSON.stringify(body)).not.toContain("rosa");
+    expect(JSON.stringify(body)).not.toContain("Scheduled rotation");
   });
 
   test("a stranger cannot read it", async () => {
@@ -507,7 +528,7 @@ describe("the client can read its own credential history", () => {
     expect(response.status).toBe(401);
   });
 
-  test("it shows this account's history and no one else's", async () => {
+  test("it counts this account's rotations and no one else's", async () => {
     const other = await newClient();
     await rotateB2BCredentials(
       other.client.id,
@@ -517,6 +538,7 @@ describe("the client can read its own credential history", () => {
 
     const body = await security(await b2bToken());
     expect(body.credentials.rotationCount).toBe(0);
-    expect(body.history.some((e) => e.details.includes("Someone else's business"))).toBe(false);
+    // Scoping still holds, and now there is nothing to leak either way.
+    expect(JSON.stringify(body)).not.toContain("Someone else's business");
   });
 });

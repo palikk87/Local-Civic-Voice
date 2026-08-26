@@ -10,7 +10,7 @@
  * Owner and admin see this page. An analyst does not, and the API refuses them
  * as well — a hidden nav item is not an access control.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Check,
   Copy,
@@ -107,6 +107,12 @@ export default function B2BAdmin() {
   const [denied, setDenied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedCredentials | null>(null);
+  /**
+   * The banner is shown ONCE and cannot be recovered — the password is stored
+   * as a hash and there is nothing to read back. Rendering it at the top of a
+   * long page and trusting somebody to scroll up is how it gets lost.
+   */
+  const issuedRef = useRef<HTMLDivElement | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [showAdd, setShowAdd] = useState(false);
@@ -119,6 +125,20 @@ export default function B2BAdmin() {
 
   const [passwordFor, setPasswordFor] = useState<B2BMemberRow | null>(null);
   const [typedPassword, setTypedPassword] = useState("");
+  /**
+   * WHY THIS IS SEPARATE FROM `error`.
+   *
+   * Both the outcome banner and the error line render at the top of this page.
+   * The set-password form sits inside a member's card, well down a scrolling
+   * list — so every answer this form could give was painted somewhere the
+   * person who submitted it was not looking. Success closed the form and put
+   * the new credentials off-screen; failure left the form open and put the
+   * reason off-screen. From the seat of whoever pressed the button, both read
+   * as "the button does nothing", and that is exactly how it was reported.
+   *
+   * A form answers where it was submitted.
+   */
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const headers = useCallback(
     (): Record<string, string> => ({
@@ -208,11 +228,18 @@ export default function B2BAdmin() {
     }
   };
 
+  useEffect(() => {
+    if (issued) issuedRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [issued]);
+
   const setPassword = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!passwordFor) return;
+    setPasswordError(null);
     if (typedPassword && typedPassword.length < 12) {
-      setError("A password you type must be at least 12 characters. Leave it blank to generate one.");
+      setPasswordError(
+        "A password you type must be at least 12 characters. Leave it blank to generate one.",
+      );
       return;
     }
 
@@ -225,13 +252,17 @@ export default function B2BAdmin() {
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.error ?? "That did not work.");
+        // Stays open, carrying its own reason. Closing on failure would throw
+        // away what was typed AND hide why.
+        setPasswordError(body.error ?? "That did not work.");
         return;
       }
       setIssued(body.credentials);
       setPasswordFor(null);
       setTypedPassword("");
       await load();
+    } catch {
+      setPasswordError("Could not reach the server. Nothing was changed.");
     } finally {
       setBusyId(null);
     }
@@ -288,7 +319,9 @@ export default function B2BAdmin() {
 
   return (
     <B2BShell title="Team">
-      {issued ? <CredentialsBanner credentials={issued} onDismiss={() => setIssued(null)} /> : null}
+      <div ref={issuedRef}>
+        {issued ? <CredentialsBanner credentials={issued} onDismiss={() => setIssued(null)} /> : null}
+      </div>
       {error ? (
         <p className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300">
           {error}
@@ -482,6 +515,7 @@ export default function B2BAdmin() {
                   onClick={() => {
                     setPasswordFor(member);
                     setTypedPassword("");
+                    setPasswordError(null);
                   }}
                   disabled={busyId === member.id}
                   className="flex items-center rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-white hover:bg-slate-700"
@@ -538,20 +572,30 @@ export default function B2BAdmin() {
                   />
                   <button
                     type="submit"
-                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                    disabled={busyId === member.id}
+                    className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
                   >
-                    Set it
+                    {busyId === member.id ? "Setting…" : "Set it"}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setPasswordFor(null)}
+                    onClick={() => {
+                      setPasswordFor(null);
+                      setPasswordError(null);
+                    }}
                     className="rounded-lg px-4 py-2 text-sm text-slate-400 hover:text-white"
                   >
                     Cancel
                   </button>
                 </div>
+                {passwordError ? (
+                  <p className="mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                    {passwordError}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-xs text-slate-500">
-                  This signs {member.name} out everywhere and nobody else at your company.
+                  This signs {member.name} out everywhere and nobody else at your company. The new
+                  password appears at the top of this page, once.
                 </p>
               </form>
             ) : null}

@@ -78,6 +78,18 @@ export default function B2BTeamScreen() {
   const [addBusy, setAddBusy] = useState(false);
 
   const [passwordForId, setPasswordForId] = useState<string | null>(null);
+  /**
+   * WHY THIS IS SEPARATE FROM `error`. Web twin:
+   * apps/web/src/pages/b2b/B2BAdmin.tsx.
+   *
+   * Both the issued-credentials panel and the error line render near the top of
+   * this screen; the set-password field sits inside a member's card, down a
+   * scrolling list. On a phone that is reliably off-screen, so every answer
+   * this form could give — the new password on success, the reason on failure —
+   * was painted where the person who submitted it could not see it. It reads as
+   * a button that does nothing, and that is how it was reported.
+   */
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [typedPassword, setTypedPassword] = useState('');
 
   const headers = useCallback(
@@ -172,8 +184,11 @@ export default function B2BTeamScreen() {
   };
 
   const setPassword = async (memberId: string) => {
+    setPasswordError(null);
     if (typedPassword && typedPassword.length < 12) {
-      setError('A password you type must be at least 12 characters. Leave it blank to generate one.');
+      setPasswordError(
+        'A password you type must be at least 12 characters. Leave it blank to generate one.',
+      );
       return;
     }
     setBusyId(memberId);
@@ -185,13 +200,17 @@ export default function B2BTeamScreen() {
       });
       const body = await res.json();
       if (!res.ok) {
-        setError(body.error ?? 'That did not work.');
+        // Stays open, carrying its own reason. Closing on failure would throw
+        // away what was typed AND hide why.
+        setPasswordError(body.error ?? 'That did not work.');
         return;
       }
       setIssued(body.credentials);
       setPasswordForId(null);
       setTypedPassword('');
       await load();
+    } catch {
+      setPasswordError('Could not reach the server. Nothing was changed.');
     } finally {
       setBusyId(null);
     }
@@ -485,6 +504,7 @@ export default function B2BTeamScreen() {
                   <TouchableOpacity
                     onPress={() => {
                       setPasswordForId(passwordForId === member.id ? null : member.id);
+                      setPasswordError(null);
                       setTypedPassword('');
                     }}
                     disabled={busyId === member.id}
@@ -531,8 +551,14 @@ export default function B2BTeamScreen() {
                       placeholder="Leave blank and one will be generated"
                       placeholderTextColor="#64748B"
                     />
+                    {passwordError ? (
+                      <Text className="text-red-300 text-sm mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">
+                        {passwordError}
+                      </Text>
+                    ) : null}
                     <Text className="text-slate-500 text-xs mt-1">
-                      This signs {member.name} out everywhere and nobody else at your company.
+                      This signs {member.name} out everywhere and nobody else at your company. The
+                      new password appears at the top of this screen, once.
                     </Text>
                     <TouchableOpacity
                       onPress={() => setPassword(member.id)}

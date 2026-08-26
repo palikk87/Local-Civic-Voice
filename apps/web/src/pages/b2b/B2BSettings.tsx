@@ -14,7 +14,6 @@ import {
   Building2,
   Check,
   Copy,
-  History,
   KeyRound,
   Loader2,
   Lock,
@@ -29,7 +28,6 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "";
 
 interface SecurityHistory {
   credentials: { lastRotatedAt: string | null; rotationCount: number };
-  history: Array<{ action: string; at: string; changedBy: string; details: string }>;
 }
 
 function when(iso: string | null | undefined): string {
@@ -382,30 +380,16 @@ export default function B2BSettings() {
           </Card>
         ) : null}
 
-        <Card title="Credential history" icon={<History size={18} color="#818CF8" />}>
-          <p className="mb-3 text-sm text-slate-400">
-            Every change ever made to this account's password or API key, and who made it. Nothing in
-            our backend changes a credential on its own — if something moved, this says who moved it.
-          </p>
-          {security && security.history.length > 0 ? (
-            <ul className="space-y-3">
-              {security.history.map((event, index) => (
-                <li key={`${event.at}-${index}`} className="border-l-2 border-slate-700 pl-3">
-                  <p className="text-sm font-medium text-white">{event.details}</p>
-                  <p className="text-xs text-slate-400">
-                    {when(event.at)} — {event.changedBy}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            /* The honest empty state: not "no history available", which reads as
-               a failure to load. Nothing has happened, and that is the good case. */
-            <p className="text-sm text-slate-400">
-              Nothing has been changed since this account was created.
-            </p>
-          )}
-        </Card>
+        {/* THE PER-EVENT CREDENTIAL LOG IS NOT SHOWN HERE ANY MORE, and the
+            server no longer sends it — hiding the card alone would have left it
+            one devtools tab away.
+
+            The question this page has to answer is still answered above: has
+            anything moved, and when. What is gone is the list of WHO moved it,
+            which is an audit trail. An audit trail belongs somewhere scoped to
+            the people entitled to read it, and this page opens for every seat
+            holder. The company's own record is in the admin portal, behind
+            owner-or-admin access, at GET /api/b2b/admin/activity. */}
       </div>
     </B2BShell>
   );

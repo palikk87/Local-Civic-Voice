@@ -3,9 +3,11 @@
  *
  * Parity with apps/web/src/pages/b2b/B2BSettings.tsx. Same endpoints, same
  * rules: the current password is required for every change, a secret is shown
- * exactly once, and the credential history is readable by the party it is
- * about — because the last time a B2B password moved without an explanation it
- * cost a week and a customer's confidence.
+ * exactly once, and whether a credential has ever moved is readable by the
+ * party it is about — because the last time a B2B password moved without an
+ * explanation it cost a week and a customer's confidence. The per-event log of
+ * WHO moved it is not here: that is an audit trail, and it lives in the admin
+ * portal behind owner-or-admin access.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import {
@@ -23,7 +25,6 @@ import {
   ArrowLeft,
   Building2,
   Copy,
-  History,
   KeyRound,
   Lock,
   ShieldAlert,
@@ -37,7 +38,6 @@ import { useB2BStore, type B2BAccountInfo } from '@/lib/b2b-store';
 
 interface SecurityHistory {
   credentials: { lastRotatedAt: string | null; rotationCount: number };
-  history: { action: string; at: string; changedBy: string; details: string }[];
 }
 
 function when(iso: string | null | undefined): string {
@@ -391,32 +391,14 @@ export default function B2BSettingsScreen() {
             </Card>
           ) : null}
 
-          <Card title="Credential history" icon={<History size={18} color="#818CF8" />}>
-            <Text className="text-slate-400 text-sm mb-3">
-              Every change ever made to this account's password or API key, and who made it. Nothing
-              in our backend changes a credential on its own — if something moved, this says who
-              moved it.
-            </Text>
-            {security && security.history.length > 0 ? (
-              security.history.map((event, index) => (
-                <View
-                  key={`${event.at}-${index}`}
-                  className="border-l-2 border-slate-700 pl-3 mb-3"
-                >
-                  <Text className="text-white text-sm font-medium">{event.details}</Text>
-                  <Text className="text-slate-400 text-xs">
-                    {when(event.at)} — {event.changedBy}
-                  </Text>
-                </View>
-              ))
-            ) : (
-              /* The honest empty state. Nothing has happened, and that is the
-                 good case — not a failure to load. */
-              <Text className="text-slate-400 text-sm">
-                Nothing has been changed since this account was created.
-              </Text>
-            )}
-          </Card>
+          {/* THE PER-EVENT CREDENTIAL LOG IS NOT SHOWN HERE ANY MORE, and the
+              server no longer sends it. Web twin: apps/web/src/pages/b2b/B2BSettings.tsx.
+
+              Whether anything moved, and when, is still answered above. The
+              list of WHO moved it is an audit trail, and an audit trail belongs
+              somewhere scoped to the people entitled to read it — this screen
+              opens for every seat holder. The company's own record is in the
+              admin portal, owner-or-admin only. */}
 
           <View className="h-8" />
         </ScrollView>
