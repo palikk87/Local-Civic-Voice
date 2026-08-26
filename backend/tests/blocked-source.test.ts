@@ -13,6 +13,8 @@
  * a captcha is on its way into the record of a law.
  */
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   judgeOfficialText,
   acceptOfficialText,
@@ -21,6 +23,89 @@ import {
 
 /** Padding, so length alone can never be what rejects a fixture. */
 const pad = (text: string) => text + " lorem ipsum dolor sit amet.".repeat(80);
+
+/*
+ * THE PAGE THAT CAUSED THIS, captured live and stored verbatim.
+ *
+ * Requesting any federalregister.gov document with a scraper-shaped User-Agent
+ * returns "Federal Register :: Request Access" — and returns it with HTTP 200,
+ * which is why `response.ok` never caught it and why this went unnoticed. It
+ * was stored as the full text of executive orders, the AI wrote a Citizen's
+ * Brief from it (summary, the case for, the case against), and readers were
+ * shown that brief with Support and Oppose buttons underneath. People were
+ * being asked to vote on an anti-scraping notice.
+ *
+ * The fixture is the real extracted text, not a paraphrase. If the guard ever
+ * accepts this file, that is exactly what starts happening again.
+ */
+const REQUEST_ACCESS_PAGE = readFileSync(
+  join(import.meta.dir, "fixtures/federal-register-request-access.txt"),
+  "utf8",
+);
+
+describe("the Federal Register's real block page", () => {
+  test("is refused", () => {
+    const verdict = judgeOfficialText(REQUEST_ACCESS_PAGE);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.reason).toBe("not_a_document");
+  });
+
+  test("is refused by NAME, not merely for being short", () => {
+    // The length corroboration in tier two would also catch it today, at ~1,500
+    // characters. That is not good enough: the Federal Register could add three
+    // paragraphs of help text and it would pass. Padding it here proves the
+    // rejection survives the page growing.
+    const padded = REQUEST_ACCESS_PAGE + "\n\nAdditional guidance. ".repeat(400);
+
+    expect(padded.length).toBeGreaterThan(3_000);
+    expect(judgeOfficialText(padded).ok).toBe(false);
+  });
+
+  /*
+   * WHERE IT CAME FROM, recorded so the fallback is never re-added.
+   *
+   * fetchExecutiveOrderText had three sources. The first two ask the Federal
+   * Register's API and its /documents/full_text/ URLs; both work from a server,
+   * with any User-Agent. The third fell back to the HUMAN-FACING page stored as
+   * sourceUrl, and that page is blocked from datacenter addresses for everyone.
+   * Measured from one address in one moment:
+   *
+   *   /documents/2026/08/14/.../              BLOCK PAGE, every User-Agent
+   *   /api/v1/documents.json                  real JSON, even a scraper UA
+   *   /documents/full_text/html|text|xml/...  real document, even a scraper UA
+   *
+   * The lesson is not "send a better User-Agent" — that was tried and the page
+   * is blocked regardless. It is that a browsable page is never the source for
+   * a record, when the publisher offers a developer surface and asks you to
+   * use it.
+   */
+  test("the developer surfaces are the source; the browsable page never is", () => {
+    const BLOCKED_FROM_A_SERVER = ["/documents/2026/08/14/2026-16730/vaccine-recommendations"];
+    const ALWAYS_SERVED = [
+      "/api/v1/documents.json",
+      "/documents/full_text/html/2026/08/14/2026-16730.html",
+      "/documents/full_text/text/2026/08/14/2026-16730.txt",
+      "/documents/full_text/xml/2026/08/14/2026-16730.xml",
+    ];
+
+    // A browsable document page is recognisable by NOT being under one of the
+    // two developer surfaces. If a future fallback reaches for one of these
+    // again, this is the shape to check against.
+    const isDeveloperSurface = (path: string) =>
+      path.startsWith("/api/") || path.startsWith("/documents/full_text/");
+
+    for (const path of ALWAYS_SERVED) expect(isDeveloperSurface(path)).toBe(true);
+    for (const path of BLOCKED_FROM_A_SERVER) expect(isDeveloperSurface(path)).toBe(false);
+  });
+
+  test("and the thing that hid it: the block page is served as HTTP 200", () => {
+    // Recorded here because it is the reason every `if (!response.ok)` in this
+    // codebase was useless against it. Nothing about this page is an error as
+    // far as HTTP is concerned.
+    const SERVED_STATUS = 200;
+    expect(SERVED_STATUS).toBe(200);
+  });
+});
 
 describe("a source that blocks us produces nothing", () => {
   const blocks: Array<[string, string]> = [

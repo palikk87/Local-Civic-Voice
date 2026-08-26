@@ -632,13 +632,38 @@ export async function fetchExecutiveOrderText(
     }
   }
 
-  // Source 3: whatever official page we have on file. Last, because it is a
-  // rendered web page with navigation and related-document links around the
-  // order rather than the order on its own.
-  if (ref.sourceUrl) {
-    const text = await fetchFederalRegisterText(ref.sourceUrl, deadlineAt, eoNumber);
-    if (text) return { text, source: "source-page", url: ref.sourceUrl };
-  }
+  /*
+   * SOURCE 3 IS GONE, AND THIS IS THE BUG THAT PUT A CAPTCHA IN FRONT OF
+   * READERS AND ASKED THEM TO VOTE ON IT.
+   *
+   * It fell back to `ref.sourceUrl` — the human-facing document page,
+   * federalregister.gov/documents/2026/08/14/…/ — and fetched it as though it
+   * were the order. From a datacenter IP that page does not serve the order.
+   * It serves "Federal Register :: Request Access", the anti-scraping notice,
+   * AND IT SERVES IT AS HTTP 200, so `response.ok` was true and nothing
+   * upstream noticed. About 1,500 characters, comfortably past the old
+   * `length > 200` check, so it was stored as the full text of the executive
+   * order — then hashed as the law's fingerprint, then summarised by the AI
+   * into a Citizen's Brief with a case for and a case against, then shown to
+   * citizens with Support and Oppose buttons underneath it.
+   *
+   * MEASURED, all from the same address, same moment:
+   *
+   *   /documents/2026/08/14/…/                    BLOCK PAGE, every User-Agent
+   *   /api/v1/documents.json                      real JSON, even a bot UA
+   *   /documents/full_text/html|text|xml/…        real document, even a bot UA
+   *
+   * So this is not something a politer User-Agent fixes — the block is on the
+   * browsable site and it applies to everyone. The Federal Register says so on
+   * the page itself: "programmatic access to these sites is limited to access
+   * to our extensive developer APIs." Sources 1 and 2 above ARE those APIs, and
+   * they work. This fallback could only ever have made things worse: on the
+   * rare occasion it was reachable it returned a page with navigation and
+   * related-document links wrapped around the order, and the rest of the time
+   * it returned the door.
+   *
+   * When the two API paths find nothing, the honest answer is nothing.
+   */
 
   console.warn(
     `[RefContent] Federal Register has no text for ${ref.masterReferenceId} ` +

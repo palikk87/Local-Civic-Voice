@@ -66,6 +66,26 @@ export function officialSourceHeaders(
  * reject on sight, at any length.
  */
 const NEVER_A_DOCUMENT = [
+  /*
+   * The Federal Register's own block page, captured live and word for word.
+   * Titled "Federal Register :: Request Access", it serves HTTP 200 — so
+   * `response.ok` is true and nothing upstream of this ever caught it — and
+   * runs to about 1,500 characters of visible text. It is the page that was
+   * being stored as the text of executive orders, summarised by the AI, and
+   * put in front of readers with Support and Oppose buttons under it.
+   *
+   * Tier one rather than tier two on purpose. The length corroboration below
+   * does catch it today, but only because the page is short; the Federal
+   * Register could add three more paragraphs of help text tomorrow and it
+   * would sail through. These phrases are what the page IS.
+   */
+  "request has been flagged as potentially automated",
+  "aggressive automated scraping",
+  "captcha (bot test)",
+  "request a wider ip range",
+  "federal register :: request access",
+  "programmatic access to these sites is limited",
+
   "attention required! | cloudflare",
   "cloudflare ray id",
   "ddos protection by",
