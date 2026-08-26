@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { api } from "@/lib/api";
+import { failureMessage } from "@/lib/request-failure";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/use-civic-auth";
 
@@ -143,6 +144,8 @@ export default function PostDetail() {
     data,
     isLoading,
     isError,
+    error,
+    refetch,
   } = useQuery({
     queryKey: ["post", id],
     queryFn: () => api.get<PostDetailResponse>(`/api/posts/${id}`),
@@ -208,19 +211,23 @@ export default function PostDetail() {
 
   // A deleted post and a blocked author's post give the same answer, and this
   // page must not guess which.
+  //
+  // AND AN UNREACHABLE SERVER IS NEITHER. `isError` covers a dead socket too,
+  // so with the API down this page told readers a real post had been deleted —
+  // about a post that was sitting safely in the database the whole time.
+  // Measured; see docs/IF_THE_API_HOST_GOES_AWAY.md.
   if (isError || !post) {
+    const failure = failureMessage(error, "this post");
     return (
       <AppShell>
         <div className="mx-auto max-w-lg px-4 py-20 text-center">
-          <p className="text-lg font-semibold text-white">This post isn't here</p>
-          <p className="mt-1 text-sm text-slate-400">
-            It may have been deleted, or it may never have existed.
-          </p>
+          <p className="text-lg font-semibold text-white">{failure.title}</p>
+          <p className="mt-1 text-sm text-slate-400">{failure.detail}</p>
           <button
-            onClick={() => navigate("/timeline")}
+            onClick={() => (failure.canRetry ? refetch() : navigate("/timeline"))}
             className="mt-4 text-sm font-medium text-amber-500 hover:underline"
           >
-            Back to the timeline
+            {failure.canRetry ? "Try again" : "Back to the timeline"}
           </button>
         </div>
       </AppShell>

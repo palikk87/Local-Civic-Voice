@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { failureMessage } from "@/lib/request-failure";
 import { Link, useParams } from "react-router-dom";
 import { Hash } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
@@ -16,7 +17,7 @@ import { postsApi } from "@/lib/civic";
 export default function HashtagPage() {
   const { tag = "" } = useParams();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["hashtag", tag],
     queryFn: () => postsApi.hashtag(tag),
     enabled: tag.length > 0,
@@ -39,6 +40,23 @@ export default function HashtagPage() {
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-24 w-full rounded-xl" />
             ))}
+          </div>
+        ) : isError ? (
+          /* "Nothing under this tag yet" is a claim about what people have
+             written. A failed request is not evidence of silence. */
+          <div className="rounded-xl border border-dashed border-border py-20 text-center">
+            <p className="font-display text-lg text-foreground">
+              {failureMessage(error, "these posts").title}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {failureMessage(error, "these posts").detail}
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-4 text-sm font-medium text-amber-500 hover:underline"
+            >
+              Try again
+            </button>
           </div>
         ) : posts.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border py-20 text-center">

@@ -57,14 +57,30 @@ export function useAuthUI() {
   return ctx;
 }
 
-/** Convenience wrapper around Better Auth's session. */
+/**
+ * Convenience wrapper around Better Auth's session.
+ * Web twin: apps/web/src/hooks/use-civic-auth.tsx
+ *
+ * `sessionUnavailable` IS NOT A DETAIL. This dropped `error` on the floor,
+ * which made "this visitor is signed out" and "I could not ask whether they are
+ * signed in" the same answer — so with the API unreachable the app pushes a
+ * signed-in person towards a sign-in that needs the same server and cannot
+ * work. Measured on web with the API switched off; the shape here was
+ * identical, so it is fixed on both.
+ *
+ * Nothing is assumed about the visitor when the session cannot be read. They
+ * are not authenticated, because we do not know that they are — but callers can
+ * see WHY, and say so instead of blaming them.
+ */
 export function useCurrentUser() {
-  const { data, isPending } = useSession();
+  const { data, isPending, isError } = useSession();
   const user = data ?? null;
   return {
     user,
     isAuthenticated: !!user,
     isLoading: isPending,
+    /** The session could not be read at all. Not the same as being signed out. */
+    sessionUnavailable: !isPending && !user && isError,
   };
 }
 

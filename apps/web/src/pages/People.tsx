@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { failureMessage } from "@/lib/request-failure";
 import { Search, UserPlus, TrendingUp, Clock, X, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Input } from "@/components/ui/input";
@@ -43,8 +44,18 @@ export default function People() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const debouncedQuery = useDebounce(searchQuery, 350);
 
-  const { data: suggestedData, isLoading: suggestedLoading } = useDiscoverUsers();
-  const { data: activeData, isLoading: activeLoading } = useActiveUsers();
+  const {
+    data: suggestedData,
+    isLoading: suggestedLoading,
+    isError: suggestedFailed,
+    error: suggestedError,
+  } = useDiscoverUsers();
+  const {
+    data: activeData,
+    isLoading: activeLoading,
+    isError: activeFailed,
+    error: activeError,
+  } = useActiveUsers();
   const { data: newData, isLoading: newMembersLoading } = useNewUsers();
   const { data: searchData, isLoading: searchLoading } = useSearchUsers(debouncedQuery);
 
@@ -147,6 +158,10 @@ export default function People() {
                     onFollowChange={handleFollowChange}
                   />
                 ))
+              ) : suggestedFailed ? (
+                /* "No suggestions" is a statement about the people on this
+                   platform. It must not be produced by a failed request. */
+                <EmptyBlock message={failureMessage(suggestedError, "suggestions").detail} />
               ) : (
                 <EmptyBlock message="No suggestions available right now." />
               )}
@@ -169,6 +184,8 @@ export default function People() {
                     onFollowChange={handleFollowChange}
                   />
                 ))
+              ) : activeFailed ? (
+                <EmptyBlock message={failureMessage(activeError, "this list").detail} />
               ) : (
                 <EmptyBlock message="No active citizens to show." />
               )}

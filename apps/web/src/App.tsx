@@ -17,7 +17,6 @@ const Timeline = lazy(() => import("./pages/Timeline"));
 const Discover = lazy(() => import("./pages/Discover"));
 const People = lazy(() => import("./pages/People"));
 const Government = lazy(() => import("./pages/Government"));
-const Analytics = lazy(() => import("./pages/Analytics"));
 const Library = lazy(() => import("./pages/Library"));
 const ReferenceDetail = lazy(() => import("./pages/ReferenceDetail"));
 const Documents = lazy(() => import("./pages/Documents"));
@@ -77,7 +76,14 @@ const App = () => (
               <Route path="/people" element={<People />} />
               <Route path="/government" element={<Government />} />
               <Route path="/reps" element={<Navigate to="/government" replace />} />
-              <Route path="/analytics" element={<Analytics />} />
+              {/* /analytics is deliberately not mounted.
+                  It was a page whose entire content was the words "Loading
+                  Analytics…", with no query behind them — so it said it was
+                  loading something that was never going to arrive, to every
+                  visitor, on a perfectly healthy server. Nothing linked to it.
+                  A 404 is a true statement; a permanent spinner is not.
+                  Real analytics live at /admin/analytics and in the B2B
+                  portal, both of which fetch real numbers. */}
               <Route path="/library" element={<Library />} />
               <Route path="/reference/:id" element={<ReferenceDetail />} />
               <Route path="/documents" element={<Documents />} />

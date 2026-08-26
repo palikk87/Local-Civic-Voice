@@ -8,6 +8,16 @@ export const useSession = () => {
     queryKey: SESSION_QUERY_KEY,
     queryFn: async () => {
       const result = await authClient.getSession();
+
+      // A FAILED ASK IS NOT AN ANSWER. Better Auth reports a transport failure
+      // by returning { data: null, error }, and reading only `data` turned
+      // "the server could not be reached" into "this person is signed out" —
+      // which is how a signed-in reader gets pushed towards a sign-in that
+      // needs the same unreachable server. Throwing puts it where React Query
+      // can see it, so useCurrentUser can say which of the two happened.
+      if (result.error) {
+        throw new Error(result.error.message ?? "Could not reach the server");
+      }
       return result.data?.user ?? null;
     },
     staleTime: 1000 * 60 * 5, // 5 min cache

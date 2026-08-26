@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { VerifyEmailStep } from "./VerifyEmailStep";
 import { api } from "@/lib/api";
+import { isUnreachable } from "@/lib/request-failure";
 
 type Mode = "signin" | "signup";
 
@@ -148,7 +149,20 @@ export function AuthForm({
         await handleSignIn();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      // "Failed to fetch" IS THE BROWSER TALKING, NOT US. With the API
+      // unreachable this box rendered that string verbatim, which reads to
+      // somebody trying to sign in as though their password were the problem.
+      // Measured with the server switched off; see
+      // docs/IF_THE_API_HOST_GOES_AWAY.md. A refused credential still shows
+      // the server's own words, because that IS the answer.
+      setError(
+        isUnreachable(e)
+          ? "We can't reach the server right now, so we can't check that. This is on our side — " +
+              "try again in a moment."
+          : e instanceof Error
+            ? e.message
+            : "Something went wrong.",
+      );
     } finally {
       setLoading(false);
     }

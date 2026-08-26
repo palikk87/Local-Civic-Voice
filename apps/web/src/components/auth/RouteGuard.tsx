@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { Lock } from "lucide-react";
+import { Lock, CloudOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -28,7 +28,7 @@ interface RouteGuardProps {
  * keep the console open.
  */
 export function RouteGuard({ capability, reason, children }: RouteGuardProps) {
-  const { can, isLoading, isAuthenticated } = usePermissions();
+  const { can, isLoading, isAuthenticated, sessionUnavailable } = usePermissions();
   const { openAuth } = useAuthUI();
   const location = useLocation();
   const verifySession = useAdminStore((s) => s.verifySession);
@@ -42,7 +42,12 @@ export function RouteGuard({ capability, reason, children }: RouteGuardProps) {
     if (needsAdmin && hasAdminSession) void verifySession();
   }, [needsAdmin, hasAdminSession, verifySession]);
 
-  const needsSignIn = !isLoading && !isAuthenticated && !needsAdmin;
+  // NOT A SIGN-IN PROBLEM. When the session could not be read at all, opening
+  // the sign-in dialog is both wrong and cruel: the person may already be
+  // signed in, and the sign-in they are being pushed towards cannot succeed
+  // either — it needs the same server. Measured with the API switched off:
+  // fifteen routes said "Sign in to continue" to signed-in readers.
+  const needsSignIn = !isLoading && !isAuthenticated && !needsAdmin && !sessionUnavailable;
 
   useEffect(() => {
     if (needsSignIn) openAuth(reason);
@@ -51,12 +56,43 @@ export function RouteGuard({ capability, reason, children }: RouteGuardProps) {
   if (isLoading) return <LoadingScreen />;
   if (allowed) return <>{children}</>;
 
+  // Say what is actually wrong, before deciding anything about this visitor.
+  if (sessionUnavailable) return <ServiceUnreachable />;
+
   // Admin console has its own login screen and its own session.
   if (needsAdmin) {
     return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
   }
 
   return <SignInWall reason={reason} onSignIn={() => openAuth(reason)} />;
+}
+
+/**
+ * The server could not be reached, so nothing is known about this visitor.
+ *
+ * Deliberately makes no claim about their account and offers no sign-in: both
+ * would be guesses, and the second cannot work while this screen is showing.
+ */
+function ServiceUnreachable() {
+  return (
+    <AppShell>
+      <div className="flex flex-col items-center justify-center py-24 text-center max-w-md mx-auto">
+        <div className="w-16 h-16 rounded-full bg-slate-500/15 flex items-center justify-center">
+          <CloudOff size={28} className="text-slate-400" />
+        </div>
+        <h1 className="mt-6 text-2xl font-bold text-white">We can&apos;t reach the server</h1>
+        <p className="mt-2 text-slate-400">
+          This is on our side, not yours — you may well still be signed in. Nothing you have
+          posted or voted on has been lost.
+        </p>
+        <div className="mt-8">
+          <Button onClick={() => window.location.reload()} className="min-h-[44px]">
+            Try again
+          </Button>
+        </div>
+      </div>
+    </AppShell>
+  );
 }
 
 function SignInWall({ reason, onSignIn }: { reason: string; onSignIn: () => void }) {

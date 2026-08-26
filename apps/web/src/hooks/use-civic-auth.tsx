@@ -38,14 +38,29 @@ export function useAuthUI() {
   return ctx;
 }
 
-/** Convenience wrapper around Better Auth's session. */
+/**
+ * Convenience wrapper around Better Auth's session.
+ *
+ * `sessionUnavailable` IS NOT A DETAIL. This used to drop `error` on the floor,
+ * which made "this visitor is signed out" and "I could not ask whether they are
+ * signed in" the same answer — and with the API unreachable, fifteen routes
+ * showed a sign-in wall to people who were already signed in, whose sign-in
+ * attempt could not have worked either. Measured with the API switched off; see
+ * docs/IF_THE_API_HOST_GOES_AWAY.md.
+ *
+ * Nothing is assumed about the visitor when the session cannot be read. They
+ * are not authenticated, because we do not know that they are — but callers can
+ * see WHY, and say so instead of blaming them.
+ */
 export function useCurrentUser() {
-  const { data, isPending } = useSession();
+  const { data, isPending, error } = useSession();
   const user = data?.user ?? null;
   return {
     user,
     isAuthenticated: !!user,
     isLoading: isPending,
+    /** The session could not be read at all. Not the same as being signed out. */
+    sessionUnavailable: !isPending && !user && !!error,
   };
 }
 
@@ -58,7 +73,7 @@ export function useCurrentUser() {
  * The admin tier comes from the separate admin-console session, matching mobile.
  */
 export function usePermissions() {
-  const { isLoading, isAuthenticated, user } = useCurrentUser();
+  const { isLoading, isAuthenticated, user, sessionUnavailable } = useCurrentUser();
   const isAdmin = useAdminStore((s) => s.isAdminAuthenticated);
 
   const role = resolveRole({ isSignedIn: isAuthenticated, isAdmin });
@@ -71,7 +86,7 @@ export function usePermissions() {
    */
   const isStaff = isStaffAccount(user as { role?: string | null } | null);
 
-  return { role, can: check, isLoading, isAuthenticated, isAdmin, isStaff, user };
+  return { role, can: check, isLoading, isAuthenticated, isAdmin, isStaff, user, sessionUnavailable };
 }
 
 /**

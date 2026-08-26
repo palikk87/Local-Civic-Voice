@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
 import { api } from "@/lib/api";
+import { failureMessage } from "@/lib/request-failure";
 import { safetyApi } from "@/lib/civic";
 import { CommonGround } from "@/components/civic/CommonGround";
 import { CivicRecord } from "@/components/record/CivicRecord";
@@ -80,7 +81,7 @@ export default function UserProfile() {
   const isSelf = me?.id === id;
   const startConversation = useStartConversation();
 
-  const { data: profile, isLoading, isError } = useQuery({
+  const { data: profile, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["public-user", id],
     queryFn: () => api.get<PublicUser>(`/api/users/${id}`),
     enabled: !!id,
@@ -163,24 +164,32 @@ export default function UserProfile() {
     );
   }
 
-  // A DELETED ACCOUNT IS NOT A SLOW ONE.
+  // A DELETED ACCOUNT IS NOT A SLOW ONE — AND NEITHER IS AN UNREACHABLE SERVER.
   //
   // This used to fold "no profile" into the loading branch, so a link to an
   // account that no longer exists spun a loader forever. Nothing was coming.
   // Say so, and give them somewhere to go.
+  //
+  // Then it folded something else in: `isError` covers a dead socket as well as
+  // a 404, so with the API unreachable this page told readers that a real
+  // person's account had been deleted. It had not. Nobody had asked anybody.
+  // Measured — see docs/IF_THE_API_HOST_GOES_AWAY.md.
   if (isError || !profile) {
+    const failure = failureMessage(error, "this account");
     return (
       <AppShell>
         <div className="mx-auto max-w-md py-24 text-center">
-          <h1 className="font-display text-xl font-semibold text-foreground">
-            This account isn&apos;t here
-          </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            The profile may have been deleted, or the link may be wrong.
-          </p>
-          <Button className="mt-6" variant="outline" onClick={() => navigate("/")}>
-            Back to the feed
-          </Button>
+          <h1 className="font-display text-xl font-semibold text-foreground">{failure.title}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{failure.detail}</p>
+          {failure.canRetry ? (
+            <Button className="mt-6" variant="outline" onClick={() => refetch()}>
+              Try again
+            </Button>
+          ) : (
+            <Button className="mt-6" variant="outline" onClick={() => navigate("/")}>
+              Back to the feed
+            </Button>
+          )}
         </div>
       </AppShell>
     );

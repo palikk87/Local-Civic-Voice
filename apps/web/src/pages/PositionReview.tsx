@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, Check, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
+import { failureMessage } from "@/lib/request-failure";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -99,7 +100,7 @@ function ReviewRow({ entry }: { entry: PositionNeedingReview }) {
 }
 
 export default function PositionReview() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["positions-review"],
     queryFn: recordApi.needingReview,
   });
@@ -109,13 +110,20 @@ export default function PositionReview() {
   return (
     <AppShell>
       <div className="mx-auto max-w-2xl space-y-5">
+        {/* THE HEADING WAS A CLAIM, AND IT WAS PRINTED BEFORE ANYTHING WAS
+            KNOWN. "The text moved — these laws changed after you took a
+            position on them" sat above an empty list that said "Nothing to
+            review", and above a failed request that knew nothing at all. On a
+            page about not putting words in somebody's mouth, the title was
+            doing exactly that. The claim now belongs to the list, which is the
+            only part that has evidence for it. */}
         <div>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            The text moved
+            Positions to review
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            These laws changed after you took a position on them. Nothing has been withdrawn for
-            you — silence is not a change of mind.
+            When a law changes after you took a position on it, it waits here. Nothing is ever
+            withdrawn for you — silence is not a change of mind.
           </p>
         </div>
 
@@ -124,6 +132,21 @@ export default function PositionReview() {
             {[0, 1].map((i) => (
               <Skeleton key={i} className="h-32 w-full rounded-xl" />
             ))}
+          </div>
+        ) : isError ? (
+          <div className="rounded-xl border border-dashed border-border py-20 text-center">
+            <p className="font-display text-lg text-foreground">
+              {failureMessage(error, "your positions").title}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {failureMessage(error, "your positions").detail}
+            </p>
+            <button
+              onClick={() => refetch()}
+              className="mt-4 text-sm font-medium text-amber-500 hover:underline"
+            >
+              Try again
+            </button>
           </div>
         ) : entries.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border py-20 text-center">
@@ -134,6 +157,10 @@ export default function PositionReview() {
           </div>
         ) : (
           <>
+            <p className="text-sm text-muted-foreground">
+              The text of {entries.length === 1 ? "this law" : "these laws"} moved after you took a
+              position.
+            </p>
             <p className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 p-3 text-sm text-accent">
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
               Your vote still counts on each of these until you say otherwise.
