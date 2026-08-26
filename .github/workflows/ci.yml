@@ -148,6 +148,12 @@ jobs:
 
       # A first visit, clicked for real. The only check that can see an overlay
       # sitting on top of a link that is itself perfectly correct.
+      # Static, and it runs before the browser checks because it is instant.
+      # A redirect to a path with no route renders NotFound — the feature works
+      # and looks broken, which is the expensive kind of bug.
+      - run: bun run route-target-check
+        working-directory: apps/web
+
       - run: bun run nav-check
         working-directory: apps/web
 

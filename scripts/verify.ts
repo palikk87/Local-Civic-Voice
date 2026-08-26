@@ -97,6 +97,14 @@ const CHECKS: Check[] = [
     guards: "no lint errors (warnings are allowed)",
   },
   {
+    name: "web route targets",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "route-target-check"],
+    guards:
+      "every place the app sends somebody is a place the app mounts — a redirect to a " +
+      "path with no route renders NotFound, which reads as the feature being broken",
+  },
+  {
     name: "web build",
     cwd: "apps/web",
     cmd: ["bun", "run", "build"],

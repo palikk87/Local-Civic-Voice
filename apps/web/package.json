@@ -20,7 +20,8 @@
     "nav-check": "node scripts/nav-check.mjs",
     "profile-check": "node scripts/profile-check.mjs",
     "every-page-check": "node scripts/every-page-check.mjs",
-    "verify-email-check": "node scripts/verify-email-check.mjs dist"
+    "verify-email-check": "node scripts/verify-email-check.mjs dist",
+    "route-target-check": "node scripts/route-target-check.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

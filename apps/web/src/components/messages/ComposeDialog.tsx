@@ -108,9 +108,21 @@ export function ComposeDialog({
       });
       reset();
       onOpenChange(false);
-      // Straight into the thread. Landing back on the list, having just written
-      // something, leaves you hunting for what you sent.
-      navigate(`/messages/${result.conversation.id}`);
+      /*
+       * /conversation/:id, NOT /messages/:id.
+       *
+       * This said `/messages/${id}`, which is not a route this app mounts — the
+       * thread route is /conversation/:id, and the Messages list has always
+       * linked to it correctly. So React Router fell through to the catch-all
+       * and rendered Not Found.
+       *
+       * The message had already SENT by then. The POST succeeded, the
+       * conversation existed, the words were delivered — and the sender was
+       * shown a 404 and reasonably concluded that messaging was broken. A
+       * wrong redirect after a successful write is worse than a failed write,
+       * because the person retries something that already happened.
+       */
+      navigate(`/conversation/${result.conversation.id}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "That did not send.");
     }
