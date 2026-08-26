@@ -14,7 +14,7 @@ import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-nativ
 import { CheckCircle2, XCircle, AlertTriangle, KeySquare, Send } from 'lucide-react-native';
 
 import { BACKEND_URL } from '@/lib/config';
-import { adminAuthHeader, useAdminStore } from '@/lib/admin-store';
+import { adminAuthHeader, adminCan, useAdminStore } from '@/lib/admin-store';
 
 type SecretSource = 'database' | 'environment' | 'unset';
 
@@ -59,7 +59,11 @@ interface TestResult {
 
 export function KeysAndEmailCard() {
   const session = useAdminStore((s) => s.session);
-  const isSuperadmin = session?.role === 'superadmin';
+  // ASK WHAT THE ROLE MAY DO, NOT WHAT IT IS CALLED. Both of these were
+  // `role === 'superadmin'`, so a role granted these exact capabilities was
+  // refused nothing by the server and shown neither control here.
+  const canManageKeys = adminCan(session, 'keys.manage');
+  const canTestEmail = adminCan(session, 'email.test');
 
   const [keys, setKeys] = useState<KeyStatus[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -191,7 +195,7 @@ export function KeysAndEmailCard() {
                     moving.
                   </Text>
                 ) : null}
-                {isSuperadmin && storage ? (
+                {canManageKeys && storage ? (
                   <KeyEditor
                     name={key.name}
                     stored={storage.stored.find((entry) => entry.name === key.name)}
@@ -231,7 +235,7 @@ export function KeysAndEmailCard() {
         account the key belongs to — and that looks exactly like a bad key.
       </Text>
 
-      {isSuperadmin ? (
+      {canTestEmail ? (
         <>
           <TextInput
             value={to}

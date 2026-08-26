@@ -27,8 +27,9 @@ import {
   Vote,
   Building2,
   GitMerge,
+  ShieldCheck,
 } from 'lucide-react-native';
-import { useAdminStore } from '@/lib/admin-store';
+import { adminCan, useAdminStore } from '@/lib/admin-store';
 import { StorageHealthCard } from '@/components/admin/StorageHealthCard';
 import * as Haptics from 'expo-haptics';
 
@@ -276,67 +277,95 @@ export default function AdminDashboardScreen() {
         {/* Menu Items */}
         <Text className="text-white text-lg font-bold mb-3">Management</Text>
 
-        <MenuItem
-          title="User Management"
-          subtitle="View, edit, ban, or delete users"
-          icon={<Users size={24} color="#3B82F6" />}
-          onPress={() => router.push('/admin/users')}
-          badge={stats?.bannedUsers}
-        />
+        {adminCan(session, 'users.view') ? (
+          <MenuItem
+            title="User Management"
+            subtitle="View, edit, ban, or delete users"
+            icon={<Users size={24} color="#3B82F6" />}
+            onPress={() => router.push('/admin/users')}
+            badge={stats?.bannedUsers}
+          />
+        ) : null}
 
-        <MenuItem
-          title="Content Moderation"
-          subtitle="Review flagged posts and comments"
-          icon={<FileText size={24} color="#22C55E" />}
-          onPress={() => router.push('/admin/posts')}
-          badge={stats?.flaggedPosts}
-        />
+        {adminCan(session, 'posts.moderate') ? (
+          <MenuItem
+            title="Content Moderation"
+            subtitle="Review flagged posts and comments"
+            icon={<FileText size={24} color="#22C55E" />}
+            onPress={() => router.push('/admin/posts')}
+            badge={stats?.flaggedPosts}
+          />
+        ) : null}
 
-        <MenuItem
-          title="Analytics"
-          subtitle="View engagement and growth metrics"
-          icon={<BarChart3 size={24} color="#F59E0B" />}
-          onPress={() => router.push('/admin/analytics')}
-        />
+        {adminCan(session, 'analytics.view') ? (
+          <MenuItem
+            title="Analytics"
+            subtitle="View engagement and growth metrics"
+            icon={<BarChart3 size={24} color="#F59E0B" />}
+            onPress={() => router.push('/admin/analytics')}
+          />
+        ) : null}
 
-        <MenuItem
-          title="Announcements"
-          subtitle="Create system-wide announcements"
-          icon={<Bell size={24} color="#8B5CF6" />}
-          onPress={() => router.push('/admin/announcements')}
-        />
+        {adminCan(session, 'announcements.write') ? (
+          <MenuItem
+            title="Announcements"
+            subtitle="Create system-wide announcements"
+            icon={<Bell size={24} color="#8B5CF6" />}
+            onPress={() => router.push('/admin/announcements')}
+          />
+        ) : null}
 
-        <MenuItem
-          title="Merge Review"
-          subtitle="Records that might be one law"
-          icon={<GitMerge size={24} color="#06B6D4" />}
-          onPress={() => router.push('/admin/merge-review')}
-        />
+        {adminCan(session, 'merges.decide') ? (
+          <MenuItem
+            title="Merge Review"
+            subtitle="Records that might be one law"
+            icon={<GitMerge size={24} color="#06B6D4" />}
+            onPress={() => router.push('/admin/merge-review')}
+          />
+        ) : null}
 
         {/*
           This screen existed with nothing linking to it — reachable only by
           typing the path. Same console, same tabs as web, so it belongs here.
         */}
-        <MenuItem
-          title="B2B Clients"
-          subtitle="Analytics logins for the business dashboard"
-          icon={<Building2 size={24} color="#14B8A6" />}
-          onPress={() => router.push('/admin/b2b-clients')}
-        />
+        {adminCan(session, 'b2b.view') ? (
+          <MenuItem
+            title="B2B Clients"
+            subtitle="Analytics logins for the business dashboard"
+            icon={<Building2 size={24} color="#14B8A6" />}
+            onPress={() => router.push('/admin/b2b-clients')}
+          />
+        ) : null}
 
-        <MenuItem
-          title="Activity Logs"
-          subtitle="View admin actions and audit trail"
-          icon={<Activity size={24} color="#EC4899" />}
-          onPress={() => router.push('/admin/logs')}
-        />
+        {adminCan(session, 'logs.view') ? (
+          <MenuItem
+            title="Activity Logs"
+            subtitle="View admin actions and audit trail"
+            icon={<Activity size={24} color="#EC4899" />}
+            onPress={() => router.push('/admin/logs')}
+          />
+        ) : null}
 
-        <MenuItem
-          title="System Settings"
-          subtitle="Configure app settings"
-          icon={<Settings size={24} color="#64748B" />}
-          onPress={() => router.push('/admin/settings')}
-        />
+        {/* The permissions panel. Web twin: the Roles tab in the console.
+            Reachable here only by a role that may edit roles, so the screen a
+            person cannot use is not offered to them. */}
+        {adminCan(session, 'roles.manage') ? (
+          <MenuItem
+            title="Roles"
+            subtitle="What each role may do, and who holds it"
+            icon={<ShieldCheck size={24} color="#A78BFA" />}
+            onPress={() => router.push('/admin/roles')}
+          />
+        ) : null}
+
+        {adminCan(session, 'keys.manage') ? (
+          <MenuItem
+            title="System Settings"
+            subtitle="Configure app settings"
+            icon={<Settings size={24} color="#64748B" />}
+            onPress={() => router.push('/admin/settings')}
+          />
+        ) : null}
 
         {/* Footer */}
         <View className="mt-6 mb-8 items-center">

@@ -2221,9 +2221,29 @@ describe("the merge review queue", () => {
    * related means a different law on the same subject.
    */
 
-  async function adminHeaders(
-    role: "admin" | "superadmin" = "superadmin",
-  ): Promise<Record<string, string>> {
+  /**
+   * A role that may sign into the console and holds nothing at all.
+   *
+   * Created rather than named, so "can look but not decide" is proved against
+   * the capability the route checks instead of against a role name that might
+   * be granted the capability tomorrow.
+   */
+  const READ_ONLY_ROLE = "merge-queue-read-only";
+
+  async function adminHeaders(role: string = "superadmin"): Promise<Record<string, string>> {
+    if (role === READ_ONLY_ROLE) {
+      await prisma.adminRole.upsert({
+        where: { slug: READ_ONLY_ROLE },
+        update: { capabilities: "[]" },
+        create: {
+          slug: READ_ONLY_ROLE,
+          name: "Merge queue — read only",
+          description: "Holds no capabilities. Exists to prove the queue refuses a decision.",
+          capabilities: "[]",
+          builtIn: false,
+        },
+      });
+    }
     const token = `merge_queue_${Math.random().toString(36).slice(2)}`;
     await prisma.adminSession.create({
       data: {
@@ -2405,10 +2425,17 @@ describe("the merge review queue", () => {
     expect(closed.status).toBe("superseded");
   });
 
-  test("a read-only admin can look but not decide", async () => {
+  test("a role without merges.decide can look but not decide", async () => {
     // Approving rewrites which record every affected post and vote belongs to.
-    // Same bar as merging by hand.
-    const readOnly = await adminHeaders("admin");
+    // Same bar as merging by hand, and the same check.
+    //
+    // THIS USED TO SIGN IN AS "admin" AND EXPECT 403. That held while the
+    // queue demanded a superadmin by name, but the direct merge route in the
+    // same codebase let an admin — and a moderator — merge by hand, so the
+    // reviewed path was stricter than the unreviewed one. Both are
+    // "merges.decide" now, and the property this test is really about is
+    // unchanged: a role that cannot decide is still allowed to look.
+    const readOnly = await adminHeaders(READ_ONLY_ROLE);
     const a = await record("A bill on rural broadband");
     const b = await record("A bill on satellite spectrum");
     const pair = await candidate(a.id, b.id);

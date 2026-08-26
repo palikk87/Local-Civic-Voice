@@ -17,6 +17,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Shield,
+  ShieldCheck,
   BarChart3,
   Users,
   FileText,
@@ -44,6 +45,7 @@ import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { BugReportsTab } from "@/components/admin/BugReportsTab";
 import { MaintenanceTab } from "@/components/admin/MaintenanceTab";
+import { RolesTab } from "@/components/admin/RolesTab";
 import { LoadingScreen } from "@/components/LoadingScreen";
 
 /** Tabs this console renders — and, one-for-one, mobile's /admin/* screen names. */
@@ -59,12 +61,36 @@ const ADMIN_TABS = [
   // /admin/bug-reports fell back to the dashboard on a reload or a shared link
   // — the tab worked, the address did not.
   "bug-reports",
+  "roles",
   "maintenance",
   "logs",
   "settings",
 ] as const;
 
 type AdminTab = (typeof ADMIN_TABS)[number];
+
+/**
+ * The capability each tab needs, matching what the server checks on the calls
+ * that tab makes.
+ *
+ * Roles are configurable now, so "which tabs do I get" cannot be answered by
+ * the role's name. A tab with no entry here is open to anybody who can sign
+ * into the console at all — Dashboard is the one such tab, deliberately, so a
+ * role granted nothing still lands somewhere rather than on a blank console.
+ */
+const TAB_CAPABILITY: Partial<Record<AdminTab, string>> = {
+  users: "users.view",
+  posts: "posts.moderate",
+  analytics: "analytics.view",
+  announcements: "announcements.write",
+  "merge-review": "merges.decide",
+  "b2b-clients": "b2b.view",
+  "bug-reports": "bugReports.manage",
+  roles: "roles.manage",
+  maintenance: "content.repair",
+  logs: "logs.view",
+  settings: "keys.manage",
+};
 
 function isAdminTab(value: string | undefined): value is AdminTab {
   return !!value && (ADMIN_TABS as readonly string[]).includes(value);
@@ -75,10 +101,22 @@ export default function Admin() {
   const { tab } = useParams<{ tab?: string }>();
   const [verified, setVerified] = useState<boolean>(false);
   const verifySession = useAdminStore((s) => s.verifySession);
+  const session = useAdminStore((s) => s.session);
+
+  const allows = (capability: string | undefined) => {
+    if (!capability) return true;
+    if (!session) return false;
+    // The owner seat holds everything, including capabilities added later.
+    if (session.role === "superadmin") return true;
+    return session.capabilities.includes(capability);
+  };
 
   // An unrecognised tab falls back to dashboard rather than rendering an empty
-  // console. /admin/login is a separate route and never reaches here.
-  const activeTab: AdminTab = isAdminTab(tab) ? tab : "dashboard";
+  // console. So does a tab this role has not been granted — following a link to
+  // /admin/logs without "logs.view" should land somewhere honest, not on a
+  // panel whose every request comes back 403.
+  const requested: AdminTab = isAdminTab(tab) ? tab : "dashboard";
+  const activeTab: AdminTab = allows(TAB_CAPABILITY[requested]) ? requested : "dashboard";
 
   // The console requires a live admin-console session — same rule as mobile.
   useEffect(() => {
@@ -133,46 +171,70 @@ export default function Admin() {
               <BarChart3 className="mr-2 h-4 w-4" />
               Dashboard
             </TabsTrigger>
-            <TabsTrigger value="users">
-              <Users className="mr-2 h-4 w-4" />
-              Users
-            </TabsTrigger>
-            <TabsTrigger value="posts">
-              <FileText className="mr-2 h-4 w-4" />
-              Posts
-            </TabsTrigger>
-            <TabsTrigger value="analytics">
-              <LineChart className="mr-2 h-4 w-4" />
-              Analytics
-            </TabsTrigger>
-            <TabsTrigger value="announcements">
-              <Megaphone className="mr-2 h-4 w-4" />
-              Announcements
-            </TabsTrigger>
-            <TabsTrigger value="merge-review">
-              <GitMerge className="mr-2 h-4 w-4" />
-              Merge review
-            </TabsTrigger>
+            {allows(TAB_CAPABILITY["users"]) ? (
+              <TabsTrigger value="users">
+                <Users className="mr-2 h-4 w-4" />
+                Users
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["posts"]) ? (
+              <TabsTrigger value="posts">
+                <FileText className="mr-2 h-4 w-4" />
+                Posts
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["analytics"]) ? (
+              <TabsTrigger value="analytics">
+                <LineChart className="mr-2 h-4 w-4" />
+                Analytics
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["announcements"]) ? (
+              <TabsTrigger value="announcements">
+                <Megaphone className="mr-2 h-4 w-4" />
+                Announcements
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["merge-review"]) ? (
+              <TabsTrigger value="merge-review">
+                <GitMerge className="mr-2 h-4 w-4" />
+                Merge review
+              </TabsTrigger>
+            ) : null}
             <TabsTrigger value="b2b-clients">
               <Building2 className="mr-2 h-4 w-4" />
               B2B clients
             </TabsTrigger>
-            <TabsTrigger value="bug-reports">
-              <Bug className="mr-2 h-4 w-4" />
-              Bug reports
-            </TabsTrigger>
-            <TabsTrigger value="maintenance">
-              <Wrench className="mr-2 h-4 w-4" />
-              Maintenance
-            </TabsTrigger>
-            <TabsTrigger value="logs">
-              <ScrollText className="mr-2 h-4 w-4" />
-              Logs
-            </TabsTrigger>
-            <TabsTrigger value="settings">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </TabsTrigger>
+            {allows(TAB_CAPABILITY["bug-reports"]) ? (
+              <TabsTrigger value="bug-reports">
+                <Bug className="mr-2 h-4 w-4" />
+                Bug reports
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["roles"]) ? (
+              <TabsTrigger value="roles">
+                <ShieldCheck className="mr-2 h-4 w-4" />
+                Roles
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["maintenance"]) ? (
+              <TabsTrigger value="maintenance">
+                <Wrench className="mr-2 h-4 w-4" />
+                Maintenance
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["logs"]) ? (
+              <TabsTrigger value="logs">
+                <ScrollText className="mr-2 h-4 w-4" />
+                Logs
+              </TabsTrigger>
+            ) : null}
+            {allows(TAB_CAPABILITY["settings"]) ? (
+              <TabsTrigger value="settings">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </TabsTrigger>
+            ) : null}
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
@@ -196,6 +258,10 @@ export default function Admin() {
           <TabsContent value="b2b-clients" className="mt-6">
             <B2BClientsTab />
           </TabsContent>
+          <TabsContent value="roles" className="mt-6">
+            <RolesTab />
+          </TabsContent>
+
           <TabsContent value="maintenance" className="mt-6">
             <MaintenanceTab />
           </TabsContent>

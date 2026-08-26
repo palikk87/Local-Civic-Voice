@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
-import { adminAuthHeader, useAdminStore } from "@/lib/mobile/admin-store";
+import { adminAuthHeader, useAdminCan } from "@/lib/mobile/admin-store";
 
 /**
  * Which keys this server actually holds, and does email actually send.
@@ -81,8 +81,12 @@ interface TestResult {
 }
 
 export function KeysAndEmailCard() {
-  const session = useAdminStore((s) => s.session);
-  const isSuperadmin = session?.role === "superadmin";
+  // ASK WHAT THE ROLE MAY DO, NOT WHAT IT IS CALLED. Both of these were
+  // `role === "superadmin"`, so a role the owner built and granted these exact
+  // capabilities to was refused nothing by the server and shown neither
+  // control by the console.
+  const canManageKeys = useAdminCan("keys.manage");
+  const canTestEmail = useAdminCan("email.test");
 
   const [to, setTo] = useState("");
   const [sending, setSending] = useState(false);
@@ -191,7 +195,7 @@ export function KeysAndEmailCard() {
                     <p className="text-sm text-amber-500">{key.withoutIt}</p>
                   ) : null}
                   {key.present ? <SourceLine source={key.source} /> : null}
-                  {isSuperadmin && data?.data.storage ? (
+                  {canManageKeys && data?.data.storage ? (
                     <KeyEditor
                       name={key.name}
                       stored={data.data.storage.stored.find((s) => s.name === key.name)}
@@ -239,7 +243,7 @@ export function KeysAndEmailCard() {
         which it is, in the provider's own words.
       </p>
 
-      {isSuperadmin ? (
+      {canTestEmail ? (
         <>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <Input

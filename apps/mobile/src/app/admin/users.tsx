@@ -28,7 +28,7 @@ import {
   User,
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
-import { useAdminStore, ManagedUser } from '@/lib/admin-store';
+import { adminCan, useAdminStore, ManagedUser } from '@/lib/admin-store';
 import * as Haptics from 'expo-haptics';
 
 interface UserCardProps {
@@ -38,7 +38,18 @@ interface UserCardProps {
   onDelete: () => void;
   onMakeAdmin: () => void;
   onGiveBusinessAccount: () => void;
-  isSuperAdmin: boolean;
+  /**
+   * What the signed-in role may do, as the server sees it — NOT what the role
+   * is called. This was a single owner-or-nothing boolean, so an owner could
+   * build a role, grant it "users.delete", and that role would still be shown
+   * no delete action. Web twin: apps/web/src/components/admin/UsersTab.tsx.
+   */
+  can: {
+    ban: boolean;
+    assignRole: boolean;
+    manageB2B: boolean;
+    delete: boolean;
+  };
 }
 
 function UserCard({
@@ -48,7 +59,7 @@ function UserCard({
   onDelete,
   onMakeAdmin,
   onGiveBusinessAccount,
-  isSuperAdmin,
+  can,
 }: UserCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
@@ -156,31 +167,33 @@ function UserCard({
             <View className="w-10 h-1 bg-slate-600 rounded-full self-center mb-4" />
             <Text className="text-white text-lg font-bold mb-4">Actions for @{user.username}</Text>
 
-            {user.status === 'banned' ? (
-              <TouchableOpacity
-                onPress={() => {
-                  setShowMenu(false);
-                  onUnban();
-                }}
-                className="flex-row items-center p-4 bg-green-500/20 rounded-xl mb-3"
-              >
-                <UserCheck size={20} color="#22C55E" />
-                <Text className="text-green-400 font-medium ml-3">Unban User</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                onPress={() => {
-                  setShowMenu(false);
-                  onBan();
-                }}
-                className="flex-row items-center p-4 bg-red-500/20 rounded-xl mb-3"
-              >
-                <Ban size={20} color="#EF4444" />
-                <Text className="text-red-400 font-medium ml-3">Ban User</Text>
-              </TouchableOpacity>
-            )}
+            {can.ban ? (
+              user.status === 'banned' ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowMenu(false);
+                    onUnban();
+                  }}
+                  className="flex-row items-center p-4 bg-green-500/20 rounded-xl mb-3"
+                >
+                  <UserCheck size={20} color="#22C55E" />
+                  <Text className="text-green-400 font-medium ml-3">Unban User</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowMenu(false);
+                    onBan();
+                  }}
+                  className="flex-row items-center p-4 bg-red-500/20 rounded-xl mb-3"
+                >
+                  <Ban size={20} color="#EF4444" />
+                  <Text className="text-red-400 font-medium ml-3">Ban User</Text>
+                </TouchableOpacity>
+              )
+            ) : null}
 
-            {isSuperAdmin && user.role === 'user' && (
+            {can.assignRole && (
               <TouchableOpacity
                 onPress={() => {
                   setShowMenu(false);
@@ -189,7 +202,13 @@ function UserCard({
                 className="flex-row items-center p-4 bg-amber-500/20 rounded-xl mb-3"
               >
                 <Crown size={20} color="#F59E0B" />
-                <Text className="text-amber-400 font-medium ml-3">Grant Admin Privileges</Text>
+                {/* "Grant Admin Privileges" only appeared for accounts whose
+                    role was still "user", so an administrator could be given a
+                    role once and never moved again — no demotion, no swap to
+                    another role, no way back to plain "user" from this screen.
+                    Roles are a picker now, so this offers the picker for
+                    anybody. */}
+                <Text className="text-amber-400 font-medium ml-3">Change role</Text>
               </TouchableOpacity>
             )}
 
@@ -198,7 +217,7 @@ function UserCard({
                 count of citizens, and reclassifying one would corrupt the only
                 number this platform exists to report. The wording says so
                 because a menu item called "Convert" would imply otherwise. */}
-            {isSuperAdmin && (
+            {can.manageB2B && (
               <TouchableOpacity
                 onPress={() => {
                   setShowMenu(false);
@@ -211,7 +230,7 @@ function UserCard({
               </TouchableOpacity>
             )}
 
-            {isSuperAdmin && (
+            {can.delete && (
               <TouchableOpacity
                 onPress={() => {
                   setShowMenu(false);
@@ -247,6 +266,16 @@ export default function AdminUsersScreen() {
   const [banReason, setBanReason] = useState('');
   const [banDuration, setBanDuration] = useState('');
   const [adminRoleModal, setAdminRoleModal] = useState<ManagedUser | null>(null);
+  /**
+   * The roles this deployment actually has.
+   *
+   * Two hardcoded buttons — "Moderator" and "Admin", with hardcoded
+   * descriptions of what each could do — is what was here, and both were wrong
+   * twice over: the endpoint behind them did not exist, and what a role may do
+   * is now configurable, so a description baked into a button would go stale
+   * the first time somebody edited one.
+   */
+  const [roles, setRoles] = useState<{ slug: string; name: string }[]>([]);
 
   const session = useAdminStore((s) => s.session);
   const users = useAdminStore((s) => s.users);
@@ -255,10 +284,16 @@ export default function AdminUsersScreen() {
   const banUser = useAdminStore((s) => s.banUser);
   const unbanUser = useAdminStore((s) => s.unbanUser);
   const deleteUser = useAdminStore((s) => s.deleteUser);
-  const makeAdmin = useAdminStore((s) => s.makeAdmin);
+  const assignRole = useAdminStore((s) => s.assignRole);
+  const fetchRoles = useAdminStore((s) => s.fetchRoles);
   const giveBusinessAccount = useAdminStore((s) => s.giveBusinessAccount);
 
-  const isSuperAdmin = session?.role === 'superadmin';
+  const can = {
+    ban: adminCan(session, 'users.ban'),
+    assignRole: adminCan(session, 'users.assignRole'),
+    manageB2B: adminCan(session, 'b2b.manage'),
+    delete: adminCan(session, 'users.delete'),
+  };
 
   useEffect(() => {
     loadUsers();
@@ -381,15 +416,15 @@ export default function AdminUsersScreen() {
     );
   };
 
-  const handleMakeAdmin = async (role: 'admin' | 'moderator') => {
+  const handleAssignRole = async (role: string) => {
     if (!adminRoleModal) return;
 
-    const result = await makeAdmin(adminRoleModal.id, role);
+    const result = await assignRole(adminRoleModal.id, role);
     if (result.success) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setAdminRoleModal(null);
     } else {
-      Alert.alert('Error', result.error || 'Failed to grant admin privileges');
+      Alert.alert('Error', result.error || 'Could not change the role');
     }
   };
 
@@ -488,9 +523,12 @@ export default function AdminUsersScreen() {
                 onBan={() => setBanModalUser(user)}
                 onUnban={() => handleUnban(user)}
                 onDelete={() => handleDelete(user)}
-                onMakeAdmin={() => setAdminRoleModal(user)}
+                onMakeAdmin={() => {
+                  setAdminRoleModal(user);
+                  void fetchRoles().then(setRoles);
+                }}
                 onGiveBusinessAccount={() => handleGiveBusinessAccount(user)}
-                isSuperAdmin={isSuperAdmin}
+                can={can}
               />
             ))
           )}
@@ -564,35 +602,49 @@ export default function AdminUsersScreen() {
         <View className="flex-1 bg-black/50 justify-end">
           <View className="bg-slate-800 rounded-t-3xl p-6">
             <View className="w-10 h-1 bg-slate-600 rounded-full self-center mb-4" />
-            <Text className="text-white text-xl font-bold mb-4">
-              Grant Admin Privileges to @{adminRoleModal?.username}
+            <Text className="text-white text-xl font-bold mb-1">
+              Role for @{adminRoleModal?.username}
+            </Text>
+            <Text className="text-slate-400 text-sm mb-4">
+              What each role may do is set in the web console under Roles. A change applies to
+              their next request, not their next sign-in.
             </Text>
 
             <TouchableOpacity
-              onPress={() => handleMakeAdmin('moderator')}
-              className="bg-blue-500/20 border border-blue-500/50 p-4 rounded-xl mb-3"
+              onPress={() => handleAssignRole('user')}
+              className="bg-slate-700/40 border border-slate-600 p-4 rounded-xl mb-3"
             >
               <View className="flex-row items-center">
-                <Shield size={24} color="#3B82F6" />
-                <View className="ml-3">
-                  <Text className="text-blue-400 font-bold">Moderator</Text>
-                  <Text className="text-slate-400 text-sm">Can moderate content and ban users</Text>
+                <Shield size={24} color="#94A3B8" />
+                <View className="ml-3 flex-1">
+                  <Text className="text-slate-200 font-bold">No administrative access</Text>
+                  <Text className="text-slate-400 text-sm">
+                    Their citizen account is untouched.
+                  </Text>
                 </View>
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => handleMakeAdmin('admin')}
-              className="bg-amber-500/20 border border-amber-500/50 p-4 rounded-xl mb-4"
-            >
-              <View className="flex-row items-center">
-                <Crown size={24} color="#F59E0B" />
-                <View className="ml-3">
-                  <Text className="text-amber-400 font-bold">Admin</Text>
-                  <Text className="text-slate-400 text-sm">Full access except user deletion</Text>
+            {roles.map((role) => (
+              <TouchableOpacity
+                key={role.slug}
+                onPress={() => handleAssignRole(role.slug)}
+                className="bg-amber-500/20 border border-amber-500/50 p-4 rounded-xl mb-3"
+              >
+                <View className="flex-row items-center">
+                  <Crown size={24} color="#F59E0B" />
+                  <View className="ml-3 flex-1">
+                    <Text className="text-amber-400 font-bold">{role.name}</Text>
+                    <Text className="text-slate-400 text-sm">{role.slug}</Text>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+
+            <Text className="text-slate-500 text-xs mb-4">
+              The owner is not in this list. There is one, the seat is not assignable, and that
+              account cannot be banned, deleted, re-keyed or re-roled by anybody.
+            </Text>
 
             <TouchableOpacity
               onPress={() => setAdminRoleModal(null)}

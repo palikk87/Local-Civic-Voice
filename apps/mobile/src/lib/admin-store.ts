@@ -4,10 +4,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { BACKEND_URL } from './config';
 
+/**
+ * The owner seat plus whatever roles the owner has created. A union of three
+ * names stopped being true when roles became configurable; the server decides
+ * what is valid and this no longer pretends to know.
+ */
+export type AdminRole = string;
+
 export interface AdminUser {
   id: string;
   username: string;
-  role: 'admin' | 'moderator' | 'superadmin';
+  role: AdminRole;
   createdAt: string;
   lastLogin?: string;
 }
@@ -16,7 +23,16 @@ export interface AdminSession {
   token: string;
   adminId: string;
   username: string;
-  role: 'admin' | 'moderator' | 'superadmin';
+  role: AdminRole;
+  /**
+   * What this role may do, as the server sees it. Refreshed on every verify.
+   *
+   * GATE UI ON THIS, NEVER ON `role`. A control hidden behind
+   * `role === 'superadmin'` stays hidden from a custom role that holds the
+   * capability — the server would allow the call, and the person holding the
+   * permission can never find it. Web twin: apps/web/src/lib/mobile/admin-store.ts.
+   */
+  capabilities: string[];
   expiresAt: string;
 }
 
@@ -33,7 +49,7 @@ export interface ManagedUser {
   following: number;
   votesCount: number;
   postsCount: number;
-  role: 'user' | 'admin' | 'moderator' | 'superadmin';
+  role: AdminRole;
   status: 'active' | 'banned' | 'suspended';
   lastActive?: string;
   banReason?: string;
@@ -111,7 +127,18 @@ interface AdminState {
   banUser: (id: string, reason: string, duration?: number) => Promise<{ success: boolean; error?: string }>;
   unbanUser: (id: string) => Promise<{ success: boolean; error?: string }>;
   deleteUser: (id: string) => Promise<{ success: boolean; error?: string }>;
-  makeAdmin: (id: string, role: 'admin' | 'moderator') => Promise<{ success: boolean; error?: string }>;
+  /**
+   * Give an account a role, or take every administrative power away with "user".
+   *
+   * WAS `makeAdmin`, AND IT NEVER WORKED. It called
+   * POST /api/admin/users/:id/make-admin, a route the backend does not mount
+   * and never has — 404 on every press, for as long as the button has existed.
+   * The endpoint exists now, roles are configurable rather than two names, and
+   * this points at it.
+   */
+  assignRole: (id: string, role: string) => Promise<{ success: boolean; error?: string }>;
+  /** Every role this deployment has, for the picker. */
+  fetchRoles: () => Promise<{ slug: string; name: string }[]>;
   /**
    * Give an existing account a separate business login for the analytics
    * portal. Web twin: apps/web/src/components/admin/UsersTab.tsx.
@@ -174,12 +201,14 @@ export const useAdminStore = create<AdminState>()(
             return { success: false, error: data.error || 'Login failed' };
           }
 
-          // Backend returns { success, token, admin: { id, username, role }, expiresAt }
+          // Backend returns
+          // { success, token, admin: { id, username, role, capabilities }, expiresAt }
           const session: AdminSession = {
             token: data.token,
             adminId: data.admin.id,
             username: data.admin.username,
             role: data.admin.role,
+            capabilities: data.admin.capabilities ?? [],
             expiresAt: data.expiresAt,
           };
 
@@ -243,6 +272,20 @@ export const useAdminStore = create<AdminState>()(
             return false;
           }
 
+          // Pick up a role edit made while this console was open, rather than
+          // waiting for the next sign-in.
+          const body = await response.json().catch(() => null);
+          const fresh = body?.admin;
+          if (fresh) {
+            set({
+              session: {
+                ...session,
+                role: fresh.role ?? session.role,
+                capabilities: fresh.capabilities ?? session.capabilities,
+              },
+            });
+          }
+
           return true;
         } catch {
           return false;
@@ -304,7 +347,7 @@ export const useAdminStore = create<AdminState>()(
               following: u.following,
               votesCount: u.votesCount,
               postsCount: u.postsCount || 0,
-              role: (u.role || 'user') as 'user' | 'admin' | 'moderator' | 'superadmin',
+              role: (u.role || 'user') as AdminRole,
               status: (u.isBanned ? 'banned' : (u.status || 'active')) as 'active' | 'banned' | 'suspended',
               lastActive: undefined,
               banReason: u.banInfo?.reason,
@@ -347,7 +390,7 @@ export const useAdminStore = create<AdminState>()(
               following: u.following,
               votesCount: u.votesCount,
               postsCount: u.stats?.postsCount || u.postsCount || 0,
-              role: (u.role || 'user') as 'user' | 'admin' | 'moderator' | 'superadmin',
+              role: (u.role || 'user') as AdminRole,
               status: (u.isBanned ? 'banned' : (u.status || 'active')) as 'active' | 'banned' | 'suspended',
               lastActive: undefined,
               banReason: u.banInfo?.reason,
@@ -489,29 +532,45 @@ export const useAdminStore = create<AdminState>()(
         }
       },
 
-      makeAdmin: async (id, role) => {
+      assignRole: async (id, role) => {
         const { session } = get();
         if (!session?.token) return { success: false, error: 'Not authenticated' };
 
         try {
-          const response = await fetch(`${BACKEND_URL}/api/admin/users/${id}/make-admin`, {
-            method: 'POST',
+          const response = await fetch(`${BACKEND_URL}/api/admin/users/${id}/role`, {
+            method: 'PUT',
             headers: {
+              Authorization: `Bearer ${session.token}`,
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${session.token}`,
             },
             body: JSON.stringify({ role }),
           });
 
           if (!response.ok) {
             const data = await response.json();
-            return { success: false, error: data.error || 'Failed to grant admin privileges' };
+            return { success: false, error: data.error || 'Could not change the role' };
           }
 
           await get().fetchUsers();
           return { success: true };
         } catch {
           return { success: false, error: 'Network error' };
+        }
+      },
+
+      fetchRoles: async () => {
+        const { session } = get();
+        if (!session?.token) return [];
+
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/admin/roles`, {
+            headers: { Authorization: `Bearer ${session.token}` },
+          });
+          if (!response.ok) return [];
+          const body = await response.json();
+          return (body.data?.roles ?? []) as { slug: string; name: string }[];
+        } catch {
+          return [];
         }
       },
 
@@ -799,4 +858,17 @@ export const useAdminStore = create<AdminState>()(
 export function adminAuthHeader(): Record<string, string> {
   const token = useAdminStore.getState().session?.token;
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Whether the signed-in console session may do `capability`.
+ *
+ * The owner seat holds everything, including capabilities that do not exist
+ * yet, so it is answered by name — the one place a name is the truth.
+ * Web twin: `adminCan` in apps/web/src/lib/mobile/admin-store.ts.
+ */
+export function adminCan(session: AdminSession | null, capability: string): boolean {
+  if (!session) return false;
+  if (session.role === 'superadmin') return true;
+  return session.capabilities.includes(capability);
 }

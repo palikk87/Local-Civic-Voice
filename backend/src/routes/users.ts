@@ -832,6 +832,47 @@ usersRouter.get("/jurisdiction/districts", async (c) => {
  * hint. The username is returned because it is the one they will be typing, and
  * because they already know it.
  */
+/**
+ * GET /api/users/me/admin-access
+ *
+ * Whether this person's account carries an administrative role, so their
+ * profile can offer them the console.
+ *
+ * SAME SHAPE AND SAME REASON as the business-account endpoint beside it. The
+ * console card used to be gated on `isStaff`, which reads the SEPARATE admin
+ * console session — so somebody who genuinely held a role but had not signed
+ * into the console yet was shown no way to get there. A door you can only see
+ * once you are already through it.
+ *
+ * SELF ONLY. Nothing here answers this about anybody else, and it says nothing
+ * about what the role may do — that is the console's business, not a public
+ * fact about a citizen.
+ */
+usersRouter.get("/me/admin-access", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  const me = await prisma.user.findUnique({
+    where: { id: currentUser.id },
+    select: { role: true },
+  });
+
+  const role = me?.role ?? "user";
+  if (role === "user") return c.json({ adminAccess: null });
+
+  // The name as configured, so a renamed role reads correctly on the card.
+  const named = await prisma.adminRole
+    .findUnique({ where: { slug: role }, select: { name: true } })
+    .catch(() => null);
+
+  return c.json({
+    adminAccess: {
+      role,
+      name: role === "superadmin" ? "Owner" : (named?.name ?? role),
+    },
+  });
+});
+
 usersRouter.get("/me/business-account", async (c) => {
   const currentUser = c.get("user");
   if (!currentUser) return c.json({ error: "Authentication required" }, 401);

@@ -1407,3 +1407,42 @@ model PlatformSecret {
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
 }
+
+/// An administrative role, and exactly what it is allowed to do.
+///
+/// WHY THIS IS A TABLE. The platform shipped with three fixed roles whose
+/// powers were spelled out in fourteen scattered `role !== "superadmin"`
+/// checks. Changing what a moderator could do meant a code change and a deploy,
+/// and no two deployments could differ. Roles are now rows, so the person who
+/// owns the platform decides what each one means without asking anybody.
+///
+/// SUPERADMIN IS NOT IN THIS TABLE. It is not a permission set, it is the
+/// owner: it always holds everything, it cannot be edited, and it cannot be
+/// deleted. That is the property that makes every other row safe to edit —
+/// there is always somebody who can undo a mistake, including the mistake of
+/// removing your own access. See services/admin-permissions.ts.
+model AdminRole {
+  /// What is stored on User.role. Lowercase, stable, and never re-used.
+  slug String @id
+
+  /// What it is called in the console. Renaming is free; the slug is the identity.
+  name        String
+  description String?
+
+  /// Capability keys, as JSON. Every one of them names something a route
+  /// checks by name — see services/admin-capabilities.ts, which is the only
+  /// place they are defined and which tests hold to actually gating something.
+  ///
+  /// JSON rather than a join table on purpose: this is read on every
+  /// authorization check, it is always read whole, and it is never queried
+  /// across roles. A join table would be three queries and a cache to answer
+  /// what one column already answers.
+  capabilities String
+
+  /// Shipped with the platform. Can be edited freely; cannot be deleted, so a
+  /// deployment always has somewhere to put an administrator.
+  builtIn Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Ban, Trash2, ShieldCheck, Users, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { adminAuthHeader, useAdminStore } from "@/lib/mobile/admin-store";
+import { adminAuthHeader, useAdminCan } from "@/lib/mobile/admin-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +55,9 @@ export function UsersTab() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState<string>("");
   const [offset, setOffset] = useState<number>(0);
+  const [roleTarget, setRoleTarget] = useState<ManagedUser | null>(null);
+  const [chosenRole, setChosenRole] = useState("user");
+
   const [convertTarget, setConvertTarget] = useState<ManagedUser | null>(null);
   const [convertType, setConvertType] = useState("research");
   const [convertTier, setConvertTier] = useState("basic");
@@ -70,7 +73,13 @@ export function UsersTab() {
   const [banDays, setBanDays] = useState<string>("");
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
 
-  const isSuperadmin = useAdminStore((s) => s.session?.role === "superadmin");
+  // WHAT THE ROLE MAY DO, NOT WHAT IT IS CALLED. These were all one
+  // `role === "superadmin"` flag, which meant an owner could grant a role
+  // "users.delete" and that role would still be shown no delete button.
+  const canBan = useAdminCan("users.ban");
+  const canAssignRole = useAdminCan("users.assignRole");
+  const canManageB2B = useAdminCan("b2b.manage");
+  const canDelete = useAdminCan("users.delete");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", search, offset],
@@ -107,6 +116,43 @@ export function UsersTab() {
    * of people, and reclassifying one would corrupt the only number this
    * platform exists to report.
    */
+  /** The roles this deployment actually has, rather than three names in a dropdown. */
+  const { data: rolesData } = useQuery({
+    queryKey: ["admin", "roles"],
+    queryFn: () =>
+      api.get<{ data: { roles: { slug: string; name: string }[] } }>("/api/admin/roles", {
+        headers: adminAuthHeader(),
+      }),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  /**
+   * Give somebody a role, or take every administrative power away with "user".
+   *
+   * THE ENDPOINT THIS CALLS DID NOT EXIST until now. The mobile console has
+   * had a "Grant Admin Privileges" button for weeks, calling
+   * POST /api/admin/users/:id/make-admin — a route the backend does not mount.
+   * It answered 404 on every press.
+   */
+  const roleMutation = useMutation({
+    mutationFn: (input: { id: string; role: string }) =>
+      api.put<{ data: { role: string; previousRole: string } }>(
+        `/api/admin/users/${input.id}/role`,
+        { role: input.role },
+        { headers: adminAuthHeader() },
+      ),
+    onSuccess: (response) => {
+      toast.success(
+        `Role changed: ${response.data.previousRole} → ${response.data.role}`,
+        { description: "Applies to their next request, not their next login." },
+      );
+      setRoleTarget(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error("Could not change the role", { description: e.message }),
+  });
+
   const convertMutation = useMutation({
     mutationFn: (input: { userId: string; name?: string; type: string; tier: string }) =>
       api.post<{
@@ -212,23 +258,38 @@ export function UsersTab() {
                 ) : null}
               </div>
               <div className="flex shrink-0 gap-2">
-                {user.isBanned ? (
+                {canBan ? (
+                  user.isBanned ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => unbanMutation.mutate(user.id)}
+                      disabled={unbanMutation.isPending}
+                    >
+                      <ShieldCheck className="mr-1.5 h-4 w-4" />
+                      Unban
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => setBanTarget(user)}>
+                      <Ban className="mr-1.5 h-4 w-4" />
+                      Ban
+                    </Button>
+                  )
+                ) : null}
+                {canAssignRole ? (
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => unbanMutation.mutate(user.id)}
-                    disabled={unbanMutation.isPending}
+                    onClick={() => {
+                      setRoleTarget(user);
+                      setChosenRole(user.role);
+                    }}
                   >
                     <ShieldCheck className="mr-1.5 h-4 w-4" />
-                    Unban
+                    Role
                   </Button>
-                ) : (
-                  <Button size="sm" variant="outline" onClick={() => setBanTarget(user)}>
-                    <Ban className="mr-1.5 h-4 w-4" />
-                    Ban
-                  </Button>
-                )}
-                {isSuperadmin ? (
+                ) : null}
+                {canManageB2B ? (
                   <Button
                     size="sm"
                     variant="outline"
@@ -243,7 +304,7 @@ export function UsersTab() {
                     Business account
                   </Button>
                 ) : null}
-                {isSuperadmin ? (
+                {canDelete ? (
                   <Button size="sm" variant="destructive" onClick={() => setDeleteTarget(user)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -276,6 +337,50 @@ export function UsersTab() {
           Next
         </Button>
       </div>
+
+      {/* What this person may do as an administrator */}
+      <Dialog open={!!roleTarget} onOpenChange={(open) => !open && setRoleTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Role for {roleTarget?.displayName}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              What each role may do is set under <span className="font-medium">Roles</span>. A
+              change here applies to their next request, not their next sign-in.
+            </p>
+            <select
+              value={chosenRole}
+              onChange={(e) => setChosenRole(e.target.value)}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="user">No administrative access</option>
+              {(rolesData?.data.roles ?? []).map((role) => (
+                <option key={role.slug} value={role.slug}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              The owner is not in this list. There is one, the seat is not assignable, and that
+              account cannot be banned, deleted, re-keyed or re-roled by anybody.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={roleMutation.isPending || chosenRole === roleTarget?.role}
+              onClick={() =>
+                roleTarget && roleMutation.mutate({ id: roleTarget.id, role: chosenRole })
+              }
+            >
+              {roleMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Give an existing account a business login */}
       <Dialog open={!!convertTarget} onOpenChange={(open) => !open && setConvertTarget(null)}>

@@ -53,6 +53,7 @@ import {
 } from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
 import { runContentSelfHeal } from "./services/content-self-heal";
+import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { syncRollCalls } from "./services/roll-call-sync";
@@ -393,6 +394,16 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
     })
     .catch((error) => console.error("[Server] could not queue the extraction repair:", error));
 }
+
+// The built-in roles, if this database has never had them.
+//
+// Only ever creates. A deployment that has decided its moderators may post
+// announcements must not have that quietly taken back by a redeploy — a boot
+// that silently rewrites authorization is the exact kind of surprise this
+// codebase has a rule against. See services/admin-permissions.ts.
+void ensureBuiltInRoles().catch((error) => {
+  console.error("[Roles] could not ensure the built-in roles:", error);
+});
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
 // SCOTUS cases at boot, then once every 24 hours. The sync itself skips if it

@@ -26,6 +26,7 @@ import { ensureReferenceContent } from "../services/reference-content";
 import { parseBrief } from "../services/citizen-brief";
 import { resolveLibraryDocument } from "../services/library-resolve";
 import { libraryResolveRequestSchema } from "../types";
+import { requireCapability } from "../services/admin-permissions";
 import { JobPriority, JobType, enqueueBriefGeneration, jobQueue } from "../services/job-queue";
 import { briefState, isAbandoned, isWorking, markSettled, markWorking } from "../services/brief-state";
 
@@ -1180,8 +1181,16 @@ governmentReferencesRouter.post("/merge", zValidator("json", mergeSchema), async
     select: { role: true },
   });
 
-  if (!actor || !["admin", "moderator", "superadmin"].includes(actor.role)) {
+  // This named "admin", "moderator" and "superadmin" literally, which meant a
+  // role the owner created — however many capabilities they gave it — could
+  // never merge anything. Roles are configurable now, so the question this asks
+  // is the capability, not the name.
+  if (!actor) {
     return c.json({ error: "Administrator access required" }, 403);
+  }
+  const denial = await requireCapability(actor.role, "merges.decide");
+  if (denial) {
+    return c.json(denial, 403);
   }
 
   const { sourceId, targetId } = c.req.valid("json");

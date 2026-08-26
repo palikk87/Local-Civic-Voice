@@ -1,5 +1,6 @@
 /**
- * The maintenance jobs are reachable without a shell, and only by a superadmin.
+ * The maintenance jobs are reachable without a shell, and only by a role that
+ * holds "content.repair".
  *
  * WHY THESE EXIST AS ENDPOINTS. Both were scripts, and a script needs somebody
  * with a terminal on the production service. The person who NOTICES that a
@@ -9,8 +10,15 @@
  *
  * What is pinned here is the part that could go quietly wrong: that the
  * destructive half never happens by accident, that it clears exactly what the
- * script clears and nothing else, and that the door is shut to everybody but a
- * superadmin.
+ * script clears and nothing else, and that the door is shut to any role
+ * without the capability that names it.
+ *
+ * THIS USED TO SAY "everybody but a superadmin", and asserted it with a plain
+ * "admin" token. That stopped being the rule when roles became configurable:
+ * the built-in Administrator seed holds "content.repair" deliberately, because
+ * clearing a captcha out of a law's text is day-to-day upkeep and not an act
+ * of authority. The door is still shut — it is shut on the capability now, so
+ * the role proving it is one that holds nothing at all.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
@@ -32,7 +40,9 @@ const POISONED = "eo-test-poisoned";
 const HEALTHY = "eo-test-healthy";
 
 let superadminToken = "";
-let plainAdminToken = "";
+/** A real console login whose role grants no capabilities whatsoever. */
+let powerlessToken = "";
+const POWERLESS_ROLE = "maint-powerless";
 
 async function loginAdmin(email: string, password: string): Promise<string> {
   const response = await fetch(`${BASE_URL}/api/admin/login`, {
@@ -57,9 +67,22 @@ beforeAll(async () => {
   await prisma.user.update({ where: { id: superadmin.userId }, data: { role: "superadmin" } });
   superadminToken = await loginAdmin("maint-super@example.com", password);
 
+  // A role holding nothing, so the refusals below prove the capability check
+  // rather than the spelling of a role name.
+  await prisma.adminRole.upsert({
+    where: { slug: POWERLESS_ROLE },
+    update: { capabilities: "[]" },
+    create: {
+      slug: POWERLESS_ROLE,
+      name: "Maintenance Test — no capabilities",
+      description: "Exists to prove that a role without content.repair is refused.",
+      capabilities: "[]",
+      builtIn: false,
+    },
+  });
   const plain = await signUp({ email: "maint-plain@example.com", password, name: "Maint Plain" });
-  await prisma.user.update({ where: { id: plain.userId }, data: { role: "admin" } });
-  plainAdminToken = await loginAdmin("maint-plain@example.com", password);
+  await prisma.user.update({ where: { id: plain.userId }, data: { role: POWERLESS_ROLE } });
+  powerlessToken = await loginAdmin("maint-plain@example.com", password);
 
   await prisma.governmentReference.createMany({
     data: [
@@ -94,6 +117,7 @@ afterAll(async () => {
   await prisma.governmentReference.deleteMany({
     where: { masterReferenceId: { in: [POISONED, HEALTHY] } },
   });
+  await prisma.adminRole.deleteMany({ where: { slug: POWERLESS_ROLE } }).catch(() => {});
   await stopServer();
 });
 
@@ -105,7 +129,7 @@ function purge(token: string, apply: boolean) {
   });
 }
 
-describe("the maintenance door is shut to everybody but a superadmin", () => {
+describe("the maintenance door is shut to a role without content.repair", () => {
   test("no token at all is 401", async () => {
     const response = await fetch(`${BASE_URL}/api/admin/maintenance/purge-blocked-text`, {
       method: "POST",
@@ -115,8 +139,8 @@ describe("the maintenance door is shut to everybody but a superadmin", () => {
     expect(response.status).toBe(401);
   });
 
-  test("an ordinary admin is 403, not merely unlucky", async () => {
-    const response = await purge(plainAdminToken, false);
+  test("a role without the capability is 403, not merely unlucky", async () => {
+    const response = await purge(powerlessToken, false);
     expect(response.status).toBe(403);
   });
 
@@ -125,7 +149,7 @@ describe("the maintenance door is shut to everybody but a superadmin", () => {
       `${BASE_URL}/api/admin/maintenance/backfill-executive-orders?maxNew=1`,
       {
         method: "POST",
-        headers: { Authorization: `Bearer ${plainAdminToken}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${powerlessToken}`, "Content-Type": "application/json" },
         body: "{}",
       },
     );

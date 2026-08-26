@@ -9,6 +9,15 @@ import { checkStorage } from "../services/storage";
 import { emailConfiguration, trySendingEmail } from "../services/email";
 import { keyReport, keyWarnings } from "../services/key-report";
 import {
+  capabilitiesFor,
+  consoleRoleSlugs,
+  forgetCachedRoles,
+  OWNER_ROLE,
+  protectOwner,
+  requireCapability,
+} from "../services/admin-permissions";
+import { CAPABILITIES, CAPABILITY_KEYS, isCapability } from "../services/admin-capabilities";
+import {
   clearPlatformSecret,
   encryptionStatus,
   isStorableSecret,
@@ -37,10 +46,17 @@ import {
 // Type Definitions
 // ==========================================
 
+/**
+ * A role is a slug the owner may create, not one of three names. The union
+ * that used to sit here made every custom role a type error waiting to be
+ * cast away — which is exactly what the cast at login was doing.
+ */
+type AdminRoleSlug = string;
+
 interface AdminUser {
   id: string;
   username: string;
-  role: "admin" | "moderator" | "superadmin";
+  role: AdminRoleSlug;
   createdAt: string;
   lastLogin?: string;
 }
@@ -49,7 +65,7 @@ interface AdminSession {
   token: string;
   adminId: string;
   username: string;
-  role: "admin" | "moderator" | "superadmin";
+  role: AdminRoleSlug;
   createdAt: string;
   expiresAt: string;
 }
@@ -353,7 +369,14 @@ adminRouter.post("/login", zValidator("json", loginSchema), async (c) => {
         { username: username },
         { email: username },
       ],
-      role: { in: ["admin", "moderator", "superadmin"] },
+      // ANY ROLE THAT EXISTS, not three names frozen into a query.
+      //
+      // This listed "admin", "moderator" and "superadmin" literally, so the
+      // first custom role somebody created could be assigned, could be shown
+      // in the console, and could not sign in — an account that looks like an
+      // administrator everywhere except the one screen that matters. Found by
+      // the permissions test on its first run, before any of this shipped.
+      role: { in: await consoleRoleSlugs() },
     },
     include: {
       accounts: { where: { providerId: "credential" }, select: { password: true } },
@@ -387,7 +410,7 @@ adminRouter.post("/login", zValidator("json", loginSchema), async (c) => {
   const now = new Date();
   const expiresAt = new Date(now.getTime() + ADMIN_SESSION_MS);
   const displayName = dbUser.username || dbUser.name || dbUser.email;
-  const role = dbUser.role as "admin" | "moderator" | "superadmin";
+  const role: AdminRoleSlug = dbUser.role;
 
   await prisma.adminSession.create({
     data: { token, adminId: dbUser.id, username: displayName, role, createdAt: now, expiresAt },
@@ -407,6 +430,14 @@ adminRouter.post("/login", zValidator("json", loginSchema), async (c) => {
       id: dbUser.id,
       username: displayName,
       role,
+      // WHAT THIS ROLE MAY DO, sent with the session that will be doing it.
+      //
+      // Without this the console can only gate its screens on the role's NAME,
+      // which is how you get a custom role that holds "keys.manage", is refused
+      // nothing by the server, and is shown no key panel to use it in — the
+      // permission works and is invisible, which to the person holding it is
+      // indistinguishable from not working.
+      capabilities: [...(await capabilitiesFor(role))],
     },
     expiresAt: expiresAt.toISOString(),
   });
@@ -426,6 +457,10 @@ adminRouter.get("/verify", async (c) => {
       id: session.adminId,
       username: session.username,
       role: session.role,
+      // Re-read on every verify, not carried from login. A console left open
+      // while the owner edits its role picks the change up on the next check
+      // rather than at the next sign-in.
+      capabilities: [...(await capabilitiesFor(session.role))],
     },
     expiresAt: session.expiresAt,
   });
@@ -451,6 +486,8 @@ adminRouter.get("/users", zValidator("query", userSearchQuerySchema), async (c) 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "users.view");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { limit, offset, search, status, sortBy, sortOrder } = c.req.valid("query");
 
@@ -546,6 +583,8 @@ adminRouter.get("/users/:id", zValidator("param", idParamSchema), async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "users.view");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { id } = c.req.valid("param");
 
@@ -623,11 +662,14 @@ adminRouter.post(
     if (!session) {
       return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
     }
-    if (session.role !== "superadmin") {
-      return c.json({ error: "Only superadmin can reset a password" }, { status: 403 });
-    }
+    const denied = await requireCapability(session.role, "users.resetPassword");
+    if (denied) return c.json(denied, { status: 403 });
 
     const { id } = c.req.valid("param");
+
+    // The owner account is not administrable from here, by anybody.
+    const owned = await protectOwner(id);
+    if (owned) return c.json(owned, { status: 403 });
     const body = c.req.valid("json");
 
     const user = await prisma.user.findUnique({
@@ -673,11 +715,13 @@ adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) =
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
 
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can delete users" }, { status: 403 });
-  }
-
+  const denied = await requireCapability(session.role, "users.delete");
+  if (denied) return c.json(denied, { status: 403 });
   const { id } = c.req.valid("param");
+
+  // The owner account is not administrable from here, by anybody.
+  const owned = await protectOwner(id);
+  if (owned) return c.json(owned, { status: 403 });
 
   try {
     const user = await prisma.user.findUnique({ where: { id } });
@@ -747,8 +791,15 @@ adminRouter.post(
     if (!session) {
       return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
     }
+    const denied = await requireCapability(session.role, "users.ban");
+    if (denied) return c.json(denied, { status: 403 });
 
     const { id } = c.req.valid("param");
+
+    // The owner account is not administrable from here, by anybody. Banning it
+    // would lock the one person who can undo anything out of the platform.
+    const owned = await protectOwner(id);
+    if (owned) return c.json(owned, { status: 403 });
     const { reason, duration } = c.req.valid("json");
 
     try {
@@ -807,8 +858,13 @@ adminRouter.delete("/users/:id/ban", zValidator("param", idParamSchema), async (
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-
+  const denied = await requireCapability(session.role, "users.ban");
+  if (denied) return c.json(denied, { status: 403 });
   const { id } = c.req.valid("param");
+
+  // The owner account is not administrable from here, by anybody.
+  const owned = await protectOwner(id);
+  if (owned) return c.json(owned, { status: 403 });
 
   try {
     const user = await prisma.user.findUnique({ where: { id } });
@@ -863,6 +919,8 @@ adminRouter.get("/posts", zValidator("query", postSearchQuerySchema), async (c) 
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "posts.moderate");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { limit, offset, search, sortBy, sortOrder } = c.req.valid("query");
 
@@ -954,6 +1012,8 @@ adminRouter.delete("/posts/:id", zValidator("param", idParamSchema), async (c) =
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "posts.moderate");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { id } = c.req.valid("param");
 
@@ -1078,11 +1138,11 @@ async function b2bClientAuth(c: Context<{ Variables: { adminSession: AdminSessio
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
 
-  // Everything except listing is superadmin-only. A read-only admin can see
-  // that a client exists; only a superadmin can mint, alter or revoke one.
-  if (c.req.method !== "GET" && session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can manage B2B clients" }, { status: 403 });
-  }
+  // Reading the list and changing it are different powers, and a role can hold
+  // one without the other.
+  const needed = c.req.method === "GET" ? "b2b.view" : "b2b.manage";
+  const denied = await requireCapability(session.role, needed);
+  if (denied) return c.json(denied, { status: 403 });
 
   c.set("adminSession", session);
   await next();
@@ -1111,6 +1171,349 @@ adminRouter.get("/b2b-clients", async (c) => {
     })),
   });
 });
+
+// ==========================================
+// Roles: what each kind of administrator may do
+// ==========================================
+
+const roleSlugParam = z.object({ slug: z.string().min(1).max(64) });
+
+const roleBodySchema = z.object({
+  name: z.string().min(1, "A role needs a name").max(80),
+  description: z.string().max(400).optional(),
+  capabilities: z.array(z.string()).max(200),
+});
+
+const createRoleSchema = roleBodySchema.extend({
+  slug: z
+    .string()
+    .min(2, "Slug must be at least 2 characters")
+    .max(64)
+    .regex(/^[a-z0-9_-]+$/, "Lowercase letters, digits, dash and underscore only"),
+});
+
+const assignRoleSchema = z.object({
+  /** "user" removes every administrative power. */
+  role: z.string().min(1).max(64),
+});
+
+/**
+ * GET /api/admin/roles
+ *
+ * Every role, what it may do, and the full catalogue to build one from.
+ *
+ * The catalogue ships with the code rather than the database because every key
+ * in it names something a route checks by name. A permission somebody could
+ * type in freehand would gate nothing while looking like it gated something,
+ * which is worse than having no permission system at all.
+ */
+adminRouter.get("/roles", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+
+  const roles = await prisma.adminRole.findMany({ orderBy: { createdAt: "asc" } });
+  const holders = await prisma.user.groupBy({ by: ["role"], _count: { role: true } });
+  const countFor = (slug: string) =>
+    holders.find((row) => row.role === slug)?._count.role ?? 0;
+
+  return c.json({
+    data: {
+      /**
+       * The owner first, and marked as not editable. It is not a row: it holds
+       * every capability including ones added later, which is what guarantees
+       * somebody can always undo a mistake — including the mistake of removing
+       * their own access.
+       */
+      owner: {
+        slug: OWNER_ROLE,
+        name: "Owner",
+        description:
+          "Holds everything, including capabilities added in future. Cannot be edited or " +
+          "deleted — somebody has to be able to undo a mistake.",
+        capabilities: CAPABILITY_KEYS,
+        builtIn: true,
+        editable: false,
+        holders: countFor(OWNER_ROLE),
+      },
+      roles: roles.map((role) => ({
+        slug: role.slug,
+        name: role.name,
+        description: role.description,
+        capabilities: JSON.parse(role.capabilities) as string[],
+        builtIn: role.builtIn,
+        editable: true,
+        holders: countFor(role.slug),
+      })),
+      capabilities: CAPABILITIES,
+      note:
+        "Every capability here is checked by name somewhere in the API. There is no way to " +
+        "invent one, because a permission that gates nothing is worse than none.",
+    },
+  });
+});
+
+/** POST /api/admin/roles — define a new kind of administrator. */
+adminRouter.post("/roles", zValidator("json", createRoleSchema), async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "roles.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const body = c.req.valid("json");
+  const slug = body.slug.toLowerCase();
+
+  if (slug === OWNER_ROLE || slug === "user") {
+    return c.json({ error: `"${slug}" is reserved.` }, { status: 400 });
+  }
+  if (await prisma.adminRole.findUnique({ where: { slug }, select: { slug: true } })) {
+    return c.json({ error: "A role with that slug already exists" }, { status: 409 });
+  }
+
+  const unknown = body.capabilities.filter((key) => !isCapability(key));
+  if (unknown.length > 0) {
+    return c.json(
+      { error: `Not capabilities this platform checks: ${unknown.join(", ")}` },
+      { status: 400 },
+    );
+  }
+
+  const created = await prisma.adminRole.create({
+    data: {
+      slug,
+      name: body.name,
+      description: body.description,
+      capabilities: JSON.stringify(body.capabilities),
+    },
+  });
+  forgetCachedRoles();
+
+  createActivityLog(
+    "create_role",
+    session.adminId,
+    session.username,
+    "system",
+    slug,
+    `Created the role "${created.name}" with ${body.capabilities.length} capabilit(ies)`,
+  );
+
+  return c.json({ data: { slug: created.slug, name: created.name } }, { status: 201 });
+});
+
+/** PUT /api/admin/roles/:slug — change what a role may do. */
+adminRouter.put(
+  "/roles/:slug",
+  zValidator("param", roleSlugParam),
+  zValidator("json", roleBodySchema),
+  async (c) => {
+    const session = await getAdminFromToken(c.req.header("Authorization"));
+    if (!session) {
+      return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+    }
+    const denied = await requireCapability(session.role, "roles.manage");
+    if (denied) return c.json(denied, { status: 403 });
+
+    const { slug } = c.req.valid("param");
+    if (slug === OWNER_ROLE) {
+      // THE ONE ROLE THAT CANNOT BE EDITED, and the reason every other one can
+      // be. If the owner's powers were editable there would be a sequence of
+      // perfectly legitimate edits that locks everybody out of the platform
+      // permanently, with nobody left who can undo it.
+      return c.json(
+        { error: "The owner role cannot be edited. It is what makes every other role safe to." },
+        { status: 400 },
+      );
+    }
+
+    const existing = await prisma.adminRole.findUnique({ where: { slug } });
+    if (!existing) return c.json({ error: "No such role" }, { status: 404 });
+
+    const body = c.req.valid("json");
+    const unknown = body.capabilities.filter((key) => !isCapability(key));
+    if (unknown.length > 0) {
+      return c.json(
+        { error: `Not capabilities this platform checks: ${unknown.join(", ")}` },
+        { status: 400 },
+      );
+    }
+
+    await prisma.adminRole.update({
+      where: { slug },
+      data: {
+        name: body.name,
+        description: body.description,
+        capabilities: JSON.stringify(body.capabilities),
+      },
+    });
+    // Before returning, so nobody keeps a power that was just taken away.
+    forgetCachedRoles();
+
+    const before = new Set(JSON.parse(existing.capabilities) as string[]);
+    const after = new Set(body.capabilities);
+    const added = [...after].filter((key) => !before.has(key));
+    const removed = [...before].filter((key) => !after.has(key));
+
+    createActivityLog(
+      "update_role",
+      session.adminId,
+      session.username,
+      "system",
+      slug,
+      `Changed "${body.name}"` +
+        (added.length ? `; added ${added.join(", ")}` : "") +
+        (removed.length ? `; removed ${removed.join(", ")}` : ""),
+    );
+
+    return c.json({ data: { slug, added, removed } });
+  },
+);
+
+/** DELETE /api/admin/roles/:slug — remove a role nobody holds. */
+adminRouter.delete("/roles/:slug", zValidator("param", roleSlugParam), async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "roles.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const { slug } = c.req.valid("param");
+  if (slug === OWNER_ROLE) {
+    return c.json({ error: "The owner role cannot be deleted." }, { status: 400 });
+  }
+
+  const role = await prisma.adminRole.findUnique({ where: { slug } });
+  if (!role) return c.json({ error: "No such role" }, { status: 404 });
+  if (role.builtIn) {
+    // A deployment must always have somewhere to put an administrator.
+    return c.json(
+      { error: "A built-in role cannot be deleted. Edit what it may do instead." },
+      { status: 400 },
+    );
+  }
+
+  const holders = await prisma.user.count({ where: { role: slug } });
+  if (holders > 0) {
+    // Deleting it would leave those accounts holding a slug that resolves to
+    // no capabilities — administrators who can sign in and do nothing, with no
+    // sign of why. Move them first, deliberately.
+    return c.json(
+      {
+        error: `${holders} account(s) still hold this role. Move them to another role first.`,
+      },
+      { status: 409 },
+    );
+  }
+
+  await prisma.adminRole.delete({ where: { slug } });
+  forgetCachedRoles();
+
+  createActivityLog(
+    "delete_role",
+    session.adminId,
+    session.username,
+    "system",
+    slug,
+    `Deleted the role "${role.name}"`,
+  );
+
+  return c.json({ data: { slug, deleted: true } });
+});
+
+/**
+ * PUT /api/admin/users/:id/role
+ *
+ * Give somebody a role, or take every administrative power away with "user".
+ *
+ * THIS ENDPOINT DID NOT EXIST. The mobile console has had a "Grant Admin
+ * Privileges" button since before this file was written, calling
+ * POST /api/admin/users/:id/make-admin — a route the backend does not mount and
+ * never has. It answered 404 every time it was pressed. Fourth mismatch of that
+ * shape found on this project, and the reason apps/web/scripts/route-target-check.mjs
+ * exists; it reads web navigation, not mobile fetch calls, so it could not see
+ * this one.
+ */
+adminRouter.put(
+  "/users/:id/role",
+  zValidator("param", idParamSchema),
+  zValidator("json", assignRoleSchema),
+  async (c) => {
+    const session = await getAdminFromToken(c.req.header("Authorization"));
+    if (!session) {
+      return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+    }
+    const denied = await requireCapability(session.role, "users.assignRole");
+    if (denied) return c.json(denied, { status: 403 });
+
+    const { id } = c.req.valid("param");
+    const role = c.req.valid("json").role.toLowerCase();
+
+    // THE OWNER SEAT IS NOT ASSIGNABLE. There is one, it is not handed out,
+    // and no path through this API creates a second.
+    //
+    // "Only an owner may do it" was the first version of this rule and it is
+    // not enough: an owner who is phished, or who mis-clicks once, has then
+    // created somebody with the same absolute powers and no way to remove
+    // them. The seat is filled by scripts/seed-admin.ts, which needs a shell
+    // and a database URL — the right bar for the one account nothing else can
+    // touch.
+    if (role === OWNER_ROLE) {
+      return c.json(
+        {
+          error:
+            "The owner role cannot be given to anybody. There is one owner and the seat is " +
+            "not assignable from the console.",
+        },
+        { status: 403 },
+      );
+    }
+
+    // AND NOTHING IS DONE TO THE OWNER EITHER.
+    const owned = await protectOwner(id);
+    if (owned) return c.json(owned, { status: 403 });
+
+    if (role !== "user" && role !== OWNER_ROLE) {
+      const exists = await prisma.adminRole.findUnique({
+        where: { slug: role },
+        select: { slug: true },
+      });
+      if (!exists) return c.json({ error: `No role called "${role}"` }, { status: 400 });
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, role: true, username: true, email: true },
+    });
+    if (!target) return c.json({ error: "That account does not exist" }, { status: 404 });
+
+    await prisma.user.update({ where: { id }, data: { role } });
+    forgetCachedRoles();
+
+    createActivityLog(
+      "assign_role",
+      session.adminId,
+      session.username,
+      "user",
+      id,
+      `${target.username ?? target.email}: ${target.role} → ${role}`,
+    );
+
+    return c.json({
+      data: {
+        id,
+        role,
+        previousRole: target.role,
+        note:
+          role === "user"
+            ? "Every administrative power removed. Their citizen account is untouched."
+            : "Takes effect on their next request; existing console sessions are re-checked.",
+      },
+    });
+  },
+);
 
 const convertUserSchema = z.object({
   userId: z.string().min(1, "Which account is being converted"),
@@ -1160,9 +1563,8 @@ const convertUserSchema = z.object({
  */
 adminRouter.post("/b2b-clients/from-user", zValidator("json", convertUserSchema), async (c) => {
   const session = c.get("adminSession");
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can create a B2B client" }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "b2b.manage");
+  if (denied) return c.json(denied, { status: 403 });
 
   const body = c.req.valid("json");
 
@@ -1435,9 +1837,8 @@ adminRouter.post("/reextract-content", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Superadmin required." }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "content.repair");
+  if (denied) return c.json(denied, { status: 403 });
 
   const referenceType = c.req.query("referenceType");
 
@@ -1495,9 +1896,8 @@ adminRouter.post("/maintenance/purge-blocked-text", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Superadmin required." }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "content.repair");
+  if (denied) return c.json(denied, { status: 403 });
 
   const apply = c.req.query("apply") === "true";
   const referenceType = c.req.query("referenceType") || undefined;
@@ -1551,9 +1951,8 @@ adminRouter.post("/maintenance/backfill-executive-orders", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Superadmin required." }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "content.repair");
+  if (denied) return c.json(denied, { status: 403 });
 
   const requested = Number(c.req.query("maxNew") ?? 100);
   // A ceiling on the ceiling. This runs inside a request, and a request that
@@ -1568,7 +1967,30 @@ adminRouter.post("/maintenance/backfill-executive-orders", async (c) => {
     where: { referenceType: "executive_order", fullText: { not: null } },
   });
 
-  const touched = await syncExecutiveOrders({ maxNew, stopAfterKnown: 200, pauseMs: 250 });
+  // THE SOURCE IS SOMEBODY ELSE'S SERVER, AND IT CAN REFUSE.
+  //
+  // This ran unguarded, so a network failure inside the sync escaped the
+  // handler. Found when a test pressed the button in an environment with no
+  // route to the Federal Register: the request never returned, and the process
+  // went with it — every later request answered ECONNREFUSED. An administrator
+  // pressing a button must not be able to take the server down with it, and a
+  // source that is unreachable is a thing to be told, not a thing to crash on.
+  let touched: Awaited<ReturnType<typeof syncExecutiveOrders>>;
+  try {
+    touched = await syncExecutiveOrders({ maxNew, stopAfterKnown: 200, pauseMs: 250 });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("[Backfill] executive order sync failed:", detail);
+    return c.json(
+      {
+        error:
+          "The Federal Register could not be read, so nothing was backfilled. " +
+          "Nothing was written and nothing was lost — try again when the source answers.",
+        detail,
+      },
+      { status: 502 },
+    );
+  }
 
   const after = await prisma.governmentReference.count({
     where: { referenceType: "executive_order" },
@@ -1804,9 +2226,8 @@ adminRouter.put("/keys/:name", zValidator("json", storedKeySchema), async (c) =>
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can change a platform key" }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "keys.manage");
+  if (denied) return c.json(denied, { status: 403 });
 
   const name = c.req.param("name");
   // A literal allowlist, not "whatever was named": an endpoint that writes
@@ -1861,9 +2282,8 @@ adminRouter.delete("/keys/:name", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can change a platform key" }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "keys.manage");
+  if (denied) return c.json(denied, { status: 403 });
 
   const name = c.req.param("name");
   if (!isStorableSecret(name)) {
@@ -1909,6 +2329,8 @@ adminRouter.get("/bug-reports", zValidator("query", bugReportQuerySchema), async
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "bugReports.manage");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { status, limit, offset } = c.req.valid("query");
   const where = status === "all" ? {} : { status };
@@ -1948,6 +2370,8 @@ adminRouter.patch(
     if (!session) {
       return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
     }
+    const denied = await requireCapability(session.role, "bugReports.manage");
+    if (denied) return c.json(denied, { status: 403 });
 
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
@@ -2037,9 +2461,8 @@ adminRouter.post("/email-health/test", zValidator("json", emailTestSchema), asyn
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can send a test message" }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "email.test");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { to } = c.req.valid("json");
   const result = await trySendingEmail(to);
@@ -2134,6 +2557,8 @@ adminRouter.get("/stats", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "analytics.view");
+  if (denied) return c.json(denied, { status: 403 });
 
   try {
     // ONE DEFINITION OF "A USER", SHARED WITH THE B2B DASHBOARD.
@@ -2200,7 +2625,7 @@ adminRouter.get("/stats", async (c) => {
           OR: [{ banExpiresAt: null }, { banExpiresAt: { gt: new Date() } }],
         },
       }),
-      prisma.user.count({ where: { role: { in: ["admin", "moderator", "superadmin"] } } }),
+      prisma.user.count({ where: { role: { in: await consoleRoleSlugs() } } }),
       prisma.adminSession.count({ where: { expiresAt: { gt: new Date() } } }),
     ]);
 
@@ -2236,6 +2661,8 @@ adminRouter.get("/stats/engagement", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "analytics.view");
+  if (denied) return c.json(denied, { status: 403 });
 
   try {
     const dataPoints: Array<{
@@ -2302,6 +2729,8 @@ adminRouter.get("/stats/growth", async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "analytics.view");
+  if (denied) return c.json(denied, { status: 403 });
 
   try {
     const dataPoints: Array<{
@@ -2397,6 +2826,8 @@ adminRouter.get("/logs", zValidator("query", logsQuerySchema), async (c) => {
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
+  const denied = await requireCapability(session.role, "logs.view");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { limit, offset, action, adminId, targetType } = c.req.valid("query");
 
@@ -2447,9 +2878,8 @@ adminRouter.post("/announce", zValidator("json", announceSchema), async (c) => {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
 
-  if (session.role === "moderator") {
-    return c.json({ error: "Moderators cannot create announcements" }, { status: 403 });
-  }
+  const denied = await requireCapability(session.role, "announcements.write");
+  if (denied) return c.json(denied, { status: 403 });
 
   const { title, content, priority, expiresAt } = c.req.valid("json");
 
@@ -2527,8 +2957,9 @@ adminRouter.get("/announcements", zValidator("query", paginationQuerySchema), as
  * question, and this is where it gets answered.
  *
  * Approving is destructive: it rewrites which record every affected post and
- * vote belongs to. Same bar as merging by hand — superadmin only. Reading the
- * queue is open to any admin.
+ * vote belongs to. Same bar as merging by hand, and now literally the same
+ * check — "merges.decide". Reading the queue is open to anybody who can sign
+ * into the console.
  */
 adminRouter.use("/reference-merges", mergeQueueAuth);
 adminRouter.use("/reference-merges/*", mergeQueueAuth);
@@ -2538,8 +2969,11 @@ async function mergeQueueAuth(c: Context<{ Variables: { adminSession: AdminSessi
   if (!session) {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
-  if (c.req.method !== "GET" && session.role !== "superadmin") {
-    return c.json({ error: "Only superadmin can decide a merge" }, { status: 403 });
+  // Reading the queue is part of looking after content; deciding a merge moves
+  // real votes between records, so only that half needs the capability.
+  if (c.req.method !== "GET") {
+    const denied = await requireCapability(session.role, "merges.decide");
+    if (denied) return c.json(denied, { status: 403 });
   }
   c.set("adminSession", session);
   await next();
