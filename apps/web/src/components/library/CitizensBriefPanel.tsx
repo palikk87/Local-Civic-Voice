@@ -5,7 +5,7 @@
 // the master reference, once, when a reader asks for it. This panel offers the
 // button and displays the result. When no official source has the text, it says
 // so — it never shows a guess.
-import { X, ExternalLink, Share2, Loader2 } from "lucide-react";
+import { X, ExternalLink, Share2 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
 import { useLibraryBrief } from "@/hooks/use-library-brief";
@@ -24,23 +24,17 @@ const BRANCH_LABELS: Record<SearchBranch, string> = {
   judicial: "Court Case",
 };
 
-export interface LibraryShareTarget {
-  referenceId: string;
-  brief: { summary: string; argumentFor: string; argumentAgainst: string };
-}
-
 interface CitizensBriefPanelProps {
   result: GovernmentSearchResult;
   onClose: () => void;
-  onConvert: (share: LibraryShareTarget) => void;
-  isConverting: boolean;
+  /** Hands back the resolved reference id. The caller opens the composer. */
+  onShare: (referenceId: string) => void;
 }
 
 export function CitizensBriefPanel({
   result,
   onClose,
-  onConvert,
-  isConverting,
+  onShare,
 }: CitizensBriefPanelProps) {
   const {
     referenceId,
@@ -54,7 +48,18 @@ export function CitizensBriefPanel({
     rewrite,
   } = useLibraryBrief(result);
 
-  const canShare = !!referenceId && !!brief;
+  /*
+   * SHARING NO LONGER WAITS FOR A BRIEF.
+   *
+   * This was `!!referenceId && !!brief`, so a reader who found a law in the
+   * Library could not say "that one matters to me" until an AI had written
+   * about it — and the caption under the greyed-out button told them so: "Get
+   * the brief first". Sharing a law and paying to summarize it are different
+   * acts. The record exists as soon as the document is identified, which is
+   * what a post attaches to; the brief is a thing the law's own card carries,
+   * for whoever wants it, whenever it is written.
+   */
+  const canShare = !!referenceId;
 
   const friendlyName =
     typeof result.metadata?.friendlyName === "string" &&
@@ -164,35 +169,35 @@ export function CitizensBriefPanel({
 
         </div>
 
-        {/* Convert to Post */}
+        {/* Share.
+            IT DOES NOT POST FOR YOU ANY MORE. This used to publish
+            immediately, with the AI's summary as the body of the post and a
+            question appended underneath, over the reader's name — so a person
+            who pressed "Share to Feed" found words on their own timeline that
+            they had not written and had not seen in a composer. Everywhere
+            else on this platform, sharing opens the composer with the law
+            attached and waits; the Library was the one place that did not, and
+            share-check has been pinning the correct behaviour on the other
+            surfaces for weeks. */}
         <div className="border-t border-border px-4 pb-6 pt-4">
           <button
             type="button"
             onClick={() => {
-              if (referenceId && brief) onConvert({ referenceId, brief });
+              if (referenceId) onShare(referenceId);
             }}
-            disabled={isConverting || !canShare}
+            disabled={!canShare}
             className={cn(
               "flex w-full items-center justify-center gap-2 rounded-xl py-4 font-bold text-slate-900 transition-opacity",
-              isConverting || !canShare ? "bg-accent/50" : "bg-accent hover:bg-accent/90",
+              !canShare ? "bg-accent/50" : "bg-accent hover:bg-accent/90",
             )}
           >
-            {isConverting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating Post…
-              </>
-            ) : (
-              <>
-                <Share2 className="h-[18px] w-[18px]" />
-                Share to Feed
-              </>
-            )}
+            <Share2 className="h-[18px] w-[18px]" />
+            Share to my timeline
           </button>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             {canShare
-              ? "Post this Citizen's Brief to start a discussion"
-              : "Get the brief first — a post carries it with the law"}
+              ? "Opens the composer with this law attached. The words are yours."
+              : "Identifying this document at its official source…"}
           </p>
         </div>
       </MotionDiv>

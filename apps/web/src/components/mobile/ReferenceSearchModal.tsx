@@ -20,6 +20,18 @@ interface ReferenceSearchModalProps {
   visible: boolean;
   onClose: () => void;
   onSelect: (reference: GovernmentReference) => void;
+  /**
+   * Expand in place instead of opening a dialog.
+   *
+   * The composer used this as a modal: attaching a law is REQUIRED to post, so
+   * writing a post always meant a full-screen dialog opening over the thing you
+   * were writing, choosing, and having it close again. The composer already
+   * owns the space; an expander keeps your draft on screen while you pick, and
+   * it cannot put an overlay over anything (see BetaWelcomeDialog for what an
+   * overlay costs). The dialog form is kept for callers that have nowhere to
+   * expand into.
+   */
+  inline?: boolean;
 }
 
 const TABS: { type: ReferenceType; label: string; icon: React.ReactNode }[] = [
@@ -32,6 +44,7 @@ export default function ReferenceSearchModal({
   visible,
   onClose,
   onSelect,
+  inline = false,
 }: ReferenceSearchModalProps) {
   const [activeTab, setActiveTab] = useState<ReferenceType>("bill");
   const [searchQuery, setSearchQuery] = useState("");
@@ -159,20 +172,9 @@ export default function ReferenceSearchModal({
     }
   };
 
-  return (
-    <Dialog open={visible} onOpenChange={(open) => (!open ? handleClose() : undefined)}>
-      <DialogContent className="bg-slate-900 border-slate-800 p-0 max-w-lg w-full h-[85vh] flex flex-col overflow-hidden [&>button]:hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
-          <button onClick={handleClose} className="w-10 h-10 flex items-center justify-center">
-            <X size={24} color="#94A3B8" />
-          </button>
-
-          <span className="text-white font-semibold text-lg">Select Reference</span>
-
-          <span className="w-10" />
-        </div>
-
+  // The picker itself. Identical either way — only the frame around it differs.
+  const panel = (
+    <>
         {/* Search Input */}
         <div className="px-4 py-3 shrink-0">
           <div className="flex items-center bg-slate-800 rounded-xl px-4 py-3">
@@ -306,6 +308,43 @@ export default function ReferenceSearchModal({
             </MotionDiv>
           )}
         </div>
+    </>
+  );
+
+  if (inline) {
+    if (!visible) return null;
+    return (
+      <div className="mt-3 flex max-h-[420px] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-2">
+          <span className="text-sm font-semibold text-white">Attach a law</span>
+          <button
+            type="button"
+            onClick={handleClose}
+            aria-label="Close the picker"
+            className="flex h-8 w-8 items-center justify-center"
+          >
+            <X size={18} color="#94A3B8" />
+          </button>
+        </div>
+        {panel}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={visible} onOpenChange={(open) => (!open ? handleClose() : undefined)}>
+      <DialogContent className="bg-slate-900 border-slate-800 p-0 max-w-lg w-full h-[85vh] flex flex-col overflow-hidden [&>button]:hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
+          <button onClick={handleClose} className="w-10 h-10 flex items-center justify-center">
+            <X size={24} color="#94A3B8" />
+          </button>
+
+          <span className="text-white font-semibold text-lg">Select Reference</span>
+
+          <span className="w-10" />
+        </div>
+        {panel}
       </DialogContent>
     </Dialog>
   );

@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, X, CheckCircle, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Search, X, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { BranchTabs } from "@/components/library/BranchTabs";
 import { LibraryEmptyState } from "@/components/library/LibraryEmptyState";
 import { LibraryResults } from "@/components/library/LibraryResults";
-import {
-  CitizensBriefPanel,
-  type LibraryShareTarget,
-} from "@/components/library/CitizensBriefPanel";
+import { CitizensBriefPanel } from "@/components/library/CitizensBriefPanel";
 import {
   libraryApi,
   congressToSearchResult,
@@ -23,26 +21,6 @@ import {
   determineStatusLabel,
   type GovernmentSearchResult,
 } from "@/lib/mobile/government-api";
-import { useTimelineStore } from "@/lib/mobile/timeline-store";
-
-function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onDismiss, 3000);
-    return () => clearTimeout(timer);
-  }, [onDismiss]);
-
-  return (
-    <div className="fixed bottom-24 left-4 right-4 z-[60] mx-auto max-w-md">
-      <div className="flex items-center gap-3 rounded-xl bg-emerald-600 p-4 shadow-lg">
-        <CheckCircle className="h-5 w-5 shrink-0 text-white" />
-        <span className="flex-1 font-medium text-white">{message}</span>
-        <button type="button" onClick={onDismiss} aria-label="Dismiss">
-          <X className="h-4 w-4 text-white" />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 const PLACEHOLDER: Record<LibraryBranch, string> = {
   all: 'Search all three branches (e.g., "healthcare", "immigration")...',
@@ -52,6 +30,7 @@ const PLACEHOLDER: Record<LibraryBranch, string> = {
 };
 
 export default function Library() {
+  const navigate = useNavigate();
   /*
    * "all" by default. It was "congress", and the search only ever queried the
    * selected branch — so two thirds of the corpus was excluded by a default
@@ -149,24 +128,22 @@ export default function Library() {
 
   // Citizen's Brief preview — same flow as the mobile library screen.
   const [selectedResult, setSelectedResult] = useState<GovernmentSearchResult | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const createLibraryPost = useTimelineStore((s) => s.createLibraryPost);
 
-  // The brief was written server-side from the full official text and is already
-  // stored on the reference — sharing just publishes a post pointing at it.
-  const convertMutation = useMutation({
-    mutationFn: (share: LibraryShareTarget) => createLibraryPost(share),
-    onSuccess: () => {
+  /*
+   * Sharing sends the reader to the composer with the law attached.
+   *
+   * It used to call createLibraryPost, which published immediately with the
+   * AI's summary as the body of the post, over the reader's name. Every other
+   * surface on this platform opens the composer and waits — see
+   * ShareToTimeline and the share-check that pins it. The Library was the one
+   * place that posted for you.
+   */
+  const handleShare = useCallback(
+    (referenceId: string) => {
       setSelectedResult(null);
-      setSuccessMessage("Shared! It's on your timeline and will cycle into the public feed.");
+      navigate(`/timeline?share=${encodeURIComponent(referenceId)}`);
     },
-  });
-
-  const handleConvert = useCallback(
-    (share: LibraryShareTarget) => {
-      convertMutation.mutate(share);
-    },
-    [convertMutation],
+    [navigate],
   );
 
   // Clear the open brief when the search or branch changes.
@@ -274,14 +251,10 @@ export default function Library() {
         <CitizensBriefPanel
           result={selectedResult}
           onClose={() => setSelectedResult(null)}
-          onConvert={handleConvert}
-          isConverting={convertMutation.isPending}
+          onShare={handleShare}
         />
       ) : null}
 
-      {successMessage ? (
-        <SuccessToast message={successMessage} onDismiss={() => setSuccessMessage(null)} />
-      ) : null}
     </AppShell>
   );
 }

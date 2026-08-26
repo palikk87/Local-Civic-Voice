@@ -56,9 +56,7 @@ import {
 import { cn } from '@/lib/cn';
 import {
   generateBillExplanation,
-  analyzeBillImpact,
   askAboutBill,
-  generateDebatePoints,
   getAIAvailability,
 } from '@/lib/ai-service';
 import { calculateRepresentationGap } from '@/lib/representation-gap';
@@ -170,153 +168,59 @@ function mapSupabaseBillToBill(
   };
 }
 
-// AI-powered Impact Analysis Section
-function AIImpactSection({ bill }: { bill: Bill }) {
-  const [showDebate, setShowDebate] = useState(false);
 
-  const { data: analysisData, isLoading: analysisLoading } = useQuery({
-    // eslint-disable-next-line @tanstack/query/exhaustive-deps
-    queryKey: ['bill-analysis', bill.id],
-    queryFn: () => analyzeBillImpact(bill),
-    staleTime: 1000 * 60 * 30, // 30 minutes
-  });
-
-  const { data: debateData, isLoading: debateLoading } = useQuery({
-    // eslint-disable-next-line @tanstack/query/exhaustive-deps
-    queryKey: ['bill-debate', bill.id],
-    queryFn: () => generateDebatePoints(bill),
-    enabled: showDebate,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const handleShowDebate = useCallback(() => {
-    setShowDebate(true);
-  }, []);
-
-  const analysis = analysisData?.data;
-  const { data: aiAvailable } = useQuery({
-    queryKey: ['ai-availability'],
-    queryFn: getAIAvailability,
-  });
-
-  return (
-    <View>
-      {/* Static Impact */}
-      <View className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/40 mb-4">
-        <View className="flex-row items-center mb-3">
-          <Users size={20} color="#F59E0B" />
-          <Text className="text-white font-semibold text-lg ml-2">
-            Real-World Impact
-          </Text>
-        </View>
-        <Text className="text-slate-300 leading-6">
-          {bill.realWorldImpact}
+/**
+ * What this law does, from the official summary. One block, not three.
+ *
+ * WHAT WAS HERE. A reader could get the case for and against the same bill
+ * THREE times, from three different generations, on one screen:
+ *
+ *   1. the Citizen's Brief tab — argumentFor / argumentAgainst, written on the
+ *      server from the COMPLETE official text, stored on the record, one per
+ *      version of the law, the same text for everybody;
+ *   2. "AI Analysis" here — pros / cons, generated on the device from
+ *      `bill.fullText.substring(0, 3000)`. The first three thousand characters
+ *      of a bill are its title, its findings and its definitions; the operative
+ *      provisions are further down. So the concerns were drawn from a fragment
+ *      that mostly does not contain the law;
+ *   3. "See Both Sides" here — arguments generated from `bill.simplifiedText`,
+ *      which is the brief's own summary. Arguments about a summary, twice
+ *      removed from the text they claim to describe.
+ *
+ * Both of the deleted ones ran at temperature 1, per reader, cached for thirty
+ * minutes on that device and nowhere else. Two people looking at the same bill
+ * got different concerns about it; one person looking twice in a day got
+ * different concerns from themselves. On a platform whose claim is that its
+ * records are the true ones, three disagreeing answers to "what does this do"
+ * is worse than one — and the one that survives is the one that read the whole
+ * law, is stored where everybody reads the same copy, and is paid for once.
+ *
+ * The official summary stays, under a label that says what it is. It was called
+ * "Real-World Impact", which is a promise of analysis; it is the description
+ * congress.gov publishes. Web twin: apps/web/src/pages/BillDetail.tsx.
+ */
+function OfficialSummarySection({ bill }: { bill: Bill }) {
+  if (!bill.realWorldImpact?.trim()) {
+    return (
+      <View className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/40">
+        <Text className="text-slate-400">
+          No official summary has been published for this one yet.
         </Text>
       </View>
+    );
+  }
 
-      {/* AI Analysis */}
-      {aiAvailable?.openai && (
-        <Animated.View
-          entering={FadeInDown.delay(100).springify()}
-          className="bg-gradient-to-br from-amber-900/30 to-slate-800/60 rounded-xl p-4 border border-amber-700/30 mb-4"
-        >
-          <View className="flex-row items-center mb-3">
-            <Sparkles size={20} color="#F59E0B" />
-            <Text className="text-amber-400 font-semibold text-lg ml-2">
-              AI Analysis
-            </Text>
-          </View>
-
-          {analysisLoading ? (
-            <View className="py-6 items-center">
-              <ActivityIndicator color="#F59E0B" size="small" />
-              <Text className="text-slate-400 mt-2">Analyzing bill...</Text>
-            </View>
-          ) : analysis ? (
-            <View>
-              <Text className="text-slate-300 leading-6 mb-4">{analysis.summary}</Text>
-
-              {/* Pros */}
-              <View className="mb-3">
-                <Text className="text-emerald-400 font-semibold mb-2">Potential Benefits</Text>
-                {analysis.pros.map((pro, i) => (
-                  <View key={i} className="flex-row items-start mb-1.5">
-                    <View className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 mr-2" />
-                    <Text className="text-slate-300 flex-1">{pro}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Cons */}
-              <View className="mb-3">
-                <Text className="text-red-400 font-semibold mb-2">Potential Concerns</Text>
-                {analysis.cons.map((con, i) => (
-                  <View key={i} className="flex-row items-start mb-1.5">
-                    <View className="w-1.5 h-1.5 rounded-full bg-red-500 mt-2 mr-2" />
-                    <Text className="text-slate-300 flex-1">{con}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Impacted Groups */}
-              <View>
-                <Text className="text-slate-400 font-medium mb-2">Who This Affects</Text>
-                <View className="flex-row flex-wrap">
-                  {analysis.impactedGroups.map((group, i) => (
-                    <View key={i} className="bg-slate-700/50 px-3 py-1.5 rounded-full mr-2 mb-2">
-                      <Text className="text-slate-300 text-sm">{group}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            </View>
-          ) : (
-            <Text className="text-slate-400">Unable to load AI analysis</Text>
-          )}
-        </Animated.View>
-      )}
-
-      {/* Debate Points */}
-      {aiAvailable?.openai && (
-        <Animated.View
-          entering={FadeInDown.delay(200).springify()}
-          className="bg-slate-800/60 rounded-xl border border-slate-700/40"
-        >
-          <Pressable
-            onPress={handleShowDebate}
-            className="flex-row items-center justify-between p-4"
-          >
-            <View className="flex-row items-center">
-              <MessageCircle size={20} color="#64748B" />
-              <Text className="text-white font-semibold ml-2">
-                See Both Sides
-              </Text>
-            </View>
-            {showDebate ? (
-              <ChevronUp size={20} color="#64748B" />
-            ) : (
-              <ChevronDown size={20} color="#64748B" />
-            )}
-          </Pressable>
-
-          {showDebate && (
-            <View className="px-4 pb-4 border-t border-slate-700/50">
-              {debateLoading ? (
-                <View className="py-6 items-center">
-                  <ActivityIndicator color="#F59E0B" size="small" />
-                  <Text className="text-slate-400 mt-2">Generating arguments...</Text>
-                </View>
-              ) : debateData?.data ? (
-                <Text className="text-slate-300 leading-6 mt-3 whitespace-pre-wrap">
-                  {debateData.data}
-                </Text>
-              ) : (
-                <Text className="text-slate-400 mt-3">Tap to load debate points</Text>
-              )}
-            </View>
-          )}
-        </Animated.View>
-      )}
+  return (
+    <View className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/40">
+      <View className="flex-row items-center mb-3">
+        <Users size={20} color="#F59E0B" />
+        <Text className="text-white font-semibold text-lg ml-2">Official summary</Text>
+      </View>
+      <Text className="text-slate-300 leading-6">{bill.realWorldImpact}</Text>
+      <Text className="text-slate-500 text-xs mt-3">
+        Published by the official source. For the case for and against, see the Citizen's
+        Brief — written once from the complete text, and the same for every reader.
+      </Text>
     </View>
   );
 }
@@ -978,7 +882,7 @@ export default function BillDetailScreen() {
               )}
 
               {viewMode === 'impact' && (
-                <AIImpactSection bill={bill} />
+                <OfficialSummarySection bill={bill} />
               )}
 
               {viewMode === 'related' && (

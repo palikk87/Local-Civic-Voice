@@ -18,19 +18,6 @@ export type PostSource = 'user' | 'library' | 'official';
  * document's ENTIRE official text and already stored on the reference, so a share
  * carries only the reference id and that stored brief — never client-written text.
  */
-export interface LibrarySharePayload {
-  /** GovernmentReference.id returned by POST /api/government-references/resolve. */
-  referenceId: string;
-  brief: { summary: string; argumentFor: string; argumentAgainst: string };
-}
-
-/**
- * Static discussion prompt appended to a shared brief. Deliberately not AI-written:
- * the only generated text in a post is the grounded brief itself.
- */
-const SHARE_DISCUSSION_PROMPT =
-  'Does this match what you want your representatives doing on your behalf?';
-
 // Vote counts for interactive posts
 export interface PostVoteCounts {
   support: number;
@@ -225,7 +212,6 @@ interface TimelineState {
   searchUsers: (query: string) => User[];
 
   // Library Gateway
-  createLibraryPost: (share: LibrarySharePayload) => Promise<void>;
 
   // Civic Engagement Actions
   voteOnPost: (postId: string, vote: 'support' | 'oppose') => void;
@@ -608,28 +594,6 @@ export const useTimelineStore = create<TimelineState>()(
         // than offering fiction.
         if (!query.trim()) return [];
         return [];
-      },
-
-      createLibraryPost: async (share) => {
-        // The reference already exists — POST /api/government-references/resolve
-        // created it and the server wrote the brief onto it from the full official
-        // text. Sharing publishes a post pointing at that record.
-        // The neutral paragraph is what a post carries. The two arguments stay
-        // on the law's own card: a post is somebody choosing to say something,
-        // and leading it with a pre-written case for and against would put
-        // words in their mouth.
-        const body = share.brief.summary.trim();
-
-        await api.post<{ post: ServerPost }>('/api/posts', {
-          content: `${body}\n\n${SHARE_DISCUSSION_PROMPT}`,
-          governmentReferenceId: share.referenceId,
-        });
-
-        // Local gamification counter (unchanged behaviour)
-        const profilesStore = useUserProfilesStore.getState();
-        profilesStore.incrementLibraryPosts(currentIdentity().id);
-
-        await get().loadFeed();
       },
 
       // Civic Engagement: Vote Support/Oppose on a post

@@ -43,7 +43,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
 import {
   searchGovernment,
@@ -53,8 +53,12 @@ import {
 } from '@/lib/government-api';
 import { useLibraryBrief } from '@/lib/use-library-brief';
 import { CitizensBriefCard } from '@/components/CitizensBrief';
-import { useTimelineStore, type LibrarySharePayload } from '@/lib/timeline-store';
 import { useResponsive } from '@/lib/useResponsive';
+import CreatePostModal from '@/components/CreatePostModal';
+import type {
+  GovernmentReference,
+  ReferenceType,
+} from '@/components/ReferenceSearchModal';
 
 // ===========================================
 // TYPES
@@ -72,6 +76,13 @@ import { useResponsive } from '@/lib/useResponsive';
  * Web twin: apps/web/src/lib/library.ts (LibraryBranch).
  */
 type LibraryTab = 'all' | 'legislative' | 'executive' | 'judicial';
+
+/** A search result's branch, in the vocabulary a reference uses. */
+const REFERENCE_TYPE_OF: Record<SearchBranch, ReferenceType> = {
+  legislative: 'bill',
+  executive: 'executive_order',
+  judicial: 'scotus_case',
+};
 
 // ===========================================
 // TAB SELECTOR
@@ -355,13 +366,12 @@ function ResultCard({
 function SlideOverPreview({
   result,
   onClose,
-  onConvert,
-  isConverting,
+  onShare,
 }: {
   result: GovernmentSearchResult;
   onClose: () => void;
-  onConvert: (share: LibrarySharePayload) => void;
-  isConverting: boolean;
+  /** Hands back the resolved reference id. The caller opens the composer. */
+  onShare: (referenceId: string) => void;
 }) {
   const translateX = useSharedValue(0);
 
@@ -384,7 +394,17 @@ function SlideOverPreview({
     request: requestBrief,
     rewrite: rewriteBrief,
   } = useLibraryBrief(result);
-  const canShare = !!referenceId && !!brief;
+  /*
+   * SHARING NO LONGER WAITS FOR A BRIEF.
+   *
+   * This was `!!referenceId && !!brief`, so a reader who found a law in the
+   * Library could not say "that one matters to me" until an AI had written
+   * about it — and the caption under the greyed-out button told them so.
+   * Sharing a law and paying to summarize it are different acts. The record
+   * exists as soon as the document is identified, which is what a post
+   * attaches to. Web twin: apps/web/src/components/library/CitizensBriefPanel.tsx.
+   */
+  const canShare = !!referenceId;
   // Resolving is a step the reader did not ask for and cannot act on, so the
   // button stays busy through it rather than looking ready to press before
   // there is anything to press it against.
@@ -532,38 +552,34 @@ function SlideOverPreview({
               </Pressable>
             </View>
 
-            {/* Convert to Post Button */}
+            {/* Share.
+                IT DOES NOT POST FOR YOU ANY MORE. This used to publish
+                immediately, with the AI's summary as the body of the post and
+                a question appended underneath, over the reader's name — so
+                somebody who pressed "Share to Feed" found words on their own
+                timeline that they had not written and had not seen in a
+                composer. It opens the composer with the law attached and
+                waits. Web twin does the same through /timeline?share=<id>. */}
             <View className="px-4 pb-6">
               <Pressable
                 onPress={() => {
-                  if (referenceId && brief) onConvert({ referenceId, brief });
+                  if (referenceId) onShare(referenceId);
                 }}
-                disabled={isConverting || !canShare}
+                disabled={!canShare}
                 className={cn(
                   'flex-row items-center justify-center py-4 rounded-xl',
-                  isConverting || !canShare ? 'bg-amber-500/50' : 'bg-amber-500'
+                  !canShare ? 'bg-amber-500/50' : 'bg-amber-500'
                 )}
               >
-                {isConverting ? (
-                  <>
-                    <ActivityIndicator size="small" color="#000" />
-                    <Text className="text-slate-900 font-bold text-base ml-2">
-                      Creating Post...
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Share2 size={18} color="#000" />
-                    <Text className="text-slate-900 font-bold text-base ml-2">
-                      Share to Feed
-                    </Text>
-                  </>
-                )}
+                <Share2 size={18} color="#000" />
+                <Text className="text-slate-900 font-bold text-base ml-2">
+                  Share to my timeline
+                </Text>
               </Pressable>
               <Text className="text-slate-500 text-xs text-center mt-2">
                 {canShare
-                  ? "Post this Citizen's Brief to start a discussion"
-                  : 'Get the brief first — a post carries it with the law'}
+                  ? 'Opens the composer with this law attached. The words are yours.'
+                  : 'Identifying this document at its official source…'}
               </Text>
             </View>
           </SafeAreaView>
@@ -657,29 +673,6 @@ function EmptyState({ activeTab, onSuggestionPress }: { activeTab: LibraryTab; o
 // SUCCESS TOAST
 // ===========================================
 
-function SuccessToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  React.useEffect(() => {
-    const timer = setTimeout(onDismiss, 3000);
-    return () => clearTimeout(timer);
-  }, [onDismiss]);
-
-  return (
-    <Animated.View
-      entering={FadeInDown.springify()}
-      exiting={FadeOut}
-      className="absolute bottom-24 left-4 right-4"
-    >
-      <View className="bg-emerald-600 rounded-xl p-4 flex-row items-center">
-        <CheckCircle size={20} color="#fff" />
-        <Text className="text-white font-medium ml-3 flex-1">{message}</Text>
-        <Pressable onPress={onDismiss} hitSlop={8}>
-          <X size={16} color="#fff" />
-        </Pressable>
-      </View>
-    </Animated.View>
-  );
-}
-
 // ===========================================
 // MAIN SCREEN
 // ===========================================
@@ -691,9 +684,15 @@ export default function LibraryScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
   const [selectedResult, setSelectedResult] = useState<GovernmentSearchResult | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  /*
+   * The law a reader chose to share, waiting for them to write about it.
+   *
+   * Sharing used to publish immediately, with the AI's summary as the body of
+   * the post, over the reader's name. The composer already accepts a
+   * pre-attached reference (`shareMode`), which is exactly what this is for.
+   */
+  const [shareTarget, setShareTarget] = useState<GovernmentReference | null>(null);
 
-  const createLibraryPost = useTimelineStore((s) => s.createLibraryPost);
 
   // NO AUTO-SEARCH. This used to run itself 500ms after you stopped typing, so
   // results appeared before you had asked for anything and changed again on
@@ -735,22 +734,6 @@ export default function LibraryScreen() {
     refetchOnMount: true, // Refetch when query key changes (new search term or tab)
   });
 
-  // Convert to post mutation. The brief was written server-side from the full
-  // official text and is already stored on the reference — sharing just publishes a
-  // post pointing at it.
-  const convertMutation = useMutation({
-    mutationFn: (share: LibrarySharePayload) => createLibraryPost(share),
-    onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setSelectedResult(null);
-      setSuccessMessage("Shared! It's on your timeline and will cycle into the public feed.");
-    },
-    onError: (error) => {
-      console.error('Convert error:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-  });
-
   const handleSearch = useCallback(() => {
     const next = searchQuery.trim();
     if (next.length < 2) return;
@@ -769,13 +752,6 @@ export default function LibraryScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelectedResult(result);
   }, []);
-
-  const handleConvert = useCallback(
-    (share: LibrarySharePayload) => {
-      convertMutation.mutate(share);
-    },
-    [convertMutation.mutate]
-  );
 
   const renderResult = useCallback(
     ({ item, index }: { item: GovernmentSearchResult; index: number }) => (
@@ -886,19 +862,33 @@ export default function LibraryScreen() {
           <SlideOverPreview
             result={selectedResult}
             onClose={() => setSelectedResult(null)}
-            onConvert={handleConvert}
-            isConverting={convertMutation.isPending}
+            onShare={(referenceId) => {
+              setShareTarget({
+                id: referenceId,
+                type: REFERENCE_TYPE_OF[selectedResult.branch],
+                title: selectedResult.title,
+                status: selectedResult.status ?? 'unknown',
+              });
+              setSelectedResult(null);
+            }}
           />
         </>
       )}
 
-      {/* Success Toast */}
-      {successMessage && (
-        <SuccessToast
-          message={successMessage}
-          onDismiss={() => setSuccessMessage(null)}
-        />
-      )}
+      {/* The composer, with the law already attached and nothing written. */}
+      <CreatePostModal
+        visible={!!shareTarget}
+        onClose={() => setShareTarget(null)}
+        {...(shareTarget
+          ? {
+              shareMode: {
+                type: shareTarget.type,
+                id: shareTarget.id,
+                title: shareTarget.title,
+              },
+            }
+          : {})}
+      />
     </View>
   );
 }

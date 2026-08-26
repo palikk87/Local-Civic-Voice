@@ -8,14 +8,6 @@ interface AIResponse {
   error?: string;
 }
 
-interface BillAnalysis {
-  summary: string;
-  pros: string[];
-  cons: string[];
-  impactedGroups: string[];
-  keyPoints: string[];
-}
-
 interface QuestionAnswer {
   answer: string;
   confidence: 'high' | 'medium' | 'low';
@@ -80,63 +72,29 @@ Focus on:
 /**
  * Analyze a bill for pros, cons, and impacted groups
  */
-export async function analyzeBillImpact(bill: Bill): Promise<{ success: boolean; data?: BillAnalysis; error?: string }> {
-  const result = await callBackendAI({
-    system: `You are a non-partisan policy analyst. Analyze legislation objectively, presenting both sides fairly.
-Return your analysis as valid JSON with this exact structure:
-{
-  "summary": "2-3 sentence overview",
-  "pros": ["benefit 1", "benefit 2", "benefit 3"],
-  "cons": ["concern 1", "concern 2", "concern 3"],
-  "impactedGroups": ["group 1", "group 2"],
-  "keyPoints": ["point 1", "point 2", "point 3"]
-}`,
-    prompt: `Analyze this legislation:
-
-Title: ${bill.title}
-Category: ${bill.category}
-Chamber: ${bill.chamber}
-Status: ${bill.status}
-
-Text:
-${bill.fullText.substring(0, 3000)}
-
-Provide a balanced analysis with pros, cons, impacted groups, and key points.`,
-    maxCompletionTokens: 800,
-    temperature: 1,
-  });
-
-  if (!result.success || !result.content) {
-    return { success: false, error: 'Failed to analyze bill' };
-  }
-
-  const content = result.content;
-
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const analysis = JSON.parse(jsonMatch[0]) as BillAnalysis;
-      return { success: true, data: analysis };
-    }
-  } catch {
-    return {
-      success: true,
-      data: {
-        summary: content.substring(0, 200),
-        pros: ['Analysis available', 'Review full text for details'],
-        cons: ['Consider multiple perspectives'],
-        impactedGroups: ['Various stakeholders'],
-        keyPoints: ['See full analysis'],
-      },
-    };
-  }
-
-  return { success: false, error: 'Could not parse analysis' };
-}
-
-/**
- * Answer a user's question about a specific bill
+/*
+ * analyzeBillImpact() and generateDebatePoints() ARE GONE, AND NOT REPLACED.
+ *
+ * Both generated the case for and against a bill, per reader, in the reader's
+ * own browser or device, at temperature 1, cached for thirty minutes there and
+ * nowhere else. So two people looking at the same law got different concerns
+ * about it, and one person looking twice in a day got different concerns from
+ * themselves.
+ *
+ * Worse than the inconsistency was the input. analyzeBillImpact truncated to
+ * `fullText.substring(0, 3000)` — the first three thousand characters of a bill
+ * are its title, its findings and its definitions, so the operative provisions
+ * were mostly not in the prompt. generateDebatePoints was fed
+ * `bill.simplifiedText`, which is the brief's own summary: arguments about a
+ * summary, twice removed from the text they claimed to describe.
+ *
+ * backend/src/services/citizen-brief.ts already writes argumentFor and
+ * argumentAgainst from the COMPLETE official text, stores them on the record,
+ * and serves the same text to everybody, once per version of the law. Three
+ * disagreeing answers to "what does this do" is worse than one, and that is the
+ * one that survives.
  */
+
 export async function askAboutBill(bill: Bill, question: string): Promise<{ success: boolean; data?: QuestionAnswer; error?: string }> {
   const result = await callBackendAI({
     system: `You are a helpful civic assistant answering questions about legislation.
@@ -174,30 +132,6 @@ Provide a helpful, accurate answer.`,
 /**
  * Generate a debate-style comparison of arguments for/against a bill
  */
-export async function generateDebatePoints(bill: Bill): Promise<AIResponse> {
-  const result = await callBackendAI({
-    system: `You are a debate moderator presenting the strongest arguments from both sides of a legislative issue.
-Be fair, balanced, and present each side's best arguments without taking a position.
-Format: Start with "FOR:" followed by 3 bullet points, then "AGAINST:" with 3 bullet points.`,
-    prompt: `Present the strongest arguments for and against this bill:
-
-${bill.shortTitle}: ${bill.title}
-
-${bill.simplifiedText}
-
-Category: ${bill.category}
-Current Status: ${bill.status}`,
-    maxCompletionTokens: 600,
-    temperature: 1,
-  });
-
-  if (!result.success) {
-    return { success: false, error: 'Failed to generate debate points' };
-  }
-
-  return { success: true, data: result.content };
-}
-
 /**
  * Check if AI services are available.
  * Availability is determined server-side (the provider key lives in the backend only).

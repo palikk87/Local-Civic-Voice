@@ -34,8 +34,6 @@ import { toast } from "sonner";
 import { useRequireAuth } from "@/hooks/use-civic-auth";
 import { cn } from "@/lib/utils";
 import {
-  analyzeBillImpact,
-  generateDebatePoints,
   getAIAvailability,
 } from "@/lib/mobile/ai-service";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
@@ -56,123 +54,58 @@ import { referenceToBill } from "@/lib/mobile/reference-mappers";
 
 type ViewMode = "simplified" | "full" | "impact" | "related";
 
-function AIImpactSection({ bill }: { bill: Bill }) {
-  const [showDebate, setShowDebate] = useState(false);
-
-  const { data: analysisData, isLoading: analysisLoading } = useQuery({
-    queryKey: ["bill-analysis", bill.id],
-    queryFn: () => analyzeBillImpact(bill),
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const { data: debateData, isLoading: debateLoading } = useQuery({
-    queryKey: ["bill-debate", bill.id],
-    queryFn: () => generateDebatePoints(bill),
-    enabled: showDebate,
-    staleTime: 1000 * 60 * 30,
-  });
-
-  const analysis = analysisData?.data;
-  const { data: aiAvailable } = useQuery({
-    queryKey: ["ai-availability"],
-    queryFn: getAIAvailability,
-  });
+/**
+ * What this law does, from the official summary. One block, not three.
+ *
+ * WHAT WAS HERE. A reader could get the case for and against the same bill
+ * THREE times, from three different generations, on one screen:
+ *
+ *   1. the Citizen's Brief tab — argumentFor / argumentAgainst, written on the
+ *      server from the COMPLETE official text, stored on the record, one per
+ *      version of the law, the same text for everybody;
+ *   2. "AI Analysis" here — pros / cons, generated in the reader's browser from
+ *      `bill.fullText.substring(0, 3000)`. The first three thousand characters
+ *      of a bill are its title, its findings and its definitions; the operative
+ *      provisions are further down. So the concerns were drawn from a fragment
+ *      that mostly does not contain the law;
+ *   3. "See Both Sides" here — arguments generated from `bill.simplifiedText`,
+ *      which is the brief's own summary. Arguments about a summary, twice
+ *      removed from the text they claim to describe.
+ *
+ * Both of the deleted ones ran at temperature 1, per reader, cached for thirty
+ * minutes in that reader's browser and nowhere else. Two people looking at the
+ * same bill got different concerns about it; one person looking twice in a day
+ * got different concerns from themselves. On a platform whose claim is that its
+ * records are the true ones, three disagreeing answers to "what does this do"
+ * is worse than one — and the one that survives is the one that read the whole
+ * law, is stored where everybody reads the same copy, and is paid for once.
+ *
+ * The official summary stays, under a label that says what it is. It was called
+ * "Real-World Impact", which is a promise of analysis; it is the description
+ * congress.gov publishes.
+ */
+function OfficialSummarySection({ bill }: { bill: Bill }) {
+  if (!bill.realWorldImpact?.trim()) {
+    return (
+      <div className="rounded-xl border border-slate-700/40 bg-slate-800/60 p-4">
+        <p className="text-slate-400">
+          No official summary has been published for this one yet.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      {/* Static Impact */}
-      <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/40 mb-4">
-        <div className="flex items-center mb-3">
-          <Users size={20} color="#F59E0B" />
-          <span className="text-white font-semibold text-lg ml-2">Real-World Impact</span>
-        </div>
-        <p className="text-slate-300 leading-6">{bill.realWorldImpact}</p>
+    <div className="rounded-xl border border-slate-700/40 bg-slate-800/60 p-4">
+      <div className="mb-3 flex items-center">
+        <Users size={20} color="#F59E0B" />
+        <span className="ml-2 text-lg font-semibold text-white">Official summary</span>
       </div>
-
-      {/* AI Analysis */}
-      {aiAvailable?.openai ? (
-        <div className="rounded-xl p-4 border border-amber-700/30 mb-4 bg-gradient-to-br from-amber-900/30 to-slate-800/60">
-          <div className="flex items-center mb-3">
-            <Sparkles size={20} color="#F59E0B" />
-            <span className="text-amber-400 font-semibold text-lg ml-2">AI Analysis</span>
-          </div>
-
-          {analysisLoading ? (
-            <div className="py-6 flex flex-col items-center">
-              <Loader2 size={20} color="#F59E0B" className="animate-spin" />
-              <p className="text-slate-400 mt-2">Analyzing bill...</p>
-            </div>
-          ) : analysis ? (
-            <div>
-              <p className="text-slate-300 leading-6 mb-4">{analysis.summary}</p>
-
-              <div className="mb-3">
-                <p className="text-emerald-400 font-semibold mb-2">Potential Benefits</p>
-                {analysis.pros.map((pro, i) => (
-                  <div key={i} className="flex items-start mb-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 mr-2 shrink-0" />
-                    <span className="text-slate-300 flex-1">{pro}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mb-3">
-                <p className="text-red-400 font-semibold mb-2">Potential Concerns</p>
-                {analysis.cons.map((con, i) => (
-                  <div key={i} className="flex items-start mb-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-2 mr-2 shrink-0" />
-                    <span className="text-slate-300 flex-1">{con}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div>
-                <p className="text-slate-400 font-medium mb-2">Who This Affects</p>
-                <div className="flex flex-wrap">
-                  {analysis.impactedGroups.map((group, i) => (
-                    <span key={i} className="bg-slate-700/50 px-3 py-1.5 rounded-full mr-2 mb-2 text-slate-300 text-sm">
-                      {group}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-slate-400">Unable to load AI analysis</p>
-          )}
-        </div>
-      ) : null}
-
-      {/* Debate Points */}
-      {aiAvailable?.openai ? (
-        <div className="bg-slate-800/60 rounded-xl border border-slate-700/40">
-          <button
-            onClick={() => setShowDebate(true)}
-            className="w-full flex items-center justify-between p-4"
-          >
-            <div className="flex items-center">
-              <MessageCircle size={20} color="#64748B" />
-              <span className="text-white font-semibold ml-2">See Both Sides</span>
-            </div>
-            {showDebate ? <ChevronUp size={20} color="#64748B" /> : <ChevronDown size={20} color="#64748B" />}
-          </button>
-
-          {showDebate ? (
-            <div className="px-4 pb-4 border-t border-slate-700/50">
-              {debateLoading ? (
-                <div className="py-6 flex flex-col items-center">
-                  <Loader2 size={20} color="#F59E0B" className="animate-spin" />
-                  <p className="text-slate-400 mt-2">Generating arguments...</p>
-                </div>
-              ) : debateData?.data ? (
-                <p className="text-slate-300 leading-6 mt-3 whitespace-pre-wrap">{debateData.data}</p>
-              ) : (
-                <p className="text-slate-400 mt-3">Tap to load debate points</p>
-              )}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      <p className="leading-6 text-slate-300">{bill.realWorldImpact}</p>
+      <p className="mt-3 text-xs text-slate-500">
+        Published by the official source. For the case for and against, see the Citizen&rsquo;s
+        Brief — written once from the complete text, and the same for every reader.
+      </p>
     </div>
   );
 }
@@ -706,7 +639,7 @@ export default function BillDetail() {
               </div>
             ) : null}
 
-            {viewMode === "impact" ? <AIImpactSection bill={bill} /> : null}
+            {viewMode === "impact" ? <OfficialSummarySection bill={bill} /> : null}
 
             {viewMode === "related" ? (
               <div>

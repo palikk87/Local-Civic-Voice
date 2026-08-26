@@ -15,7 +15,14 @@
  *   3. Clicking Search does the same thing as Enter.
  *   4. Continuing to type after a search leaves the results alone.
  *
- * AND ONE MORE, added later for a different bug. The Library used to open with
+ * AND TWO MORE, added later for different bugs.
+ *
+ * Sharing from the Library used to PUBLISH IMMEDIATELY — the AI's summary as
+ * the body of the post, a question appended underneath, over the reader's name.
+ * Somebody who pressed "Share to Feed" found words on their own timeline that
+ * they had not written and had not seen. It was also gated: you could not share
+ * a law at all until an AI had written about it. Both are pinned below.
+ * The Library used to open with
  * Congress preselected and search only the selected branch, so a reader typing
  * "immigration" got no executive orders and no court cases — two thirds of the
  * platform's own subject matter, excluded by a default nobody chose and with
@@ -36,6 +43,9 @@ const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/htm
 
 /** Every search the page asked for, in order, with the term it asked about. */
 const searches = [];
+
+/** Anything the page tried to publish. Must stay empty. */
+const posts = [];
 
 function bill(title) {
   return {
@@ -96,9 +106,20 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ results: [courtCase(`Case about "${term}"`)] }));
   }
+  if (path === "/api/government-references/resolve" && req.method === "POST") {
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ reference: { id: "ref_master_0001", briefState: "idle" } }));
+  }
+  if (path === "/api/posts" && req.method === "POST") {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    posts.push(JSON.parse(raw || "{}"));
+    res.writeHead(201, { "content-type": "application/json" });
+    return res.end('{"post":{"id":"post_1"}}');
+  }
   if (path.startsWith("/api/")) {
     res.writeHead(200, { "content-type": "application/json" });
-    return res.end('{"results":[]}');
+    return res.end('{"results":[],"posts":[],"references":[]}');
   }
 
   let file = join(DIST, path === "/" ? "index.html" : path);
@@ -202,6 +223,38 @@ check(
   "choosing a branch narrows the search to that branch",
   searches.length === 1 && searches[0]?.branch === "congress",
   `searches=${JSON.stringify(searches)}`,
+);
+
+// ------------------------------------------------ 6. sharing does not post
+
+// Back to a fresh search so a result card is on screen, then open one.
+searches.length = 0;
+await page.goto(`${base}/library`, { waitUntil: "networkidle" });
+await page.getByPlaceholder(/Search all three branches/i).fill("healthcare");
+await page.getByRole("button", { name: "Search", exact: true }).click();
+await page.getByText('Result for "healthcare"').waitFor({ timeout: 15_000 });
+await page.getByText('Result for "healthcare"').click();
+await page.waitForTimeout(1500);
+
+const shareButton = page.getByRole("button", { name: /Share to my timeline/i });
+check(
+  "sharing is offered without waiting for a brief",
+  (await shareButton.count()) > 0 && (await shareButton.first().isEnabled()),
+  `count=${await shareButton.count()}`,
+);
+
+await shareButton.first().click();
+await page.waitForTimeout(1200);
+
+check(
+  "and it opens the composer instead of posting",
+  page.url().includes("/timeline?share="),
+  `url=${page.url()}`,
+);
+check(
+  "with nothing published on the reader's behalf",
+  posts.length === 0,
+  `posts=${JSON.stringify(posts)}`,
 );
 
 await browser.close();

@@ -178,7 +178,11 @@ export function ComposeCard() {
         </div>
       </div>
 
+      {/* Expands in place rather than opening over your draft. Attaching a law
+          is required to post, so the picker was a full-screen dialog every
+          single time somebody wrote anything. */}
       <ReferenceSearchModal
+        inline
         visible={searchOpen}
         onClose={() => setSearchOpen(false)}
         onSelect={(reference) => {
