@@ -53,6 +53,7 @@ import {
 } from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
 import { runContentSelfHeal } from "./services/content-self-heal";
+import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
 
@@ -397,17 +398,36 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 // ran successfully within the last 6 hours, so restarts don't hammer the APIs.
 const GOVERNMENT_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  enqueueGovernmentSync("startup");
-  setInterval(() => enqueueGovernmentSync("daily"), GOVERNMENT_SYNC_INTERVAL_MS);
+  // The one job that was already correct — it enqueued at boot as well as on
+  // its interval. Moved onto the same helper anyway, so that "no bare
+  // setInterval" is a rule a test can enforce rather than a habit. The sync
+  // itself skips when it ran successfully within the last six hours, so the
+  // thirty-second stagger costs nothing and restarts do not hammer the APIs.
+  schedule({
+    name: "GovSync",
+    firstRunAfterMs: FIRST_RUN.governmentSync,
+    everyMs: GOVERNMENT_SYNC_INTERVAL_MS,
+    run: async () => enqueueGovernmentSync("scheduled"),
+  });
 }
 
 // Lineage: ask congress.gov which stored records are really the same law, so
-// two filings of one bill stop splitting the vote count. Daily, and not at
-// boot — the sweep is one request per record against the same key search uses,
-// and a restart loop would spend the hourly budget on nothing.
+// two filings of one bill stop splitting the vote count.
+//
+// "Daily, and not at boot" was the rule, for a good reason — the sweep is one
+// request per record against the same key search uses, and a restart loop
+// would spend the hourly budget on nothing. But a first run twenty-four hours
+// out is a first run this container never reaches, so the sweep was not
+// running daily. It was not running. The stagger keeps the restart-loop
+// protection and drops the part that made the schedule fictional.
 const LINEAGE_SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  setInterval(() => enqueueLineageSync("daily"), LINEAGE_SYNC_INTERVAL_MS);
+  schedule({
+    name: "Lineage",
+    firstRunAfterMs: FIRST_RUN.lineage,
+    everyMs: LINEAGE_SYNC_INTERVAL_MS,
+    run: async () => enqueueLineageSync("daily"),
+  });
 }
 
 // Roll calls: how each chamber actually voted, from senate.gov and
@@ -425,15 +445,18 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 // easy to abuse.
 const ROLL_CALL_SYNC_INTERVAL_MS = 12 * 60 * 60 * 1000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  const runRollCallSync = () => {
-    void syncRollCalls().catch((error) => {
-      // Never throws into the interval: a failed pull is a gap that stays
-      // hidden for twelve hours, not a reason to take the process down.
-      console.error("[RollCall] sync failed:", error);
-    });
-  };
-  // Not at boot. A restart loop would spend the courtesy budget on nothing.
-  setInterval(runRollCallSync, ROLL_CALL_SYNC_INTERVAL_MS);
+  // WAS "not at boot", and that had a real concern behind it — a restart loop
+  // must not spend the courtesy budget on nothing. But twelve hours is longer
+  // than this container usually lives: it restarts on every deploy, so the
+  // first run was never reached and this ingest was, again, not running. The
+  // stagger answers the original concern without recreating the original bug —
+  // a crash-looping container never survives five minutes.
+  schedule({
+    name: "RollCall",
+    firstRunAfterMs: FIRST_RUN.rollCall,
+    everyMs: ROLL_CALL_SYNC_INTERVAL_MS,
+    run: syncRollCalls,
+  });
 }
 
 /**
@@ -455,10 +478,13 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
  * See services/content-self-heal.ts for what it will and will not touch.
  */
 const SELF_HEAL_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const SELF_HEAL_BOOT_DELAY_MS = 90_000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  setTimeout(() => void runContentSelfHeal("boot"), SELF_HEAL_BOOT_DELAY_MS).unref?.();
-  setInterval(() => void runContentSelfHeal("scheduled"), SELF_HEAL_INTERVAL_MS);
+  schedule({
+    name: "SelfHeal",
+    firstRunAfterMs: FIRST_RUN.selfHeal,
+    everyMs: SELF_HEAL_INTERVAL_MS,
+    run: () => runContentSelfHeal("sweep"),
+  });
 }
 
 /**
@@ -478,11 +504,16 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
  */
 const PROVENANCE_INTERVAL_MS = 4 * 60 * 60 * 1000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  setInterval(() => {
-    void fillBillProvenance(25).catch((error) => {
-      console.error("[Provenance] fill failed:", error);
-    });
-  }, PROVENANCE_INTERVAL_MS);
+  // THIS IS THE ONE WITH RECEIPTS. Four hours between runs on a container that
+  // restarts several times a day meant the first run was never reached, so
+  // this never ran once — and 205 of 255 stored bills still have no sponsor
+  // and no introduced date, weeks after it shipped with tests.
+  schedule({
+    name: "Provenance",
+    firstRunAfterMs: FIRST_RUN.provenance,
+    everyMs: PROVENANCE_INTERVAL_MS,
+    run: () => fillBillProvenance(25),
+  });
 }
 
 // Duplicate laws: two filings of one bill split the vote count in half, and
@@ -495,20 +526,20 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 const MERGE_ADJUDICATION_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MERGE_ADJUDICATION_BATCH = 25;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  setInterval(() => {
-    void adjudicatePending(MERGE_ADJUDICATION_BATCH, { allowAI: true })
-      .then((sweep) => {
-        if (sweep.considered > 0) {
-          console.log(
-            `[Merge] considered ${sweep.considered}: ${sweep.merged} merged, ` +
-              `${sweep.rejected} ruled different, ${sweep.leftPending} left for a person.`
-          );
-        }
-      })
-      .catch((error) => {
-        console.error("[Merge] adjudication failed:", error);
-      });
-  }, MERGE_ADJUDICATION_INTERVAL_MS);
+  schedule({
+    name: "Merge",
+    firstRunAfterMs: FIRST_RUN.merge,
+    everyMs: MERGE_ADJUDICATION_INTERVAL_MS,
+    run: async () => {
+      const sweep = await adjudicatePending(MERGE_ADJUDICATION_BATCH, { allowAI: true });
+      if (sweep.considered > 0) {
+        console.log(
+          `[Merge] considered ${sweep.considered}: ${sweep.merged} merged, ` +
+            `${sweep.rejected} ruled different, ${sweep.leftPending} left for a person.`
+        );
+      }
+    },
+  });
 }
 
 // Accounts live in Postgres, external to this container, so they survive
