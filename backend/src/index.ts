@@ -53,6 +53,7 @@ import {
 } from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
 import { runContentSelfHeal } from "./services/content-self-heal";
+import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
@@ -456,6 +457,32 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
     firstRunAfterMs: FIRST_RUN.rollCall,
     everyMs: ROLL_CALL_SYNC_INTERVAL_MS,
     run: syncRollCalls,
+  });
+}
+
+/**
+ * The whole executive-order archive, filling itself in behind everything else.
+ *
+ * The Federal Register publishes about 1,556 executive orders going back to
+ * 1994 and this platform held 62. The nightly forward sync takes at most 50 new
+ * ones and starts at the newest, which is right for catching up on a few days
+ * and the wrong shape entirely for fetching the other 1,494.
+ *
+ * Every half hour, a hundred more, working backwards from the oldest order
+ * held — so the corpus is complete in under a day and then this costs one cheap
+ * request per sweep forever, which is what catches anything the Federal
+ * Register adds retroactively.
+ *
+ * See services/executive-order-archive.ts for why it resumes from the data
+ * rather than from a bookmark.
+ */
+const EO_ARCHIVE_INTERVAL_MS = 30 * 60 * 1000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  schedule({
+    name: "EOArchive",
+    firstRunAfterMs: FIRST_RUN.executiveOrderArchive,
+    everyMs: EO_ARCHIVE_INTERVAL_MS,
+    run: runExecutiveOrderArchiveSweep,
   });
 }
 

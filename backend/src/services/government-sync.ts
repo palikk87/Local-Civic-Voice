@@ -399,9 +399,42 @@ interface ExecutiveOrderSyncOptions {
   maxNew?: number;
   /** Pause between requests. These are public servers run for the public. */
   pauseMs?: number;
+  /**
+   * Only orders signed on or before this date.
+   *
+   * THE WHOLE ARCHIVE, WITHOUT WALKING IT TWICE. The forward sync starts at the
+   * newest and pages until it recognises what it is reading, which is right for
+   * catching up on a few days. It is the wrong shape for fetching 1,494 orders
+   * going back to 1994: every run would re-walk everything already held before
+   * reaching anything new, and the cost of a run would grow with the size of
+   * the archive already collected.
+   *
+   * Anchoring on a date makes each run start exactly where the last one
+   * stopped, with no state to keep and nothing to re-read. The anchor is
+   * derived from the data — the oldest order held — so it is self-correcting:
+   * interrupt it, restart it, or run it twice, and it resumes from whatever is
+   * actually in the database rather than from a bookmark that could be wrong.
+   */
+  signedBefore?: Date;
+}
+
+/** What one pass over the archive did, and whether there is any more of it. */
+export interface ExecutiveOrderSyncResult {
+  synced: number;
+  /**
+   * True when the source returned nothing at all for this window — which,
+   * walking backwards, means the beginning of the archive has been reached.
+   */
+  exhausted: boolean;
 }
 
 export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {}): Promise<number> {
+  return (await syncExecutiveOrdersDetailed(options)).synced;
+}
+
+export async function syncExecutiveOrdersDetailed(
+  options: ExecutiveOrderSyncOptions = {},
+): Promise<ExecutiveOrderSyncResult> {
   const stopAfterKnown = options.stopAfterKnown ?? EO_STOP_AFTER_KNOWN;
   const maxPages = options.maxPages ?? EO_MAX_PAGES;
   const maxNew = options.maxNew ?? EO_MAX_NEW_PER_RUN;
@@ -410,6 +443,12 @@ export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {
   let synced = 0;
   let taken = 0;
   let consecutiveKnown = 0;
+  /**
+   * Whether the source had anything at all to say for this window. Only
+   * meaningful walking backwards, where "nothing older exists" is the finish
+   * line rather than a failure.
+   */
+  let sawAnyResult = false;
 
   for (let page = 1; page <= maxPages; page++) {
     const url = new URL("https://www.federalregister.gov/api/v1/documents.json");
@@ -418,12 +457,19 @@ export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {
     url.searchParams.set("order", "newest");
     url.searchParams.set("per_page", String(EO_PAGE_SIZE));
     url.searchParams.set("page", String(page));
+    if (options.signedBefore) {
+      url.searchParams.set(
+        "conditions[signing_date][lte]",
+        options.signedBefore.toISOString().slice(0, 10),
+      );
+    }
     for (const field of ["executive_order_number", "title", "abstract", "signing_date", "publication_date", "html_url", "document_number", "president", "body_html_url", "raw_text_url"]) {
       url.searchParams.append("fields[]", field);
     }
 
     const data = await fetchJson<FederalRegisterListResponse>(url.toString());
     if (!data?.results || data.results.length === 0) break;
+    sawAnyResult = true;
 
     for (const doc of data.results) {
       if (!doc.title) continue;
@@ -440,7 +486,7 @@ export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {
       // stored in it — is not caught up, and must not count towards stopping.
       if (existing?.fullText) {
         consecutiveKnown++;
-        if (consecutiveKnown >= stopAfterKnown) return synced;
+        if (consecutiveKnown >= stopAfterKnown) return { synced, exhausted: false };
       } else {
         consecutiveKnown = 0;
         // Only records we actually have to go and fetch count against the
@@ -450,7 +496,7 @@ export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {
             `[GovSync] Executive orders: took ${taken} this run and stopped. ` +
               `More remain; the next run picks up where this one left off.`,
           );
-          return synced;
+          return { synced, exhausted: false };
         }
         taken++;
       }
@@ -490,7 +536,7 @@ export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {
     if (pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
 
-  return synced;
+  return { synced, exhausted: !sawAnyResult };
 }
 
 // ---------- SCOTUS cases (CourtListener) ----------

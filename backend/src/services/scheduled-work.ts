@@ -75,4 +75,9 @@ export const FIRST_RUN = {
   merge: 4 * 60_000,
   /** The heaviest courtesy cost: a few hundred spaced requests. */
   rollCall: 5 * 60_000,
+  /**
+   * Last, because it is the only one with a finish line — everything else has
+   * to be responsive, this only has to arrive.
+   */
+  executiveOrderArchive: 6 * 60_000,
 } as const;
