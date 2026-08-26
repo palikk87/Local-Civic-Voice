@@ -52,6 +52,7 @@ import {
   startPlatformSecretRefresh,
 } from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
+import { runContentSelfHeal } from "./services/content-self-heal";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
 
@@ -433,6 +434,31 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   };
   // Not at boot. A restart loop would spend the courtesy budget on nothing.
   setInterval(runRollCallSync, ROLL_CALL_SYNC_INTERVAL_MS);
+}
+
+/**
+ * Records holding a lie clean themselves up.
+ *
+ * WHY THIS RUNS RATHER THAN WAITING TO BE RUN. The Federal Register's
+ * anti-scraping page was stored as the text of an executive order, hashed as
+ * that law's fingerprint, and summarised into a Citizen's Brief published under
+ * Support and Oppose buttons. The guard stopped new ones arriving and the admin
+ * console got a button to clear the old ones — but a button means the defect
+ * sits there until somebody notices, finds the tab and presses it, and the
+ * person who noticed was the one reading the app on his phone. Making the
+ * reader the janitor is not a fix.
+ *
+ * AT BOOT, after a pause. The pause is not cosmetic: the job queue has to be
+ * accepting work, and a container in a restart loop must not spend the
+ * government's courtesy budget on the same sweep every ninety seconds.
+ *
+ * See services/content-self-heal.ts for what it will and will not touch.
+ */
+const SELF_HEAL_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const SELF_HEAL_BOOT_DELAY_MS = 90_000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  setTimeout(() => void runContentSelfHeal("boot"), SELF_HEAL_BOOT_DELAY_MS).unref?.();
+  setInterval(() => void runContentSelfHeal("scheduled"), SELF_HEAL_INTERVAL_MS);
 }
 
 /**
