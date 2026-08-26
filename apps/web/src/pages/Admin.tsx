@@ -25,6 +25,7 @@ import {
   Building2,
   GitMerge,
   ScrollText,
+  Wrench,
   Settings,
   Bug,
 } from "lucide-react";
@@ -42,6 +43,7 @@ import { MergeReviewTab } from "@/components/admin/MergeReviewTab";
 import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { BugReportsTab } from "@/components/admin/BugReportsTab";
+import { MaintenanceTab } from "@/components/admin/MaintenanceTab";
 import { LoadingScreen } from "@/components/LoadingScreen";
 
 /** Tabs this console renders — and, one-for-one, mobile's /admin/* screen names. */
@@ -53,6 +55,11 @@ const ADMIN_TABS = [
   "announcements",
   "merge-review",
   "b2b-clients",
+  // "bug-reports" had a tab trigger but was missing from this list, so the URL
+  // /admin/bug-reports fell back to the dashboard on a reload or a shared link
+  // — the tab worked, the address did not.
+  "bug-reports",
+  "maintenance",
   "logs",
   "settings",
 ] as const;
@@ -154,6 +161,10 @@ export default function Admin() {
               <Bug className="mr-2 h-4 w-4" />
               Bug reports
             </TabsTrigger>
+            <TabsTrigger value="maintenance">
+              <Wrench className="mr-2 h-4 w-4" />
+              Maintenance
+            </TabsTrigger>
             <TabsTrigger value="logs">
               <ScrollText className="mr-2 h-4 w-4" />
               Logs
@@ -184,6 +195,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="b2b-clients" className="mt-6">
             <B2BClientsTab />
+          </TabsContent>
+          <TabsContent value="maintenance" className="mt-6">
+            <MaintenanceTab />
           </TabsContent>
           <TabsContent value="logs" className="mt-6">
             <LogsTab />

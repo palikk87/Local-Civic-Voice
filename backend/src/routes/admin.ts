@@ -14,6 +14,8 @@ import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
 import { JobPriority, JobType, enqueueLineageSync, jobQueue } from "../services/job-queue";
 import { officialSources } from "../services/reference-content";
+import { purgeBlockedText } from "../services/blocked-text-purge";
+import { syncExecutiveOrders } from "../services/government-sync";
 import {
   B2B_PUBLIC_FIELDS,
   createB2BClient,
@@ -1319,6 +1321,134 @@ adminRouter.post("/reextract-content", async (c) => {
     message:
       "Official text will be re-pulled and briefs rewritten. No law is marked as changed, " +
       "so nobody is notified and no post is badged.",
+  });
+});
+
+/**
+ * POST /api/admin/maintenance/purge-blocked-text
+ *
+ * Find records holding an anti-scraping page as their official text, and clear
+ * them. Reports by default; writes only when asked twice, so the destructive
+ * half is never the accidental half.
+ *
+ * WHY THIS IS A BUTTON. It was a script, and a script needs somebody with a
+ * shell on the production service. The person who NOTICES a captcha where a
+ * law should be is whoever is reading the app, usually on a phone, and making
+ * them find a terminal is how a known problem stays live for a week. Same
+ * implementation as the script — src/services/blocked-text-purge.ts — so the
+ * two can never disagree about what counts as a block page.
+ */
+adminRouter.post("/maintenance/purge-blocked-text", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Superadmin required." }, { status: 403 });
+  }
+
+  const apply = c.req.query("apply") === "true";
+  const referenceType = c.req.query("referenceType") || undefined;
+
+  const result = await purgeBlockedText({ referenceType, apply });
+
+  // Logged only when something was actually written. A dry run is a question,
+  // not an event, and an activity log full of questions hides the answers.
+  if (result.applied && result.cleared > 0) {
+    createActivityLog(
+      "purge_blocked_text",
+      session.adminId,
+      session.username,
+      "system",
+      referenceType ?? "all",
+      `Cleared a block page from ${result.cleared} record(s), and every brief written from one`,
+    );
+  }
+
+  return c.json({
+    data: {
+      examined: result.examined,
+      applied: result.applied,
+      cleared: result.cleared,
+      found: result.found,
+      message: result.applied
+        ? `Cleared ${result.cleared}. Those records show an honest empty state now, and the ` +
+          `content pipeline will fetch the real text on its next pass.`
+        : result.found.length === 0
+          ? "Nothing to clear: no stored text looks like a block page."
+          : `${result.found.length} record(s) hold a block page. Nothing was written — ` +
+            `run again with apply to clear them.`,
+    },
+  });
+});
+
+/**
+ * POST /api/admin/maintenance/backfill-executive-orders
+ *
+ * Catch the executive orders up. The nightly sync takes at most 50 new ones a
+ * run, on purpose: doing the whole Federal Register in one night is 1,556
+ * full-text downloads against a public server and 1,556 rows into a shared
+ * database. This is the same job with the ceiling raised deliberately, by
+ * somebody who is watching it.
+ *
+ * Runs inline rather than queued, so the answer comes back with the request and
+ * the person who pressed it sees what happened.
+ */
+adminRouter.post("/maintenance/backfill-executive-orders", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Superadmin required." }, { status: 403 });
+  }
+
+  const requested = Number(c.req.query("maxNew") ?? 100);
+  // A ceiling on the ceiling. This runs inside a request, and a request that
+  // walks the whole corpus will be cut off by a proxy long before it finishes,
+  // leaving somebody unsure what was written.
+  const maxNew = Math.min(Math.max(Number.isFinite(requested) ? requested : 100, 1), 300);
+
+  const before = await prisma.governmentReference.count({
+    where: { referenceType: "executive_order" },
+  });
+  const beforeText = await prisma.governmentReference.count({
+    where: { referenceType: "executive_order", fullText: { not: null } },
+  });
+
+  const touched = await syncExecutiveOrders({ maxNew, stopAfterKnown: 200, pauseMs: 250 });
+
+  const after = await prisma.governmentReference.count({
+    where: { referenceType: "executive_order" },
+  });
+  const afterText = await prisma.governmentReference.count({
+    where: { referenceType: "executive_order", fullText: { not: null } },
+  });
+
+  createActivityLog(
+    "backfill_executive_orders",
+    session.adminId,
+    session.username,
+    "system",
+    "executive_order",
+    `Backfilled up to ${maxNew}: ${after - before} new record(s), ${afterText - beforeText} gained text`,
+  );
+
+  return c.json({
+    data: {
+      requestedMaxNew: maxNew,
+      touched,
+      added: after - before,
+      gainedText: afterText - beforeText,
+      total: after,
+      totalWithText: afterText,
+      message:
+        afterText < after
+          ? `${after - afterText} still have no official text. That is honest rather than ` +
+            `broken: either the source has not given it to us yet, or it answered with a ` +
+            `block page and we refused to store it.`
+          : "Every executive order held now has its official text.",
+    },
   });
 });
 
