@@ -84,7 +84,9 @@ async function main() {
   const withBriefs = bad.filter((r) => r.citizenBrief).length;
   console.log(
     `\n${bad.length} record${bad.length === 1 ? "" : "s"} hold a block page as official text` +
-      (withBriefs > 0 ? `, and ${withBriefs} of them have a brief written from it` : "") +
+      (withBriefs > 0
+        ? `, and ${withBriefs} of them ${withBriefs === 1 ? "has" : "have"} a brief written from it`
+        : "") +
       ".",
   );
 
