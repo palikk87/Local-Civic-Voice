@@ -47,6 +47,7 @@ import {
 } from '@/lib/government-service';
 import { cn } from '@/lib/cn';
 import { DataFreshness } from '@/components/civic/DataFreshness';
+import { ordinal } from '@/lib/ordinal';
 
 type Section = 'congress' | 'executive' | 'judicial' | 'leadership';
 
@@ -637,7 +638,15 @@ export default function GovernmentScreen() {
           <View className="flex-1 items-center justify-center px-8">
             <AlertCircle size={48} color="#F59E0B" />
             <Text className="mt-4 text-center text-lg text-white">Couldn't load government data</Text>
-            <Text className="mt-1 text-center text-sm text-slate-400">{error}</Text>
+            {/* NOT the raw error. That is whatever threw — on web the same
+                branch printed TanStack Query's own
+                `["congress-members"] data is undefined`, brackets and all, at
+                a reader. An error a person cannot act on should say what they
+                CAN do. Web twin: apps/web/src/pages/Government.tsx. */}
+            <Text className="mt-1 text-center text-sm text-slate-400">
+              The roster comes from congress.gov. If this keeps happening, the sync may
+              not have run yet.
+            </Text>
             <Pressable onPress={onRefresh} className="mt-5 rounded-xl bg-amber-500 px-5 py-3">
               <Text className="font-semibold text-slate-900">Try again</Text>
             </Pressable>
@@ -707,8 +716,10 @@ export default function GovernmentScreen() {
                 </View>
 
                 <Text className="mb-2 px-4 text-xs text-slate-500">
-                  Showing {filteredMembers.length} of {members.length} members of the{' '}
-                  {congress?.congress}th Congress
+                  {/* The congress number arrives with the roster, so until it
+                      does this read "members of the th Congress". */}
+                  Showing {filteredMembers.length} of {members.length} members
+                  {congress?.congress ? ` of the ${ordinal(congress.congress)} Congress` : null}
                 </Text>
 
                 {filteredMembers.map((member, index) => (

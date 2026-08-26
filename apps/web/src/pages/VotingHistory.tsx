@@ -132,7 +132,9 @@ export default function VotingHistory() {
                 No votes yet
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                Browse and vote on legislation in the Explore section.
+                {/* There is no "Explore" section. /explore has redirected to
+                    /discover for months and the sidebar says Discover. */}
+                Find something to back or oppose in Discover, or in the Library.
               </p>
             </div>
           ) : (

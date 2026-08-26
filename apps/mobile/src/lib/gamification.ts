@@ -66,21 +66,14 @@ export type BadgeId =
   | 'fifty_votes'
   | 'hundred_votes'
   | 'category_expert'
-  | 'bipartisan_voter'
-  | 'early_voter'
   // Engagement badges
   | 'gap_hunter'
   | 'truth_seeker'
-  | 'local_champion'
-  | 'influencer'
-  | 'community_builder'
   // Streak badges
   | 'weekly_warrior'
   | 'monthly_maven'
   | 'quarter_champion'
   // Impact badges
-  | 'voice_heard'
-  | 'congress_watcher'
   | 'accountability_hero'
   | 'change_maker';
 
@@ -96,6 +89,20 @@ export interface Badge {
   requirement: number;
 }
 
+/**
+ * SEVEN BADGES ARE GONE. Nothing could ever award them.
+ *
+ * bipartisan_voter, early_voter, local_champion, influencer,
+ * community_builder, voice_heard and congress_watcher were declared here with
+ * names, descriptions and XP rewards, and no code path anywhere pushed any of
+ * them. Twelve of the nineteen had an award path; these seven were a list of
+ * things the app said it valued and had no way of noticing.
+ *
+ * They were also invisible: nothing in either app renders this badge list at
+ * all. The Profile's "Achievements" row is a SEPARATE hardcoded set of four,
+ * with different names and different thresholds, computed inline. So this was
+ * dead weight twice over. See docs/BADGE_AUDIT.md.
+ */
 export const BADGES: Record<BadgeId, Omit<Badge, 'unlockedAt' | 'progress'>> = {
   // Voting badges
   first_vote: {
@@ -143,24 +150,6 @@ export const BADGES: Record<BadgeId, Omit<Badge, 'unlockedAt' | 'progress'>> = {
     xpReward: 50,
     requirement: 20,
   },
-  bipartisan_voter: {
-    id: 'bipartisan_voter',
-    name: 'Bipartisan Bridge',
-    description: 'Vote with both parties on different bills',
-    icon: '🤝',
-    rarity: 'rare',
-    xpReward: 100,
-    requirement: 10,
-  },
-  early_voter: {
-    id: 'early_voter',
-    name: 'Early Bird',
-    description: 'Vote on a bill within 24 hours of it being posted',
-    icon: '⏰',
-    rarity: 'common',
-    xpReward: 15,
-    requirement: 1,
-  },
 
   // Engagement badges
   gap_hunter: {
@@ -180,33 +169,6 @@ export const BADGES: Record<BadgeId, Omit<Badge, 'unlockedAt' | 'progress'>> = {
     rarity: 'uncommon',
     xpReward: 40,
     requirement: 10,
-  },
-  local_champion: {
-    id: 'local_champion',
-    name: 'Local Champion',
-    description: 'Vote on 10 bills affecting your state',
-    icon: '📍',
-    rarity: 'uncommon',
-    xpReward: 50,
-    requirement: 10,
-  },
-  influencer: {
-    id: 'influencer',
-    name: 'Civic Influencer',
-    description: 'Get 100 likes on your votes/comments',
-    icon: '⭐',
-    rarity: 'rare',
-    xpReward: 100,
-    requirement: 100,
-  },
-  community_builder: {
-    id: 'community_builder',
-    name: 'Community Builder',
-    description: 'Have 50 people follow your voting',
-    icon: '👥',
-    rarity: 'rare',
-    xpReward: 120,
-    requirement: 50,
   },
 
   // Streak badges
@@ -239,24 +201,6 @@ export const BADGES: Record<BadgeId, Omit<Badge, 'unlockedAt' | 'progress'>> = {
   },
 
   // Impact badges (moral rewards!)
-  voice_heard: {
-    id: 'voice_heard',
-    name: 'Voice Heard',
-    description: 'Your vote aligned with the final congressional outcome',
-    icon: '📢',
-    rarity: 'uncommon',
-    xpReward: 50,
-    requirement: 1,
-  },
-  congress_watcher: {
-    id: 'congress_watcher',
-    name: 'Congress Watcher',
-    description: 'Track 10 bills from introduction to final vote',
-    icon: '👁️',
-    rarity: 'rare',
-    xpReward: 80,
-    requirement: 10,
-  },
   accountability_hero: {
     id: 'accountability_hero',
     name: 'Accountability Hero',

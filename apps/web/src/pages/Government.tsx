@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { DataFreshness } from "@/components/civic/DataFreshness";
+import { ordinal } from "@/lib/civic";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -191,8 +192,15 @@ export default function Government() {
           <div className="flex flex-col items-center py-16 text-center">
             <AlertCircle className="h-12 w-12 text-amber-500" />
             <p className="mt-4 text-lg text-foreground">Couldn't load government data</p>
+            {/* NOT `error.message`. That is whatever threw — and when the
+                query resolves to nothing, TanStack Query's own text is
+                `["congress-members"] data is undefined`, which a reader saw
+                printed on the page, brackets and all. An error a person cannot
+                act on should say what they CAN do. The real message still
+                reaches the console for whoever is debugging. */}
             <p className="mt-1 text-sm text-muted-foreground">
-              {error instanceof Error ? error.message : "Please try again"}
+              The roster comes from congress.gov. If this keeps happening, the
+              sync may not have run yet.
             </p>
             <Button
               className="mt-5 bg-amber-500 text-slate-900 hover:bg-amber-400"
@@ -259,8 +267,10 @@ export default function Government() {
                 </div>
 
                 <p className="text-xs text-muted-foreground">
-                  Showing {filteredMembers.length} of {members.length} members of the{" "}
-                  {congress?.congress}th Congress
+                  {/* The congress number arrives with the roster, so until it
+                      does this read "members of the th Congress". */}
+                  Showing {filteredMembers.length} of {members.length} members
+                  {congress?.congress ? ` of the ${ordinal(congress.congress)} Congress` : null}
                 </p>
 
                 <div className="space-y-3">

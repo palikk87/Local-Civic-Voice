@@ -23,7 +23,7 @@ import {
   CategoryBadge,
   StatusBadge,
 } from "@/components/civic/badges";
-import { civicApi, formatDate, titleCase } from "@/lib/civic";
+import { civicApi, formatDate, ordinal, titleCase } from "@/lib/civic";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 
@@ -203,8 +203,10 @@ export default function ReferenceDetail() {
                   {reference.chamber ? (
                     <MetaRow icon={Building2} label="Chamber" value={titleCase(reference.chamber)} />
                   ) : null}
+                  {/* The suffix was hardcoded "th". Correct today, wrong from
+                      the 121st Congress on — four years away. */}
                   {reference.congress ? (
-                    <MetaRow icon={Building2} label="Congress" value={`${reference.congress}th`} />
+                    <MetaRow icon={Building2} label="Congress" value={ordinal(reference.congress)} />
                   ) : null}
                   {reference.signedDate ? (
                     <MetaRow icon={CalendarDays} label="Signed" value={formatDate(reference.signedDate) ?? ""} />

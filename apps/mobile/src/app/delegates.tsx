@@ -311,7 +311,23 @@ function DelegatesContent() {
     [activeDelegations]
   );
   const activeDelegationsCount = activeDelegations.length;
-  const requirements = data?.requirements;
+  /*
+   * The FIELDS, not just the container.
+   *
+   * The sentence below was guarded on `requirements` being truthy and then read
+   * four numbers off it, so any answer carrying that key without those numbers
+   * printed "an account at least undefined days old, undefined+ votes,
+   * undefined+ posts, and activity within the last undefined days" to a
+   * would-be delegate. Web twin: apps/web/src/pages/Delegates.tsx.
+   */
+  const rawRequirements = data?.requirements;
+  const requirements =
+    typeof rawRequirements?.MIN_ACCOUNT_AGE_DAYS === 'number' &&
+    typeof rawRequirements?.MIN_VOTES === 'number' &&
+    typeof rawRequirements?.MIN_POSTS === 'number' &&
+    typeof rawRequirements?.ACTIVE_WITHIN_DAYS === 'number'
+      ? rawRequirements
+      : null;
 
   const query = searchQuery.trim().toLowerCase();
   const filteredDelegates = (data?.delegates ?? []).filter(

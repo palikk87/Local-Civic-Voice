@@ -262,7 +262,24 @@ export default function Delegates() {
     onError: (e: Error) => toast.error("Couldn't revoke", { description: e.message }),
   });
 
-  const requirements = data?.requirements;
+  /*
+   * The FIELDS, not just the container.
+   *
+   * The sentence below was guarded on `requirements` being truthy and then read
+   * four numbers off it, so any answer carrying that key without those numbers
+   * printed "an account at least undefined days old, undefined+ votes,
+   * undefined+ posts, and activity within the last undefined days" to a
+   * would-be delegate. This is the fourth time this session that guarding the
+   * container and dereferencing the field has put something wrong on a screen.
+   */
+  const rawRequirements = data?.requirements;
+  const requirements =
+    typeof rawRequirements?.MIN_ACCOUNT_AGE_DAYS === "number" &&
+    typeof rawRequirements?.MIN_VOTES === "number" &&
+    typeof rawRequirements?.MIN_POSTS === "number" &&
+    typeof rawRequirements?.ACTIVE_WITHIN_DAYS === "number"
+      ? rawRequirements
+      : null;
   const query = debouncedSearch.trim().toLowerCase();
   const delegates = (data?.delegates ?? []).filter(
     (d) =>

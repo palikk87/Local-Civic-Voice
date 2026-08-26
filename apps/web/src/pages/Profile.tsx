@@ -303,6 +303,25 @@ export default function Profile() {
     navigate("/");
   };
 
+  /*
+   * ACHIEVEMENTS, AND WHAT THEY ACTUALLY MEASURE.
+   *
+   * Two problems, both from the audit in docs/BADGE_AUDIT.md.
+   *
+   * "5 followers" read `user.followers`, and `user` here is built by
+   * signed-in-identity.ts, which sets `followers: 0` as a literal because a
+   * session carries no such field. So that one could never be earned by
+   * anybody, ever, whatever the database held — the live count is right there
+   * in `liveProfile`, three lines up, and was already being displayed.
+   *
+   * The vote thresholds read a browser-local store until this week; they read
+   * the server now, which is what makes them mean anything on a second device.
+   *
+   * These four are ALSO not the badge system. gamification.ts declares its own
+   * nineteen with different names and different thresholds, and nothing in
+   * either app renders that list. Consolidating the two is a decision, not a
+   * cleanup, and it is written up rather than made here.
+   */
   const achievements = [
     {
       title: "First Vote",
@@ -325,10 +344,8 @@ export default function Profile() {
     {
       title: "Engaged",
       description: "5 followers",
-      icon: (
-        <Users size={20} color={(user?.followers ?? 0) >= 5 ? "#F59E0B" : "#64748B"} />
-      ),
-      earned: (user?.followers ?? 0) >= 5,
+      icon: <Users size={20} color={followerCount >= 5 ? "#F59E0B" : "#64748B"} />,
+      earned: followerCount >= 5,
     },
   ];
 

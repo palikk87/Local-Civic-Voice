@@ -339,6 +339,25 @@ export function shortDate(value: string | Date | null | undefined): string {
   return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+/**
+ * "119th", "121st", "122nd", "123rd" — and nothing at all when the number is
+ * missing.
+ *
+ * Three places printed `{congress}th` with the suffix hardcoded. Two of them
+ * are the Government screens, where the congress number comes from an API
+ * response and is not guarded, so before it arrived the page read "members of
+ * the th Congress". The suffix is also simply wrong from the 121st Congress
+ * on, which is four years away.
+ */
+export function ordinal(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "";
+  const abs = Math.abs(Math.trunc(n));
+  // 11th, 12th, 13th are the exceptions to the last-digit rule.
+  const teen = abs % 100 >= 11 && abs % 100 <= 13;
+  const suffix = teen ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[abs % 10] ?? "th";
+  return `${n}${suffix}`;
+}
+
 export function supportPct(votes: Votes): number {
   if (!votes.total) return 0;
   return Math.round((votes.support / votes.total) * 100);
