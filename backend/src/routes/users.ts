@@ -828,9 +828,18 @@ usersRouter.get("/jurisdiction/districts", async (c) => {
  * desk. The only reason to show it is so its owner can reach it, which is a
  * question only they can ask.
  *
- * NO SECRET LEAVES HERE. Not the password, not the API key, not a hash, not a
- * hint. The username is returned because it is the one they will be typing, and
- * because they already know it.
+ * NOTHING ABOUT THE ACCOUNT LEAVES HERE — NOT EVEN THE USERNAME.
+ *
+ * This used to return the username, business name and tier, on the reasoning
+ * that the username is the one thing somebody cannot guess about their own
+ * second login. That was wrong twice over. It printed half of a credential
+ * pair onto a page people leave open, screenshot and share — a B2B login is
+ * username plus password, and handing out the first half for free narrows an
+ * attack to one unknown. And the business name is a fact about a person that
+ * this endpoint had no reason to state.
+ *
+ * The card asks one question — is there a door for me — so the answer is one
+ * bit. Whoever needs the username was given it when the account was made.
  */
 /**
  * GET /api/users/me/admin-access
@@ -877,24 +886,16 @@ usersRouter.get("/me/business-account", async (c) => {
   const currentUser = c.get("user");
   if (!currentUser) return c.json({ error: "Authentication required" }, 401);
 
+  // `id` only, and it is never sent. Selecting the username would put it in
+  // this process's memory and one careless spread away from the response.
   const client = await prisma.b2BClient.findFirst({
     where: { userId: currentUser.id },
-    select: { username: true, name: true, tier: true, type: true, createdAt: true },
+    select: { id: true },
   });
 
-  // Null rather than 404: not having one is an ordinary state for almost
+  // False rather than 404: not having one is an ordinary state for almost
   // everybody, and a 404 would read to the client as a failed request.
-  return c.json({
-    businessAccount: client
-      ? {
-          username: client.username,
-          name: client.name,
-          tier: client.tier,
-          type: client.type,
-          since: client.createdAt.toISOString(),
-        }
-      : null,
-  });
+  return c.json({ hasBusinessAccount: client !== null });
 });
 
 /**

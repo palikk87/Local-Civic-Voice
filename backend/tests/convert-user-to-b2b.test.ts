@@ -251,20 +251,17 @@ describe("the thread back from the citizen account", () => {
    * has to be told out of band that they have one, and then find the portal
    * themselves. The profile card is the thread, and this is what feeds it.
    */
-  test("the owner can see that they have one, and which one", async () => {
+  test("the owner can see that they have one", async () => {
     const response = await fetch(`${BASE_URL}/api/users/me/business-account`, {
       headers: { Cookie: citizenCookie },
     });
     expect(response.status).toBe(200);
 
-    const body = (await response.json()) as {
-      businessAccount: { username: string; name: string; tier: string } | null;
-    };
-    expect(body.businessAccount?.username).toBe(CITIZEN_USERNAME);
-    expect(body.businessAccount?.tier).toBe("professional");
+    const body = (await response.json()) as { hasBusinessAccount: boolean };
+    expect(body.hasBusinessAccount).toBe(true);
   });
 
-  test("NO SECRET COMES BACK WITH IT", async () => {
+  test("ONE BIT COMES BACK, AND THAT INCLUDES THE USERNAME", async () => {
     const response = await fetch(`${BASE_URL}/api/users/me/business-account`, {
       headers: { Cookie: citizenCookie },
     });
@@ -275,9 +272,19 @@ describe("the thread back from the citizen account", () => {
     expect(raw.toLowerCase()).not.toContain("passwordhash");
     expect(raw.toLowerCase()).not.toContain("apikey");
     expect(raw.toLowerCase()).not.toContain("hash");
+
+    // AND NOT THE USERNAME. This endpoint used to return it, along with the
+    // business name and tier, so the profile card could say which of your two
+    // logins the door wanted. A B2B login is username plus password: printing
+    // the username onto a page people leave open, screenshot and share hands
+    // over half the pair and leaves one unknown. The card asks whether there
+    // is a door, so one bit is the whole answer.
+    expect(raw).not.toContain(CITIZEN_USERNAME);
+    expect(raw).not.toContain("professional");
+    expect(JSON.parse(raw)).toEqual({ hasBusinessAccount: true });
   });
 
-  test("somebody without one is told null, not given an error", async () => {
+  test("somebody without one is told false, not given an error", async () => {
     // Having no business account is the ordinary state for almost everybody. A
     // 404 here would read to the client as a failed request and the card would
     // flicker into an error state on every profile on the platform.
@@ -292,7 +299,7 @@ describe("the thread back from the citizen account", () => {
       headers: { Cookie: signIn.headers.get("set-cookie") ?? "" },
     });
     expect(response.status).toBe(200);
-    expect(((await response.json()) as { businessAccount: unknown }).businessAccount).toBeNull();
+    expect(await response.json()).toEqual({ hasBusinessAccount: false });
   });
 
   test("a stranger cannot ask about somebody else's", async () => {

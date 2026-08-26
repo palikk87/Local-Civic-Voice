@@ -318,17 +318,19 @@ function ProfileContent() {
       const response = await fetch(`${BACKEND_URL}/api/users/me/business-account`, {
         headers: { Cookie: authClient.getCookie() },
       });
-      if (!response.ok) return { businessAccount: null };
-      return (await response.json()) as {
-        businessAccount: { username: string; name: string; tier: string } | null;
-      };
+      // ONE BIT, AND THE ENDPOINT SENDS NOTHING ELSE. It used to return the
+      // username, business name and tier. A B2B login is username plus
+      // password, so putting the username on a page people leave open and
+      // screenshot gave away half the pair for free.
+      if (!response.ok) return { hasBusinessAccount: false };
+      return (await response.json()) as { hasBusinessAccount: boolean };
     },
     staleTime: 5 * 60_000,
     // A failure is silent by design: no card is the honest answer when we
     // could not ask.
     retry: false,
   });
-  const businessAccount = business?.businessAccount ?? null;
+  const hasBusinessAccount = business?.hasBusinessAccount ?? false;
 
   /**
    * Whether this account carries an administrative role.
@@ -851,7 +853,7 @@ function ProfileContent() {
               cannot keep. Nothing about the viewer appears on it: no name, no
               username, no tier. It is a door, and a door does not need to know
               who you are. Web twin: apps/web/src/pages/Profile.tsx. */}
-          {businessAccount || isStaff ? (
+          {hasBusinessAccount || isStaff ? (
             <View className="px-4 mb-6">
               <Pressable
                 onPress={() => {
