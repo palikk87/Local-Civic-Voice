@@ -60,7 +60,7 @@ import {
 } from "./merge-adjudicator";
 import { ReferenceKind, billReferenceId, parseReferenceId } from "./master-reference-id";
 import { findByName } from "./reference-names";
-import { env } from "../env";
+import { congressGovKey, env } from "../env";
 
 /**
  * The government's labels, spelled the way congress.gov actually returns them.
@@ -209,7 +209,7 @@ export interface PublishedRelationship {
  */
 export async function publishedRelationshipsFor(
   masterReferenceId: string,
-  apiKey = env.CONGRESS_API_KEY,
+  apiKey = congressGovKey(),
 ): Promise<PublishedRelationship[]> {
   if (!apiKey) return [];
 

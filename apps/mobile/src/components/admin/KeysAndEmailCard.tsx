@@ -16,6 +16,8 @@ import { CheckCircle2, XCircle, AlertTriangle, KeySquare, Send } from 'lucide-re
 import { BACKEND_URL } from '@/lib/config';
 import { adminAuthHeader, useAdminStore } from '@/lib/admin-store';
 
+type SecretSource = 'database' | 'environment' | 'unset';
+
 interface KeyStatus {
   name: string;
   present: boolean;
@@ -24,6 +26,26 @@ interface KeyStatus {
   looksRight: boolean;
   powers: string;
   withoutIt: string;
+  /** Which of the two places the value in use came from. */
+  source: SecretSource;
+}
+
+interface StoredSecretInfo {
+  name: string;
+  source: SecretSource;
+  storedInDatabase: boolean;
+  presentInEnvironment: boolean;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+interface KeyStorage {
+  stored: StoredSecretInfo[];
+  storable: string[];
+  encryptionAvailable: boolean;
+  encryptionUnavailableReason: string | null;
+  note: string;
+  cannotBeStored: { names: string[]; why: string };
 }
 
 interface TestResult {
@@ -39,7 +61,10 @@ export function KeysAndEmailCard() {
 
   const [keys, setKeys] = useState<KeyStatus[] | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [storage, setStorage] = useState<KeyStorage | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** Bumped after a key is stored or cleared, to re-read what the server holds. */
+  const [reloadToken, setReloadToken] = useState(0);
 
   const [to, setTo] = useState('');
   const [sending, setSending] = useState(false);
@@ -53,7 +78,7 @@ export function KeysAndEmailCard() {
           headers: adminAuthHeader(),
         });
         const body = (await response.json()) as {
-          data?: { keys: KeyStatus[]; warnings: string[] };
+          data?: { keys: KeyStatus[]; warnings: string[]; storage?: KeyStorage };
           error?: string;
         };
         if (cancelled) return;
@@ -63,6 +88,7 @@ export function KeysAndEmailCard() {
         }
         setKeys(body.data.keys);
         setWarnings(body.data.warnings);
+        setStorage(body.data.storage ?? null);
       } catch {
         if (!cancelled) setLoadError('Could not reach the API.');
       }
@@ -70,7 +96,7 @@ export function KeysAndEmailCard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadToken]);
 
   async function sendTest() {
     const address = to.trim();
@@ -152,6 +178,26 @@ export function KeysAndEmailCard() {
                 {!key.present ? (
                   <Text className="text-amber-400 text-sm">{key.withoutIt}</Text>
                 ) : null}
+                {key.present && key.source === 'database' ? (
+                  <Text className="text-emerald-400 text-xs mt-1">
+                    Stored here, in the platform's own database. Moves with it to any host.
+                  </Text>
+                ) : null}
+                {key.present && key.source === 'environment' ? (
+                  <Text className="text-slate-500 text-xs mt-1">
+                    Set as a variable on whatever host runs this API. Re-typing it is part of
+                    moving.
+                  </Text>
+                ) : null}
+                {isSuperadmin && storage ? (
+                  <KeyEditor
+                    name={key.name}
+                    stored={storage.stored.find((entry) => entry.name === key.name)}
+                    canStore={storage.encryptionAvailable}
+                    whyNot={storage.encryptionUnavailableReason}
+                    onChanged={() => setReloadToken((n) => n + 1)}
+                  />
+                ) : null}
               </View>
             </View>
           ))}
@@ -159,6 +205,15 @@ export function KeysAndEmailCard() {
             The four characters after each name are a fingerprint of the stored value, not part
             of the key.
           </Text>
+          {storage ? (
+            <View className="mt-3 rounded-xl border border-slate-700/60 bg-slate-900/40 p-3">
+              <Text className="text-slate-400 text-xs">{storage.note}</Text>
+              <Text className="text-slate-500 text-xs mt-2">
+                {storage.cannotBeStored.names.join(', ')} stay on the host.{' '}
+                {storage.cannotBeStored.why}
+              </Text>
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -228,6 +283,178 @@ export function KeysAndEmailCard() {
           A superadmin sends the test — it spends the mail quota and can be pointed at any
           address.
         </Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Set or clear one key, from the phone that is already in your hand.
+ * Web twin: apps/web/src/components/admin/KeysAndEmailCard.tsx
+ *
+ * WHY THIS EXISTS. Rotating a key used to mean opening the hosting dashboard on
+ * a computer and redeploying, which put every rotation behind one person and
+ * one browser tab. It takes effect on the next request now: the server reads
+ * its secrets live rather than snapshotting them at boot, so nothing restarts.
+ *
+ * WRITE-ONLY, ALWAYS. There is no code path on the server that returns a stored
+ * key, so there is nothing here that could reveal one. The box is always empty;
+ * what confirms a paste worked is the fingerprint and length above it changing.
+ */
+function KeyEditor({
+  name,
+  stored,
+  canStore,
+  whyNot,
+  onChanged,
+}: {
+  name: string;
+  stored: StoredSecretInfo | undefined;
+  canStore: boolean;
+  whyNot: string | null;
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function save() {
+    const pasted = value.trim();
+    if (!pasted) {
+      setMessage({ ok: false, text: 'Paste a key first.' });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/admin/keys/${name}`, {
+        method: 'PUT',
+        headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: pasted }),
+      });
+      const body = (await response.json()) as { data?: { message: string }; error?: string };
+      if (!response.ok || !body.data) {
+        setMessage({ ok: false, text: body.error ?? 'Could not store the key.' });
+        return;
+      }
+      setValue('');
+      setOpen(false);
+      setMessage({ ok: true, text: body.data.message });
+      onChanged();
+    } catch {
+      setMessage({ ok: false, text: 'Could not reach the API.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/admin/keys/${name}`, {
+        method: 'DELETE',
+        headers: adminAuthHeader(),
+      });
+      const body = (await response.json()) as { data?: { message: string }; error?: string };
+      if (!response.ok || !body.data) {
+        setMessage({ ok: false, text: body.error ?? 'Could not clear the key.' });
+        return;
+      }
+      setMessage({ ok: true, text: body.data.message });
+      onChanged();
+    } catch {
+      setMessage({ ok: false, text: 'Could not reach the API.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canStore) {
+    // Said once per key rather than hidden: somebody looking for the box needs
+    // to know why there isn't one, and what to do about it.
+    return (
+      <Text className="text-slate-500 text-xs mt-1">
+        {whyNot ?? 'Keys cannot be stored on this deployment.'}
+      </Text>
+    );
+  }
+
+  return (
+    <View className="mt-2">
+      {message ? (
+        <Text className={`text-xs mb-2 ${message.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {message.text}
+        </Text>
+      ) : null}
+
+      {open ? (
+        <View>
+          <TextInput
+            value={value}
+            onChangeText={setValue}
+            placeholder={`Paste ${name}`}
+            placeholderTextColor="#475569"
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="bg-slate-900 text-white rounded-xl px-3 py-2 text-sm"
+          />
+          <View className="flex-row gap-2 mt-2">
+            <Pressable
+              onPress={save}
+              disabled={busy}
+              className="bg-amber-500 rounded-xl px-4 py-2 min-h-[44px] justify-center"
+            >
+              {busy ? (
+                <ActivityIndicator color="#0F172A" />
+              ) : (
+                <Text className="text-slate-900 font-semibold text-sm">Save</Text>
+              )}
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setOpen(false);
+                setValue('');
+              }}
+              disabled={busy}
+              className="rounded-xl px-4 py-2 min-h-[44px] justify-center"
+            >
+              <Text className="text-slate-400 text-sm">Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View className="flex-row items-center gap-2 flex-wrap">
+          <Pressable
+            onPress={() => setOpen(true)}
+            className="border border-slate-600 rounded-xl px-3 py-2 min-h-[44px] justify-center"
+          >
+            <Text className="text-slate-200 text-sm">
+              {stored?.storedInDatabase ? 'Replace' : 'Store here'}
+            </Text>
+          </Pressable>
+          {stored?.storedInDatabase ? (
+            <Pressable
+              onPress={clear}
+              disabled={busy}
+              className="rounded-xl px-3 py-2 min-h-[44px] justify-center"
+            >
+              {busy ? (
+                <ActivityIndicator color="#F87171" />
+              ) : (
+                <Text className="text-red-400 text-sm">Clear</Text>
+              )}
+            </Pressable>
+          ) : null}
+          {stored?.storedInDatabase && stored.updatedBy ? (
+            <Text className="text-slate-500 text-xs">
+              set by {stored.updatedBy}
+              {stored.updatedAt ? ` on ${new Date(stored.updatedAt).toLocaleDateString()}` : ''}
+            </Text>
+          ) : null}
+        </View>
       )}
     </View>
   );

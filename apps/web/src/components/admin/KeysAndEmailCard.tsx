@@ -1,6 +1,15 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2, Send, KeySquare } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Loader2,
+  Send,
+  KeySquare,
+  Database,
+  Server,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -21,6 +30,8 @@ import { adminAuthHeader, useAdminStore } from "@/lib/mobile/admin-store";
  * it over your shoulder.
  */
 
+type SecretSource = "database" | "environment" | "unset";
+
 interface KeyStatus {
   name: string;
   present: boolean;
@@ -29,10 +40,33 @@ interface KeyStatus {
   looksRight: boolean;
   powers: string;
   withoutIt: string;
+  /** Which of the two places the value in use came from. */
+  source: SecretSource;
+}
+
+interface StoredSecretInfo {
+  name: string;
+  source: SecretSource;
+  storedInDatabase: boolean;
+  presentInEnvironment: boolean;
+  updatedBy: string | null;
+  updatedAt: string | null;
 }
 
 interface KeysResponse {
-  data: { keys: KeyStatus[]; warnings: string[]; note: string };
+  data: {
+    keys: KeyStatus[];
+    warnings: string[];
+    note: string;
+    storage: {
+      stored: StoredSecretInfo[];
+      storable: string[];
+      encryptionAvailable: boolean;
+      encryptionUnavailableReason: string | null;
+      note: string;
+      cannotBeStored: { names: string[]; why: string };
+    };
+  };
 }
 
 interface TestResult {
@@ -154,6 +188,15 @@ export function KeysAndEmailCard() {
                   {!key.present ? (
                     <p className="text-sm text-amber-500">{key.withoutIt}</p>
                   ) : null}
+                  {key.present ? <SourceLine source={key.source} /> : null}
+                  {isSuperadmin && data?.data.storage ? (
+                    <KeyEditor
+                      name={key.name}
+                      stored={data.data.storage.stored.find((s) => s.name === key.name)}
+                      canStore={data.data.storage.encryptionAvailable}
+                      whyNot={data.data.storage.encryptionUnavailableReason}
+                    />
+                  ) : null}
                 </div>
               </li>
             ))}
@@ -164,6 +207,18 @@ export function KeysAndEmailCard() {
             of the key. Compare them with a fingerprint of what you pasted to tell whether this
             server has the same value.
           </p>
+
+          {data?.data.storage ? (
+            <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
+              <p className="text-xs text-muted-foreground">{data.data.storage.note}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                <span className="font-mono">
+                  {data.data.storage.cannotBeStored.names.join(", ")}
+                </span>{" "}
+                stay on the host. {data.data.storage.cannotBeStored.why}
+              </p>
+            </div>
+          ) : null}
         </>
       )}
 
@@ -234,6 +289,171 @@ export function KeysAndEmailCard() {
           A superadmin sends the test — it spends the mail quota and can be pointed at any
           address.
         </p>
+      )}
+    </div>
+  );
+}
+
+/** Which of the two places the value in use came from, said plainly. */
+function SourceLine({ source }: { source: SecretSource }) {
+  if (source === "database") {
+    return (
+      <p className="mt-1 flex items-center gap-1.5 text-xs text-emerald-500">
+        <Database className="h-3 w-3" aria-hidden="true" />
+        Stored here, in the platform's own database. Moves with it to any host.
+      </p>
+    );
+  }
+  if (source === "environment") {
+    return (
+      <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Server className="h-3 w-3" aria-hidden="true" />
+        Set as a variable on whatever host is running this API. Re-typing it is part of moving.
+      </p>
+    );
+  }
+  return null;
+}
+
+/**
+ * Set or clear one key, from a phone if that is what is to hand.
+ *
+ * WHY THIS EXISTS. Rotating a key used to mean opening the hosting dashboard
+ * and redeploying, which put every rotation behind one person and one browser
+ * tab. It takes effect on the next request now: the server reads its secrets
+ * live rather than snapshotting them at boot, so nothing restarts.
+ *
+ * WRITE-ONLY, ALWAYS. There is no code path on the server that returns a stored
+ * key, so there is nothing here to reveal one. The box is always empty; what
+ * confirms a paste worked is the fingerprint and length above it changing.
+ */
+function KeyEditor({
+  name,
+  stored,
+  canStore,
+  whyNot,
+}: {
+  name: string;
+  stored: StoredSecretInfo | undefined;
+  canStore: boolean;
+  whyNot: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function save() {
+    const pasted = value.trim();
+    if (!pasted) {
+      setMessage({ ok: false, text: "Paste a key first." });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await api.put<{ data: { message: string } }>(
+        `/api/admin/keys/${name}`,
+        { value: pasted },
+        { headers: adminAuthHeader() },
+      );
+      setValue("");
+      setOpen(false);
+      setMessage({ ok: true, text: response.data.message });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "keys"] });
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : "Could not store the key." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await api.delete<{ data: { message: string } }>(
+        `/api/admin/keys/${name}`,
+        { headers: adminAuthHeader() },
+      );
+      setMessage({ ok: true, text: response.data.message });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "keys"] });
+    } catch (e) {
+      setMessage({ ok: false, text: e instanceof Error ? e.message : "Could not clear the key." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!canStore) {
+    // Said once per key rather than hidden: somebody looking for the box needs
+    // to know why there isn't one, and what to do about it.
+    return (
+      <p className="mt-1 text-xs text-muted-foreground">
+        {whyNot ?? "Keys cannot be stored on this deployment."}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      {message ? (
+        <p className={`mb-2 text-xs ${message.ok ? "text-emerald-500" : "text-destructive"}`}>
+          {message.text}
+        </p>
+      ) : null}
+
+      {open ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={`Paste ${name}`}
+            className="h-9 max-w-xs font-mono text-xs"
+          />
+          <Button size="sm" className="min-h-[36px]" onClick={save} disabled={busy}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-[36px]"
+            onClick={() => {
+              setOpen(false);
+              setValue("");
+            }}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" className="min-h-[36px]" onClick={() => setOpen(true)}>
+            {stored?.storedInDatabase ? "Replace" : "Store here"}
+          </Button>
+          {stored?.storedInDatabase ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="min-h-[36px] text-destructive"
+              onClick={clear}
+              disabled={busy}
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Clear"}
+            </Button>
+          ) : null}
+          {stored?.storedInDatabase && stored.updatedBy ? (
+            <span className="text-xs text-muted-foreground">
+              set by {stored.updatedBy}
+              {stored.updatedAt ? ` on ${new Date(stored.updatedAt).toLocaleDateString()}` : ""}
+            </span>
+          ) : null}
+        </div>
       )}
     </div>
   );

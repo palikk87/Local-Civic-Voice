@@ -47,6 +47,10 @@ import { initializeProcessors } from "./services/job-processors";
 import { getCacheStats } from "./services/cache";
 import { emailConfiguration, isEmailConfigured } from "./services/email";
 import { keySummary, keyWarnings } from "./services/key-report";
+import {
+  loadPlatformSecretsIntoEnv,
+  startPlatformSecretRefresh,
+} from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
@@ -508,19 +512,46 @@ void checkStorage().then(({ ok, driver, detail }) => {
 // It was invisible for exactly as long as it took somebody to try signing up,
 // because Better Auth's own send path answers success either way. Now it says
 // so at boot, and /health carries the same fact for whatever polls it.
-// One line naming every key this process actually holds, and one line per
-// thing that will not work. Printed at boot because the alternative — which
-// this project lived through with three separate keys — is somebody being sure
-// a key is set while the feature it powers fails silently, and no way to tell
-// which of the two is wrong without reading source code.
-{
+// Keys stored in the platform's own database, decrypted into this process's
+// environment before anything reports on them.
+//
+// WHY BEFORE THE REPORT. A key held in the database and announced as missing at
+// boot is the same lie this project already paid for three times, only now with
+// two places to look instead of one. Both blocks below wait for the load, so
+// the boot log describes the keys this server is actually holding.
+//
+// It never rejects: an unreachable database or an absent SECRETS_ENCRYPTION_KEY
+// leaves the server reading its keys from the environment, which is exactly how
+// it behaved before any of this existed.
+void loadPlatformSecretsIntoEnv().then((secrets) => {
+  if (secrets.loaded.length > 0) {
+    console.log(
+      `[Keys] ${secrets.loaded.length} key(s) loaded from the database: ${secrets.loaded.join(", ")}`,
+    );
+  }
+  for (const failure of secrets.failed) {
+    // Naming the key and the reason, because "the stored key does not work" is
+    // otherwise indistinguishable from "there is no stored key".
+    if (failure.name === "*") continue; // no table yet, or the database is down
+    console.error(
+      `[Keys] ⚠️  ${failure.name} is stored but could not be decrypted: ${failure.reason}. ` +
+        "The host's own variable, if any, is being used instead.",
+    );
+  }
+
+  // Other containers serving this API only find out about a change by asking.
+  startPlatformSecretRefresh();
+
+  // One line naming every key this process actually holds, and one line per
+  // thing that will not work. Printed at boot because the alternative — which
+  // this project lived through with three separate keys — is somebody being sure
+  // a key is set while the feature it powers fails silently, and no way to tell
+  // which of the two is wrong without reading source code.
   console.log(`[Keys] ${keySummary()}`);
   for (const warning of keyWarnings()) {
     console.warn(`[Keys] ⚠️  ${warning}`);
   }
-}
 
-{
   const mail = emailConfiguration();
   if (!mail.configured) {
     console.warn(
@@ -550,7 +581,7 @@ void checkStorage().then(({ ok, driver, detail }) => {
       );
     }
   }
-}
+});
 
 // Graceful shutdown handler
 async function gracefulShutdown(signal: string): Promise<void> {

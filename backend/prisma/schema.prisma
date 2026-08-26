@@ -1348,3 +1348,47 @@ model B2BMember {
 
   @@index([clientId])
 }
+
+/// An API key this platform uses, held in the database instead of the host's
+/// environment panel.
+///
+/// WHY THIS TABLE EXISTS. Every provider key lived in one hosting provider's
+/// environment variables, which made that provider load-bearing for a reason
+/// that has nothing to do with running a container: leaving it meant re-typing
+/// every key somewhere else, and rotating one meant a redeploy. The keys belong
+/// to the platform, so they live with the platform's own data.
+///
+/// NEVER PLAINTEXT. The value is encrypted with AES-256-GCM before it gets
+/// here, under SECRETS_ENCRYPTION_KEY, which stays in the environment and is
+/// never written to this database. That is not decoration: this database is
+/// shared with another project, and a plaintext key column would be readable by
+/// anyone holding any connection string to it. Encrypted, a leak of the
+/// database alone yields nothing.
+///
+/// The three columns after the ciphertext exist so a human can recognise a key
+/// without the server ever having to reveal one. See services/platform-secrets.ts.
+model PlatformSecret {
+  /// The environment variable name, spelled exactly as env.ts declares it —
+  /// "CONGRESS_API_KEY". The name is the identity; there is one row per key.
+  name String @id
+
+  /// v1:<iv>:<tag>:<ciphertext>, all base64. The name is bound in as additional
+  /// authenticated data, so a ciphertext moved to another row fails to decrypt
+  /// rather than quietly becoming a different key.
+  ciphertext String
+
+  /// First four hex characters of SHA-256(plaintext) — the same fingerprint the
+  /// key report shows, so "what I pasted" and "what the server holds" can be
+  /// compared without either side naming the value.
+  fingerprint String
+  /// Character count of the plaintext. A half-pasted key is a real failure and
+  /// an invisible one.
+  length      Int
+
+  /// Who set it, copied in rather than joined so the record survives the
+  /// account being closed.
+  updatedById String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}

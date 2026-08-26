@@ -159,6 +159,46 @@ describe("every key is written down where somebody setting this up will see it",
   });
 });
 
+describe("a data.gov key is a congress.gov key", () => {
+  /**
+   * MEASURED BEFORE IT WAS WRITTEN. api.data.gov is a shared gateway, and the
+   * public DEMO_KEY answers 200 from api.congress.gov — so somebody holding a
+   * data.gov key already holds a congress.gov key. Before this, the server told
+   * them to go and get one, which is the exact failure this file exists to end.
+   */
+  test("CONGRESS_API_KEY wins, DATA_GOV_API_KEY stands in, and the report says which", async () => {
+    const { congressGovKey, congressGovKeySource } = await import("../src/env");
+    const { keyReport, keyWarnings } = await import("../src/services/key-report");
+
+    const savedCongress = process.env.CONGRESS_API_KEY;
+    const savedDataGov = process.env.DATA_GOV_API_KEY;
+
+    delete process.env.CONGRESS_API_KEY;
+    delete process.env.DATA_GOV_API_KEY;
+    expect(congressGovKey()).toBeUndefined();
+    expect(congressGovKeySource()).toBeNull();
+    // And it says so, naming both ways to fix it.
+    const missing = keyWarnings(keyReport()).join(" ");
+    expect(missing).toContain("No congress.gov key");
+    expect(missing).toContain("DATA_GOV_API_KEY");
+
+    process.env.DATA_GOV_API_KEY = "data-gov-only";
+    expect(congressGovKey()).toBe("data-gov-only");
+    expect(congressGovKeySource()).toBe("DATA_GOV_API_KEY");
+    // No longer nagging for a key that is already in hand.
+    expect(keyWarnings(keyReport()).join(" ")).not.toContain("No congress.gov key");
+
+    process.env.CONGRESS_API_KEY = "congress-specific";
+    expect(congressGovKey()).toBe("congress-specific");
+    expect(congressGovKeySource()).toBe("CONGRESS_API_KEY");
+
+    if (savedCongress === undefined) delete process.env.CONGRESS_API_KEY;
+    else process.env.CONGRESS_API_KEY = savedCongress;
+    if (savedDataGov === undefined) delete process.env.DATA_GOV_API_KEY;
+    else process.env.DATA_GOV_API_KEY = savedDataGov;
+  });
+});
+
 describe("the server can say which keys it holds", () => {
   test("the report covers every declared key", async () => {
     const { keyReport } = await import("../src/services/key-report");

@@ -122,6 +122,20 @@ const envSchema = z.object({
   // opinion endpoint answers 401 without a token.
   COURTLISTENER_API_KEY: secret(),
 
+  // api.data.gov. ONE KEY, SEVERAL AGENCIES: api.data.gov is a shared gateway,
+  // and the same key authenticates api.congress.gov, api.govinfo.gov and
+  // api.regulations.gov. Measured, not assumed — the public DEMO_KEY answers
+  // 200 from congress.gov, and govinfo and regulations.gov both accept it and
+  // fail on their own terms (a rate limit and a parameter complaint) rather
+  // than rejecting the key.
+  //
+  // So this IS a congress.gov key: congressGovKey() below falls back to it when
+  // CONGRESS_API_KEY is unset, and the key report says which of the two a
+  // request actually used. Nothing else reads it yet — govinfo and
+  // regulations.gov are not wired up — and the report says that too rather than
+  // implying a feature that does not exist.
+  DATA_GOV_API_KEY: secret(),
+
   // Live web-search grounding for legislative search (services/web-search.ts).
   // Optional — search falls back to unaided AI interpretation without it.
   TAVILY_API_KEY: secret(),
@@ -138,6 +152,27 @@ const envSchema = z.object({
   // not a key that could not be found; that is a key nobody was told existed.
   GEMINI_API_KEY: secret(),
   OPENAI_API_KEY: secret(),
+
+  // ---------------------------------------------------------------------------
+  // The one key that unlocks the others.
+  // ---------------------------------------------------------------------------
+  //
+  // 32 bytes, base64 or hex. Every key above can be stored in the database
+  // instead of here — encrypted with this one, by the super admin, from the
+  // admin console — which is what makes the container host replaceable rather
+  // than load-bearing. See services/platform-secrets.ts.
+  //
+  // THIS ONE CANNOT MOVE INTO THE DATABASE, and neither can DATABASE_URL or
+  // BETTER_AUTH_SECRET: a process needs the database before it can read
+  // anything out of it, and a key kept next to the thing it encrypts is not
+  // encryption. Three variables, then, wherever this container runs — not ten.
+  //
+  // Optional: without it the server runs exactly as it did before, reading
+  // every key from this environment. Stored keys are refused rather than
+  // written in the clear, and the admin console says so.
+  //
+  // Generate one with: openssl rand -base64 32
+  SECRETS_ENCRYPTION_KEY: secret(),
 
   // ---------------------------------------------------------------------------
   // NOT HERE ANY MORE: the six B2B_* variables
@@ -183,10 +218,12 @@ function validateEnv() {
  * below and the key report cannot drift apart from the schema.
  */
 const SECRET_KEYS = [
+  "SECRETS_ENCRYPTION_KEY",
   "RESEND_API_KEY",
   "CONGRESS_API_KEY",
   "COURTLISTENER_API_KEY",
   "TAVILY_API_KEY",
+  "DATA_GOV_API_KEY",
   "GEMINI_API_KEY",
   "OPENAI_API_KEY",
 ] as const;
@@ -225,6 +262,29 @@ function liveSecrets<T extends object>(snapshot: T): T {
 }
 
 export const env = liveSecrets(validateEnv());
+
+/**
+ * The key to send to api.congress.gov.
+ *
+ * CONGRESS_API_KEY first, then DATA_GOV_API_KEY. They are the same kind of
+ * credential — congress.gov is one of the agencies behind the api.data.gov
+ * gateway, and a key issued there works on it — so somebody who has a data.gov
+ * key already has a congress.gov key and should not have to discover that by
+ * reading source code.
+ *
+ * A function rather than a second field on `env`, because the fallback is a
+ * decision and decisions should be greppable. Six callers, one rule.
+ */
+export function congressGovKey(): string | undefined {
+  return env.CONGRESS_API_KEY ?? env.DATA_GOV_API_KEY;
+}
+
+/** Which of the two names supplied the key a congress.gov call will use. */
+export function congressGovKeySource(): "CONGRESS_API_KEY" | "DATA_GOV_API_KEY" | null {
+  if (env.CONGRESS_API_KEY) return "CONGRESS_API_KEY";
+  if (env.DATA_GOV_API_KEY) return "DATA_GOV_API_KEY";
+  return null;
+}
 
 /**
  * Type of the validated environment variables

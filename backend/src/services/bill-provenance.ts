@@ -24,7 +24,7 @@
  */
 
 import { prisma } from "../prisma";
-import { env } from "./../env";
+import { congressGovKey, env } from "./../env";
 
 interface BillDetail {
   bill?: {
@@ -74,7 +74,7 @@ function partyLetter(value: string | undefined): string | null {
 }
 
 async function fetchDetail(masterReferenceId: string): Promise<BillDetail["bill"] | null> {
-  const apiKey = env.CONGRESS_API_KEY;
+  const apiKey = congressGovKey();
   if (!apiKey) return null;
 
   const parsed = parseBillId(masterReferenceId);

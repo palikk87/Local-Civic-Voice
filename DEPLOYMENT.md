@@ -33,6 +33,7 @@ Do these first; one of them has a wait built in.
 | Object storage | user photos and video | Cloudflare R2 free to 10 GB; Backblaze B2 similar | none |
 | [Resend](https://resend.com) | password-reset and sign-in emails | 3,000/month free | **DNS verification, hours** |
 | [congress.gov API](https://api.congress.gov/sign-up/) | bill data | free | key by email, minutes |
+| [api.data.gov](https://api.data.gov/signup/) | optional; `DATA_GOV_API_KEY` stands in for the congress.gov key, and opens govinfo and regulations.gov too | free | instant |
 | [CourtListener](https://www.courtlistener.com/) | Supreme Court data | free | sign up, then Profile → API |
 
 Start the Resend domain verification now. It is the only step whose duration is
@@ -112,6 +113,26 @@ Railway-specific.
    actually holds — presence, a four-character fingerprint so you can tell
    whether the server has the value you pasted, and what stops working without
    each. It never returns a key.
+
+   **Or set none of the provider keys here.** Every key in that list except the
+   three named below can live in the platform's own database instead, set from
+   **Admin → API keys and email → Store here** by a superadmin. Add
+   `SECRETS_ENCRYPTION_KEY` (`openssl rand -base64 32`) and the console can
+   store the rest, encrypted, where they move with the database rather than with
+   the host. A stored key takes precedence over a variable of the same name, and
+   the console shows which of the two each key came from.
+
+   That reduces what any future host has to be handed to three variables:
+   `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `SECRETS_ENCRYPTION_KEY` — plus the
+   non-secret settings (`BACKEND_URL`, `APP_ORIGINS`, `APP_SCHEMES`,
+   `NODE_ENV`). None of the three can move into the database: a process cannot
+   read the database to learn how to reach the database, sessions must verify
+   before anybody can be the admin who would set one, and a key kept beside what
+   it encrypts is not encryption.
+
+   Rotation stops needing a redeploy either way: the server reads its secrets
+   live on each use rather than snapshotting them at boot, so a key saved in the
+   console is in use on the next request.
 
    The six `B2B_*` values are **not** service variables. They are tagged
    `[SEED]` in `.env.example` and belong in the shell that runs
@@ -428,7 +449,15 @@ application code.
 - **To leave:** point another host at the same repo with root directory
   `backend`, copy the environment variables across, deploy, then update the
   `/api/*` rewrite on the web host and `EXPO_PUBLIC_BACKEND_URL` for the next
-  mobile build.
+  mobile build. If the provider keys are stored in the database (see
+  [the API section](#2-the-api--a-container-host)), "copy the variables across"
+  is three secrets and four settings rather than a dozen keys.
+- **What actually goes down while it is gone:** the API, and only the API. Both
+  apps keep loading — the database and the static site are elsewhere and are
+  untouched — but every screen that needs data is empty, and the daily
+  government sync and the job queue stop until the container runs somewhere.
+  Measured, not assumed: `apps/web/scripts/backend-down-check.mjs` opens every
+  route against a genuinely dead API host.
 
 ### Static host — the web app
 

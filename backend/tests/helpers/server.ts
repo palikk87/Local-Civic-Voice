@@ -142,6 +142,20 @@ let envOverrides: Record<string, string> = {};
  * undefined ones rather than passing an empty string. Narrowing it would mean
  * either a cast or a filter, both of which lie about what is being passed.
  */
+/**
+ * The encryption key the test server stores platform secrets under.
+ *
+ * Exported so a test can decrypt what the server wrote and prove the column
+ * really is ciphertext, rather than taking the server's word for it.
+ */
+export const TEST_SECRETS_ENCRYPTION_KEY = "dGVzdC1vbmx5LXNlY3JldHMta2V5LTMyLWJ5dGVzISE=";
+
+// Set on the RUNNER too, not only the server it spawns: a test that exercises
+// the storage layer in-process — the override-and-restore path, which needs a
+// host variable that exists before the module loads — has to be able to
+// encrypt as well.
+process.env.SECRETS_ENCRYPTION_KEY ??= TEST_SECRETS_ENCRYPTION_KEY;
+
 function env(): Record<string, string | undefined> {
   return {
     ...process.env,
@@ -153,6 +167,9 @@ function env(): Record<string, string | undefined> {
     // Long enough to satisfy Better Auth; this is a throwaway test value and
     // signs nothing that outlives the process.
     BETTER_AUTH_SECRET: "test-only-secret-value-not-used-anywhere-else",
+    // Throwaway 32 bytes, so the suite can prove a key stored in the database
+    // round-trips. Encrypts nothing that outlives the test database.
+    SECRETS_ENCRYPTION_KEY: TEST_SECRETS_ENCRYPTION_KEY,
     APP_ORIGINS: BASE_URL,
     APP_SCHEMES: "ayeandnay",
     MEDIA_STORAGE: "local",

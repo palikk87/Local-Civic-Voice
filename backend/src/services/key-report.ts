@@ -27,8 +27,9 @@
  */
 
 import { createHash } from "node:crypto";
-import { env } from "../env";
+import { congressGovKeySource, env } from "../env";
 import { emailConfiguration } from "./email";
+import { sourceOf, type SecretSource } from "./platform-secrets";
 
 export interface KeyStatus {
   /** The environment variable name, spelled exactly as it must be set. */
@@ -48,6 +49,15 @@ export interface KeyStatus {
   powers: string;
   /** What a user sees when it is missing. Written from their side, not ours. */
   withoutIt: string;
+  /**
+   * Where the value this process is using came from: the database (set from the
+   * admin console) or this host's environment.
+   *
+   * "It is definitely set" was true and useless three times on this project.
+   * With two possible places to set a key, saying which one won is the
+   * difference between a five-second answer and another source-code read.
+   */
+  source: SecretSource;
 }
 
 function fingerprint(value: string): string {
@@ -70,6 +80,7 @@ function status(
     looksRight: !value || !expectedPrefix ? !!value : value.startsWith(expectedPrefix),
     powers,
     withoutIt,
+    source: sourceOf(name),
   };
 }
 
@@ -87,7 +98,10 @@ export function keyReport(): KeyStatus[] {
       env.CONGRESS_API_KEY,
       null,
       "Bill text and bill lineage from congress.gov.",
-      "No legislative text, so no brief for any bill."
+      env.DATA_GOV_API_KEY
+        ? "Nothing right now — DATA_GOV_API_KEY is set and congress.gov accepts it, so bill " +
+          "text is still being fetched with that."
+        : "No legislative text, so no brief for any bill."
     ),
     status(
       "COURTLISTENER_API_KEY",
@@ -109,6 +123,17 @@ export function keyReport(): KeyStatus[] {
       "sk-",
       "Writes the Citizen's Brief when Gemini is absent or failing.",
       "Falls back to Gemini. With neither, no brief can be written for any law."
+    ),
+    status(
+      "DATA_GOV_API_KEY",
+      env.DATA_GOV_API_KEY,
+      null,
+      "api.data.gov is one gateway in front of several agencies, and this key opens all of " +
+        "them. Today it is used as a stand-in for CONGRESS_API_KEY when that is not set — " +
+        "congress.gov sits behind the same gateway and accepts it.",
+      "Nothing, on its own. It is a second way to supply the congress.gov key, not a " +
+        "requirement of its own. govinfo.gov and regulations.gov also accept it; neither is " +
+        "wired up yet."
     ),
     status(
       "TAVILY_API_KEY",
@@ -174,8 +199,16 @@ export function keyWarnings(report: KeyStatus[] = keyReport()): string[] {
     );
   }
 
-  if (!by("CONGRESS_API_KEY").present) {
-    warnings.push("CONGRESS_API_KEY is missing. No bill text, so no brief for any bill.");
+  // Read through the same fallback the code uses. This warned about a missing
+  // CONGRESS_API_KEY while a perfectly good DATA_GOV_API_KEY was set and being
+  // used for exactly that — which sends somebody looking for a key they already
+  // have, the failure mode this whole file exists to end.
+  if (!congressGovKeySource()) {
+    warnings.push(
+      "No congress.gov key. Set CONGRESS_API_KEY, or DATA_GOV_API_KEY — congress.gov is " +
+        "behind the api.data.gov gateway and accepts a key issued there. Without one there " +
+        "is no bill text, so no brief for any bill."
+    );
   }
 
   if (!by("COURTLISTENER_API_KEY").present) {
@@ -192,7 +225,10 @@ export function keyWarnings(report: KeyStatus[] = keyReport()): string[] {
 export function keySummary(report: KeyStatus[] = keyReport()): string {
   return report
     .map((key) =>
-      key.present ? `${key.name}=${key.fingerprint}${key.looksRight ? "" : "(?)"}` : `${key.name}=—`
+      key.present
+        ? `${key.name}=${key.fingerprint}${key.looksRight ? "" : "(?)"}` +
+          (key.source === "database" ? "(db)" : "")
+        : `${key.name}=—`
     )
     .join("  ");
 }

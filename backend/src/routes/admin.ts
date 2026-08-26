@@ -8,6 +8,14 @@ import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { emailConfiguration, trySendingEmail } from "../services/email";
 import { keyReport, keyWarnings } from "../services/key-report";
+import {
+  clearPlatformSecret,
+  encryptionStatus,
+  isStorableSecret,
+  listPlatformSecrets,
+  setPlatformSecret,
+  STORABLE_SECRETS,
+} from "../services/platform-secrets";
 import { purgeMediaObjects } from "../services/media-objects";
 import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
 import { LOOK_ALIKE } from "../services/reference-lineage";
@@ -1587,20 +1595,152 @@ adminRouter.get("/keys", async (c) => {
   }
 
   const keys = keyReport();
+  const encryption = encryptionStatus();
   return c.json({
     data: {
       keys,
       warnings: keyWarnings(keys),
-      // Where the values come from, because "I set it" and "this process can
-      // see it" are different statements and the gap between them is usually
-      // the whole problem: set on the web host instead of the API, set in a
-      // build-time variable rather than a runtime one, or set on a service that
-      // was redeployed since.
+      // Every key can now come from either of two places, so each one says
+      // which. "I set it" and "this process is using it" are different
+      // statements, and the gap between them was the whole problem three
+      // separate times here.
+      storage: {
+        stored: await listPlatformSecrets(),
+        storable: STORABLE_SECRETS,
+        encryptionAvailable: encryption.available,
+        encryptionUnavailableReason: encryption.reason,
+        note:
+          "A key set here is encrypted and kept in the platform's own database, so it " +
+          "survives moving the API to another host and can be rotated without a redeploy. " +
+          "It takes precedence over a variable of the same name on the host. Clearing one " +
+          "hands the name back to the host variable, if there still is one.",
+        cannotBeStored: {
+          names: ["DATABASE_URL", "BETTER_AUTH_SECRET", "SECRETS_ENCRYPTION_KEY"],
+          why:
+            "A process cannot read the database to learn how to reach the database, " +
+            "sessions must verify before anyone can be an admin, and a key kept beside " +
+            "what it encrypts is not encryption. These three stay on the host.",
+        },
+      },
       note:
-        "These are read from this API process's own environment at boot. A key set " +
-        "anywhere else — the web host, a build-time variable, another service — is " +
-        "not visible here and is not used.",
+        "Keys are read from this API process's own environment, which the stored ones are " +
+        "loaded into at boot. A key set anywhere else — the web host, a build-time " +
+        "variable, another service — is not visible here and is not used.",
       verifyEmailWith: "POST /api/admin/email-health/test { to }",
+    },
+  });
+});
+
+const storedKeySchema = z.object({
+  value: z.string().min(1, "An empty value is not a key"),
+});
+
+/**
+ * PUT /api/admin/keys/:name
+ *
+ * Put a provider key in the platform's own database, encrypted, instead of in
+ * the host's environment panel.
+ *
+ * WHY THIS IS A BUTTON AND NOT A DASHBOARD FIELD. Keys in one host's variables
+ * make that host load-bearing for a reason unrelated to running a container:
+ * leaving meant re-typing every key, and rotating one meant a redeploy by
+ * whoever held the dashboard. A rotation is now a text box and a save, and it
+ * takes effect on the next request — env.ts reads every secret live rather than
+ * snapshotting it at import, so nothing has to restart.
+ *
+ * Superadmin only, and the value is never returned, logged, or written to the
+ * activity trail. What comes back is what a person needs to recognise the key
+ * they just pasted — four hex characters of its digest and its length — and
+ * nothing that helps anybody who did not already have it.
+ */
+adminRouter.put("/keys/:name", zValidator("json", storedKeySchema), async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Only superadmin can change a platform key" }, { status: 403 });
+  }
+
+  const name = c.req.param("name");
+  // A literal allowlist, not "whatever was named": an endpoint that writes
+  // arbitrary environment variables from an HTTP body is a remote code
+  // execution waiting for someone to type PATH or NODE_OPTIONS.
+  if (!isStorableSecret(name)) {
+    return c.json(
+      { error: `${name} is not a key this platform stores`, storable: STORABLE_SECRETS },
+      { status: 400 },
+    );
+  }
+
+  try {
+    const result = await setPlatformSecret(name, c.req.valid("json").value, {
+      id: session.adminId,
+      username: session.username,
+    });
+
+    createActivityLog(
+      "set_platform_key",
+      session.adminId,
+      session.username,
+      "system",
+      name,
+      `${result.replaced ? "Replaced" : "Stored"} ${name} in the database (fingerprint ${result.fingerprint})`,
+    );
+
+    return c.json({
+      data: {
+        ...result,
+        message:
+          `${name} is stored and in use now. It overrides any variable of the same name on ` +
+          `the host, and it moves with the database if this API changes hosts.`,
+      },
+    });
+  } catch (error) {
+    // The encryption key being absent is a configuration answer, not a crash:
+    // say what to do about it.
+    return c.json({ error: (error as Error).message }, { status: 400 });
+  }
+});
+
+/**
+ * DELETE /api/admin/keys/:name
+ *
+ * Forget a stored key. If the host still has a variable of that name, it takes
+ * over again on the spot; if it does not, the key is simply gone and the key
+ * report says so rather than the feature failing silently later.
+ */
+adminRouter.delete("/keys/:name", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  if (session.role !== "superadmin") {
+    return c.json({ error: "Only superadmin can change a platform key" }, { status: 403 });
+  }
+
+  const name = c.req.param("name");
+  if (!isStorableSecret(name)) {
+    return c.json({ error: `${name} is not a key this platform stores` }, { status: 400 });
+  }
+
+  const result = await clearPlatformSecret(name);
+
+  createActivityLog(
+    "clear_platform_key",
+    session.adminId,
+    session.username,
+    "system",
+    name,
+    `Removed the stored ${name}`,
+  );
+
+  return c.json({
+    data: {
+      ...result,
+      message: result.fellBackToEnvironment
+        ? `${name} is no longer stored. The host's own variable is in use again.`
+        : `${name} is no longer set anywhere. Whatever it powers stops working until one is set.`,
     },
   });
 });

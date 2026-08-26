@@ -25,7 +25,7 @@ import {
 } from "./reference-content";
 import { notifyLawUpdate } from "./notification-service";
 import { acceptOfficialText, officialSourceHeaders } from "./official-source";
-import { env } from "../env";
+import { congressGovKey, env } from "../env";
 
 const SYNC_COUNT = 10;
 const FETCH_TIMEOUT_MS = 20_000;
@@ -281,7 +281,7 @@ interface CongressListResponse {
 }
 
 async function syncBills(): Promise<number> {
-  const apiKey = env.CONGRESS_API_KEY;
+  const apiKey = congressGovKey();
   if (!apiKey) {
     console.warn("[GovSync] CONGRESS_API_KEY not set — skipping bills");
     return 0;
