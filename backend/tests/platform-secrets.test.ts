@@ -255,6 +255,89 @@ describe("stored, encrypted, and in use", () => {
   });
 });
 
+describe("storing a key needs no variable nobody has set", () => {
+  /**
+   * THE BUG THIS PINS SHUT. The first version required SECRETS_ENCRYPTION_KEY
+   * before a single key could be stored — so the feature whose entire point was
+   * "stop opening the hosting dashboard to change a key" could not be turned on
+   * without opening the hosting dashboard and redeploying. The panel showed an
+   * explanation where the input boxes should have been, and the person it was
+   * built for could not use it.
+   */
+  test("with no SECRETS_ENCRYPTION_KEY, a key still stores and reads back", async () => {
+    const secrets = await import("../src/services/platform-secrets");
+    const saved = process.env.SECRETS_ENCRYPTION_KEY;
+    delete process.env.SECRETS_ENCRYPTION_KEY;
+
+    try {
+      const status = secrets.encryptionStatus();
+      expect(status.available).toBe(true);
+      expect(status.source).toBe("derived-from-auth-secret");
+      // The one way stored keys can be lost is said out loud, not discovered.
+      expect(status.caveat).toContain("BETTER_AUTH_SECRET");
+
+      const cipher = secrets.encryptSecret("TAVILY_API_KEY", "tvly-derived-key-path");
+      expect(cipher).not.toContain("tvly-");
+      expect(secrets.decryptSecret("TAVILY_API_KEY", cipher)).toBe("tvly-derived-key-path");
+    } finally {
+      if (saved === undefined) delete process.env.SECRETS_ENCRYPTION_KEY;
+      else process.env.SECRETS_ENCRYPTION_KEY = saved;
+    }
+  });
+
+  test("the derived key is not the auth secret itself", async () => {
+    const secrets = await import("../src/services/platform-secrets");
+    const saved = process.env.SECRETS_ENCRYPTION_KEY;
+    delete process.env.SECRETS_ENCRYPTION_KEY;
+
+    try {
+      // If the auth secret were used directly, a ciphertext would decrypt under
+      // a key built from it verbatim. HKDF means it cannot, which is what stops
+      // this from weakening the thing that signs every session.
+      const cipher = secrets.encryptSecret("TAVILY_API_KEY", "tvly-derived-key-path");
+      const naive = Buffer.alloc(32);
+      Buffer.from(process.env.BETTER_AUTH_SECRET!, "utf8").copy(naive);
+      const [, iv, tag, body] = cipher.split(":");
+      const { createDecipheriv } = await import("node:crypto");
+      expect(() => {
+        const d = createDecipheriv("aes-256-gcm", naive, Buffer.from(iv!, "base64"));
+        d.setAAD(Buffer.from("TAVILY_API_KEY", "utf8"));
+        d.setAuthTag(Buffer.from(tag!, "base64"));
+        Buffer.concat([d.update(Buffer.from(body!, "base64")), d.final()]);
+      }).toThrow();
+    } finally {
+      if (saved === undefined) delete process.env.SECRETS_ENCRYPTION_KEY;
+      else process.env.SECRETS_ENCRYPTION_KEY = saved;
+    }
+  });
+
+  test("an explicit SECRETS_ENCRYPTION_KEY still wins", async () => {
+    const secrets = await import("../src/services/platform-secrets");
+    const status = secrets.encryptionStatus();
+    // The harness sets one, so this is the configured path.
+    expect(status.available).toBe(true);
+    expect(status.source).toBe("SECRETS_ENCRYPTION_KEY");
+    expect(status.caveat).toBeNull();
+  });
+
+  test("a malformed explicit key is refused rather than silently derived around", async () => {
+    const secrets = await import("../src/services/platform-secrets");
+    const saved = process.env.SECRETS_ENCRYPTION_KEY;
+    process.env.SECRETS_ENCRYPTION_KEY = "too-short";
+
+    try {
+      const status = secrets.encryptionStatus();
+      expect(status.available).toBe(false);
+      // Falling back to the derived key here would mean a typo silently changed
+      // which key everything is encrypted under.
+      expect(status.reason).toContain("32");
+    } finally {
+      if (saved === undefined) delete process.env.SECRETS_ENCRYPTION_KEY;
+      else process.env.SECRETS_ENCRYPTION_KEY = saved;
+    }
+  });
+});
+
 describe("a stored key overrides the host's variable, and clearing gives it back", () => {
   /**
    * THE HALF THAT ONLY MATTERS MID-MIGRATION, which is exactly when somebody

@@ -1609,6 +1609,8 @@ adminRouter.get("/keys", async (c) => {
         storable: STORABLE_SECRETS,
         encryptionAvailable: encryption.available,
         encryptionUnavailableReason: encryption.reason,
+        encryptionSource: encryption.source,
+        encryptionCaveat: encryption.caveat,
         note:
           "A key set here is encrypted and kept in the platform's own database, so it " +
           "survives moving the API to another host and can be rotated without a redeploy. " +

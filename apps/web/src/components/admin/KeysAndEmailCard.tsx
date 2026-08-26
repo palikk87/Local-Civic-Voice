@@ -63,6 +63,8 @@ interface KeysResponse {
       storable: string[];
       encryptionAvailable: boolean;
       encryptionUnavailableReason: string | null;
+      encryptionSource: string | null;
+      encryptionCaveat: string | null;
       note: string;
       cannotBeStored: { names: string[]; why: string };
     };
@@ -211,6 +213,11 @@ export function KeysAndEmailCard() {
           {data?.data.storage ? (
             <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
               <p className="text-xs text-muted-foreground">{data.data.storage.note}</p>
+              {data.data.storage.encryptionCaveat ? (
+                <p className="mt-2 text-xs text-amber-500">
+                  {data.data.storage.encryptionCaveat}
+                </p>
+              ) : null}
               <p className="mt-2 text-xs text-muted-foreground">
                 <span className="font-mono">
                   {data.data.storage.cannotBeStored.names.join(", ")}

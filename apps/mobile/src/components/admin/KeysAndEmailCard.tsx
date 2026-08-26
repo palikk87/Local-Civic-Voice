@@ -44,6 +44,8 @@ interface KeyStorage {
   storable: string[];
   encryptionAvailable: boolean;
   encryptionUnavailableReason: string | null;
+  encryptionSource: string | null;
+  encryptionCaveat: string | null;
   note: string;
   cannotBeStored: { names: string[]; why: string };
 }
@@ -208,6 +210,9 @@ export function KeysAndEmailCard() {
           {storage ? (
             <View className="mt-3 rounded-xl border border-slate-700/60 bg-slate-900/40 p-3">
               <Text className="text-slate-400 text-xs">{storage.note}</Text>
+              {storage.encryptionCaveat ? (
+                <Text className="text-amber-400 text-xs mt-2">{storage.encryptionCaveat}</Text>
+              ) : null}
               <Text className="text-slate-500 text-xs mt-2">
                 {storage.cannotBeStored.names.join(', ')} stay on the host.{' '}
                 {storage.cannotBeStored.why}

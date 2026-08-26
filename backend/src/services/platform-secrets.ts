@@ -41,7 +41,7 @@
  * on this platform is still `env.THE_KEY`.
  */
 
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from "node:crypto";
 import { prisma } from "../prisma";
 import { env } from "../env";
 
@@ -112,48 +112,116 @@ export class SecretsNotEncryptable extends Error {
 }
 
 /**
- * The 32 raw bytes, from base64 or hex, or an explanation of why not.
+ * Where the encryption key came from. Reported, never guessed at.
+ *
+ * "derived" is not a lesser mode — the bytes are a full 32-byte HKDF output and
+ * the ciphertext is identical in strength. The distinction matters for one
+ * reason only, and it is stated in the panel: a value derived from
+ * BETTER_AUTH_SECRET moves if that secret is ever rotated, and stored keys
+ * written under the old one stop decrypting.
+ */
+export type EncryptionKeySource = "SECRETS_ENCRYPTION_KEY" | "derived-from-auth-secret";
+
+/**
+ * The 32 raw bytes, and where they came from.
+ *
+ * WHY THERE IS A DERIVED FALLBACK AT ALL. The first version of this required a
+ * new variable, SECRETS_ENCRYPTION_KEY, before a single key could be stored —
+ * so the feature whose entire purpose was "stop having to open the hosting
+ * dashboard to change a key" could not be switched on without opening the
+ * hosting dashboard and redeploying. Khalid hit exactly that: the panel offered
+ * an explanation where the input boxes should have been. A lock shipped without
+ * its key is not a security feature, it is a closed door.
+ *
+ * So when the variable is absent, the key is derived from BETTER_AUTH_SECRET
+ * with HKDF-SHA256 under a fixed, unambiguous context string. That secret is
+ * already required at boot, already lives only in the environment, and already
+ * guards every session on the platform.
+ *
+ * THE PROPERTY THAT MATTERS IS UNCHANGED: the key is not in the database, so a
+ * copy of this shared database still yields nothing. HKDF also means the value
+ * used here is not BETTER_AUTH_SECRET itself — it cannot be worked backwards to
+ * sign a session.
+ *
+ * The explicit variable still wins wherever it is set, for anybody who wants
+ * these two secrets to have independent lifetimes.
  *
  * Read live rather than cached: env.ts reads secrets live, and a cache here
  * would reintroduce precisely the import-order landmine that was removed there.
  */
-function encryptionKey(): Buffer {
+function encryptionKey(): { key: Buffer; source: EncryptionKeySource } {
   const configured = env.SECRETS_ENCRYPTION_KEY;
-  if (!configured) {
+
+  if (configured) {
+    const decoded = /^[0-9a-fA-F]{64}$/.test(configured)
+      ? Buffer.from(configured, "hex")
+      : Buffer.from(configured, "base64");
+
+    if (decoded.length !== 32) {
+      throw new SecretsNotEncryptable(
+        `SECRETS_ENCRYPTION_KEY decodes to ${decoded.length} bytes; AES-256 needs exactly 32. ` +
+          "Generate one with `openssl rand -base64 32`, or remove the variable and one will " +
+          "be derived from BETTER_AUTH_SECRET instead.",
+      );
+    }
+    return { key: decoded, source: "SECRETS_ENCRYPTION_KEY" };
+  }
+
+  const authSecret = process.env.BETTER_AUTH_SECRET?.trim();
+  if (!authSecret) {
+    // Unreachable through a booted server — env.ts refuses to start without it —
+    // but this module is importable on its own, and a silent zero key would be
+    // catastrophic rather than merely broken.
     throw new SecretsNotEncryptable(
-      "SECRETS_ENCRYPTION_KEY is not set on this API. Keys cannot be stored in the " +
-        "database without it, and storing one in the clear is not an option — this " +
-        "database is shared. Generate one with `openssl rand -base64 32`, set it on the " +
-        "host, and redeploy.",
+      "Neither SECRETS_ENCRYPTION_KEY nor BETTER_AUTH_SECRET is set, so there is nothing " +
+        "to encrypt a stored key with.",
     );
   }
 
-  const decoded = /^[0-9a-fA-F]{64}$/.test(configured)
-    ? Buffer.from(configured, "hex")
-    : Buffer.from(configured, "base64");
-
-  if (decoded.length !== 32) {
-    throw new SecretsNotEncryptable(
-      `SECRETS_ENCRYPTION_KEY decodes to ${decoded.length} bytes; AES-256 needs exactly 32. ` +
-        "Generate one with `openssl rand -base64 32`.",
-    );
-  }
-  return decoded;
+  // Fixed salt and info: the derivation must be reproducible across restarts
+  // and hosts, so it can carry no randomness. The info string names the exact
+  // purpose, which is what keeps this output distinct from any other use of
+  // the same secret.
+  const key = hkdfSync(
+    "sha256",
+    Buffer.from(authSecret, "utf8"),
+    Buffer.from("ayeandnay/platform-secrets", "utf8"),
+    Buffer.from("aes-256-gcm platform api keys v1", "utf8"),
+    32,
+  );
+  return { key: Buffer.from(key), source: "derived-from-auth-secret" };
 }
 
-/** Whether a key can be stored at all right now, and why not when it cannot. */
-export function encryptionStatus(): { available: boolean; reason: string | null } {
+/** Whether a key can be stored at all right now, where the key comes from, and why not when it cannot. */
+export function encryptionStatus(): {
+  available: boolean;
+  reason: string | null;
+  source: EncryptionKeySource | null;
+  /** Said out loud in the panel, because it is the one way stored keys can be lost. */
+  caveat: string | null;
+} {
   try {
-    encryptionKey();
-    return { available: true, reason: null };
+    const { source } = encryptionKey();
+    return {
+      available: true,
+      reason: null,
+      source,
+      caveat:
+        source === "derived-from-auth-secret"
+          ? "The encryption key is derived from BETTER_AUTH_SECRET, so no extra variable is " +
+            "needed. If that secret is ever rotated, keys stored here can no longer be read " +
+            "and have to be entered again — the panel will say so rather than failing quietly. " +
+            "Set SECRETS_ENCRYPTION_KEY to give the two independent lifetimes."
+          : null,
+    };
   } catch (error) {
-    return { available: false, reason: (error as Error).message };
+    return { available: false, reason: (error as Error).message, source: null, caveat: null };
   }
 }
 
 export function encryptSecret(name: string, plaintext: string): string {
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv(ALGORITHM, encryptionKey(), iv);
+  const cipher = createCipheriv(ALGORITHM, encryptionKey().key, iv);
   // The name is authenticated but not encrypted: a ciphertext lifted into
   // another row will not decrypt, so a stored OPENAI key can never come back as
   // a CONGRESS key.
@@ -168,7 +236,7 @@ export function decryptSecret(name: string, stored: string): string {
   if (version !== FORMAT_VERSION || !iv || !tag || !body) {
     throw new Error(`Stored value for ${name} is not in the expected format`);
   }
-  const decipher = createDecipheriv(ALGORITHM, encryptionKey(), Buffer.from(iv, "base64"));
+  const decipher = createDecipheriv(ALGORITHM, encryptionKey().key, Buffer.from(iv, "base64"));
   decipher.setAAD(Buffer.from(name, "utf8"));
   decipher.setAuthTag(Buffer.from(tag, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(body, "base64")), decipher.final()]).toString("utf8");
