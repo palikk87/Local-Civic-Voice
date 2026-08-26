@@ -29,6 +29,7 @@ import {
   ListOrdered,
   MapPin,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
@@ -46,7 +47,6 @@ import {
   type Party,
 } from '@/lib/government-service';
 import { cn } from '@/lib/cn';
-import { DataFreshness } from '@/components/civic/DataFreshness';
 import { ordinal } from '@/lib/ordinal';
 
 type Section = 'congress' | 'executive' | 'judicial' | 'leadership';
@@ -660,10 +660,35 @@ export default function GovernmentScreen() {
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#F59E0B" />
             }
           >
-            {/* How current this is, stated rather than assumed. See the
-                component for why: a stale snapshot and a live one look
-                identical. Web twin: apps/web/src/pages/Government.tsx. */}
-            <DataFreshness />
+            {/* THE FRESHNESS STRIP THAT WAS HERE ANSWERED THE WRONG QUESTION.
+                It reports on GovernmentReference — bills, executive orders,
+                court cases — so on a screen headed "Every federal official" it
+                announced a count of laws and quoted a BILL TITLE as "the most
+                recent action we hold". Somebody looking up their senator was
+                told about sanctions on the People's Republic of China.
+
+                This screen is about people. The references strip moved to
+                Discover, where the references are.
+
+                What replaces it is the RIGHT question for this screen,
+                answered from the roster this screen actually shows.
+                Web twin: apps/web/src/pages/Government.tsx. */}
+            {officials?.lastUpdated || congress ? (
+              <View className="mx-4 mb-4 flex-row items-start">
+                <View className="mt-0.5">
+                  <RefreshCw size={13} color="#94A3B8" />
+                </View>
+                <Text className="ml-1.5 flex-1 text-xs text-slate-400">
+                  {members.length > 0
+                    ? `${members.length} members of Congress`
+                    : 'Congress roster'}
+                  {congress?.source === 'fallback' ? ' (cached snapshot)' : ''} from Congress.gov
+                  {officials?.lastUpdated
+                    ? ` · Executive and judicial checked ${new Date(officials.lastUpdated).toLocaleDateString()}`
+                    : ''}
+                </Text>
+              </View>
+            ) : null}
 
             {section === 'congress' ? (
               <>

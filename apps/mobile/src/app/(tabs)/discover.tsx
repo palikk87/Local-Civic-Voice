@@ -58,6 +58,7 @@ import {
   referenceToExecutiveOrder,
   referenceToScotusCase,
 } from '@/lib/api/references';
+import { DataFreshness } from '@/components/civic/DataFreshness';
 
 // Tab types
 type DiscoverTab = 'trending' | 'legislative' | 'executive' | 'judicial' | 'government';
@@ -992,6 +993,13 @@ export default function DiscoverScreen() {
                   ))}
                 </ScrollView>
               </View>
+
+              {/* How current the RECORDS below are. This is the screen that
+                  lists them, which is why the strip lives here rather than on
+                  the Government screen — where it used to sit and describe laws
+                  to somebody looking up an official.
+                  Web twin: apps/web/src/pages/Discover.tsx. */}
+              <DataFreshness />
 
               {/* Trending Bills */}
               <View className="px-4 mb-3">

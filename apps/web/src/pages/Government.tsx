@@ -14,13 +14,13 @@ import {
   Landmark,
   ListOrdered,
   MapPin,
+  RefreshCw,
   Scale,
   Search,
   Users,
   X,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { DataFreshness } from "@/components/civic/DataFreshness";
 import { ordinal } from "@/lib/civic";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -132,11 +132,34 @@ export default function Government() {
             Every federal official, across all three branches
           </p>
 
-          {/* How current this is, stated rather than assumed. See the component
-              for why: a stale snapshot and a live one look identical. */}
-          <div className="mt-4">
-            <DataFreshness />
-          </div>
+          {/* THE FRESHNESS STRIP THAT WAS HERE ANSWERED THE WRONG QUESTION.
+              It reports on GovernmentReference — bills, executive orders, court
+              cases — so on a page headed "Every federal official" it announced
+              a count of laws and quoted a BILL TITLE as "the most recent action
+              we hold". A reader looking up their senator was told about
+              sanctions on the People's Republic of China.
+
+              This page is about people, and it already says how current its
+              people are, at the bottom, from the roster's own lastUpdated. The
+              references strip moved to Discover, where the references are.
+
+              What replaces it is the RIGHT question for this page, answered
+              from the roster this page actually shows. */}
+          {officials?.lastUpdated || congress ? (
+            <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                {members.length > 0 ? `${members.length} members of Congress` : "Congress roster"}
+                {congress?.source === "fallback" ? " (cached snapshot)" : ""} from Congress.gov
+              </span>
+              {officials?.lastUpdated ? (
+                <span>
+                  · Executive and judicial checked{" "}
+                  {new Date(officials.lastUpdated).toLocaleDateString()}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
 
           <div className="relative mt-4">
             <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />

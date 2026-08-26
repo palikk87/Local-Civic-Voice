@@ -1,5 +1,11 @@
 /**
- * How current is the government you are looking at?
+ * How current are the RECORDS — bills, executive orders, court cases?
+ *
+ * WHERE THIS BELONGS, learned the hard way. It was mounted on the Government
+ * screen, which lists federal officials, so it announced a count of laws and
+ * quoted a bill title as "the most recent action we hold" to somebody looking
+ * up their senator. It reports on GovernmentReference and it belongs where
+ * GovernmentReference is shown: Discover.
  *
  * Web twin: apps/web/src/components/civic/DataFreshness.tsx — same endpoint,
  * same words, same refusal to guess.
@@ -77,8 +83,7 @@ export function DataFreshness() {
       </View>
 
       <Text className="mt-1 text-xs text-slate-400">
-        {total.toLocaleString()} held — checked every {data.cadence.recordsHours}h, roll calls every{' '}
-        {data.cadence.rollCallsHours}h
+        {`${total.toLocaleString()} records held — rechecked every ${data.cadence.recordsHours}h, roll calls every ${data.cadence.rollCallsHours}h`}
       </Text>
 
       {data.newestAction?.date ? (

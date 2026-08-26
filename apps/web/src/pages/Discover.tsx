@@ -16,6 +16,7 @@ import {
   SupremeCourtJusticesSection,
   DataFreshnessIndicator,
 } from "@/components/discover/GovernmentOverview";
+import { DataFreshness } from "@/components/civic/DataFreshness";
 import { categoryLabels } from "@/lib/mobile/mock-data";
 import { fetchOfficials } from "@/lib/government-service";
 import { useQuery } from "@tanstack/react-query";
@@ -298,6 +299,14 @@ export default function Discover() {
                   there are no tags — an empty panel reads as broken. */}
               <div className="mb-6">
                 <TrendingHashtags />
+              </div>
+
+              {/* How current the RECORDS below are. This is the page that
+                  lists them, which is why the strip lives here rather than on
+                  the Government page — where it used to sit and describe laws
+                  to somebody looking up an official. */}
+              <div className="mb-4">
+                <DataFreshness />
               </div>
 
               {/* Trending Bills */}

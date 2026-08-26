@@ -1,5 +1,12 @@
 /**
- * How current is the government you are looking at?
+ * How current are the RECORDS — bills, executive orders, court cases?
+ *
+ * WHERE THIS BELONGS, learned the hard way. It was mounted on the Government
+ * page, which lists federal officials, so it announced a count of laws and
+ * quoted a bill title as "the most recent action we hold" to somebody looking
+ * up their senator. It reports on GovernmentReference and it belongs where
+ * GovernmentReference is shown: Discover. The Government page has its own
+ * roster provenance line, from the roster's own lastUpdated.
  *
  * WHY THIS EXISTS. A visitor had no way to tell whether this section showed
  * today's Congress or a snapshot from whenever the last sync happened to run.
@@ -70,9 +77,11 @@ export function DataFreshness() {
           */}
           {synced ? `Records checked ${synced}` : "Records have not been checked yet"}
         </span>
+        {/* One line, one space. Broken across source lines this rendered as
+            "checked every  24h" — JSX keeps the newline's whitespace next to
+            the interpolation. */}
         <span className="text-muted-foreground">
-          {total.toLocaleString()} held — checked every {data.cadence.recordsHours}h, roll calls
-          every {data.cadence.rollCallsHours}h
+          {`${total.toLocaleString()} records held — rechecked every ${data.cadence.recordsHours}h, roll calls every ${data.cadence.rollCallsHours}h`}
         </span>
       </div>
 
