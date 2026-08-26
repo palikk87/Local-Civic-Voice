@@ -231,6 +231,25 @@ export default function Profile() {
     retry: false,
   });
   const businessAccount = business?.businessAccount ?? null;
+
+  /**
+   * Whether this account carries an administrative role.
+   *
+   * Read from the CITIZEN account rather than from the console session, which
+   * is what `isStaff` does. Somebody who holds a role but has not signed into
+   * the console yet was previously shown no way to reach it — a door only
+   * visible once you are already through it.
+   */
+  const { data: adminData } = useQuery({
+    queryKey: ["me", "admin-access"],
+    queryFn: () =>
+      api.get<{ adminAccess: { role: string; name: string } | null }>(
+        "/api/users/me/admin-access",
+      ),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const adminAccess = adminData?.adminAccess ?? null;
   const mockUser = useAuthStore((s) => s.user);
   const mockSignOut = useAuthStore((s) => s.signOut);
   const queryClient = useQueryClient();
@@ -620,7 +639,38 @@ export default function Profile() {
           {/* Admin Console — only for an account whose own role is staff. Not for
               whoever happens to have an admin-console flag left in this
               browser's storage, which is what this used to check. */}
-          {isStaff ? (
+          {adminAccess ? (
+            <div className="px-4 mb-6">
+              <button
+                onClick={() => navigate("/admin")}
+                className="w-full text-left rounded-xl overflow-hidden border border-purple-700/30 bg-gradient-to-br from-[#581C87] to-[#3B0764] p-4"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center flex-1">
+                    <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center mr-3 shrink-0">
+                      <Shield size={24} color="#C084FC" />
+                    </div>
+                    <div className="flex-1">
+                      <span className="block text-purple-100 font-semibold text-lg">
+                        Admin Console
+                      </span>
+                      <span className="block text-purple-300/70 text-sm">
+                        Signed in here as {adminAccess.name}
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronRight size={20} color="#C084FC" />
+                </div>
+              </button>
+              <p className="mt-2 text-xs text-muted-foreground">
+                A separate sign-in from this account&apos;s.
+              </p>
+            </div>
+          ) : null}
+
+          {/* The generic entry point, for anybody reaching the console without
+              a role on this account. Hidden from somebody who has one. */}
+          {isStaff && !adminAccess ? (
           <div className="px-4 mb-6">
             <button
               onClick={() => navigate("/admin/login")}
@@ -646,19 +696,22 @@ export default function Profile() {
           </div>
           ) : null}
 
-          {/* THEIR OWN BUSINESS ACCOUNT.
-              This card used to say "a business client signs in at /b2b
-              directly; they have no citizen profile to reach it from", and that
-              stopped being true the moment an existing account could be given a
-              business login. The two logins stay separate secrets — a citizen
-              changing their password must never re-key a business account — but
-              separate credentials had become separate worlds, with nothing
-              joining them. This is the thread.
+          {/* ONE B2B CARD, THE SAME FOR EVERYBODY WHO CAN REACH THE PORTAL.
 
-              It names the business and the username to sign in with, because
-              the one thing somebody cannot guess is WHICH of their two logins
-              this door wants. */}
-          {businessAccount ? (
+              These were two cards. The staff one said "B2B Analytics / Civic
+              Intelligence Platform". The one shown to somebody who actually
+              HELD a business account said "{business name} / Sign in as
+              {username} · {tier}" — so on a converted account it rendered as
+              "khalid / Sign in as civicvoice · enterprise", putting a person's
+              own display name where a product name goes, and reading like a
+              different feature to the only people who use it.
+
+              They are one branch now rather than two matching ones, because
+              two copies of a card that must never differ is a promise the code
+              cannot keep. Nothing about the viewer appears on it: no name, no
+              username, no tier. It is a door, and a door does not need to know
+              who you are. */}
+          {businessAccount || isStaff ? (
             <div className="px-4 mb-6">
               <button
                 onClick={() => navigate("/b2b/login")}
@@ -669,53 +722,19 @@ export default function Profile() {
                     <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3 shrink-0">
                       <BarChart3 size={24} color="#818CF8" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="block text-indigo-100 font-semibold text-lg truncate">
-                        {businessAccount.name}
+                    <div className="flex-1">
+                      <span className="block text-indigo-100 font-semibold text-lg">
+                        B2B Analytics
                       </span>
                       <span className="block text-indigo-300/70 text-sm">
-                        Sign in as{" "}
-                        <span className="font-mono">{businessAccount.username}</span> ·{" "}
-                        {businessAccount.tier}
+                        Civic Intelligence Platform
                       </span>
                     </div>
                   </div>
                   <ChevronRight size={20} color="#818CF8" />
                 </div>
               </button>
-              <p className="mt-2 text-xs text-muted-foreground">
-                A separate password from this account&apos;s. Changing one never changes the other.
-              </p>
             </div>
-          ) : null}
-
-          {/* The generic entry point, for staff who need to reach the portal
-              without holding an account of their own. Hidden from somebody who
-              has one, so they are not offered the same door twice. */}
-          {isStaff && !businessAccount ? (
-          <div className="px-4 mb-6">
-            <button
-              onClick={() => navigate("/b2b/login")}
-              className="w-full text-left rounded-xl overflow-hidden border border-indigo-700/30 bg-gradient-to-br from-[#312E81] to-[#1E1B4B] p-4"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center flex-1">
-                  <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center mr-3 shrink-0">
-                    <BarChart3 size={24} color="#818CF8" />
-                  </div>
-                  <div className="flex-1">
-                    <span className="block text-indigo-100 font-semibold text-lg">
-                      B2B Analytics
-                    </span>
-                    <span className="block text-indigo-300/70 text-sm">
-                      Civic Intelligence Platform
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight size={20} color="#818CF8" />
-              </div>
-            </button>
-          </div>
           ) : null}
 
           {/* Achievements */}

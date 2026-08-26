@@ -330,6 +330,30 @@ function ProfileContent() {
   });
   const businessAccount = business?.businessAccount ?? null;
 
+  /**
+   * Whether this account carries an administrative role.
+   * Web twin: apps/web/src/pages/Profile.tsx.
+   *
+   * Read from the CITIZEN account rather than the console session — somebody
+   * who holds a role but has not signed into the console yet was shown no way
+   * to reach it.
+   */
+  const { data: adminData } = useQuery({
+    queryKey: ['me', 'admin-access'],
+    queryFn: async () => {
+      const response = await fetch(`${BACKEND_URL}/api/users/me/admin-access`, {
+        headers: { Cookie: authClient.getCookie() },
+      });
+      if (!response.ok) return { adminAccess: null };
+      return (await response.json()) as {
+        adminAccess: { role: string; name: string } | null;
+      };
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const adminAccess = adminData?.adminAccess ?? null;
+
   const yeaVotes = positions?.summary.support ?? 0;
   const nayVotes = positions?.summary.oppose ?? 0;
   const totalVotes = positions?.summary.total ?? 0;
@@ -736,7 +760,48 @@ function ProfileContent() {
           </View>
 
           {/* Admin Console — only for an account whose own role is staff. */}
-          {isStaff ? (
+          {adminAccess ? (
+            <View className="px-4 mb-6">
+              <Pressable
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/admin/login');
+                }}
+                className="rounded-xl overflow-hidden border border-purple-700/30"
+              >
+                <LinearGradient
+                  colors={['#581C87', '#3B0764']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ padding: 16 }}
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View className="flex-row items-center flex-1">
+                      <View className="w-12 h-12 rounded-full bg-purple-500/20 items-center justify-center mr-3">
+                        <Shield size={24} color="#C084FC" />
+                      </View>
+                      <View className="flex-1">
+                        <Text className="text-purple-100 font-semibold text-lg">
+                          Admin Console
+                        </Text>
+                        <Text className="text-purple-300/70 text-sm">
+                          Signed in here as {adminAccess.name}
+                        </Text>
+                      </View>
+                    </View>
+                    <ChevronRight size={20} color="#C084FC" />
+                  </View>
+                </LinearGradient>
+              </Pressable>
+              <Text className="text-slate-500 text-xs mt-2">
+                A separate sign-in from this account&apos;s.
+              </Text>
+            </View>
+          ) : null}
+
+          {/* The generic entry point, for anybody reaching the console without
+              a role on this account. Hidden from somebody who has one. */}
+          {isStaff && !adminAccess ? (
           <View className="px-4 mb-6">
             <Pressable
               onPress={() => {
@@ -772,14 +837,21 @@ function ProfileContent() {
           </View>
           ) : null}
 
-          {/* THEIR OWN BUSINESS ACCOUNT.
-              This said "a business client has no citizen profile to reach it
-              from", which stopped being true the moment an existing account
-              could be given a business login. The logins stay separate secrets;
-              this is the thread between them. It names the business and the
-              username, because the one thing somebody cannot guess is WHICH of
-              their two logins this door wants. */}
-          {businessAccount ? (
+          {/* ONE B2B CARD, THE SAME FOR EVERYBODY WHO CAN REACH THE PORTAL.
+
+              These were two cards. The staff one said "B2B Analytics / Civic
+              Intelligence Platform". The one shown to somebody who actually
+              HELD a business account said "{business name} / Sign in as
+              {username} · {tier}", putting a person's own display name where a
+              product name goes and reading like a different feature to the
+              only people who use it.
+
+              They are one branch now rather than two matching ones, because
+              two copies of a card that must never differ is a promise the code
+              cannot keep. Nothing about the viewer appears on it: no name, no
+              username, no tier. It is a door, and a door does not need to know
+              who you are. Web twin: apps/web/src/pages/Profile.tsx. */}
+          {businessAccount || isStaff ? (
             <View className="px-4 mb-6">
               <Pressable
                 onPress={() => {
@@ -800,11 +872,11 @@ function ProfileContent() {
                         <BarChart3 size={24} color="#818CF8" />
                       </View>
                       <View className="flex-1">
-                        <Text className="text-indigo-100 font-semibold text-lg" numberOfLines={1}>
-                          {businessAccount.name}
+                        <Text className="text-indigo-100 font-semibold text-lg">
+                          B2B Analytics
                         </Text>
                         <Text className="text-indigo-300/70 text-sm">
-                          Sign in as {businessAccount.username} · {businessAccount.tier}
+                          Civic Intelligence Platform
                         </Text>
                       </View>
                     </View>
@@ -812,49 +884,7 @@ function ProfileContent() {
                   </View>
                 </LinearGradient>
               </Pressable>
-              <Text className="text-slate-500 text-xs mt-2">
-                A separate password from this account&apos;s. Changing one never changes the other.
-              </Text>
             </View>
-          ) : null}
-
-          {/* The generic entry point, for staff who need the portal without
-              holding an account of their own. Hidden from somebody who has one,
-              so they are not offered the same door twice. */}
-          {isStaff && !businessAccount ? (
-          <View className="px-4 mb-6">
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/b2b/login');
-              }}
-              className="rounded-xl overflow-hidden border border-indigo-700/30"
-            >
-              <LinearGradient
-                colors={['#312E81', '#1E1B4B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={{ padding: 16 }}
-              >
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center flex-1">
-                    <View className="w-12 h-12 rounded-full bg-indigo-500/20 items-center justify-center mr-3">
-                      <BarChart3 size={24} color="#818CF8" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-indigo-100 font-semibold text-lg">
-                        B2B Analytics
-                      </Text>
-                      <Text className="text-indigo-300/70 text-sm">
-                        Civic Intelligence Platform
-                      </Text>
-                    </View>
-                  </View>
-                  <ChevronRight size={20} color="#818CF8" />
-                </View>
-              </LinearGradient>
-            </Pressable>
-          </View>
           ) : null}
 
           {/* Achievements */}
