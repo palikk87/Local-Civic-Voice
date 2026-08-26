@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,11 @@ import {
   ArrowLeft,
   Database,
   Shield,
-  Bell,
-  RefreshCw,
   Server,
   Info,
 } from 'lucide-react-native';
 import { useAdminStore } from '@/lib/admin-store';
+import { BACKEND_URL } from '@/lib/config';
 import * as Haptics from 'expo-haptics';
 import { KeysAndEmailCard } from '@/components/admin/KeysAndEmailCard';
 
@@ -54,40 +53,71 @@ export default function AdminSettingsScreen() {
   const router = useRouter();
   const session = useAdminStore((s) => s.session);
 
-  const handleClearCache = () => {
-    Alert.alert(
-      'Clear Cache',
-      'This will clear all cached data. Users may experience slower load times temporarily.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            Alert.alert('Success', 'Cache cleared successfully');
-          },
-        },
-      ]
-    );
-  };
+  /**
+   * What the backend says about itself, or the reason we could not ask.
+   *
+   * Nothing here is written unless /health returned it. When the request
+   * fails, this reports the failure rather than falling back to a cheerful
+   * default — an admin console that cannot reach the server must say so.
+   */
+  const [health, setHealth] = useState<{
+    reachable: boolean;
+    subtitle: string;
+    schema: string;
+  }>({ reachable: false, subtitle: 'Checking…', schema: 'Checking…' });
 
-  const handleResetStats = () => {
-    Alert.alert(
-      'Reset Analytics',
-      'This will reset all analytics data. This action cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: () => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            Alert.alert('Success', 'Analytics reset successfully');
-          },
-        },
-      ]
-    );
-  };
+  const checkHealth = useCallback(async (announce = false) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/health`);
+      if (!response.ok) {
+        const failed = {
+          reachable: false,
+          subtitle: `Server answered ${response.status}`,
+          schema: 'Unknown — the server did not answer',
+        };
+        setHealth(failed);
+        if (announce) Alert.alert('Server Status', failed.subtitle);
+        return;
+      }
+      const body = await response.json();
+      const minutes = Math.round((body.uptime ?? 0) / 60);
+      const schema = body.schema;
+      const schemaLine = !schema
+        ? 'The server reported no schema state'
+        : schema.inSync
+          ? `In sync — ${schema.applied} migration(s) applied`
+          : schema.failed?.length
+            ? `${schema.failed.length} migration(s) FAILED`
+            : `${schema.pending?.length ?? 0} migration(s) pending`;
+      const next = {
+        reachable: true,
+        subtitle: `Up ${minutes} min · ${body.version ?? 'version unknown'}`,
+        schema: schemaLine,
+      };
+      setHealth(next);
+      if (announce) Alert.alert('Server Status', `${next.subtitle}\n${schemaLine}`);
+    } catch {
+      const failed = {
+        reachable: false,
+        subtitle: 'Could not reach the server',
+        schema: 'Unknown — the server could not be reached',
+      };
+      setHealth(failed);
+      if (announce) Alert.alert('Server Status', failed.subtitle);
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkHealth();
+  }, [checkHealth]);
+
+  // "Clear Cache" and "Reset Analytics" USED TO LIVE HERE. Neither called an
+  // endpoint. Both popped a confirmation, played a haptic, and said "cleared
+  // successfully" / "reset successfully" — an administrator could reset the
+  // platform's analytics, be told it worked, and nothing on any server would
+  // have changed. A control that reports a result it did not produce is worse
+  // than no control, so they are gone rather than gated. If either is wanted,
+  // it needs a route behind it first.
 
   return (
     <SafeAreaView className="flex-1 bg-slate-900">
@@ -116,54 +146,38 @@ export default function AdminSettingsScreen() {
         {/* Settings */}
         <Text className="text-white text-lg font-bold mb-3">System</Text>
 
+        {/* THESE TWO USED TO ANSWER WITHOUT ASKING.
+            "Server Status" said "All systems operational" whether or not a
+            server existed. "Database" said "SQLite database is running
+            normally / Size: 12.4 MB / Tables: 15" — this platform runs
+            PostgreSQL, and every one of those numbers was typed by hand. An
+            administrator checking whether the backend was up got a reassuring
+            answer from a string constant. They read /health now, and say what
+            it says. */}
         <SettingItem
           title="Server Status"
-          subtitle="Check backend server health"
-          icon={<Server size={20} color="#22C55E" />}
+          subtitle={health.subtitle}
+          icon={<Server size={20} color={health.reachable ? '#22C55E' : '#EF4444'} />}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Alert.alert('Server Status', 'All systems operational');
+            void checkHealth(true);
           }}
         />
 
         <SettingItem
           title="Database"
-          subtitle="View database statistics"
+          subtitle={health.schema}
           icon={<Database size={20} color="#3B82F6" />}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Alert.alert('Database Info', 'SQLite database is running normally\nSize: 12.4 MB\nTables: 15');
+            void checkHealth(true);
           }}
         />
 
-        <SettingItem
-          title="Push Notifications"
-          subtitle="Configure notification settings"
-          icon={<Bell size={20} color="#8B5CF6" />}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            Alert.alert('Notifications', 'Push notification settings are managed through the app configuration.');
-          }}
-        />
+        {/* "Push Notifications" was here and opened an alert saying the
+            settings are managed elsewhere. It configured nothing. */}
 
         <Text className="text-white text-lg font-bold mb-3 mt-6">Maintenance</Text>
-
-        <SettingItem
-          title="Clear Cache"
-          subtitle="Clear all cached data"
-          icon={<RefreshCw size={20} color="#F59E0B" />}
-          onPress={handleClearCache}
-        />
-
-        {session?.role === 'superadmin' && (
-          <SettingItem
-            title="Reset Analytics"
-            subtitle="Reset all analytics data"
-            icon={<RefreshCw size={20} color="#EF4444" />}
-            onPress={handleResetStats}
-            danger
-          />
-        )}
 
         {/* Version Info */}
         <View className="mt-6 items-center py-8">
