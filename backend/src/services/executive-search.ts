@@ -56,6 +56,8 @@ export interface ExecutiveSearchOutput {
   count: number;
 }
 
+import { officialSourceHeaders } from "./official-source";
+
 interface RawDocument {
   title?: string;
   type?: string;
@@ -141,7 +143,7 @@ export async function searchExecutiveDocuments(
   for (const field of FIELDS) url.searchParams.append("fields[]", field);
 
   const response = await fetch(url.toString(), {
-    headers: { Accept: "application/json" },
+    headers: officialSourceHeaders({ Accept: "application/json" }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 

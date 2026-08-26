@@ -28,6 +28,7 @@ import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 import { fetchCourtListener } from "./courtlistener";
 import { markSettled, markWorking } from "./brief-state";
 import { env } from "../env";
+import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -117,7 +118,7 @@ async function fetchJson<T>(
   if (timeout <= 0) return null;
   try {
     const response = await fetch(url, {
-      headers: { Accept: "application/json", ...headers },
+      headers: officialSourceHeaders({ Accept: "application/json", ...headers }),
       signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) {
@@ -176,14 +177,16 @@ async function fetchDocumentText(url: string, deadlineAt: number): Promise<strin
   if (timeout <= 0) return null;
   try {
     const response = await fetch(url, {
-      headers: { Accept: "text/plain, text/html, */*" },
+      // Identify ourselves — see official-source.ts.
+      headers: officialSourceHeaders({ Accept: "text/plain, text/html, */*" }),
       signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) return null;
     const raw = await response.text();
     const looksLikeHtml = /<\/?(html|body|div|p|pre)\b/i.test(raw.slice(0, 2_000));
     const text = sanitizeOfficialText(looksLikeHtml ? htmlToText(raw) : raw);
-    return text.length > 200 ? text : null;
+    // Was `length > 200`, which a captcha page passes comfortably.
+    return acceptOfficialText(text, "RefContent");
   } catch {
     return null;
   }

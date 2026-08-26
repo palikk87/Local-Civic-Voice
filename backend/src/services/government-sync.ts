@@ -24,6 +24,7 @@ import {
   stripFederalRegisterFurniture,
 } from "./reference-content";
 import { notifyLawUpdate } from "./notification-service";
+import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 import { env } from "../env";
 
 const SYNC_COUNT = 10;
@@ -43,7 +44,7 @@ export interface GovernmentSyncResult {
 async function fetchJson<T>(url: string, headers: Record<string, string> = {}): Promise<T | null> {
   try {
     const response = await fetch(url, {
-      headers: { Accept: "application/json", ...headers },
+      headers: officialSourceHeaders({ Accept: "application/json", ...headers }),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) {
@@ -73,13 +74,22 @@ async function fetchJson<T>(url: string, headers: Record<string, string> = {}): 
  */
 async function fetchText(url: string): Promise<string | null> {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const response = await fetch(url, {
+      // Identify ourselves. Unsigned requests from a datacenter IP on a
+      // schedule are what an anti-bot service exists to stop, and the Federal
+      // Register's API documentation asks callers to say who they are.
+      headers: officialSourceHeaders({ Accept: "text/plain, text/html, */*" }),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!response.ok) return null;
     const raw = await response.text();
     const looksLikeHtml = /<\/?(html|body|div|p|pre)\b/i.test(raw.slice(0, 2_000));
     // Never truncate — official text is stored in its entirety.
     const text = sanitizeOfficialText(looksLikeHtml ? htmlToText(raw) : raw);
-    return text.length > 200 ? text : null;
+    // The old test was `length > 200`, which a captcha page passes comfortably.
+    // See official-source.ts: a source that will not give us the document must
+    // produce nothing, not a block page stored as the law.
+    return acceptOfficialText(text, "GovSync");
   } catch {
     return null;
   }
@@ -343,56 +353,143 @@ interface FederalRegisterListResponse {
   }>;
 }
 
-async function syncExecutiveOrders(): Promise<number> {
-  const url = new URL("https://www.federalregister.gov/api/v1/documents.json");
-  url.searchParams.set("conditions[presidential_document_type]", "executive_order");
-  url.searchParams.append("conditions[type][]", "PRESDOCU");
-  url.searchParams.set("order", "newest");
-  url.searchParams.set("per_page", String(SYNC_COUNT));
-  for (const field of ["executive_order_number", "title", "abstract", "signing_date", "publication_date", "html_url", "document_number", "president", "body_html_url", "raw_text_url"]) {
-    url.searchParams.append("fields[]", field);
-  }
-  const data = await fetchJson<FederalRegisterListResponse>(url.toString());
-  if (!data?.results) return 0;
+/**
+ * How many orders to ask for in one request. The Federal Register serves up to
+ * 1,000 per page; 100 is a page size that is polite and still catches up fast.
+ */
+const EO_PAGE_SIZE = 100;
+
+/**
+ * Stop once this many consecutive orders are ones we already hold with text.
+ *
+ * The old sync took a fixed newest 10 and stopped. Since the newest ten barely
+ * change between daily runs, it re-upserted the same ten rows forever: the
+ * Federal Register publishes 1,556 executive orders and this platform would
+ * hold about ten of them, permanently, with no way to ever catch up. Worse, any
+ * outage longer than "ten orders' worth of time" silently lost whatever was
+ * signed meanwhile — the gap never healed, because nothing ever looked back.
+ *
+ * Paging until it recognises what it is reading makes the sync self-healing: a
+ * normal night stops after one page of familiar records, and a night following
+ * a week of downtime keeps going until it has caught up.
+ */
+const EO_STOP_AFTER_KNOWN = 25;
+
+/** A ceiling, so a bad answer from the source cannot walk the whole corpus. */
+const EO_MAX_PAGES = 20;
+
+/**
+ * How many NEW orders one run will take. This is the important number.
+ *
+ * Without it, "page until you recognise what you are reading" means the first
+ * run after this ships walks the entire Federal Register — 1,556 orders, each
+ * with its own full-text download — in a single night, into a database shared
+ * with another project, against a public server run for the public. Catching up
+ * over a fortnight of ordinary nightly runs is not worse for anybody, and the
+ * backfill script raises this deliberately when a person is watching.
+ */
+const EO_MAX_NEW_PER_RUN = 50;
+
+interface ExecutiveOrderSyncOptions {
+  /** Page until this many consecutive known orders. Raise it to backfill. */
+  stopAfterKnown?: number;
+  /** Hard ceiling on pages walked. */
+  maxPages?: number;
+  /** How many new orders to take before stopping. Raise it to backfill. */
+  maxNew?: number;
+  /** Pause between requests. These are public servers run for the public. */
+  pauseMs?: number;
+}
+
+export async function syncExecutiveOrders(options: ExecutiveOrderSyncOptions = {}): Promise<number> {
+  const stopAfterKnown = options.stopAfterKnown ?? EO_STOP_AFTER_KNOWN;
+  const maxPages = options.maxPages ?? EO_MAX_PAGES;
+  const maxNew = options.maxNew ?? EO_MAX_NEW_PER_RUN;
+  const pauseMs = options.pauseMs ?? 250;
 
   let synced = 0;
-  for (const doc of data.results) {
-    if (!doc.title) continue;
-    const eoNumber = doc.executive_order_number ? String(doc.executive_order_number).replace(/\D/g, "") : null;
-    const masterReferenceId = eoNumber ? `eo-${eoNumber}` : `eo-${doc.document_number.toLowerCase()}`;
+  let taken = 0;
+  let consecutiveKnown = 0;
 
-    const existing = await prisma.governmentReference.findUnique({
-      where: { masterReferenceId },
-      select: { id: true, fullText: true },
-    });
-    // Full text is a separate download per order — only fetch it once.
-    //
-    // body_html first. It is the order and nothing else; raw_text_url is the
-    // page of the Federal Register the order was printed on, gazette furniture
-    // and all. Whatever comes back has that furniture stripped either way.
-    const textUrl = doc.body_html_url ?? doc.raw_text_url;
-    const fetched = !existing?.fullText && textUrl ? await fetchText(textUrl) : null;
-    const fullText = fetched ? stripFederalRegisterFurniture(fetched, eoNumber) : null;
+  for (let page = 1; page <= maxPages; page++) {
+    const url = new URL("https://www.federalregister.gov/api/v1/documents.json");
+    url.searchParams.set("conditions[presidential_document_type]", "executive_order");
+    url.searchParams.append("conditions[type][]", "PRESDOCU");
+    url.searchParams.set("order", "newest");
+    url.searchParams.set("per_page", String(EO_PAGE_SIZE));
+    url.searchParams.set("page", String(page));
+    for (const field of ["executive_order_number", "title", "abstract", "signing_date", "publication_date", "html_url", "document_number", "president", "body_html_url", "raw_text_url"]) {
+      url.searchParams.append("fields[]", field);
+    }
 
-    const presidentName = doc.president?.name;
-    const descriptionParts = [
-      doc.abstract,
-      presidentName ? `Signed by President ${presidentName}${doc.signing_date ? ` on ${doc.signing_date}` : ""}.` : null,
-    ].filter(Boolean);
+    const data = await fetchJson<FederalRegisterListResponse>(url.toString());
+    if (!data?.results || data.results.length === 0) break;
 
-    await upsertReference({
-      masterReferenceId,
-      referenceType: "executive_order",
-      title: doc.title,
-      status: "active",
-      category: categorize(doc.title),
-      sourceUrl: doc.html_url,
-      description: descriptionParts.length > 0 ? descriptionParts.join(" ") : undefined,
-      fullText: fullText ?? undefined,
-      signedDate: doc.signing_date ? new Date(doc.signing_date) : doc.publication_date ? new Date(doc.publication_date) : undefined,
-    });
-    synced++;
+    for (const doc of data.results) {
+      if (!doc.title) continue;
+      const eoNumber = doc.executive_order_number ? String(doc.executive_order_number).replace(/\D/g, "") : null;
+      const masterReferenceId = eoNumber ? `eo-${eoNumber}` : `eo-${doc.document_number.toLowerCase()}`;
+
+      const existing = await prisma.governmentReference.findUnique({
+        where: { masterReferenceId },
+        select: { id: true, fullText: true },
+      });
+
+      // "Known" means we hold it AND we hold its text. A row whose text is
+      // missing — never fetched, or cleared because a block page had been
+      // stored in it — is not caught up, and must not count towards stopping.
+      if (existing?.fullText) {
+        consecutiveKnown++;
+        if (consecutiveKnown >= stopAfterKnown) return synced;
+      } else {
+        consecutiveKnown = 0;
+        // Only records we actually have to go and fetch count against the
+        // budget. Re-reading ones we already hold is cheap.
+        if (taken >= maxNew) {
+          console.log(
+            `[GovSync] Executive orders: took ${taken} this run and stopped. ` +
+              `More remain; the next run picks up where this one left off.`,
+          );
+          return synced;
+        }
+        taken++;
+      }
+
+      // Full text is a separate download per order — only fetch it once.
+      //
+      // body_html first. It is the order and nothing else; raw_text_url is the
+      // page of the Federal Register the order was printed on, gazette
+      // furniture and all. Whatever comes back has that furniture stripped
+      // either way, and is refused outright if it turns out to be a block page
+      // rather than a law — see official-source.ts.
+      const textUrl = doc.body_html_url ?? doc.raw_text_url;
+      const fetched = !existing?.fullText && textUrl ? await fetchText(textUrl) : null;
+      const fullText = fetched ? stripFederalRegisterFurniture(fetched, eoNumber) : null;
+
+      const presidentName = doc.president?.name;
+      const descriptionParts = [
+        doc.abstract,
+        presidentName ? `Signed by President ${presidentName}${doc.signing_date ? ` on ${doc.signing_date}` : ""}.` : null,
+      ].filter(Boolean);
+
+      await upsertReference({
+        masterReferenceId,
+        referenceType: "executive_order",
+        title: doc.title,
+        status: "active",
+        category: categorize(doc.title),
+        sourceUrl: doc.html_url,
+        description: descriptionParts.length > 0 ? descriptionParts.join(" ") : undefined,
+        fullText: fullText ?? undefined,
+        signedDate: doc.signing_date ? new Date(doc.signing_date) : doc.publication_date ? new Date(doc.publication_date) : undefined,
+      });
+      synced++;
+    }
+
+    if (data.results.length < EO_PAGE_SIZE) break;
+    if (pauseMs > 0) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
+
   return synced;
 }
 
