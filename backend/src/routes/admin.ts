@@ -29,6 +29,7 @@ import {
 } from "../services/platform-secrets";
 import { purgeMediaObjects } from "../services/media-objects";
 import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
+import { undoSystemReset } from "../services/system-reset";
 import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
 import { JobPriority, JobType, enqueueLineageSync, jobQueue } from "../services/job-queue";
@@ -3498,6 +3499,21 @@ adminRouter.get("/articles", async (c) => {
     for (const group of grouped) voteCounts.set(group.impeachmentId, group._count._all);
   }
 
+  // ARTICLES OF SYSTEM RESET, returned as their own list rather than merged
+  // into the page above. Only one reset can stand at a time platform-wide, so
+  // there are never many, and interleaving two tables into one paginated list
+  // would mean a page boundary that silently drops one kind.
+  const resets = await prisma.systemReset.findMany({
+    orderBy: { openedAt: "desc" },
+    take: 50,
+  });
+
+  const resetFilers = await prisma.user.findMany({
+    where: { id: { in: resets.map((reset) => reset.filedById) } },
+    select: person,
+  });
+  const filerById = new Map(resetFilers.map((filer) => [filer.id, filer]));
+
   return c.json({
     articles: filings.map((filing) => ({
       id: filing.id,
@@ -3514,6 +3530,24 @@ adminRouter.get("/articles", async (c) => {
       votes: voteCounts.get(filing.id) ?? 0,
       electorCount: filing._count.electors,
     })),
+    resets: resets.map((reset) => ({
+      id: reset.id,
+      kind: "system_reset" as const,
+      status: reset.status,
+      grounds: reset.grounds,
+      evidence: reset.evidence,
+      // Null when the filer's account is gone. SystemReset has no foreign key
+      // to User on purpose, so this is the honest "we no longer know".
+      filedBy: filerById.get(reset.filedById) ?? null,
+      openedAt: reset.openedAt.toISOString(),
+      expiresAt: reset.expiresAt.toISOString(),
+      decidedAt: reset.decidedAt?.toISOString() ?? null,
+      executeAfter: reset.executeAfter?.toISOString() ?? null,
+      executedAt: reset.executedAt?.toISOString() ?? null,
+      revertedAt: reset.revertedAt?.toISOString() ?? null,
+      revertedBy: reset.revertedBy,
+      eligibleCount: reset.eligibleCount,
+    })),
     total,
     openCount,
     limit,
@@ -3522,4 +3556,39 @@ adminRouter.get("/articles", async (c) => {
     // server would refuse anyway.
     canStopProceedings: false,
   });
+});
+
+/**
+ * POST /api/admin/system-reset/:id/undo
+ *
+ * Put an EXECUTED reset back. Superadmin only, the same bar as undoing a merge.
+ *
+ * THIS IS NOT A VETO, and the distinction is the whole reason it is allowed to
+ * exist. There is no route that stops a proceeding, refuses a result, or keeps
+ * a reset from running — this one only ever acts on a reset that has already
+ * happened, from a journal written inside the transaction that did it.
+ *
+ * The tension is real and better named than hidden: an owner who undoes a reset
+ * the people voted for has overturned them. It is recorded with their name
+ * against it, it is visible, and the people can vote again. The alternative is
+ * a bulk delete of every vote on the platform with no way back, which this
+ * codebase already decided against when it built the merge journal.
+ */
+adminRouter.post("/system-reset/:id/undo", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "systemReset.undo");
+  if (denied) return c.json(denied, { status: 403 });
+
+  try {
+    const report = await undoSystemReset(c.req.param("id"), session.username);
+    return c.json({ undone: report });
+  } catch (error) {
+    return c.json(
+      { error: error instanceof Error ? error.message : "Could not undo that reset." },
+      400
+    );
+  }
 });

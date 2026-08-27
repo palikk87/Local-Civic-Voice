@@ -73,6 +73,13 @@ export const FIRST_RUN = {
    * against the same person — so a late sweep is a right nobody can exercise.
    */
   impeachment: 75_000,
+  /**
+   * Also local, and also a clock nobody else is watching. It closes a reset
+   * vote when its two weeks are up and runs one whose 48-hour notice period has
+   * elapsed — a reset that was announced for Tuesday and does not happen is the
+   * platform breaking a promise it made to every account at once.
+   */
+  systemReset: 80_000,
   /** One local pass plus a few calls. */
   selfHeal: 90_000,
   /** Reads congress.gov lineage for stored records. */

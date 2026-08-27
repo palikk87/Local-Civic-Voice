@@ -120,6 +120,19 @@ export const CAPABILITIES = [
     group: "Content",
   },
   {
+    key: "systemReset.undo",
+    label: "Undo an executed System-Wide Reset",
+    grants:
+      "Put back every delegation and every vote a System-Wide Reset deleted, " +
+      "from the journal written inside the transaction that deleted them. " +
+      "NOT A VETO — nothing can stop a proceeding or refuse a result, and this " +
+      "only ever acts on a reset that has already happened. It is still the " +
+      "power to overturn something the whole platform voted for, so it is " +
+      "granted to no built-in role: the owner holds it, and hands it out or " +
+      "does not.",
+    group: "Content",
+  },
+  {
     key: "content.repair",
     label: "Run content repairs",
     grants:

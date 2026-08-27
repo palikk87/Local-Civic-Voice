@@ -21,6 +21,12 @@ export const NotificationType = {
   IMPEACHMENT_DECIDED: "impeachment_decided",
   /// Articles of Impeachment have been filed against you. Served on the accused.
   IMPEACHMENT_SERVED: "impeachment_served",
+  /// A vote to restart the platform has opened. Sent to every account.
+  SYSTEM_RESET_OPENED: "system_reset_opened",
+  /// It passed, and runs in 48 hours. This is the disclosure notice.
+  SYSTEM_RESET_SCHEDULED: "system_reset_scheduled",
+  /// It has run, or it failed. Either way everybody is told.
+  SYSTEM_RESET_SETTLED: "system_reset_settled",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
@@ -43,6 +49,8 @@ export interface NotificationData {
   impeachmentId?: string;
   /** Who the proceeding is against, so the notification can name them. */
   leaderId?: string;
+  /** The reset being voted on, for an Article V reset notification. */
+  systemResetId?: string;
 }
 
 // Preference field mapping for notification types.

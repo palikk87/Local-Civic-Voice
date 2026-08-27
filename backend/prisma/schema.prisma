@@ -1563,3 +1563,135 @@ model ImpeachmentElector {
   @@unique([impeachmentId, voterId])
   @@index([voterId])
 }
+
+/// A vote to restart the platform's collective memory.
+///
+/// Article V's other remedy, and the heavier one. Where impeachment recalls one
+/// person's borrowed power, this returns ALL of it and zeroes every published
+/// tally — the Pulse genuinely starts again.
+///
+/// One at a time, platform-wide. Unlike impeachment there is no per-target
+/// scoping to make room for, and two simultaneous resets would be two votes on
+/// the same irreversible act.
+model SystemReset {
+  id String @id @default(cuid())
+
+  /// NO FOREIGN KEY, on purpose. A proceeding that affects every account on the
+  /// platform must not disappear because the person who brought it deleted
+  /// theirs. Impeachment cascades from its leader because the proceeding is
+  /// meaningless without them; this one is not about its filer.
+  filedById String
+
+  /// voting | failed | scheduled | executed
+  ///
+  /// "scheduled" is the 48 hours between the people deciding and the reset
+  /// running. Nobody loses their delegations to a vote that closed while they
+  /// slept: the result is announced, everybody is told exactly what is about to
+  /// be lost, and only then does it happen.
+  status String @default("voting")
+
+  /// ARTICLES OF SYSTEM RESET. Queued for admins like Articles of Impeachment,
+  /// and shown to every voter before they vote — this is the case being put to
+  /// the whole platform, so it is the whole platform's to read.
+  grounds  String
+  evidence String
+
+  openedAt  DateTime @default(now())
+  /// openedAt + 14 days. Two weeks, and it runs the full two weeks: unlike
+  /// impeachment there is no early close, because everybody entitled to a say
+  /// on wiping the platform should get their full window to take it.
+  expiresAt DateTime
+
+  decidedAt    DateTime?
+  /// decidedAt + 48 hours. The disclosure period.
+  executeAfter DateTime?
+  executedAt   DateTime?
+
+  /// How many accounts could vote, frozen when it opened. The denominator for
+  /// the participation floor. Frozen so that mass sign-ups during the window
+  /// cannot move the bar in either direction; the ballot route independently
+  /// refuses accounts created after openedAt, so the count and the electorate
+  /// stay the same set.
+  eligibleCount Int
+
+  /// Set when an executed reset is put back. See the undo route for why this
+  /// exists at all, and why it is the owner's alone.
+  revertedAt DateTime?
+  revertedBy String?
+
+  ballots            SystemResetBallot[]
+  journalDelegations SystemResetJournalDelegation[]
+  journalVotes       SystemResetJournalVote[]
+
+  @@index([status])
+  @@index([status, expiresAt])
+  @@index([status, executeAfter])
+}
+
+/// One account, one ballot. Unlike impeachment this has a real "against" side:
+/// the threshold is a share of those who turned out, so an opposing vote
+/// changes the arithmetic rather than merely declining to help.
+model SystemResetBallot {
+  id      String  @id @default(cuid())
+  resetId String
+  voterId String
+  support Boolean
+
+  createdAt DateTime @default(now())
+
+  reset SystemReset @relation(fields: [resetId], references: [id], onDelete: Cascade)
+
+  @@unique([resetId, voterId])
+  @@index([resetId, support])
+}
+
+/// THE JOURNAL — every delegation the reset switched off, by id.
+///
+/// Written inside the same transaction as the mutation, which is the whole
+/// point: a journal written afterwards is a journal that is missing exactly the
+/// rows the crash ate. Same shape as MergeJournal, which is the precedent this
+/// platform already has for a reversible destructive operation.
+model SystemResetJournalDelegation {
+  id           String @id @default(cuid())
+  resetId      String
+  delegationId String
+
+  reset SystemReset @relation(fields: [resetId], references: [id], onDelete: Cascade)
+
+  @@unique([resetId, delegationId])
+  @@index([resetId])
+}
+
+/// THE JOURNAL — every vote the reset deleted, whole.
+///
+/// Deleted rather than flagged, deliberately. Every tally, every feed query,
+/// every analytic in the app reads GovernmentReferenceVote; a "cleared" flag
+/// would have to be honoured by all of them, and the one place that forgot
+/// would keep publishing pre-reset numbers with nothing to show it was wrong.
+/// Gone means gone everywhere, and the row lives here instead.
+///
+/// This is also what "restore my own positions" reads. Every row here is a
+/// DIRECT vote — delegated voice is computed and never stored — so a citizen
+/// restoring from it gets back exactly what they cast themselves, and nothing
+/// a delegate cast in their name.
+model SystemResetJournalVote {
+  id      String @id @default(cuid())
+  resetId String
+
+  governmentReferenceId String
+  userId                String
+  position              String
+  isAnonymous           Boolean
+  /// The original createdAt, so a restored position keeps its real date rather
+  /// than claiming to have been cast on the day it came back.
+  castAt                DateTime
+
+  /// Set when this row has been put back, so restoring twice is a no-op rather
+  /// than a duplicate-key error.
+  restoredAt DateTime?
+
+  reset SystemReset @relation(fields: [resetId], references: [id], onDelete: Cascade)
+
+  @@unique([resetId, governmentReferenceId, userId])
+  @@index([resetId, userId])
+}

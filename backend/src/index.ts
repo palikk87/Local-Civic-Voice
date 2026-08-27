@@ -25,6 +25,7 @@ import { aiRouter } from "./routes/ai";
 import { verificationRouter } from "./routes/verification";
 import { bugReportsRouter } from "./routes/bug-reports";
 import { impeachmentsRouter } from "./routes/impeachments";
+import { systemResetRouter } from "./routes/system-reset";
 import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
@@ -59,6 +60,7 @@ import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { startImpeachmentSweep } from "./services/impeachment";
+import { startSystemResetSweep } from "./services/system-reset";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
 
@@ -285,6 +287,7 @@ app.route("/api/ai", aiRouter);
 app.route("/api/verification", verificationRouter);
 app.route("/api/bug-reports", bugReportsRouter);
 app.route("/api/impeachments", impeachmentsRouter);
+app.route("/api/system-reset", systemResetRouter);
 
 // Serve user uploads — only when storage is local disk.
 //
@@ -638,6 +641,7 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 // never runs turns "one proceeding at a time" into "one proceeding, ever".
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   startImpeachmentSweep();
+  startSystemResetSweep();
 }
 
 // Accounts live in Postgres, external to this container, so they survive
