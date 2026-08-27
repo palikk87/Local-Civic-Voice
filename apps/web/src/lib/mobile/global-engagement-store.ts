@@ -55,8 +55,18 @@ export interface UserReferenceVote {
   sourceAuthorId: string;        // Credit to the post author
 }
 
-// Civil Leader leaderboard entry
-export interface CivilLeader {
+/**
+ * One row of the engagement leaderboard.
+ *
+ * RENAMED FROM "CivilLeader", WHICH MEANT SOMETHING ELSE ENTIRELY. The
+ * Constitution's Civil Leader is a person holding delegated votes — the
+ * borrowed power Article V impeachment recalls. This is a browser-local
+ * ranking by how much engagement somebody's posts drove, computed here and
+ * stored in localStorage. Two unrelated ideas under one name on a platform
+ * whose whole subject is who holds power is a confusion worth spending a
+ * rename on.
+ */
+export interface EngagementLeader {
   userId: string;
   username: string;
   displayName: string;
@@ -74,8 +84,8 @@ interface GlobalEngagementState {
   // User's votes per reference (prevent double voting)
   userVotes: Record<string, UserReferenceVote>;
 
-  // Civil Leader leaderboard (cached)
-  civilLeaders: CivilLeader[];
+  // Engagement leaderboard (cached)
+  engagementLeaders: EngagementLeader[];
 
   // Actions
   getOrCreateRecord: (referenceId: string, referenceType: ReferenceType, title: string) => GlobalEngagementRecord;
@@ -87,12 +97,12 @@ interface GlobalEngagementState {
   getGlobalEngagement: (referenceId: string) => GlobalEngagementRecord | undefined;
   getUserVote: (referenceId: string) => UserReferenceVote | undefined;
   getTrendingReferences: (limit?: number) => GlobalEngagementRecord[];
-  getCivilLeaders: (limit?: number) => CivilLeader[];
+  getEngagementLeaders: (limit?: number) => EngagementLeader[];
   getTopContributorsForReference: (referenceId: string, limit?: number) => TopContributor[];
 
   // Utility
   recalculateTrendingScores: () => void;
-  recalculateCivilLeaders: () => void;
+  recalculateEngagementLeaders: () => void;
 }
 
 // Calculate trending score based on recency and engagement
@@ -119,7 +129,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
       // rendered as a populated Global Pulse on a platform with no activity.
       engagementRecords: {},
       userVotes: {},
-      civilLeaders: [],
+      engagementLeaders: [],
 
       getOrCreateRecord: (referenceId, referenceType, title) => {
         const existing = get().engagementRecords[referenceId];
@@ -243,7 +253,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
         });
 
         // Recalculate civil leaders
-        get().recalculateCivilLeaders();
+        get().recalculateEngagementLeaders();
       },
 
       addCommentToReference: (referenceId, authorId) => {
@@ -331,8 +341,8 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
           .slice(0, limit);
       },
 
-      getCivilLeaders: (limit = 10) => {
-        return get().civilLeaders.slice(0, limit);
+      getEngagementLeaders: (limit = 10) => {
+        return get().engagementLeaders.slice(0, limit);
       },
 
       getTopContributorsForReference: (referenceId, limit = 3) => {
@@ -355,7 +365,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
         });
       },
 
-      recalculateCivilLeaders: () => {
+      recalculateEngagementLeaders: () => {
         const records = Object.values(get().engagementRecords);
 
         // Aggregate engagement by user
@@ -386,7 +396,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
         });
 
         // Convert to sorted leaderboard
-        const leaders: CivilLeader[] = Object.values(userEngagement)
+        const leaders: EngagementLeader[] = Object.values(userEngagement)
           .map((user, idx) => ({
             userId: user.userId,
             username: user.username,
@@ -402,7 +412,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
 
         // An empty leaderboard is allowed to be empty. This used to fall back
         // to whatever was there before, which was the mock cast.
-        set({ civilLeaders: leaders });
+        set({ engagementLeaders: leaders });
       },
     }),
     {
@@ -420,5 +430,5 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
 export const selectTrendingReferences = (limit: number) => (state: GlobalEngagementState) =>
   state.getTrendingReferences(limit);
 
-export const selectCivilLeaders = (limit: number) => (state: GlobalEngagementState) =>
-  state.getCivilLeaders(limit);
+export const selectEngagementLeaders = (limit: number) => (state: GlobalEngagementState) =>
+  state.getEngagementLeaders(limit);

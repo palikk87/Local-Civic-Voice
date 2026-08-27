@@ -1,19 +1,20 @@
 /**
- * Article V: Self-Correction Mechanism
+ * ARTICLE V — SELF-CORRECTION, on real proceedings.
  *
- * This screen implements the constitutional right of users to:
- * 1. Impeach Civil Leaders who misrepresent facts or violate Code of Conduct
- * 2. Trigger a System-Wide Reset via super-majority vote (66%)
+ * PHONE TWIN of apps/web/src/pages/ArticleV.tsx.
+ *
+ * WHAT THIS SCREEN USED TO BE. Three hardcoded people — "Dr. Sarah Chen",
+ * "Marcus Rivera", "James Park" — with invented trust scores and invented
+ * impeachment tallies, and a Vote to Impeach button that set a local flag. The
+ * System Reset tab showed "12,450 for, 45,230 against", numbers that had never
+ * existed. A citizen could believe they had exercised a constitutional power
+ * and nothing at all had happened.
+ *
+ * Everything below reads the server. When nothing is happening, it says so.
  */
 
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  Image,
-} from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, Stack } from 'expo-router';
@@ -21,690 +22,944 @@ import {
   ChevronLeft,
   AlertTriangle,
   RotateCcw,
-  UserX,
-  Shield,
   Users,
   CheckCircle,
-  XCircle,
-  Clock,
   Gavel,
   FileText,
-  AlertOctagon,
   BookOpen,
+  Scale,
 } from 'lucide-react-native';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeInUp,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withSequence,
-} from 'react-native-reanimated';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-
-import { SYSTEM_RESET_THRESHOLD, canTriggerSystemReset, type SystemResetVote } from '@/lib/constitution';
-import { ArticleBadge, FoundingDocumentsLink } from '@/components/BillOfRightsBadge';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
-import { useRequireAuth } from '@/lib/auth/use-civic-auth';
+import { usePermissions } from '@/lib/auth/use-civic-auth';
+import {
+  articleV,
+  daysLeft,
+  hoursLeft,
+  personLabel,
+  type ImpeachmentProceeding,
+  type MyDelegation,
+  type SystemResetState,
+} from '@/lib/article-v';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+// ---------------------------------------------------------------------------
+// Shared bits
+// ---------------------------------------------------------------------------
 
-// Mock data for Civil Leaders
-interface CivilLeader {
-  id: string;
-  displayName: string;
-  username: string;
-  avatar: string;
-  trustScore: number;
-  delegatorCount: number;
-  falsehoodCount: number;
-  impeachmentVotes: number;
-  totalEligibleVoters: number;
+function Panel({
+  children,
+  tone = 'neutral',
+}: {
+  children: React.ReactNode;
+  tone?: 'neutral' | 'warning' | 'danger';
+}) {
+  return (
+    <View
+      className={cn(
+        'mb-4 rounded-2xl border p-4',
+        tone === 'danger'
+          ? 'border-red-700/50 bg-red-900/25'
+          : tone === 'warning'
+            ? 'border-amber-700/40 bg-amber-900/20'
+            : 'border-slate-700/50 bg-slate-800/60'
+      )}
+    >
+      {children}
+    </View>
+  );
 }
 
-const mockCivilLeaders: CivilLeader[] = [
-  {
-    id: 'leader-1',
-    displayName: 'Dr. Sarah Chen',
-    username: 'healthpolicy_expert',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/png?seed=sarah',
-    trustScore: 92,
-    delegatorCount: 1247,
-    falsehoodCount: 0,
-    impeachmentVotes: 23,
-    totalEligibleVoters: 1247,
-  },
-  {
-    id: 'leader-2',
-    displayName: 'Marcus Rivera',
-    username: 'greenlegislation',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/png?seed=marcus',
-    trustScore: 78,
-    delegatorCount: 892,
-    falsehoodCount: 1,
-    impeachmentVotes: 156,
-    totalEligibleVoters: 892,
-  },
-  {
-    id: 'leader-3',
-    displayName: 'James Park',
-    username: 'techpolicy_watch',
-    avatar: 'https://api.dicebear.com/7.x/avataaars/png?seed=james',
-    trustScore: 45,
-    delegatorCount: 1089,
-    falsehoodCount: 3,
-    impeachmentVotes: 612,
-    totalEligibleVoters: 1089,
-  },
-];
-
-// Mock system reset vote
-const mockSystemResetVote: SystemResetVote = {
-  id: 'reset-2025-01',
-  initiatedAt: '2025-01-15T00:00:00Z',
-  reason: 'Alleged algorithmic bias in feed ranking detected by community audit',
-  evidence: 'Community audit report #2025-001 showing 15% preference for certain content types',
-  votesFor: 12450,
-  votesAgainst: 45230,
-  totalEligibleVoters: 94000,
-  status: 'voting',
-  expiresAt: '2025-01-22T00:00:00Z',
-};
-
-// ==========================================
-// IMPEACHMENT SECTION
-// ==========================================
-
-interface LeaderCardProps {
-  leader: CivilLeader;
-  onVoteImpeach: (leaderId: string) => void;
-  hasVoted: boolean;
+/** An empty state that teaches the mechanism instead of inventing one. */
+function Nothing({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Panel>
+      <View className="flex-row items-start">
+        <Scale size={20} color="#94A3B8" />
+        <View className="ml-3 flex-1">
+          <Text className="font-semibold text-white">{title}</Text>
+          <View className="mt-1">{children}</View>
+        </View>
+      </View>
+    </Panel>
+  );
 }
 
-function LeaderCard({ leader, onVoteImpeach, hasVoted }: LeaderCardProps) {
-  const impeachmentPct = (leader.impeachmentVotes / leader.totalEligibleVoters) * 100;
-  const isNearImpeachment = impeachmentPct >= 40;
-  const isImpeached = impeachmentPct >= 50;
+function Articles({ grounds, evidence }: { grounds: string; evidence: string }) {
+  return (
+    <View className="mt-3 rounded-xl border border-slate-700/50 bg-slate-900/50 p-3">
+      <Text className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grounds</Text>
+      <Text className="mt-1 text-sm leading-6 text-slate-200">{grounds}</Text>
+      <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Evidence
+      </Text>
+      <Text className="mt-1 text-sm leading-6 text-slate-200">{evidence}</Text>
+    </View>
+  );
+}
 
-  const scale = useSharedValue(1);
+function Bar({ value, max, tone }: { value: number; max: number; tone: 'amber' | 'red' }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <View className="h-2 overflow-hidden rounded-full bg-slate-700">
+      <View
+        className={cn('h-full rounded-full', tone === 'red' ? 'bg-red-500' : 'bg-amber-500')}
+        style={{ width: `${pct}%` }}
+      />
+    </View>
+  );
+}
 
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const handleVote = () => {
-    scale.value = withSequence(
-      withSpring(0.95, { damping: 15 }),
-      withSpring(1, { damping: 15 })
-    );
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    onVoteImpeach(leader.id);
-  };
-
-  // Trust score color
-  const getTrustColor = (score: number) => {
-    if (score >= 80) return '#22C55E';
-    if (score >= 60) return '#F59E0B';
-    if (score >= 40) return '#F97316';
-    return '#EF4444';
-  };
+function ArticlesForm({
+  minLength,
+  maxLength,
+  submitLabel,
+  busy,
+  error,
+  onSubmit,
+  onCancel,
+}: {
+  minLength: number;
+  maxLength: number;
+  submitLabel: string;
+  busy: boolean;
+  error: string | null;
+  onSubmit: (grounds: string, evidence: string) => void;
+  onCancel: () => void;
+}) {
+  const [grounds, setGrounds] = useState('');
+  const [evidence, setEvidence] = useState('');
+  const ready = grounds.trim().length >= minLength && evidence.trim().length >= minLength;
 
   return (
-    <Animated.View entering={FadeInDown.springify()}>
-      <AnimatedPressable style={animStyle}>
-        <View
+    <View className="mt-3">
+      <Text className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Grounds — what they are accused of
+      </Text>
+      <TextInput
+        testID="articles-grounds"
+        value={grounds}
+        onChangeText={(text) => setGrounds(text.slice(0, maxLength))}
+        multiline
+        numberOfLines={4}
+        placeholder="State the accusation plainly."
+        placeholderTextColor="#64748B"
+        className="mt-1 min-h-[96px] rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
+      />
+      <Text className="mt-1 text-xs text-slate-500">
+        {grounds.trim().length} of at least {minLength} characters
+      </Text>
+
+      <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Evidence — what shows it
+      </Text>
+      <TextInput
+        testID="articles-evidence"
+        value={evidence}
+        onChangeText={(text) => setEvidence(text.slice(0, maxLength))}
+        multiline
+        numberOfLines={4}
+        placeholder="Point at what anybody can check."
+        placeholderTextColor="#64748B"
+        className="mt-1 min-h-[96px] rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
+      />
+      <Text className="mt-1 text-xs text-slate-500">
+        {evidence.trim().length} of at least {minLength} characters
+      </Text>
+
+      {/* Said before they file, not after. */}
+      <Text className="mt-3 rounded-xl border border-amber-700/40 bg-amber-900/20 p-3 text-xs leading-5 text-amber-200">
+        This is a formal filing. It is delivered to the person it names, in their inbox and by
+        email, and it goes to the platform's administrators. Nobody can stop the proceeding once
+        it starts — but a filing made in bad faith is grounds for suspending or banning the person
+        who made it.
+      </Text>
+
+      {error ? <Text className="mt-2 text-sm text-red-400">{error}</Text> : null}
+
+      <View className="mt-3 flex-row">
+        <Pressable
+          testID="articles-submit"
+          disabled={!ready || busy}
+          onPress={() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onSubmit(grounds.trim(), evidence.trim());
+          }}
           className={cn(
-            'rounded-2xl p-4 border mb-4',
-            isImpeached
-              ? 'bg-red-900/30 border-red-700/50'
-              : isNearImpeachment
-              ? 'bg-amber-900/20 border-amber-700/40'
-              : 'bg-slate-800/60 border-slate-700/50'
+            'flex-1 items-center rounded-xl py-3',
+            ready && !busy ? 'bg-red-600' : 'bg-slate-700/50'
           )}
         >
-          {/* Header */}
-          <View className="flex-row items-center mb-3">
-            <Image
-              source={{ uri: leader.avatar }}
-              className="w-12 h-12 rounded-full"
+          <Text className={cn('font-semibold', ready && !busy ? 'text-white' : 'text-slate-500')}>
+            {busy ? 'Filing…' : submitLabel}
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={onCancel}
+          className="ml-2 rounded-xl border border-slate-700 px-4 py-3"
+        >
+          <Text className="text-sm text-slate-300">Cancel</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Impeachment
+// ---------------------------------------------------------------------------
+
+function ProceedingCard({
+  proceeding,
+  onVote,
+  onWithdraw,
+  busy,
+}: {
+  proceeding: ImpeachmentProceeding;
+  onVote: (id: string, days: number) => void;
+  onWithdraw: (id: string) => void;
+  busy: boolean;
+}) {
+  const [days, setDays] = useState('30');
+  const open = proceeding.status === 'open';
+  const needed = Math.ceil(proceeding.electorCount * 0.66);
+  const proposed = Number(days);
+
+  return (
+    <Panel tone={proceeding.status === 'passed' ? 'danger' : open ? 'warning' : 'neutral'}>
+      <View className="flex-row items-start justify-between">
+        <View className="flex-1 pr-3">
+          <Text className="text-lg font-semibold text-white">
+            {personLabel(proceeding.leader)}
+          </Text>
+          <Text className="text-sm text-slate-400">
+            Filed by {personLabel(proceeding.filedBy)}
+          </Text>
+        </View>
+        <View
+          className={cn(
+            'rounded-full px-2 py-0.5',
+            proceeding.status === 'passed'
+              ? 'bg-red-500/20'
+              : open
+                ? 'bg-amber-500/20'
+                : 'bg-slate-600/30'
+          )}
+        >
+          <Text
+            className={cn(
+              'text-xs font-medium',
+              proceeding.status === 'passed'
+                ? 'text-red-300'
+                : open
+                  ? 'text-amber-300'
+                  : 'text-slate-300'
+            )}
+          >
+            {proceeding.status === 'passed'
+              ? 'Impeached'
+              : open
+                ? `${daysLeft(proceeding.expiresAt)} days left`
+                : 'Closed without two thirds'}
+          </Text>
+        </View>
+      </View>
+
+      <Articles grounds={proceeding.grounds} evidence={proceeding.evidence} />
+
+      <View className="mt-3">
+        <View className="mb-1 flex-row justify-between">
+          <Text className="text-xs text-slate-400">Votes to impeach</Text>
+          <Text className="text-xs font-medium text-amber-300">
+            {proceeding.votes} of {proceeding.electorCount} — {needed} needed
+          </Text>
+        </View>
+        <Bar
+          value={proceeding.votes}
+          max={Math.max(needed, 1)}
+          tone={proceeding.status === 'passed' ? 'red' : 'amber'}
+        />
+        <Text className="mt-2 text-xs leading-5 text-slate-500">
+          Two thirds of the people who were delegating to {personLabel(proceeding.leader)} when
+          this was filed. Nobody who delegated afterwards has a vote.
+        </Text>
+      </View>
+
+      {proceeding.status === 'passed' && proceeding.suspendedUntil ? (
+        <Text className="mt-3 text-sm text-red-200">
+          Suspended from receiving delegations until{' '}
+          {new Date(proceeding.suspendedUntil).toLocaleDateString()}. Their account, followers,
+          posts and their own vote are untouched.
+        </Text>
+      ) : null}
+
+      {open ? (
+        proceeding.viewerHasVoted ? (
+          <View className="mt-4">
+            <View className="flex-row items-center rounded-xl bg-slate-700/40 p-3">
+              <CheckCircle size={18} color="#34D399" />
+              <Text className="ml-2 text-sm font-medium text-emerald-300">
+                You voted to impeach
+                {proceeding.viewerProposedDays
+                  ? `, and proposed ${proceeding.viewerProposedDays} days`
+                  : ''}
+              </Text>
+            </View>
+            <Pressable
+              testID="impeachment-withdraw"
+              disabled={busy}
+              onPress={() => onWithdraw(proceeding.id)}
+              className="mt-2 items-center rounded-xl border border-slate-700 py-2"
+            >
+              <Text className="text-sm text-slate-300">Take my vote back</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View className="mt-4">
+            <Text className="text-xs text-slate-400">
+              How long should the suspension run? The average of everybody who votes sets the
+              date.
+            </Text>
+            <TextInput
+              testID="impeachment-days"
+              value={days}
+              onChangeText={setDays}
+              keyboardType="number-pad"
+              className="mt-1 rounded-xl border border-slate-700 bg-slate-900 p-2 text-sm text-slate-100"
             />
-            <View className="flex-1 ml-3">
-              <View className="flex-row items-center">
-                <Text className="text-white font-semibold text-lg">
-                  {leader.displayName}
-                </Text>
-                {isImpeached && (
-                  <View className="ml-2 bg-red-500/20 px-2 py-0.5 rounded-full">
-                    <Text className="text-red-400 text-xs font-medium">Impeached</Text>
-                  </View>
-                )}
-              </View>
-              <Text className="text-slate-400 text-sm">@{leader.username}</Text>
-            </View>
+            <Pressable
+              testID="impeachment-vote"
+              disabled={busy || !(proposed >= 1 && proposed <= 365)}
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                onVote(proceeding.id, proposed);
+              }}
+              className={cn(
+                'mt-2 flex-row items-center justify-center rounded-xl py-3',
+                busy || !(proposed >= 1 && proposed <= 365) ? 'bg-slate-700/50' : 'bg-red-600/80'
+              )}
+            >
+              <Gavel size={18} color="#fff" />
+              <Text className="ml-2 font-semibold text-white">Vote to impeach</Text>
+            </Pressable>
+          </View>
+        )
+      ) : null}
+    </Panel>
+  );
+}
 
-            {/* Trust Score */}
-            <View className="items-center">
-              <View
-                className="w-12 h-12 rounded-full items-center justify-center"
-                style={{ backgroundColor: `${getTrustColor(leader.trustScore)}20` }}
-              >
-                <Text
-                  className="text-lg font-bold"
-                  style={{ color: getTrustColor(leader.trustScore) }}
-                >
-                  {leader.trustScore}
-                </Text>
-              </View>
-              <Text className="text-slate-500 text-xs mt-1">Trust</Text>
+function FileAgainstDelegate({
+  delegation,
+  minLength,
+  maxLength,
+  onFiled,
+}: {
+  delegation: MyDelegation;
+  minLength: number;
+  maxLength: number;
+  onFiled: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const filing = useMutation({
+    mutationFn: ({ grounds, evidence }: { grounds: string; evidence: string }) =>
+      articleV.file(delegation.toUser.id, grounds, evidence),
+    onSuccess: () => {
+      setOpen(false);
+      setError(null);
+      onFiled();
+    },
+    onError: (cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : 'Could not file.'),
+  });
+
+  return (
+    <Panel>
+      <View className="flex-row items-center justify-between">
+        <View className="flex-1 pr-3">
+          <Text className="font-semibold text-white">{personLabel(delegation.toUser)}</Text>
+          <Text className="text-xs text-slate-400">
+            {delegation.category
+              ? `You delegate your vote on ${delegation.category}`
+              : 'You delegate your vote across every category'}
+          </Text>
+        </View>
+        {!open ? (
+          <Pressable
+            testID="open-articles-form"
+            onPress={() => setOpen(true)}
+            className="rounded-xl border border-red-700/50 px-3 py-2"
+          >
+            <Text className="text-sm text-red-300">File Articles</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {open ? (
+        <ArticlesForm
+          minLength={minLength}
+          maxLength={maxLength}
+          submitLabel="File Articles of Impeachment"
+          busy={filing.isPending}
+          error={error}
+          onSubmit={(grounds, evidence) => filing.mutate({ grounds, evidence })}
+          onCancel={() => {
+            setOpen(false);
+            setError(null);
+          }}
+        />
+      ) : null}
+    </Panel>
+  );
+}
+
+function ImpeachmentTab() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated } = usePermissions();
+  const [error, setError] = useState<string | null>(null);
+
+  const rules = useQuery({ queryKey: ['article-v', 'rules'], queryFn: articleV.rules });
+  const mine = useQuery({
+    queryKey: ['article-v', 'my-proceedings'],
+    queryFn: articleV.myProceedings,
+    enabled: isAuthenticated,
+  });
+  const delegations = useQuery({
+    queryKey: ['article-v', 'my-delegations'],
+    queryFn: articleV.myDelegations,
+    enabled: isAuthenticated,
+  });
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['article-v'] });
+  };
+
+  const voting = useMutation({
+    mutationFn: ({ id, days }: { id: string; days: number }) => articleV.vote(id, days),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
+    onError: (cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : 'Could not record that vote.'),
+  });
+
+  const withdrawing = useMutation({
+    mutationFn: (id: string) => articleV.withdraw(id),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
+    onError: (cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : 'Could not take that vote back.'),
+  });
+
+  const proceedings = mine.data?.proceedings ?? [];
+  const open = proceedings.filter((item) => item.status === 'open');
+  const closed = proceedings.filter((item) => item.status !== 'open');
+
+  const openLeaderIds = new Set(open.map((item) => item.leader.id));
+  const impeachable = (delegations.data?.delegations ?? []).filter(
+    (delegation) => delegation.isActive && !openLeaderIds.has(delegation.toUser.id)
+  );
+
+  const minLength = rules.data?.minArticleLength ?? 40;
+  const maxLength = rules.data?.maxArticleLength ?? 5000;
+
+  if (!isAuthenticated) {
+    return (
+      <Nothing title="Impeachment belongs to the people who lent the power">
+        <Text className="text-sm leading-6 text-slate-400">
+          Only somebody currently delegating their vote to a person can move to take it back, and
+          only the people who were delegating when proceedings opened can vote on it. Sign in to
+          take part.
+        </Text>
+      </Nothing>
+    );
+  }
+
+  return (
+    <View testID="impeachment-tab">
+      {error ? (
+        <Text className="mb-3 rounded-xl border border-red-700/50 bg-red-900/25 p-3 text-sm text-red-200">
+          {error}
+        </Text>
+      ) : null}
+
+      <Panel>
+        <Text className="font-semibold text-white">What impeachment does</Text>
+        <Text className="mt-1 text-sm leading-6 text-slate-400">
+          It suspends one person from receiving delegated votes, and nothing else. Their account
+          stays open, they keep their followers, they can still post and comment and share, and
+          they keep their own vote — including delegating it to somebody else. Power here is
+          borrowed; this calls in the loan.
+        </Text>
+        {rules.data ? (
+          <Text className="mt-2 text-sm text-slate-500">
+            {Math.round(rules.data.threshold * 100)}% of the people delegating to them when
+            proceedings opened, within {rules.data.windowDays} days.
+          </Text>
+        ) : null}
+      </Panel>
+
+      {mine.isLoading ? <ActivityIndicator className="py-6" color="#94A3B8" /> : null}
+
+      {!mine.isLoading && open.length === 0 ? (
+        <Nothing title="No proceedings are open that you can vote in">
+          <Text className="text-sm leading-6 text-slate-400">
+            You are shown a vote here when somebody files Articles of Impeachment against a person
+            you were delegating to at that moment. Nobody who delegates after a filing gets a vote
+            — that is what stops a proceeding being swung by whoever turns up once it starts.
+          </Text>
+        </Nothing>
+      ) : null}
+
+      {open.map((proceeding) => (
+        <ProceedingCard
+          key={proceeding.id}
+          proceeding={proceeding}
+          busy={voting.isPending || withdrawing.isPending}
+          onVote={(id, days) => voting.mutate({ id, days })}
+          onWithdraw={(id) => withdrawing.mutate(id)}
+        />
+      ))}
+
+      <Text className="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500">
+        Bring proceedings
+      </Text>
+
+      {impeachable.length === 0 ? (
+        <Nothing title="You are not delegating to anybody">
+          <Text className="text-sm leading-6 text-slate-400">
+            Impeachment recalls borrowed power, so it belongs to the people who lent it. Delegate
+            your vote to somebody and you can also take it back — instantly and alone at any time,
+            or through Article V when you think everybody who lent to them should decide together.
+          </Text>
+        </Nothing>
+      ) : (
+        impeachable.map((delegation) => (
+          <FileAgainstDelegate
+            key={delegation.id}
+            delegation={delegation}
+            minLength={minLength}
+            maxLength={maxLength}
+            onFiled={refresh}
+          />
+        ))
+      )}
+
+      {closed.length > 0 ? (
+        <>
+          <Text className="mb-2 mt-6 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Decided
+          </Text>
+          {closed.map((proceeding) => (
+            <ProceedingCard
+              key={proceeding.id}
+              proceeding={proceeding}
+              busy={false}
+              onVote={() => undefined}
+              onWithdraw={() => undefined}
+            />
+          ))}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// System-Wide Reset
+// ---------------------------------------------------------------------------
+
+/** Full disclosure, shown before any reset vote can be cast. */
+function Disclosure({ disclosure }: { disclosure: SystemResetState['disclosure'] }) {
+  return (
+    <Panel tone="danger">
+      <View testID="reset-disclosure">
+        <Text className="font-semibold text-red-100">What a reset does</Text>
+
+        <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-red-300">
+          What everybody loses
+        </Text>
+        {disclosure.lost.map((line) => (
+          <Text key={line} className="mt-1 text-sm leading-6 text-red-100">
+            • {line}
+          </Text>
+        ))}
+
+        <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-emerald-300">
+          What you keep
+        </Text>
+        {disclosure.kept.map((line) => (
+          <Text key={line} className="mt-1 text-sm leading-6 text-slate-200">
+            • {line}
+          </Text>
+        ))}
+
+        <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Afterwards
+        </Text>
+        {disclosure.afterwards.map((line) => (
+          <Text key={line} className="mt-1 text-sm leading-6 text-slate-300">
+            • {line}
+          </Text>
+        ))}
+      </View>
+    </Panel>
+  );
+}
+
+function ResetTab() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated } = usePermissions();
+  const [error, setError] = useState<string | null>(null);
+  const [filing, setFiling] = useState(false);
+
+  const state = useQuery({ queryKey: ['article-v', 'reset'], queryFn: articleV.reset });
+  const restorable = useQuery({
+    queryKey: ['article-v', 'restorable'],
+    queryFn: articleV.restorable,
+    enabled: isAuthenticated,
+  });
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: ['article-v'] });
+  };
+
+  const balloting = useMutation({
+    mutationFn: ({ id, support }: { id: string; support: boolean }) =>
+      articleV.voteReset(id, support),
+    onSuccess: () => {
+      setError(null);
+      refresh();
+    },
+    onError: (cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : 'Could not record that vote.'),
+  });
+
+  const opening = useMutation({
+    mutationFn: ({ grounds, evidence }: { grounds: string; evidence: string }) =>
+      articleV.fileReset(grounds, evidence),
+    onSuccess: () => {
+      setFiling(false);
+      setError(null);
+      refresh();
+    },
+    onError: (cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : 'Could not file.'),
+  });
+
+  const restoring = useMutation({
+    mutationFn: () => articleV.restoreMine(),
+    onSuccess: () => refresh(),
+    onError: (cause: unknown) =>
+      setError(cause instanceof Error ? cause.message : 'Could not restore your positions.'),
+  });
+
+  if (state.isLoading) return <ActivityIndicator className="py-6" color="#94A3B8" />;
+
+  if (!state.data) {
+    return (
+      <Nothing title="Could not reach the platform">
+        <Text className="text-sm leading-6 text-slate-400">
+          Article V could not be loaded. This is a connection problem, not an empty result.
+        </Text>
+      </Nothing>
+    );
+  }
+
+  const proceeding = state.data.proceeding;
+  const rules = state.data.rules;
+
+  return (
+    <View testID="reset-tab">
+      {error ? (
+        <Text className="mb-3 rounded-xl border border-red-700/50 bg-red-900/25 p-3 text-sm text-red-200">
+          {error}
+        </Text>
+      ) : null}
+
+      {/* DISCLOSURE FIRST, ALWAYS. Before the numbers, before the buttons. */}
+      <Disclosure disclosure={state.data.disclosure} />
+
+      {proceeding ? (
+        <Panel tone="danger">
+          <View className="flex-row items-start justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="text-lg font-semibold text-white">System-Wide Reset</Text>
+              <Text className="text-sm text-slate-400">
+                Filed by {personLabel(proceeding.filedBy)}
+              </Text>
+            </View>
+            <View className="rounded-full bg-red-500/20 px-2 py-0.5">
+              <Text className="text-xs font-medium text-red-300">
+                {proceeding.status === 'voting'
+                  ? `${daysLeft(proceeding.expiresAt)} days left`
+                  : proceeding.status === 'scheduled'
+                    ? `Runs in ${hoursLeft(proceeding.executeAfter ?? proceeding.expiresAt)}h`
+                    : proceeding.status}
+              </Text>
             </View>
           </View>
 
-          {/* Stats */}
-          <View className="flex-row justify-between mb-3 py-2 border-y border-slate-700/50">
-            <View className="items-center">
-              <Text className="text-slate-400 text-xs">Delegators</Text>
-              <Text className="text-white font-semibold">{leader.delegatorCount.toLocaleString()}</Text>
+          <Articles grounds={proceeding.grounds} evidence={proceeding.evidence} />
+
+          <View className="mt-4 flex-row border-y border-slate-700/50 py-3">
+            <View className="flex-1 items-center">
+              <Text className="text-xs text-slate-400">For</Text>
+              <Text className="font-semibold text-red-300">{proceeding.support}</Text>
             </View>
-            <View className="items-center">
-              <Text className="text-slate-400 text-xs">Falsehoods</Text>
-              <Text
-                className={cn(
-                  'font-semibold',
-                  leader.falsehoodCount > 0 ? 'text-red-400' : 'text-emerald-400'
-                )}
-              >
-                {leader.falsehoodCount}
-              </Text>
+            <View className="flex-1 items-center">
+              <Text className="text-xs text-slate-400">Against</Text>
+              <Text className="font-semibold text-emerald-300">{proceeding.oppose}</Text>
             </View>
-            <View className="items-center">
-              <Text className="text-slate-400 text-xs">Impeach Votes</Text>
-              <Text className="text-amber-400 font-semibold">{leader.impeachmentVotes.toLocaleString()}</Text>
+            <View className="flex-1 items-center">
+              <Text className="text-xs text-slate-400">Eligible</Text>
+              <Text className="font-semibold text-white">{proceeding.eligibleCount}</Text>
             </View>
           </View>
 
-          {/* Impeachment Progress */}
-          <View className="mb-3">
-            <View className="flex-row justify-between mb-1">
-              <Text className="text-slate-400 text-xs">Impeachment Progress</Text>
-              <Text
-                className={cn(
-                  'text-xs font-medium',
-                  isImpeached ? 'text-red-400' : isNearImpeachment ? 'text-amber-400' : 'text-slate-400'
-                )}
-              >
-                {impeachmentPct.toFixed(1)}% of 50% needed
+          <View className="mt-3">
+            <View className="flex-row justify-between">
+              <Text className="text-xs text-slate-400">
+                Turnout — {Math.round(rules.participationFloor * 100)}% needed
+              </Text>
+              <Text className="text-xs font-medium text-slate-300">
+                {Math.round(proceeding.participation * 100)}%
               </Text>
             </View>
-            <View className="h-2 bg-slate-700 rounded-full overflow-hidden">
-              <View
-                className={cn(
-                  'h-full rounded-full',
-                  isImpeached ? 'bg-red-500' : isNearImpeachment ? 'bg-amber-500' : 'bg-slate-500'
-                )}
-                style={{ width: `${Math.min(100, (impeachmentPct / 50) * 100)}%` }}
+            <View className="mt-1">
+              <Bar
+                value={proceeding.turnout}
+                max={Math.max(1, Math.ceil(proceeding.eligibleCount * rules.participationFloor))}
+                tone="amber"
+              />
+            </View>
+            <View className="mt-3 flex-row justify-between">
+              <Text className="text-xs text-slate-400">
+                Approval — {Math.round(rules.approvalThreshold * 100)}% of those who voted
+              </Text>
+              <Text className="text-xs font-medium text-slate-300">
+                {proceeding.turnout > 0
+                  ? `${Math.round(proceeding.approval * 100)}%`
+                  : 'no votes yet'}
+              </Text>
+            </View>
+            <View className="mt-1">
+              <Bar
+                value={proceeding.support}
+                max={Math.max(1, Math.ceil(proceeding.turnout * rules.approvalThreshold))}
+                tone="red"
               />
             </View>
           </View>
 
-          {/* Vote Button */}
-          {!isImpeached && (
-            <Pressable
-              onPress={handleVote}
-              disabled={hasVoted}
-              className={cn(
-                'rounded-xl py-3 items-center flex-row justify-center',
-                hasVoted ? 'bg-slate-700/50' : 'bg-red-600/80'
-              )}
-            >
-              {hasVoted ? (
-                <>
-                  <CheckCircle size={18} color="#22C55E" />
-                  <Text className="text-emerald-400 font-medium ml-2">Vote Recorded</Text>
-                </>
-              ) : (
-                <>
-                  <Gavel size={18} color="#fff" />
-                  <Text className="text-white font-semibold ml-2">Vote to Impeach</Text>
-                </>
-              )}
-            </Pressable>
-          )}
-        </View>
-      </AnimatedPressable>
-    </Animated.View>
-  );
-}
-
-// ==========================================
-// SYSTEM RESET SECTION
-// ==========================================
-
-interface SystemResetCardProps {
-  vote: SystemResetVote;
-  onVoteFor: () => void;
-  onVoteAgainst: () => void;
-  userVote: 'for' | 'against' | null;
-}
-
-function SystemResetCard({ vote, onVoteFor, onVoteAgainst, userVote }: SystemResetCardProps) {
-  const totalVotes = vote.votesFor + vote.votesAgainst;
-  const participation = totalVotes / vote.totalEligibleVoters;
-  const approvalPct = totalVotes > 0 ? (vote.votesFor / totalVotes) * 100 : 0;
-  const canTrigger = canTriggerSystemReset(vote);
-
-  const daysRemaining = Math.max(
-    0,
-    Math.ceil((new Date(vote.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-  );
-
-  return (
-    <Animated.View entering={FadeInDown.delay(200).springify()}>
-      <View className="bg-slate-800/60 rounded-2xl overflow-hidden border border-slate-700/50">
-        {/* Header */}
-        <LinearGradient
-          colors={['#7F1D1D', '#450A0A']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ padding: 16 }}
-        >
-          <View className="flex-row items-center mb-2">
-            <AlertOctagon size={24} color="#FCA5A5" />
-            <Text className="text-red-200 font-bold text-lg ml-2">
-              System-Wide Reset Vote
+          {proceeding.status === 'scheduled' ? (
+            <Text className="mt-4 rounded-xl border border-red-700/50 bg-red-950/50 p-3 text-sm leading-6 text-red-100">
+              The vote passed. Everything above happens in{' '}
+              {hoursLeft(proceeding.executeAfter ?? proceeding.expiresAt)} hours. Nothing has
+              changed yet — the delay exists so nobody loses their delegations to a vote that
+              closed while they slept.
             </Text>
-          </View>
-          <Text className="text-red-300/80 text-sm">
-            Article V, Section 2: Platform Neutrality
+          ) : null}
+
+          {proceeding.status === 'voting' ? (
+            proceeding.viewerHasVoted ? (
+              <Text className="mt-4 rounded-xl bg-slate-700/40 p-3 text-sm text-slate-200">
+                You voted {proceeding.viewerSupported ? 'for' : 'against'} the reset.
+              </Text>
+            ) : (
+              <View className="mt-4 flex-row">
+                <Pressable
+                  testID="reset-vote-for"
+                  disabled={balloting.isPending}
+                  onPress={() => balloting.mutate({ id: proceeding.id, support: true })}
+                  className="flex-1 items-center rounded-xl bg-red-600/80 py-3"
+                >
+                  <Text className="font-semibold text-white">Vote for the reset</Text>
+                </Pressable>
+                <Pressable
+                  testID="reset-vote-against"
+                  disabled={balloting.isPending}
+                  onPress={() => balloting.mutate({ id: proceeding.id, support: false })}
+                  className="ml-2 flex-1 items-center rounded-xl border border-slate-600 py-3"
+                >
+                  <Text className="font-semibold text-slate-200">Vote against</Text>
+                </Pressable>
+              </View>
+            )
+          ) : null}
+        </Panel>
+      ) : (
+        <Nothing title="No System-Wide Reset is before the platform">
+          <Text className="text-sm leading-6 text-slate-400">
+            Any verified account can bring one, and only one can stand at a time. It runs for{' '}
+            {rules.windowDays} days, every account is notified, and it passes only if more than{' '}
+            {Math.round(rules.participationFloor * 100)}% of the platform votes and at least{' '}
+            {Math.round(rules.approvalThreshold * 100)}% of those votes are in favour. If it
+            passes, it runs {rules.disclosureHours} hours later — not immediately.
           </Text>
-        </LinearGradient>
+        </Nothing>
+      )}
 
-        <View className="p-4">
-          {/* Reason */}
-          <View className="mb-4">
-            <Text className="text-slate-400 text-xs font-semibold tracking-wider mb-1">
-              REASON FOR RESET
+      {restorable.data?.reset && restorable.data.available > 0 ? (
+        <Panel>
+          <Text className="font-semibold text-white">Put your own positions back</Text>
+          <Text className="mt-1 text-sm leading-6 text-slate-400">
+            The last reset cleared {restorable.data.available} position
+            {restorable.data.available === 1 ? '' : 's'} you had taken yourself. Only what you cast
+            personally — nothing a delegate cast in your name, because that was never stored as
+            yours.
+          </Text>
+          <Pressable
+            testID="restore-my-positions"
+            disabled={restoring.isPending}
+            onPress={() => restoring.mutate()}
+            className="mt-3 items-center rounded-xl bg-slate-700 py-3"
+          >
+            <Text className="font-medium text-white">
+              {restoring.isPending ? 'Restoring…' : 'Restore my positions'}
             </Text>
-            <Text className="text-white leading-5">{vote.reason}</Text>
-          </View>
+          </Pressable>
+        </Panel>
+      ) : null}
 
-          {/* Evidence */}
-          <View className="mb-4 bg-slate-900/50 rounded-lg p-3">
-            <View className="flex-row items-center mb-1">
-              <FileText size={14} color="#94A3B8" />
-              <Text className="text-slate-400 text-xs font-semibold ml-1">EVIDENCE</Text>
-            </View>
-            <Text className="text-slate-300 text-sm">{vote.evidence}</Text>
-          </View>
-
-          {/* Vote Stats */}
-          <View className="mb-4">
-            <View className="flex-row justify-between mb-2">
-              <View className="flex-row items-center">
-                <Users size={14} color="#94A3B8" />
-                <Text className="text-slate-400 text-sm ml-1">
-                  {(participation * 100).toFixed(1)}% participation
-                </Text>
-              </View>
-              <View className="flex-row items-center">
-                <Clock size={14} color="#94A3B8" />
-                <Text className="text-slate-400 text-sm ml-1">
-                  {daysRemaining} days left
-                </Text>
-              </View>
-            </View>
-
-            {/* Progress bars */}
-            <View className="mb-2">
-              <View className="flex-row justify-between mb-1">
-                <Text className="text-emerald-400 text-sm font-medium">
-                  For Reset: {vote.votesFor.toLocaleString()}
-                </Text>
-                <Text className="text-emerald-400 text-sm font-medium">
-                  {approvalPct.toFixed(1)}%
-                </Text>
-              </View>
-              <View className="h-3 bg-slate-700 rounded-full overflow-hidden">
-                <View
-                  className="h-full bg-emerald-500 rounded-full"
-                  style={{ width: `${approvalPct}%` }}
-                />
-              </View>
-            </View>
-
-            <View>
-              <View className="flex-row justify-between mb-1">
-                <Text className="text-red-400 text-sm font-medium">
-                  Against: {vote.votesAgainst.toLocaleString()}
-                </Text>
-                <Text className="text-red-400 text-sm font-medium">
-                  {(100 - approvalPct).toFixed(1)}%
-                </Text>
-              </View>
-              <View className="h-3 bg-slate-700 rounded-full overflow-hidden">
-                <View
-                  className="h-full bg-red-500 rounded-full"
-                  style={{ width: `${100 - approvalPct}%` }}
-                />
-              </View>
-            </View>
-          </View>
-
-          {/* Threshold indicator */}
-          <View className="bg-slate-900/50 rounded-lg p-3 mb-4">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-slate-300 text-sm">
-                Super-majority required: {(SYSTEM_RESET_THRESHOLD * 100).toFixed(0)}%
-              </Text>
-              {canTrigger ? (
-                <View className="flex-row items-center">
-                  <CheckCircle size={14} color="#22C55E" />
-                  <Text className="text-emerald-400 text-sm font-medium ml-1">
-                    Threshold Met
-                  </Text>
-                </View>
-              ) : (
-                <View className="flex-row items-center">
-                  <XCircle size={14} color="#EF4444" />
-                  <Text className="text-red-400 text-sm font-medium ml-1">
-                    Not Met
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text className="text-slate-500 text-xs mt-1">
-              Requires 50% participation + 66% approval
-            </Text>
-          </View>
-
-          {/* Vote buttons */}
-          <View className="flex-row">
+      {!proceeding && isAuthenticated ? (
+        <Panel>
+          {!filing ? (
             <Pressable
-              onPress={onVoteFor}
-              disabled={userVote !== null}
-              className={cn(
-                'flex-1 rounded-xl py-3 items-center mr-2 flex-row justify-center',
-                userVote === 'for'
-                  ? 'bg-emerald-600'
-                  : userVote !== null
-                  ? 'bg-slate-700/50'
-                  : 'bg-emerald-600/80'
-              )}
+              testID="open-reset-form"
+              onPress={() => setFiling(true)}
+              className="items-center rounded-xl border border-red-700/50 py-3"
             >
-              <CheckCircle size={18} color={userVote === 'for' ? '#fff' : '#22C55E'} />
-              <Text
-                className={cn(
-                  'font-semibold ml-2',
-                  userVote === 'for' ? 'text-white' : 'text-emerald-400'
-                )}
-              >
-                {userVote === 'for' ? 'Voted For' : 'Vote For'}
+              <Text className="text-sm font-medium text-red-300">
+                File Articles of System Reset
               </Text>
             </Pressable>
-
-            <Pressable
-              onPress={onVoteAgainst}
-              disabled={userVote !== null}
-              className={cn(
-                'flex-1 rounded-xl py-3 items-center ml-2 flex-row justify-center',
-                userVote === 'against'
-                  ? 'bg-red-600'
-                  : userVote !== null
-                  ? 'bg-slate-700/50'
-                  : 'bg-red-600/80'
-              )}
-            >
-              <XCircle size={18} color={userVote === 'against' ? '#fff' : '#EF4444'} />
-              <Text
-                className={cn(
-                  'font-semibold ml-2',
-                  userVote === 'against' ? 'text-white' : 'text-red-400'
-                )}
-              >
-                {userVote === 'against' ? 'Voted Against' : 'Vote Against'}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Animated.View>
+          ) : (
+            <ArticlesForm
+              minLength={rules.minArticleLength}
+              maxLength={rules.maxArticleLength}
+              submitLabel="File Articles of System Reset"
+              busy={opening.isPending}
+              error={null}
+              onSubmit={(grounds, evidence) => opening.mutate({ grounds, evidence })}
+              onCancel={() => setFiling(false)}
+            />
+          )}
+        </Panel>
+      ) : null}
+    </View>
   );
 }
 
-// ==========================================
-// MAIN SCREEN
-// ==========================================
+// ---------------------------------------------------------------------------
+// Screen
+// ---------------------------------------------------------------------------
 
 export default function ArticleVScreen() {
-  const requireAuth = useRequireAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'impeachment' | 'reset'>('impeachment');
-  const [votedLeaders, setVotedLeaders] = useState<Set<string>>(new Set());
-  const [resetVote, setResetVote] = useState<'for' | 'against' | null>(null);
-
-  const handleVoteImpeach = useCallback((leaderId: string) => {
-    if (!requireAuth('Sign in to cast your vote.')) return;
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setVotedLeaders(prev => new Set(prev).add(leaderId));
-  }, [requireAuth]);
-
-  const handleResetVoteFor = useCallback(() => {
-    if (!requireAuth('Sign in to cast your vote.')) return;
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    setResetVote('for');
-  }, [requireAuth]);
-
-  const handleResetVoteAgainst = useCallback(() => {
-    if (!requireAuth('Sign in to cast your vote.')) return;
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setResetVote('against');
-  }, [requireAuth]);
+  const [tab, setTab] = useState<'impeachment' | 'reset'>('impeachment');
 
   return (
-    <>
+    <SafeAreaView className="flex-1 bg-slate-900" edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View className="flex-1 bg-slate-900">
-        <LinearGradient
-          colors={['#1a1a2e', '#16213e', '#0f0f23']}
-          style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
-        />
 
-        <SafeAreaView edges={['top']} className="flex-1">
-          {/* Header */}
-          <View className="px-4 py-3 border-b border-slate-800">
-            <View className="flex-row items-center">
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.back();
-                }}
-                className="w-10 h-10 items-center justify-center rounded-full bg-slate-800/60"
-              >
-                <ChevronLeft size={24} color="#fff" />
-              </Pressable>
-              <View className="flex-1 items-center">
-                <Text className="text-white font-bold text-lg">Article V</Text>
-                <Text className="text-slate-400 text-xs">Self-Correction Mechanism</Text>
-              </View>
-              <Pressable
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/constitution');
-                }}
-                className="w-10 h-10 items-center justify-center rounded-full bg-slate-800/60"
-              >
-                <BookOpen size={20} color="#94A3B8" />
-              </Pressable>
-            </View>
-          </View>
-
-          <ScrollView
-            className="flex-1"
-            contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Header Banner */}
-            <Animated.View entering={FadeInUp.duration(500)} className="mb-6">
-              <View className="rounded-2xl overflow-hidden border border-red-700/30">
-                <LinearGradient
-                  colors={['#7F1D1D', '#450A0A']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={{ padding: 20 }}
-                >
-                  <View className="flex-row items-center mb-3">
-                    <View className="w-12 h-12 rounded-full bg-red-500/20 items-center justify-center mr-3">
-                      <RotateCcw size={24} color="#FCA5A5" />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-red-100 font-bold text-xl">
-                        Self-Correction
-                      </Text>
-                      <Text className="text-red-300/70 text-sm">
-                        Constitutional Article V
-                      </Text>
-                    </View>
-                    <ArticleBadge articleNumber="V" size="md" source="constitution" />
-                  </View>
-                  <Text className="text-red-200/80 leading-5 italic">
-                    "The community retains the right to Impeach or demote any leader who
-                    misrepresents facts or violates the Code of Conduct, and may trigger
-                    a System-Wide Reset via super-majority vote."
-                  </Text>
-                </LinearGradient>
-              </View>
-            </Animated.View>
-
-            {/* Tab Selector */}
-            <Animated.View entering={FadeIn.delay(200)} className="flex-row mb-6">
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setActiveTab('impeachment');
-                }}
-                className={cn(
-                  'flex-1 py-3 rounded-l-xl flex-row items-center justify-center border',
-                  activeTab === 'impeachment'
-                    ? 'bg-amber-500/20 border-amber-500/50'
-                    : 'bg-slate-800/60 border-slate-700/50'
-                )}
-              >
-                <UserX
-                  size={18}
-                  color={activeTab === 'impeachment' ? '#F59E0B' : '#64748B'}
-                />
-                <Text
-                  className={cn(
-                    'font-semibold ml-2',
-                    activeTab === 'impeachment' ? 'text-amber-500' : 'text-slate-400'
-                  )}
-                >
-                  Impeachment
-                </Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  setActiveTab('reset');
-                }}
-                className={cn(
-                  'flex-1 py-3 rounded-r-xl flex-row items-center justify-center border',
-                  activeTab === 'reset'
-                    ? 'bg-red-500/20 border-red-500/50'
-                    : 'bg-slate-800/60 border-slate-700/50'
-                )}
-              >
-                <RotateCcw
-                  size={18}
-                  color={activeTab === 'reset' ? '#EF4444' : '#64748B'}
-                />
-                <Text
-                  className={cn(
-                    'font-semibold ml-2',
-                    activeTab === 'reset' ? 'text-red-400' : 'text-slate-400'
-                  )}
-                >
-                  System Reset
-                </Text>
-              </Pressable>
-            </Animated.View>
-
-            {/* Content */}
-            {activeTab === 'impeachment' ? (
-              <View>
-                {/* Impeachment Explanation */}
-                <Animated.View entering={FadeInDown.delay(100)} className="mb-4">
-                  <View className="bg-amber-900/20 rounded-xl p-4 border border-amber-700/30">
-                    <View className="flex-row items-center mb-2">
-                      <Gavel size={18} color="#F59E0B" />
-                      <Text className="text-amber-400 font-semibold ml-2">
-                        Leader Accountability
-                      </Text>
-                    </View>
-                    <Text className="text-slate-300 text-sm leading-5">
-                      Civil Leaders who misrepresent facts or violate the Code of Conduct
-                      can be impeached by their delegators. A 50% majority of delegators
-                      must vote to impeach for removal.
-                    </Text>
-                  </View>
-                </Animated.View>
-
-                {/* Civil Leaders List */}
-                <Text className="text-slate-400 text-xs font-semibold tracking-wider mb-3">
-                  CIVIL LEADERS
-                </Text>
-                {mockCivilLeaders.map((leader, index) => (
-                  <LeaderCard
-                    key={leader.id}
-                    leader={leader}
-                    onVoteImpeach={handleVoteImpeach}
-                    hasVoted={votedLeaders.has(leader.id)}
-                  />
-                ))}
-              </View>
-            ) : (
-              <View>
-                {/* Reset Explanation */}
-                <Animated.View entering={FadeInDown.delay(100)} className="mb-4">
-                  <View className="bg-red-900/20 rounded-xl p-4 border border-red-700/30">
-                    <View className="flex-row items-center mb-2">
-                      <AlertTriangle size={18} color="#EF4444" />
-                      <Text className="text-red-400 font-semibold ml-2">
-                        Platform Neutrality
-                      </Text>
-                    </View>
-                    <Text className="text-slate-300 text-sm leading-5">
-                      If platform administrators or developers are found biasing the Pulse,
-                      the Electorate may trigger a System-Wide Reset. This requires a
-                      super-majority vote (66%) with at least 50% participation.
-                    </Text>
-                  </View>
-                </Animated.View>
-
-                {/* Active Reset Vote */}
-                <Text className="text-slate-400 text-xs font-semibold tracking-wider mb-3">
-                  ACTIVE RESET VOTE
-                </Text>
-                <SystemResetCard
-                  vote={mockSystemResetVote}
-                  onVoteFor={handleResetVoteFor}
-                  onVoteAgainst={handleResetVoteAgainst}
-                  userVote={resetVote}
-                />
-              </View>
-            )}
-
-            {/* Footer */}
-            <Animated.View entering={FadeIn.delay(600)} className="mt-6">
-              <FoundingDocumentsLink variant="horizontal" />
-            </Animated.View>
-          </ScrollView>
-        </SafeAreaView>
+      <View className="flex-row items-center justify-between px-4 py-3">
+        <Pressable onPress={() => router.back()} className="p-1">
+          <ChevronLeft size={24} color="#94A3B8" />
+        </Pressable>
+        <View className="items-center">
+          <Text className="font-bold text-white">Article V</Text>
+          <Text className="text-xs text-slate-400">Self-Correction</Text>
+        </View>
+        <Pressable onPress={() => router.push('/constitution')} className="p-1">
+          <BookOpen size={22} color="#94A3B8" />
+        </Pressable>
       </View>
-    </>
+
+      <ScrollView className="flex-1 px-4" contentContainerStyle={{ paddingBottom: 48 }}>
+        <Animated.View entering={FadeInDown.duration(300)}>
+          <LinearGradient
+            colors={['#7F1D1D', '#450A0A']}
+            className="mb-6 overflow-hidden rounded-2xl p-5"
+          >
+            <View className="mb-3 flex-row items-center">
+              <View className="mr-3 h-12 w-12 items-center justify-center rounded-full bg-red-500/20">
+                <RotateCcw size={24} color="#FCA5A5" />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xl font-bold text-red-100">Self-Correction</Text>
+                <Text className="text-sm text-red-300">Constitutional Article V</Text>
+              </View>
+            </View>
+            <Text className="italic leading-6 text-red-200">
+              "The community retains the right to Impeach or demote any leader who misrepresents
+              facts or violates the Code of Conduct, and may trigger a System-Wide Reset via
+              super-majority vote."
+            </Text>
+          </LinearGradient>
+        </Animated.View>
+
+        <View className="mb-6 flex-row">
+          <Pressable
+            testID="tab-impeachment"
+            onPress={() => setTab('impeachment')}
+            className={cn(
+              'flex-1 flex-row items-center justify-center rounded-l-xl border py-3',
+              tab === 'impeachment'
+                ? 'border-amber-500/50 bg-amber-500/20'
+                : 'border-slate-700/50 bg-slate-800/40'
+            )}
+          >
+            <Users size={16} color={tab === 'impeachment' ? '#FCD34D' : '#94A3B8'} />
+            <Text
+              className={cn(
+                'ml-2',
+                tab === 'impeachment' ? 'text-amber-200' : 'text-slate-400'
+              )}
+            >
+              Impeachment
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="tab-reset"
+            onPress={() => setTab('reset')}
+            className={cn(
+              'flex-1 flex-row items-center justify-center rounded-r-xl border border-l-0 py-3',
+              tab === 'reset'
+                ? 'border-red-500/50 bg-red-500/20'
+                : 'border-slate-700/50 bg-slate-800/40'
+            )}
+          >
+            <AlertTriangle size={16} color={tab === 'reset' ? '#FCA5A5' : '#94A3B8'} />
+            <Text className={cn('ml-2', tab === 'reset' ? 'text-red-200' : 'text-slate-400')}>
+              System Reset
+            </Text>
+          </Pressable>
+        </View>
+
+        {tab === 'impeachment' ? <ImpeachmentTab /> : <ResetTab />}
+
+        <View className="mt-8 flex-row items-start">
+          <FileText size={16} color="#64748B" />
+          <Text className="ml-2 flex-1 text-xs leading-5 text-slate-500">
+            Both filings are formal documents. They go to the platform's administrators, and the
+            person named in Articles of Impeachment is sent a copy. Nobody — no administrator, no
+            owner, not the person accused — can stop a proceeding once it has started. A filing
+            made in bad faith is grounds for suspending or banning whoever made it, and the
+            proceeding still runs.
+          </Text>
+        </View>
+
+        <Text className="mt-3 text-xs text-slate-600">
+          Every number on this screen is counted from real proceedings. Nothing here is a sample.
+        </Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }

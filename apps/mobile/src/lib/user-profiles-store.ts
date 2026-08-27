@@ -10,11 +10,11 @@ const defaultCivicStats: CivicEngagementStats = {
   totalOpposeVotes: 0,
   totalRepGapVotes: 0,
   totalComments: 0,
-  civilLeaderScore: 0,
+  engagementScore: 0,
 };
 
 // Calculate Civil Leader score based on engagement
-function calculateCivilLeaderScore(stats: CivicEngagementStats): number {
+function calculateEngagementScore(stats: CivicEngagementStats): number {
   // Weight different engagement types
   const libraryPostWeight = 10;
   const supportVoteWeight = 2;
@@ -46,7 +46,7 @@ interface UserProfilesState {
 
   // Getters
   getUserStats: (userId: string) => CivicEngagementStats;
-  getCivilLeaderRank: (userId: string) => string;
+  getEngagementRank: (userId: string) => string;
 }
 
 export const useUserProfilesStore = create<UserProfilesState>()(
@@ -64,7 +64,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             libraryPostsCount: current.libraryPostsCount + 1,
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -81,7 +81,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             totalSupportVotes: current.totalSupportVotes + 1,
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -98,7 +98,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             totalSupportVotes: Math.max(0, current.totalSupportVotes - 1),
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -115,7 +115,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             totalOpposeVotes: current.totalOpposeVotes + 1,
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -132,7 +132,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             totalOpposeVotes: Math.max(0, current.totalOpposeVotes - 1),
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -149,7 +149,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             totalRepGapVotes: current.totalRepGapVotes + 1,
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -166,7 +166,7 @@ export const useUserProfilesStore = create<UserProfilesState>()(
             ...current,
             totalComments: current.totalComments + 1,
           };
-          updated.civilLeaderScore = calculateCivilLeaderScore(updated);
+          updated.engagementScore = calculateEngagementScore(updated);
           return {
             userStats: {
               ...state.userStats,
@@ -180,13 +180,13 @@ export const useUserProfilesStore = create<UserProfilesState>()(
         const stats = get().userStats[userId] ?? { ...defaultCivicStats };
         return {
           ...stats,
-          civilLeaderScore: calculateCivilLeaderScore(stats),
+          engagementScore: calculateEngagementScore(stats),
         };
       },
 
-      getCivilLeaderRank: (userId) => {
+      getEngagementRank: (userId) => {
         const stats = get().userStats[userId] ?? { ...defaultCivicStats };
-        const score = calculateCivilLeaderScore(stats);
+        const score = calculateEngagementScore(stats);
 
         // Rank tiers based on Civil Leader score
         if (score >= 500) return 'Civic Champion';
@@ -211,5 +211,5 @@ export const useUserProfilesStore = create<UserProfilesState>()(
 export const selectUserStats = (userId: string) => (state: UserProfilesState) =>
   state.userStats[userId] ?? defaultCivicStats;
 
-export const selectCivilLeaderRank = (userId: string) => (state: UserProfilesState) =>
-  state.getCivilLeaderRank(userId);
+export const selectEngagementRank = (userId: string) => (state: UserProfilesState) =>
+  state.getEngagementRank(userId);

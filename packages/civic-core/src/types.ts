@@ -198,7 +198,16 @@ export interface CivicEngagementStats {
   totalOpposeVotes: number;      // Oppose votes received on posts
   totalRepGapVotes: number;      // Representation Gap poll votes received
   totalComments: number;         // Comments received on posts
-  civilLeaderScore: number;      // Calculated engagement score
+  /**
+   * A weighted score over the counters above.
+   *
+   * RENAMED FROM "civilLeaderScore". The Constitution's Civil Leader is a
+   * person holding delegated votes — the borrowed power Article V impeachment
+   * recalls — and this is a local engagement number that has nothing to do
+   * with delegation. Two unrelated ideas under one name, on a platform whose
+   * whole subject is who holds power.
+   */
+  engagementScore: number;
 }
 
 export interface User {

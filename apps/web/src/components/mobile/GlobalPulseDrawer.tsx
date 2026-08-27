@@ -20,7 +20,7 @@ import { MotionDiv } from "@/components/civic/Motion";
 import {
   useGlobalEngagementStore,
   type GlobalEngagementRecord,
-  type CivilLeader,
+  type EngagementLeader,
   type ReferenceType,
 } from "@/lib/mobile/global-engagement-store";
 
@@ -148,13 +148,13 @@ function TrendingCard({
   );
 }
 
-// Civil Leader Card
+// One row of the engagement leaderboard
 function LeaderCard({
   leader,
   index,
   onFollow,
 }: {
-  leader: CivilLeader;
+  leader: EngagementLeader;
   index: number;
   onFollow?: (userId: string) => void;
 }) {
@@ -216,7 +216,7 @@ export default function GlobalPulseDrawer({
 }) {
   // Select raw data from store (stable references)
   const engagementRecords = useGlobalEngagementStore((s) => s.engagementRecords);
-  const civilLeadersData = useGlobalEngagementStore((s) => s.civilLeaders);
+  const engagementLeadersData = useGlobalEngagementStore((s) => s.engagementLeaders);
 
   // Compute derived data outside selector to prevent infinite loops
   const trendingReferences = useMemo(() => {
@@ -224,7 +224,7 @@ export default function GlobalPulseDrawer({
     return records.sort((a, b) => b.trendingScore - a.trendingScore).slice(0, 5);
   }, [engagementRecords]);
 
-  const civilLeaders = useMemo(() => civilLeadersData.slice(0, 10), [civilLeadersData]);
+  const engagementLeaders = useMemo(() => engagementLeadersData.slice(0, 10), [engagementLeadersData]);
 
   return (
     <Sheet open={visible} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -272,15 +272,15 @@ export default function GlobalPulseDrawer({
             ))}
           </div>
 
-          {/* Civil Leaders Section */}
+          {/* Most engagement driven */}
           <div>
             <div className="flex items-center mb-4">
               <Crown size={18} color="#F59E0B" />
-              <span className="text-white font-semibold text-lg ml-2">Civil Leaders</span>
+              <span className="text-white font-semibold text-lg ml-2">Most Engagement Driven</span>
               <span className="text-slate-500 text-xs ml-auto">Top engagement drivers</span>
             </div>
 
-            {civilLeaders.map((leader, idx) => (
+            {engagementLeaders.map((leader, idx) => (
               <LeaderCard key={leader.userId} leader={leader} index={idx} onFollow={() => undefined} />
             ))}
           </div>

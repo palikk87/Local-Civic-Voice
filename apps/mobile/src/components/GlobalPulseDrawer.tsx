@@ -38,7 +38,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import {
   useGlobalEngagementStore,
   type GlobalEngagementRecord,
-  type CivilLeader,
+  type EngagementLeader,
   type ReferenceType,
 } from '@/lib/global-engagement-store';
 import { cn } from '@/lib/cn';
@@ -178,13 +178,13 @@ function TrendingCard({
   );
 }
 
-// Civil Leader Card
+// One row of the engagement leaderboard
 function LeaderCard({
   leader,
   index,
   onFollow,
 }: {
-  leader: CivilLeader;
+  leader: EngagementLeader;
   index: number;
   onFollow?: (userId: string) => void;
 }) {
@@ -252,7 +252,7 @@ export default function GlobalPulseDrawer({
 
   // Select raw data from store (stable references)
   const engagementRecords = useGlobalEngagementStore((s) => s.engagementRecords);
-  const civilLeadersData = useGlobalEngagementStore((s) => s.civilLeaders);
+  const engagementLeadersData = useGlobalEngagementStore((s) => s.engagementLeaders);
 
   // Compute derived data outside selector to prevent infinite loops
   const trendingReferences = useMemo(() => {
@@ -262,9 +262,9 @@ export default function GlobalPulseDrawer({
       .slice(0, 5);
   }, [engagementRecords]);
 
-  const civilLeaders = useMemo(() => {
-    return civilLeadersData.slice(0, 10);
-  }, [civilLeadersData]);
+  const engagementLeaders = useMemo(() => {
+    return engagementLeadersData.slice(0, 10);
+  }, [engagementLeadersData]);
 
   // Animate drawer
   React.useEffect(() => {
@@ -383,19 +383,19 @@ export default function GlobalPulseDrawer({
                   ))}
                 </View>
 
-                {/* Civil Leaders Section */}
+                {/* Most engagement driven */}
                 <View>
                   <View className="flex-row items-center mb-4">
                     <Crown size={18} color="#F59E0B" />
                     <Text className="text-white font-semibold text-lg ml-2">
-                      Civil Leaders
+                      Most Engagement Driven
                     </Text>
                     <Text className="text-slate-500 text-xs ml-auto">
                       Top engagement drivers
                     </Text>
                   </View>
 
-                  {civilLeaders.map((leader, idx) => (
+                  {engagementLeaders.map((leader, idx) => (
                     <LeaderCard
                       key={leader.userId}
                       leader={leader}
