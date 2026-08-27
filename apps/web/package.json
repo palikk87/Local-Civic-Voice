@@ -24,6 +24,7 @@
     "route-target-check": "node scripts/route-target-check.mjs",
     "admin-permissions-check": "node scripts/admin-permissions-check.mjs dist",
     "bug-report-check": "node scripts/bug-report-check.mjs dist",
+    "article-v-check": "node scripts/article-v-check.mjs dist",
     "terms-parity-check": "node scripts/terms-parity-check.mjs"
   },
   "dependencies": {

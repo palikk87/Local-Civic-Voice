@@ -695,6 +695,14 @@ describe("impeachment: what the page can read", () => {
     expect(payload.proceedings[0].leader.id).toBe(leader.userId);
     expect(payload.proceedings[0].electorCount).toBe(3);
     expect(payload.proceedings[0].viewerHasVoted).toBe(false);
+
+    // BOTH HALVES OF THE ARTICLES. This route returned the grounds and not the
+    // evidence, and the page renders an Evidence heading from the same object —
+    // so the accusation showed and the case for it was a blank block. Every
+    // status code was 200 throughout, which is why the browser check found it
+    // and nothing else did.
+    expect(payload.proceedings[0].grounds).toBe(GROUNDS);
+    expect(payload.proceedings[0].evidence).toBe(EVIDENCE);
   });
 
   test("somebody who is an elector in nothing gets an empty list, not an error", async () => {

@@ -182,7 +182,13 @@ impeachmentsRouter.get("/me", async (c) => {
         select: {
           id: true,
           status: true,
+          // BOTH HALVES. This selected `grounds` only, and the page renders an
+          // Evidence section from the same object — so the accusation showed
+          // and what was said to support it came through as an empty block.
+          // The article-v browser check found it; nothing that only reads the
+          // API's status code could have.
           grounds: true,
+          evidence: true,
           openedAt: true,
           expiresAt: true,
           suspendedUntil: true,
@@ -211,6 +217,7 @@ impeachmentsRouter.get("/me", async (c) => {
     id: row.impeachment.id,
     status: row.impeachment.status,
     grounds: row.impeachment.grounds,
+    evidence: row.impeachment.evidence,
     leader: publicUser(row.impeachment.leader),
     filedBy: publicUser(row.impeachment.filedBy),
     openedAt: row.impeachment.openedAt.toISOString(),

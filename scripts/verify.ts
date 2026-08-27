@@ -205,6 +205,15 @@ const CHECKS: Check[] = [
       + "showing and a selector that finds it again — and never what somebody typed",
   },
   {
+    name: "web article-v-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "article-v-check"],
+    guards:
+      "a citizen's vote to impeach reaches the database and is still there after a reload, "
+      + "the articles are on the page in full, somebody with no delegation is not shown a "
+      + "vote they do not have, and the reset tab says what a reset costs before one can be cast",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],

@@ -29,6 +29,7 @@ import {
   Wrench,
   Settings,
   Bug,
+  Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/layout/AppShell";
@@ -44,6 +45,7 @@ import { MergeReviewTab } from "@/components/admin/MergeReviewTab";
 import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { BugReportsTab } from "@/components/admin/BugReportsTab";
+import { ArticlesTab } from "@/components/admin/ArticlesTab";
 import { MaintenanceTab } from "@/components/admin/MaintenanceTab";
 import { RolesTab } from "@/components/admin/RolesTab";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -61,6 +63,7 @@ const ADMIN_TABS = [
   // /admin/bug-reports fell back to the dashboard on a reload or a shared link
   // — the tab worked, the address did not.
   "bug-reports",
+  "articles",
   "roles",
   "maintenance",
   "logs",
@@ -86,6 +89,7 @@ const TAB_CAPABILITY: Partial<Record<AdminTab, string>> = {
   "merge-review": "merges.decide",
   "b2b-clients": "b2b.view",
   "bug-reports": "bugReports.manage",
+  articles: "articles.review",
   roles: "roles.manage",
   maintenance: "content.repair",
   logs: "logs.view",
@@ -213,6 +217,12 @@ export default function Admin() {
                 Bug reports
               </TabsTrigger>
             ) : null}
+            {allows(TAB_CAPABILITY["articles"]) ? (
+              <TabsTrigger value="articles">
+                <Scale className="mr-2 h-4 w-4" />
+                Articles
+              </TabsTrigger>
+            ) : null}
             {allows(TAB_CAPABILITY["roles"]) ? (
               <TabsTrigger value="roles">
                 <ShieldCheck className="mr-2 h-4 w-4" />
@@ -272,6 +282,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="bug-reports" className="mt-6">
             <BugReportsTab />
+          </TabsContent>
+          <TabsContent value="articles" className="mt-6">
+            <ArticlesTab />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">

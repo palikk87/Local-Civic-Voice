@@ -319,6 +319,7 @@ try {
     check("…and Roles stays hidden", !shown.some((l) => /^roles$/i.test(l)), shown.join(", "));
     check("…and Settings stays hidden", !shown.some((l) => /^settings$/i.test(l)), shown.join(", "));
     check("…and B2B clients stays hidden", !shown.some((l) => /b2b/i.test(l)), shown.join(", "));
+    check("…and Articles stays hidden", !shown.some((l) => /^articles$/i.test(l)), shown.join(", "));
     await context.close();
   }
 
@@ -408,7 +409,7 @@ try {
     // The owner holds everything, so every tab is on screen. This is the other
     // end of the first scenario: it catches a gate that hides a tab from
     // EVERYBODY, which would pass every "stays hidden" assertion above.
-    for (const expected of ["Users", "Roles", "Settings", "Logs", "B2B clients"]) {
+    for (const expected of ["Users", "Roles", "Settings", "Logs", "B2B clients", "Articles"]) {
       check(`the owner sees ${expected}`, shown.some((l) => l.toLowerCase() === expected.toLowerCase()), shown.join(", "));
     }
     await context.close();
