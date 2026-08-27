@@ -122,10 +122,24 @@ describe("only a superadmin can change a platform key", () => {
   });
 });
 
-describe("a name that is not a platform key is refused", () => {
-  // The whole reason the allowlist is a literal list. Each of these would be a
-  // remote code execution if the endpoint wrote whatever it was handed.
-  for (const name of ["PATH", "NODE_OPTIONS", "DATABASE_URL", "BETTER_AUTH_SECRET", "SECRETS_ENCRYPTION_KEY"]) {
+describe("a name that could be a system variable is refused", () => {
+  // The panel now accepts a NEW provider's key, not only the seven built-ins —
+  // but a name that could change how the process runs is still an RCE waiting
+  // for someone to type it. Each of these must be refused. The first two carry
+  // no credential suffix, so the naming rule excludes them; the last three end
+  // in one and are caught by the explicit denylist.
+  for (const name of [
+    "PATH",
+    "NODE_OPTIONS",
+    "LD_PRELOAD",
+    "DATABASE_URL",
+    "BETTER_AUTH_SECRET",
+    "SECRETS_ENCRYPTION_KEY",
+    // Shapes that must not sneak past the rule.
+    "path_api_key", // lowercase
+    "MY KEY", // a space
+    "SOME_PROVIDER", // no credential suffix
+  ]) {
     test(`${name} cannot be set`, async () => {
       const response = await setKey(name, "/tmp/evil", superadminToken);
       expect(response.status).toBe(400);
@@ -137,6 +151,88 @@ describe("a name that is not a platform key is refused", () => {
     // Belt and braces: the refusal above is only meaningful if nothing wrote it.
     expect(process.env.PATH).toBeTruthy();
     expect(process.env.PATH).not.toContain("/tmp/evil");
+  });
+});
+
+describe("the custom-name rule, at the predicate that both layers share", () => {
+  // The HTTP tests above cannot reach a name with a slash in it — the router
+  // resolves the path before the handler sees it — so the predicate is checked
+  // directly here, where path characters, casing and suffixes all matter.
+  test("safe provider names pass", async () => {
+    const { isSafeCustomSecretName } = await import("../src/services/platform-secrets");
+    for (const name of ["ACLED_API_KEY", "PROPUBLICA_API_KEY", "SOME_SERVICE_TOKEN", "X_ACCESS_KEY"]) {
+      expect(isSafeCustomSecretName(name)).toBe(true);
+    }
+  });
+
+  test("anything that could be a system or protected variable fails", async () => {
+    const { isSafeCustomSecretName } = await import("../src/services/platform-secrets");
+    for (const name of [
+      "PATH",
+      "NODE_OPTIONS",
+      "LD_PRELOAD",
+      "SECRETS_ENCRYPTION_KEY",
+      "BETTER_AUTH_SECRET",
+      "DATABASE_URL",
+      "../../ETC_KEY",
+      "a b_KEY",
+      "lower_api_key",
+      "NO_SUFFIX",
+      "CONGRESS_API_KEY", // a built-in is not a custom name
+    ]) {
+      expect(isSafeCustomSecretName(name)).toBe(false);
+    }
+  });
+});
+
+describe("a new provider's key can be added, and it actually works", () => {
+  // The panel is an on-ramp: an operator inserts the key, then the wiring is
+  // written against it. ACLED is a real data source nobody here uses yet — the
+  // point is exactly that no code reads it, and it can still be stored, loaded
+  // and read back by name, ready to wire.
+  const CUSTOM = "ACLED_API_KEY";
+  const CUSTOM_VALUE = "acled-live-value-9f3b2c";
+
+  test("a safe custom name is accepted and encrypted like a built-in", async () => {
+    const response = await setKey(CUSTOM, CUSTOM_VALUE, superadminToken);
+    expect(response.status).toBe(200);
+
+    const row = await prisma.platformSecret.findUnique({ where: { name: CUSTOM } });
+    expect(row).not.toBeNull();
+    expect(row!.ciphertext).not.toContain(CUSTOM_VALUE);
+    expect(row!.ciphertext.startsWith("v1:")).toBe(true);
+    expect(await decrypt(CUSTOM)).toBe(CUSTOM_VALUE);
+  });
+
+  test("the server reports it as live, from the database", async () => {
+    // The whole promise: once inserted, the running backend is using it, ready
+    // for a consumer to be wired against it with no redeploy. The value is
+    // never handed back, so what proves it is the server's own report that the
+    // key in use for this name now comes from the database. (The test runs in a
+    // different process from the server, so its own process.env cannot see the
+    // server's — the server's report is the observable truth.)
+    const body = (await (await readKeys(superadminToken)).json()) as {
+      data: { storage: { stored: { name: string; source: string }[] } };
+    };
+    const row = body.data.storage.stored.find((entry) => entry.name === CUSTOM);
+    expect(row?.source).toBe("database");
+  });
+
+  test("the panel lists it, marked as not built in", async () => {
+    const body = (await (await readKeys(superadminToken)).json()) as {
+      data: { storage: { stored: { name: string; builtIn: boolean; storedInDatabase: boolean }[] } };
+    };
+    const row = body.data.storage.stored.find((entry) => entry.name === CUSTOM);
+    expect(row).toBeDefined();
+    expect(row!.builtIn).toBe(false);
+    expect(row!.storedInDatabase).toBe(true);
+  });
+
+  test("clearing it hands the name back and removes it from the process", async () => {
+    expect((await clearKey(CUSTOM, superadminToken)).status).toBe(200);
+    expect(await prisma.platformSecret.findUnique({ where: { name: CUSTOM } })).toBeNull();
+    // Nothing had this on the host at boot, so clearing unsets it entirely.
+    expect(process.env[CUSTOM]).toBeUndefined();
   });
 });
 

@@ -37,6 +37,7 @@ interface StoredSecretInfo {
   presentInEnvironment: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
+  builtIn: boolean;
 }
 
 interface KeyStorage {
@@ -47,6 +48,7 @@ interface KeyStorage {
   encryptionSource: string | null;
   encryptionCaveat: string | null;
   note: string;
+  customNamingRule: string;
   cannotBeStored: { names: string[]; why: string };
 }
 
@@ -211,6 +213,15 @@ export function KeysAndEmailCard() {
             The four characters after each name are a fingerprint of the stored value, not part
             of the key.
           </Text>
+          {canManageKeys && storage ? (
+            <CustomKeys
+              stored={storage.stored.filter((entry) => !entry.builtIn)}
+              canStore={storage.encryptionAvailable}
+              whyNot={storage.encryptionUnavailableReason}
+              rule={storage.customNamingRule}
+              onChanged={() => setReloadToken((n) => n + 1)}
+            />
+          ) : null}
           {storage ? (
             <View className="mt-3 rounded-xl border border-slate-700/60 bg-slate-900/40 p-3">
               <Text className="text-slate-400 text-xs">{storage.note}</Text>
@@ -310,6 +321,173 @@ export function KeysAndEmailCard() {
  * key, so there is nothing here that could reveal one. The box is always empty;
  * what confirms a paste worked is the fingerprint and length above it changing.
  */
+/**
+ * The panel as an on-ramp — keys for providers this platform does not use yet.
+ * Web twin: apps/web/src/components/admin/KeysAndEmailCard.tsx.
+ */
+function CustomKeys({
+  stored,
+  canStore,
+  whyNot,
+  rule,
+  onChanged,
+}: {
+  stored: StoredSecretInfo[];
+  canStore: boolean;
+  whyNot: string | null;
+  rule: string;
+  onChanged: () => void;
+}) {
+  return (
+    <View className="mt-4">
+      <Text className="text-white font-semibold">Other API keys</Text>
+      <Text className="text-slate-400 text-xs mt-1">
+        Keys for providers this platform does not use yet. Add one here, then it can be wired
+        into the code by name — it takes effect immediately, with no redeploy.
+      </Text>
+
+      {stored.length ? (
+        stored.map((key) => (
+          <View key={key.name} className="mt-3 rounded-xl border border-slate-700/60 p-3">
+            <Text className="text-white font-mono text-sm">{key.name}</Text>
+            {canStore ? (
+              <KeyEditor
+                name={key.name}
+                stored={key}
+                canStore={canStore}
+                whyNot={whyNot}
+                onChanged={onChanged}
+              />
+            ) : null}
+          </View>
+        ))
+      ) : (
+        <Text className="text-slate-500 text-xs mt-2">None added yet.</Text>
+      )}
+
+      {canStore ? (
+        <NewKeyForm rule={rule} onChanged={onChanged} />
+      ) : (
+        <Text className="text-slate-500 text-xs mt-2">
+          {whyNot ?? 'Keys cannot be stored on this deployment.'}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+function NewKeyForm({ rule, onChanged }: { rule: string; onChanged: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function add() {
+    const keyName = name.trim().toUpperCase();
+    const pasted = value.trim();
+    if (!keyName || !pasted) {
+      setMessage({ ok: false, text: 'A name and a value are both needed.' });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/admin/keys/${encodeURIComponent(keyName)}`, {
+        method: 'PUT',
+        headers: { ...adminAuthHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: pasted }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        setMessage({ ok: false, text: body?.error ?? 'Could not add the key.' });
+        return;
+      }
+      setName('');
+      setValue('');
+      setOpen(false);
+      setMessage({ ok: true, text: body?.data?.message ?? 'Added.' });
+      onChanged();
+    } catch {
+      setMessage({ ok: false, text: 'Could not reach the server.' });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <View className="mt-3">
+        {message ? (
+          <Text className={`text-xs mb-2 ${message.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+            {message.text}
+          </Text>
+        ) : null}
+        <Pressable
+          onPress={() => setOpen(true)}
+          className="self-start rounded-lg border border-slate-600 px-3 py-2"
+        >
+          <Text className="text-slate-200 text-sm font-medium">Add a new API key</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <View className="mt-3 rounded-xl border border-slate-700/60 p-3">
+      {message ? (
+        <Text className={`text-xs mb-2 ${message.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+          {message.text}
+        </Text>
+      ) : null}
+      <TextInput
+        value={name}
+        onChangeText={(t) => setName(t.toUpperCase())}
+        placeholder="NAME, e.g. ACLED_API_KEY"
+        placeholderTextColor="#64748B"
+        autoCapitalize="characters"
+        autoCorrect={false}
+        className="bg-slate-900 text-white font-mono text-xs rounded-lg px-3 py-2.5"
+      />
+      <TextInput
+        value={value}
+        onChangeText={setValue}
+        placeholder="Paste the key"
+        placeholderTextColor="#64748B"
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        className="bg-slate-900 text-white font-mono text-xs rounded-lg px-3 py-2.5 mt-2"
+      />
+      <Text className="text-slate-500 text-xs mt-2">{rule}</Text>
+      <View className="flex-row mt-3">
+        <Pressable
+          onPress={add}
+          disabled={busy}
+          className="rounded-lg bg-indigo-500 px-4 py-2 mr-2"
+        >
+          {busy ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text className="text-white font-medium">Add</Text>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setOpen(false);
+            setName('');
+            setValue('');
+          }}
+          disabled={busy}
+          className="rounded-lg bg-slate-700 px-4 py-2"
+        >
+          <Text className="text-slate-300 font-medium">Cancel</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function KeyEditor({
   name,
   stored,

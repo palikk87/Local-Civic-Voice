@@ -72,6 +72,82 @@ export function isStorableSecret(name: string): name is StorableSecret {
   return (STORABLE_SECRETS as readonly string[]).includes(name);
 }
 
+/**
+ * THE PANEL IS AN ON-RAMP, NOT A FIXED MENU.
+ *
+ * The seven names above are the keys the platform's own code already uses. But
+ * the panel exists so an operator can add a NEW provider — insert its key, then
+ * have the wiring written against it. That was impossible: the store route only
+ * accepted the seven, so a brand-new API could not even be entered.
+ *
+ * The reason it was a fixed list is not bureaucracy — it is spelled out at the
+ * store route: this mechanism loads stored secrets into process.env, and an
+ * endpoint that writes ARBITRARY environment variables from an HTTP body is a
+ * remote code execution waiting for someone to type PATH or NODE_OPTIONS.
+ *
+ * So a custom name is allowed only if it structurally CANNOT be one of those.
+ * The rule is deliberately strict:
+ *
+ *   1. Uppercase letters, digits and underscores, starting with a letter.
+ *   2. It must end in a credential suffix — _API_KEY, _KEY, _TOKEN, _SECRET.
+ *      PATH, NODE_OPTIONS, LD_PRELOAD, LD_LIBRARY_PATH, DYLD_INSERT_LIBRARIES,
+ *      BUN_OPTIONS and every other variable that changes how the runtime
+ *      behaves end in none of these, so the suffix alone excludes them.
+ *   3. A hard denylist catches the few sensitive names that DO end in a
+ *      credential suffix — the platform's own three — so they can never be
+ *      shadowed from the panel.
+ *
+ * A custom key is stored and loaded exactly like a built-in one; the only
+ * difference is that no code reads it until someone wires a consumer for it,
+ * which is the next step after inserting it.
+ */
+const CUSTOM_SECRET_SUFFIXES = ["_API_KEY", "_ACCESS_KEY", "_KEY", "_TOKEN", "_SECRET"] as const;
+
+/**
+ * Names that end in a credential suffix but must never be writable from the
+ * panel: the three the platform keeps on the host by necessity (a process
+ * cannot read the database to learn how to reach the database; sessions must
+ * verify before anyone is an admin; a key kept beside what it encrypts is not
+ * encryption), plus their obvious variants.
+ */
+const PROTECTED_SECRET_NAMES = new Set([
+  "SECRETS_ENCRYPTION_KEY",
+  "BETTER_AUTH_SECRET",
+  "AUTH_SECRET",
+  "DATABASE_KEY",
+  "DIRECT_URL",
+  "DATABASE_URL",
+]);
+
+/**
+ * A name an operator may add for a NEW provider — not one of the built-ins,
+ * and provably not a variable that could change how the process runs.
+ */
+export function isSafeCustomSecretName(name: string): boolean {
+  if (isStorableSecret(name)) return false;
+  if (PROTECTED_SECRET_NAMES.has(name)) return false;
+  if (name.length < 4 || name.length > 80) return false;
+  if (!/^[A-Z][A-Z0-9_]*$/.test(name)) return false;
+  return CUSTOM_SECRET_SUFFIXES.some((suffix) => name.endsWith(suffix));
+}
+
+/**
+ * Every name the panel may store: the built-ins, plus any safe custom name.
+ *
+ * Both the store route and the loader ask this, so the check that decides what
+ * reaches process.env is written once. If they could disagree, the store route
+ * could accept something the loader would refuse — or worse, the reverse.
+ */
+export function isAllowedSecretName(name: string): boolean {
+  return isStorableSecret(name) || isSafeCustomSecretName(name);
+}
+
+/** Shown in the panel so an operator knows what a new key may be called. */
+export const CUSTOM_SECRET_RULE =
+  "A new key's name must be uppercase letters, digits and underscores, and end " +
+  "in _API_KEY, _ACCESS_KEY, _KEY, _TOKEN or _SECRET — for example ACLED_API_KEY. " +
+  "That suffix is what keeps it from ever being mistaken for a system variable.";
+
 /** Where the value this process is using actually came from. */
 export type SecretSource = "database" | "environment" | "unset";
 
@@ -291,7 +367,7 @@ export async function loadPlatformSecretsIntoEnv(): Promise<LoadResult> {
   const seen = new Set<string>();
 
   for (const row of rows) {
-    if (!isStorableSecret(row.name)) continue; // never write an arbitrary variable
+    if (!isAllowedSecretName(row.name)) continue; // never write an arbitrary variable
     seen.add(row.name);
     try {
       const value = decryptSecret(row.name, row.ciphertext);
@@ -358,6 +434,8 @@ export interface StoredSecretInfo {
   length: number | null;
   updatedBy: string | null;
   updatedAt: string | null;
+  /** True for one of the platform's own keys; false for a custom-added one. */
+  builtIn: boolean;
 }
 
 /** Metadata for every storable key. Never the value — there is no code path that returns one. */
@@ -374,7 +452,7 @@ export async function listPlatformSecrets(): Promise<StoredSecretInfo[]> {
   }
   const byName = new Map(rows.map((row) => [row.name, row]));
 
-  return STORABLE_SECRETS.map((name) => {
+  const summarise = (name: string): StoredSecretInfo => {
     const row = byName.get(name);
     const inEnvironment = !!ENV_AT_BOOT.get(name)?.trim();
     return {
@@ -386,8 +464,21 @@ export async function listPlatformSecrets(): Promise<StoredSecretInfo[]> {
       length: row?.length ?? null,
       updatedBy: row?.updatedBy ?? null,
       updatedAt: row?.updatedAt.toISOString() ?? null,
+      builtIn: isStorableSecret(name),
     };
-  });
+  };
+
+  // The built-ins always appear, stored or not, so the panel can show that a
+  // known key is still unset. Custom keys appear only once they exist — there
+  // is no fixed list of them to show empty rows for. A stored row whose name is
+  // no longer allowed (a rule tightened after it was stored) is left out rather
+  // than shown as something the panel would now refuse.
+  const custom = rows
+    .map((row) => row.name)
+    .filter((name) => !isStorableSecret(name) && isSafeCustomSecretName(name))
+    .sort();
+
+  return [...STORABLE_SECRETS.map(summarise), ...custom.map(summarise)];
 }
 
 export interface SetSecretResult {
@@ -409,8 +500,9 @@ export async function setPlatformSecret(
   rawValue: string,
   by: { id: string; username: string },
 ): Promise<SetSecretResult> {
-  if (!isStorableSecret(name)) {
-    throw new Error(`${name} is not a key this platform stores`);
+  // Built-in OR a safe custom name — the same gate the route and loader use.
+  if (!isAllowedSecretName(name)) {
+    throw new Error(`${name} is not a key this platform can store`);
   }
 
   // Trimmed here for the same reason env.ts trims: a key is pasted, and a
@@ -453,8 +545,8 @@ export interface ClearSecretResult {
 
 /** Forget a stored key. The host's own variable, if any, takes over again. */
 export async function clearPlatformSecret(name: string): Promise<ClearSecretResult> {
-  if (!isStorableSecret(name)) {
-    throw new Error(`${name} is not a key this platform stores`);
+  if (!isAllowedSecretName(name)) {
+    throw new Error(`${name} is not a key this platform can store`);
   }
   takeBootSnapshot();
 

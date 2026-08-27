@@ -21,6 +21,8 @@ import {
   clearPlatformSecret,
   encryptionStatus,
   isStorableSecret,
+  isAllowedSecretName,
+  CUSTOM_SECRET_RULE,
   listPlatformSecrets,
   setPlatformSecret,
   STORABLE_SECRETS,
@@ -2173,6 +2175,10 @@ adminRouter.get("/keys", async (c) => {
       storage: {
         stored: await listPlatformSecrets(),
         storable: STORABLE_SECRETS,
+        // The panel is an on-ramp: an operator can add a NEW provider's key,
+        // not only replace one of the built-ins. This is the rule its name has
+        // to follow so it can never be mistaken for a system variable.
+        customNamingRule: CUSTOM_SECRET_RULE,
         encryptionAvailable: encryption.available,
         encryptionUnavailableReason: encryption.reason,
         encryptionSource: encryption.source,
@@ -2230,12 +2236,19 @@ adminRouter.put("/keys/:name", zValidator("json", storedKeySchema), async (c) =>
   if (denied) return c.json(denied, { status: 403 });
 
   const name = c.req.param("name");
-  // A literal allowlist, not "whatever was named": an endpoint that writes
-  // arbitrary environment variables from an HTTP body is a remote code
-  // execution waiting for someone to type PATH or NODE_OPTIONS.
-  if (!isStorableSecret(name)) {
+  // NOT "whatever was named": this writes into process.env, so an arbitrary
+  // name is a remote code execution waiting for someone to type PATH or
+  // NODE_OPTIONS. A built-in is always allowed; a NEW provider's key is allowed
+  // only if its name structurally cannot be a runtime variable — see
+  // isSafeCustomSecretName. Same check the loader uses, so the two cannot
+  // disagree about what is safe.
+  if (!isAllowedSecretName(name)) {
     return c.json(
-      { error: `${name} is not a key this platform stores`, storable: STORABLE_SECRETS },
+      {
+        error: `${name} cannot be stored under that name.`,
+        rule: CUSTOM_SECRET_RULE,
+        storable: STORABLE_SECRETS,
+      },
       { status: 400 },
     );
   }
@@ -2286,7 +2299,7 @@ adminRouter.delete("/keys/:name", async (c) => {
   if (denied) return c.json(denied, { status: 403 });
 
   const name = c.req.param("name");
-  if (!isStorableSecret(name)) {
+  if (!isAllowedSecretName(name)) {
     return c.json({ error: `${name} is not a key this platform stores` }, { status: 400 });
   }
 

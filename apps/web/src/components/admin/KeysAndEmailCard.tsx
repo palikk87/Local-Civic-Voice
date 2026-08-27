@@ -51,6 +51,8 @@ interface StoredSecretInfo {
   presentInEnvironment: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
+  /** True for a platform key, false for one an operator added for a new provider. */
+  builtIn: boolean;
 }
 
 interface KeysResponse {
@@ -66,6 +68,8 @@ interface KeysResponse {
       encryptionSource: string | null;
       encryptionCaveat: string | null;
       note: string;
+      /** The rule a new provider's key name has to follow. */
+      customNamingRule: string;
       cannotBeStored: { names: string[]; why: string };
     };
   };
@@ -214,6 +218,15 @@ export function KeysAndEmailCard() {
             server has the same value.
           </p>
 
+          {canManageKeys && data?.data.storage ? (
+            <CustomKeys
+              stored={data.data.storage.stored.filter((s) => !s.builtIn)}
+              canStore={data.data.storage.encryptionAvailable}
+              whyNot={data.data.storage.encryptionUnavailableReason}
+              rule={data.data.storage.customNamingRule}
+            />
+          ) : null}
+
           {data?.data.storage ? (
             <div className="mt-4 rounded-md border border-border bg-muted/40 p-3">
               <p className="text-xs text-muted-foreground">{data.data.storage.note}</p>
@@ -338,6 +351,164 @@ function SourceLine({ source }: { source: SecretSource }) {
  * key, so there is nothing here to reveal one. The box is always empty; what
  * confirms a paste worked is the fingerprint and length above it changing.
  */
+/**
+ * The panel as an ON-RAMP: keys an operator added for providers the platform's
+ * own code does not use yet.
+ *
+ * The seven built-ins each describe what they power, because the code knows.
+ * A custom key has no consumer until one is wired, so there is nothing honest
+ * to say it "powers" — it is listed plainly, with the same Replace/Clear the
+ * built-ins have, and an add form whose only cleverness is refusing a name that
+ * could be a system variable before the server has to.
+ */
+function CustomKeys({
+  stored,
+  canStore,
+  whyNot,
+  rule,
+}: {
+  stored: StoredSecretInfo[];
+  canStore: boolean;
+  whyNot: string | null;
+  rule: string;
+}) {
+  return (
+    <div className="mt-5">
+      <p className="font-medium text-foreground">Other API keys</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Keys for providers this platform does not use yet. Add one here, then it can be wired
+        into the code by name — it takes effect immediately, with no redeploy.
+      </p>
+
+      {stored.length ? (
+        <ul className="mt-3 space-y-3">
+          {stored.map((key) => (
+            <li key={key.name} className="rounded-md border border-border p-3">
+              <p className="font-mono text-sm text-foreground">{key.name}</p>
+              <SourceLine source={key.source} />
+              {canStore ? (
+                <KeyEditor name={key.name} stored={key} canStore={canStore} whyNot={whyNot} />
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">None added yet.</p>
+      )}
+
+      {canStore ? (
+        <NewKeyForm rule={rule} />
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {whyNot ?? "Keys cannot be stored on this deployment."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Add a brand-new provider key: a name and a value, validated by the server. */
+function NewKeyForm({ rule }: { rule: string }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function add() {
+    const keyName = name.trim().toUpperCase();
+    const pasted = value.trim();
+    if (!keyName || !pasted) {
+      setMessage({ ok: false, text: "A name and a value are both needed." });
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      const response = await api.put<{ data: { message: string } }>(
+        `/api/admin/keys/${encodeURIComponent(keyName)}`,
+        { value: pasted },
+        { headers: adminAuthHeader() },
+      );
+      setName("");
+      setValue("");
+      setOpen(false);
+      setMessage({ ok: true, text: response.data.message });
+      await queryClient.invalidateQueries({ queryKey: ["admin", "keys"] });
+    } catch (e) {
+      // The server returns the naming rule in its error when the name is bad;
+      // api surfaces its message, which already carries it.
+      setMessage({ ok: false, text: e instanceof Error ? e.message : "Could not add the key." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <div className="mt-3">
+        {message ? (
+          <p className={`mb-2 text-xs ${message.ok ? "text-emerald-500" : "text-destructive"}`}>
+            {message.text}
+          </p>
+        ) : null}
+        <Button size="sm" variant="outline" className="min-h-[36px]" onClick={() => setOpen(true)}>
+          Add a new API key
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-border p-3">
+      {message ? (
+        <p className={`mb-2 text-xs ${message.ok ? "text-emerald-500" : "text-destructive"}`}>
+          {message.text}
+        </p>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        <Input
+          autoComplete="off"
+          spellCheck={false}
+          value={name}
+          onChange={(e) => setName(e.target.value.toUpperCase())}
+          placeholder="NAME, e.g. ACLED_API_KEY"
+          className="h-9 font-mono text-xs"
+        />
+        <Input
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Paste the key"
+          className="h-9 font-mono text-xs"
+        />
+        <p className="text-xs text-muted-foreground">{rule}</p>
+        <div className="flex gap-2">
+          <Button size="sm" className="min-h-[36px]" onClick={add} disabled={busy}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="min-h-[36px]"
+            onClick={() => {
+              setOpen(false);
+              setName("");
+              setValue("");
+            }}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function KeyEditor({
   name,
   stored,
