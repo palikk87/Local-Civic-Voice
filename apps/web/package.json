@@ -21,7 +21,8 @@
     "profile-check": "node scripts/profile-check.mjs",
     "every-page-check": "node scripts/every-page-check.mjs",
     "verify-email-check": "node scripts/verify-email-check.mjs dist",
-    "route-target-check": "node scripts/route-target-check.mjs"
+    "route-target-check": "node scripts/route-target-check.mjs",
+    "admin-permissions-check": "node scripts/admin-permissions-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

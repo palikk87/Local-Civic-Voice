@@ -373,3 +373,75 @@ describe("authorization is never decided by a role's name", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * THE CONSOLE GATES ON WHAT THE SERVER SENDS, SO THE SERVER HAS TO SEND IT.
+ *
+ * apps/web/scripts/admin-permissions-check.mjs drives the real console in a
+ * browser and asserts that a role holding "users.ban" is shown a Ban button
+ * and a role without it is not. To do that it stubs the session endpoints with
+ * a body of this exact shape.
+ *
+ * A stub can drift from the thing it stands in for, and this is the seam where
+ * it would: drop `capabilities` from the login response and the browser check
+ * carries on passing against its own fiction while every real administrator
+ * loses every control on screen. These tests are the other half of that pair —
+ * they pin the shape at the source, so the drift fails here.
+ */
+describe("the login response carries the capabilities the console gates on", () => {
+  test("signing in returns the role AND what it may do", async () => {
+    const response = await fetch(`${BASE_URL}/api/admin/login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: OWNER_EMAIL, password: PASSWORD }),
+    });
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as {
+      admin: { id: string; username: string; role: string; capabilities: string[] };
+    };
+
+    expect(body.admin.role).toBe("superadmin");
+    expect(Array.isArray(body.admin.capabilities)).toBe(true);
+
+    // The owner holds everything, including capabilities added later.
+    const { CAPABILITY_KEYS } = await import("../src/services/admin-capabilities");
+    expect([...body.admin.capabilities].sort()).toEqual([...CAPABILITY_KEYS].sort());
+  });
+
+  test("verify re-reads them, so a role edited mid-session is picked up", async () => {
+    const response = await fetch(`${BASE_URL}/api/admin/verify`, {
+      headers: { Authorization: `Bearer ${nobodyToken}` },
+    });
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as {
+      admin: { role: string; capabilities: string[] };
+    };
+    expect(body.admin.role).toBe(NOBODY_ROLE);
+    // Holding nothing is a real answer, and it must come back as an empty
+    // array rather than as a missing field — the console reads
+    // `capabilities.includes(...)`, and undefined there is a crash, not a
+    // refusal.
+    expect(body.admin.capabilities).toEqual([]);
+  });
+
+  test("a capability granted mid-session appears on the next verify", async () => {
+    await setTestRoleCapabilities(["users.view", "users.ban"]);
+
+    const response = await fetch(`${BASE_URL}/api/admin/verify`, {
+      headers: { Authorization: `Bearer ${nobodyToken}` },
+    });
+    const body = (await response.json()) as { admin: { capabilities: string[] } };
+    expect([...body.admin.capabilities].sort()).toEqual(["users.ban", "users.view"]);
+
+    // And revoking takes it away again, without a new sign-in. This is the
+    // round trip the owner actually performs: tick a box, and the person
+    // holding the role gains the control on their next request.
+    await setTestRoleCapabilities([]);
+    const after = await fetch(`${BASE_URL}/api/admin/verify`, {
+      headers: { Authorization: `Bearer ${nobodyToken}` },
+    });
+    expect(((await after.json()) as { admin: { capabilities: string[] } }).admin.capabilities).toEqual([]);
+  });
+});

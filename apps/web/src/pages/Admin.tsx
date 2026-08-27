@@ -201,10 +201,12 @@ export default function Admin() {
                 Merge review
               </TabsTrigger>
             ) : null}
-            <TabsTrigger value="b2b-clients">
-              <Building2 className="mr-2 h-4 w-4" />
-              B2B clients
-            </TabsTrigger>
+            {allows(TAB_CAPABILITY["b2b-clients"]) ? (
+              <TabsTrigger value="b2b-clients">
+                <Building2 className="mr-2 h-4 w-4" />
+                B2B clients
+              </TabsTrigger>
+            ) : null}
             {allows(TAB_CAPABILITY["bug-reports"]) ? (
               <TabsTrigger value="bug-reports">
                 <Bug className="mr-2 h-4 w-4" />

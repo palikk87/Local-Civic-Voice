@@ -182,6 +182,15 @@ const CHECKS: Check[] = [
       "the two sections that are only for its owner, and Message opens a conversation",
   },
   {
+    name: "web admin-permissions-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "admin-permissions-check"],
+    guards:
+      "an owner grants a capability through the real endpoints and the person holding " +
+      "that role sees the control appear in the real console — and loses it when it is " +
+      "revoked, with no new sign-in",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],
