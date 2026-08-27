@@ -27,6 +27,7 @@ import { EditProfileDialog } from "@/components/profile/EditProfileDialog";
 import { AppShell } from "@/components/layout/AppShell";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { CivicRecord } from "@/components/record/CivicRecord";
+import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
 import { recordApi } from "@/lib/civic";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
 import { api } from "@/lib/api";
@@ -743,6 +744,16 @@ export default function Profile() {
               ))}
             </div>
           </div>
+
+          {/* ARTICLE V, on your own profile too. Somebody who has been
+              impeached sees exactly what everybody else sees about it, in the
+              same words. A finding hidden from the person it is about is a
+              finding they cannot answer. */}
+          {sessionUser?.id ? (
+            <div className="px-4">
+              <ImpeachmentRecord userId={sessionUser.id} />
+            </div>
+          ) : null}
 
           {/* Your record — positions, changes of mind, and what was said in
               your name. It used to live on its own page at /record, behind its

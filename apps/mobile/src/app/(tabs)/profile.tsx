@@ -42,6 +42,7 @@ import { useUserVoteHistory } from '@/lib/hooks';
 import type { Bill, BillCategory } from '@/lib/types';
 import type { VoteWithBill } from '@/lib/database.types';
 import { AuthGate } from '@/components/auth/AuthGate';
+import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/api';
 import { authClient } from '@/lib/auth/auth-client';
@@ -693,6 +694,12 @@ function ProfileContent() {
               </LinearGradient>
             </Pressable>
           </View>
+
+          {/* ARTICLE V, on your own profile too. Somebody who has been
+              impeached sees exactly what everybody else sees about it, in the
+              same words. A finding hidden from the person it is about is a
+              finding they cannot answer. */}
+          {sessionUser?.id ? <ImpeachmentRecord userId={sessionUser.id} /> : null}
 
           {/* Your record — the platform could not answer this about its own
               users until now. Sits above delegation because what was said in

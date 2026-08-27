@@ -146,9 +146,57 @@ impeachmentsRouter.get("/leader/:userId", async (c) => {
     };
   }
 
+  // THE RECORD, KEPT PERMANENTLY.
+  //
+  // Only proceedings that PASSED. An accusation that did not reach two thirds
+  // is not a finding against anybody, and carrying it on a profile forever
+  // would turn the right to bring a charge into a way to mark someone.
+  //
+  // A passed one stays for good, including after the suspension lifts. It is
+  // the record of a constitutional act the person's own delegators took, and a
+  // record that expires is one somebody can wait out.
+  const record = await prisma.impeachment.findMany({
+    where: { leaderId, status: "passed" },
+    orderBy: { decidedAt: "desc" },
+    select: {
+      id: true,
+      grounds: true,
+      evidence: true,
+      openedAt: true,
+      decidedAt: true,
+      suspendedUntil: true,
+      filedBy: { select: USER_FIELDS },
+      _count: { select: { electors: true } },
+    },
+  });
+
+  const recordVotes = new Map<string, number>();
+  if (record.length > 0) {
+    const grouped = await prisma.impeachmentElector.groupBy({
+      by: ["impeachmentId"],
+      where: { impeachmentId: { in: record.map((r) => r.id) }, votedAt: { not: null } },
+      _count: { _all: true },
+    });
+    for (const group of grouped) recordVotes.set(group.impeachmentId, group._count._all);
+  }
+
   return c.json({
     leader: publicUser(leader),
     delegatorCount,
+    /// Every impeachment this person has been through and lost, newest first.
+    record: record.map((entry) => ({
+      id: entry.id,
+      grounds: entry.grounds,
+      evidence: entry.evidence,
+      filedBy: publicUser(entry.filedBy),
+      openedAt: entry.openedAt.toISOString(),
+      decidedAt: entry.decidedAt?.toISOString() ?? null,
+      suspendedUntil: entry.suspendedUntil?.toISOString() ?? null,
+      /// Whether this particular one is the suspension still in force.
+      inForce: !!entry.suspendedUntil && entry.suspendedUntil > new Date(),
+      votes: recordVotes.get(entry.id) ?? 0,
+      electorCount: entry._count.electors,
+    })),
     /// Article V applies to anyone holding borrowed power, and to nobody else.
     canBeImpeached: delegatorCount > 0,
     suspension: {

@@ -24,6 +24,7 @@ import { api } from "@/lib/api";
 import { failureMessage } from "@/lib/request-failure";
 import { safetyApi } from "@/lib/civic";
 import { CommonGround } from "@/components/civic/CommonGround";
+import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
 import { CivicRecord } from "@/components/record/CivicRecord";
 import { useStartConversation } from "@/lib/api/messages";
 
@@ -421,6 +422,14 @@ export default function UserProfile() {
               </button>
             </div>
           ) : null}
+        </div>
+
+        {/* ARTICLE V. Above everything else about them, because somebody
+            deciding whether to lend this person their vote needs to know
+            before they read the rest — not after. Renders nothing at all for
+            almost every profile. */}
+        <div className="px-4">
+          <ImpeachmentRecord userId={id!} />
         </div>
 
         {/* Where the two of you actually agree — and where you do not. Sits

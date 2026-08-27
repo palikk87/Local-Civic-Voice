@@ -39,6 +39,7 @@ import {
   daysLeft,
   hoursLeft,
   personLabel,
+  type ArticleVPerson,
   type ImpeachmentProceeding,
   type MyDelegation,
   type SystemResetState,
@@ -86,10 +87,57 @@ function Nothing({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Articles({ grounds, evidence }: { grounds: string; evidence: string }) {
+function filedOn(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
+/**
+ * THE FILING ITSELF, as the person who brought it wrote it.
+ *
+ * Presented as the document it is — named, attributed, dated — rather than two
+ * unlabelled paragraphs. Somebody deciding how to vote is being asked to judge
+ * a formal accusation, and they cannot do that without seeing that it IS one,
+ * who made it, and when. Never truncated and never behind a "read more".
+ */
+function Articles({
+  kind,
+  filedBy,
+  openedAt,
+  grounds,
+  evidence,
+}: {
+  kind: 'impeachment' | 'reset';
+  filedBy: ArticleVPerson | null;
+  openedAt: string;
+  grounds: string;
+  evidence: string;
+}) {
   return (
-    <View className="mt-3 rounded-xl border border-slate-700/50 bg-slate-900/50 p-3">
-      <Text className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grounds</Text>
+    <View
+      testID={kind === 'impeachment' ? 'articles-of-impeachment' : 'articles-of-reset'}
+      className="mt-3 rounded-xl border border-slate-700/50 bg-slate-900/50 p-3"
+    >
+      <View className="flex-row items-start border-b border-slate-700/50 pb-2">
+        <FileText size={16} color="#94A3B8" />
+        <View className="ml-2 flex-1">
+          <Text className="text-sm font-semibold text-white">
+            {kind === 'impeachment'
+              ? 'Articles of Impeachment'
+              : 'Articles of System Reset'}
+          </Text>
+          <Text className="text-xs text-slate-400">
+            Filed by {personLabel(filedBy)} on {filedOn(openedAt)}
+          </Text>
+        </View>
+      </View>
+
+      <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Grounds
+      </Text>
       <Text className="mt-1 text-sm leading-6 text-slate-200">{grounds}</Text>
       <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Evidence
@@ -234,7 +282,7 @@ function ProceedingCard({
             {personLabel(proceeding.leader)}
           </Text>
           <Text className="text-sm text-slate-400">
-            Filed by {personLabel(proceeding.filedBy)}
+            {proceeding.electorCount} delegator{proceeding.electorCount === 1 ? '' : 's'} may vote
           </Text>
         </View>
         <View
@@ -266,7 +314,13 @@ function ProceedingCard({
         </View>
       </View>
 
-      <Articles grounds={proceeding.grounds} evidence={proceeding.evidence} />
+      <Articles
+        kind="impeachment"
+        filedBy={proceeding.filedBy}
+        openedAt={proceeding.openedAt}
+        grounds={proceeding.grounds}
+        evidence={proceeding.evidence}
+      />
 
       <View className="mt-3">
         <View className="mb-1 flex-row justify-between">
@@ -692,7 +746,7 @@ function ResetTab() {
             <View className="flex-1 pr-3">
               <Text className="text-lg font-semibold text-white">System-Wide Reset</Text>
               <Text className="text-sm text-slate-400">
-                Filed by {personLabel(proceeding.filedBy)}
+                {proceeding.eligibleCount} accounts may vote
               </Text>
             </View>
             <View className="rounded-full bg-red-500/20 px-2 py-0.5">
@@ -706,7 +760,13 @@ function ResetTab() {
             </View>
           </View>
 
-          <Articles grounds={proceeding.grounds} evidence={proceeding.evidence} />
+          <Articles
+            kind="reset"
+            filedBy={proceeding.filedBy}
+            openedAt={proceeding.openedAt}
+            grounds={proceeding.grounds}
+            evidence={proceeding.evidence}
+          />
 
           <View className="mt-4 flex-row border-y border-slate-700/50 py-3">
             <View className="flex-1 items-center">

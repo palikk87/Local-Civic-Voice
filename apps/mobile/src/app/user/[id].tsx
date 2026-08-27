@@ -32,6 +32,7 @@ import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/cn';
 import { CommonGroundPanel } from '@/components/CivicPanels';
+import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
 import { useStartConversation } from '@/lib/api/messages';
 
 interface PublicUser {
@@ -328,6 +329,12 @@ export default function UserProfileScreen() {
                 </View>
               ) : null}
             </View>
+
+            {/* ARTICLE V. Above everything else about them, because somebody
+                deciding whether to lend this person their vote needs to know
+                before they read the rest. Renders nothing for almost every
+                profile. */}
+            <ImpeachmentRecord userId={id} />
 
             {/* Where the two of you actually agree — and where you do not.
                 Above their timeline: knowing you are with somebody on three

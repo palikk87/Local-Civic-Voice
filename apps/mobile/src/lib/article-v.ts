@@ -42,10 +42,32 @@ export interface MyProceedings {
   proceedings: ImpeachmentProceeding[];
 }
 
+/**
+ * One impeachment this person went through and lost.
+ *
+ * Only ever a PASSED proceeding. An accusation that did not reach two thirds
+ * is not a finding against anybody, and is never part of this record.
+ */
+export interface ImpeachmentRecordEntry {
+  id: string;
+  grounds: string;
+  evidence: string;
+  filedBy: ArticleVPerson;
+  openedAt: string;
+  decidedAt: string | null;
+  suspendedUntil: string | null;
+  /** Whether this is the suspension currently in force, as opposed to a past one. */
+  inForce: boolean;
+  votes: number;
+  electorCount: number;
+}
+
 export interface LeaderArticleV {
   leader: ArticleVPerson;
   delegatorCount: number;
   canBeImpeached: boolean;
+  /** Kept permanently, newest first. Empty for almost everybody. */
+  record: ImpeachmentRecordEntry[];
   suspension: { suspended: boolean; until: string | null; impeachmentId: string | null };
   proceeding: null | {
     id: string;

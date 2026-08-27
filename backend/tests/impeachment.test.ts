@@ -715,6 +715,78 @@ describe("impeachment: what the page can read", () => {
   });
 });
 
+describe("impeachment: the record on their profile", () => {
+  test("a passed impeachment is on the record, with the articles in full", async () => {
+    const { leader, delegators } = await leaderWithDelegators(3);
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
+    for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
+
+    const payload = await body(
+      await fetch(`${BASE_URL}/api/impeachments/leader/${leader.userId}`),
+    );
+
+    expect(payload.record).toHaveLength(1);
+    expect(payload.record[0].grounds).toBe(GROUNDS);
+    expect(payload.record[0].evidence).toBe(EVIDENCE);
+    expect(payload.record[0].filedBy.id).toBe(delegators[0]!.userId);
+    // Two, not three: two of three IS two thirds, so it closed on the second
+    // vote and the third was refused. The record shows what carried it.
+    expect(payload.record[0].votes).toBe(2);
+    expect(payload.record[0].electorCount).toBe(3);
+    expect(payload.record[0].inForce).toBe(true);
+    expect(payload.record[0].suspendedUntil).toBeTruthy();
+  });
+
+  test("AN ACCUSATION THAT DID NOT PASS IS NOT ON ANYBODY'S RECORD", async () => {
+    // Filing costs nothing but standing. If a failed accusation stayed on a
+    // profile, the right to bring a charge would double as a way to mark
+    // somebody — the opposite of what Article V is for.
+    const { leader, delegators } = await leaderWithDelegators(6);
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
+    await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 30);
+
+    await prisma.impeachment.update({
+      where: { id: filed.impeachmentId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    await sweepExpiredImpeachments();
+
+    const payload = await body(
+      await fetch(`${BASE_URL}/api/impeachments/leader/${leader.userId}`),
+    );
+    expect(payload.record).toEqual([]);
+  });
+
+  test("THE RECORD OUTLIVES THE SUSPENSION", async () => {
+    // A record that expires is one somebody can wait out.
+    const { leader, delegators } = await leaderWithDelegators(3);
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
+    for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
+
+    await prisma.impeachment.update({
+      where: { id: filed.impeachmentId },
+      data: { suspendedUntil: new Date(Date.now() - 1000) },
+    });
+
+    const payload = await body(
+      await fetch(`${BASE_URL}/api/impeachments/leader/${leader.userId}`),
+    );
+
+    expect(payload.suspension.suspended).toBe(false);
+    expect(payload.record).toHaveLength(1);
+    // Still on the record, but no longer the reason they cannot be delegated to.
+    expect(payload.record[0].inForce).toBe(false);
+  });
+
+  test("somebody never impeached has an empty record, not a missing field", async () => {
+    const clean = await citizen("clean");
+    const payload = await body(
+      await fetch(`${BASE_URL}/api/impeachments/leader/${clean.userId}`),
+    );
+    expect(payload.record).toEqual([]);
+  });
+});
+
 describe("impeachment: nobody can stop it", () => {
   test("there is no route, at any permission level, that cancels a proceeding", async () => {
     // Article V is the people's remedy against borrowed power. A remedy the

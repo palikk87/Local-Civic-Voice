@@ -229,6 +229,9 @@ async function asCitizen(cookie, path, method = "GET", body) {
   });
 }
 
+/** The proceeding this run opens, so later steps can carry it to a finding. */
+let filedId = "";
+
 try {
   await waitForApi();
 
@@ -324,7 +327,12 @@ try {
     }
 
     await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector('[data-testid="tab-impeachment"]', { timeout: 25_000 });
+    // Wait for something the page in question actually renders. Waiting for the
+    // Article V tabs on a profile is a 25-second timeout dressed as a failure.
+    await page.waitForSelector(
+      path.startsWith("/article-v") ? '[data-testid="tab-impeachment"]' : "#root",
+      { timeout: 25_000 },
+    );
     await page.waitForTimeout(1_500);
     return { context, page };
   }
@@ -367,6 +375,7 @@ try {
     const body = await response.json().catch(() => ({}));
     check("a delegator files Articles of Impeachment", response.status === 201, `${response.status} ${JSON.stringify(body).slice(0, 200)}`);
     check("…and the electorate is the three who were delegating", body.electorCount === 3, JSON.stringify(body));
+    filedId = body.impeachmentId;
   }
 
   // ----------------------------------------------------- an elector reads and votes
@@ -420,6 +429,79 @@ try {
       "…and is told plainly why",
       /No proceedings are open that you can vote in/i.test(text),
       text.slice(0, 300).replace(/\n/g, " | "),
+    );
+    await context.close();
+  }
+
+  // ---------------------------------- the articles read as the document they are
+
+  {
+    const { context, page } = await open(ELECTOR);
+    const text = await screen(page);
+
+    check(
+      "the filing is headed as Articles of Impeachment",
+      /Articles of Impeachment/i.test(text),
+      text.slice(0, 300).replace(/\n/g, " | "),
+    );
+    check(
+      "…and says who filed it and when",
+      new RegExp(`Filed by @?${FILER.username}`, "i").test(text),
+      text.slice(0, 400).replace(/\n/g, " | "),
+    );
+    check(
+      "…as one block, not two loose paragraphs",
+      (await page.locator('[data-testid="articles-of-impeachment"]').count()) === 1,
+    );
+    await context.close();
+  }
+
+  // ------------------------------------- the record lands on the leader's profile
+
+  {
+    // Carry it to a finding: the remaining two electors take it past two thirds.
+    for (const person of [FILER, THIRD]) {
+      const response = await asCitizen(
+        cookies[person.id],
+        `/api/impeachments/${filedId}/vote`,
+        "POST",
+        { proposedDays: 30 },
+      );
+      // One of these crosses the threshold; the one after it is correctly refused.
+      if (!response.ok && response.status !== 400) {
+        check(`${person.username} could vote`, false, `${response.status}`);
+      }
+    }
+
+    const state = await (
+      await fetch(`${API}/api/impeachments/leader/${LEADER.id}`)
+    ).json();
+    check("the proceeding passed", state.suspension.suspended === true, JSON.stringify(state.suspension));
+    check("…and is on the leader's record", state.record.length === 1, JSON.stringify(state.record.length));
+
+    const { context, page } = await open(ELECTOR, `/user/${LEADER.id}`);
+    await page.waitForTimeout(2_000);
+    const text = await screen(page);
+
+    check(
+      "THE PROFILE CARRIES THE IMPEACHMENT",
+      /Article V record/i.test(text),
+      text.slice(0, 400).replace(/\n/g, " | "),
+    );
+    check(
+      "…and says they are suspended from receiving delegated votes",
+      /suspended from receiving delegated votes/i.test(text),
+      text.slice(0, 600).replace(/\n/g, " | "),
+    );
+
+    // The articles are on the profile too, one click away.
+    await page.locator('[data-testid="impeachment-record-entry"]').first().click();
+    await page.waitForTimeout(500);
+    const opened = await screen(page);
+    check(
+      "…and the articles can be read from the profile",
+      opened.includes(GROUNDS) && opened.includes(EVIDENCE),
+      opened.slice(0, 400).replace(/\n/g, " | "),
     );
     await context.close();
   }

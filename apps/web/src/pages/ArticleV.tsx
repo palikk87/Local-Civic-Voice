@@ -42,6 +42,7 @@ import {
   daysLeft,
   hoursLeft,
   personLabel,
+  type ArticleVPerson,
   type ImpeachmentProceeding,
   type MyDelegation,
   type SystemResetState,
@@ -98,16 +99,64 @@ function Nothing({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Articles({ grounds, evidence }: { grounds: string; evidence: string }) {
+function filedOn(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/**
+ * THE FILING ITSELF, as the person who brought it wrote it.
+ *
+ * Presented as the document it is — named, attributed, dated — rather than two
+ * unlabelled paragraphs. Somebody deciding how to vote is being asked to judge
+ * a formal accusation, and they cannot do that without seeing that it IS one,
+ * who made it, and when. Never truncated and never behind a "read more": the
+ * whole case, or the vote is being cast on a summary somebody else chose.
+ */
+function Articles({
+  kind,
+  filedBy,
+  openedAt,
+  grounds,
+  evidence,
+}: {
+  kind: "impeachment" | "reset";
+  filedBy: ArticleVPerson | null;
+  openedAt: string;
+  grounds: string;
+  evidence: string;
+}) {
   return (
-    <div className="mt-3 space-y-3 rounded-xl border border-slate-700/50 bg-slate-900/50 p-3">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grounds</p>
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{grounds}</p>
+    <div
+      data-testid={kind === "impeachment" ? "articles-of-impeachment" : "articles-of-reset"}
+      className="mt-3 rounded-xl border border-slate-700/50 bg-slate-900/50 p-3"
+    >
+      <div className="flex items-start gap-2 border-b border-slate-700/50 pb-2">
+        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+        <div>
+          <p className="text-sm font-semibold text-white">
+            {kind === "impeachment"
+              ? "Articles of Impeachment"
+              : "Articles of System Reset"}
+          </p>
+          <p className="text-xs text-slate-400">
+            Filed by {personLabel(filedBy)} on {filedOn(openedAt)}
+          </p>
+        </div>
       </div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence</p>
-        <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{evidence}</p>
+
+      <div className="mt-3 space-y-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Grounds</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{grounds}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Evidence</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-200">{evidence}</p>
+        </div>
       </div>
     </div>
   );
@@ -246,7 +295,7 @@ function ProceedingCard({
         <div>
           <p className="text-lg font-semibold text-white">{personLabel(proceeding.leader)}</p>
           <p className="text-sm text-slate-400">
-            Filed by {personLabel(proceeding.filedBy)}
+            {proceeding.electorCount} delegator{proceeding.electorCount === 1 ? "" : "s"} may vote
           </p>
         </div>
         <span
@@ -267,7 +316,13 @@ function ProceedingCard({
         </span>
       </div>
 
-      <Articles grounds={proceeding.grounds} evidence={proceeding.evidence} />
+      <Articles
+        kind="impeachment"
+        filedBy={proceeding.filedBy}
+        openedAt={proceeding.openedAt}
+        grounds={proceeding.grounds}
+        evidence={proceeding.evidence}
+      />
 
       <div className="mt-3">
         <div className="mb-1 flex justify-between text-xs">
@@ -722,7 +777,7 @@ function ResetTab() {
             <div>
               <p className="text-lg font-semibold text-white">System-Wide Reset</p>
               <p className="text-sm text-slate-400">
-                Filed by {personLabel(proceeding.filedBy)}
+                {proceeding.eligibleCount} accounts may vote
               </p>
             </div>
             <span className="shrink-0 rounded-full bg-red-500/20 px-2 py-0.5 text-xs font-medium text-red-300">
@@ -734,7 +789,13 @@ function ResetTab() {
             </span>
           </div>
 
-          <Articles grounds={proceeding.grounds} evidence={proceeding.evidence} />
+          <Articles
+            kind="reset"
+            filedBy={proceeding.filedBy}
+            openedAt={proceeding.openedAt}
+            grounds={proceeding.grounds}
+            evidence={proceeding.evidence}
+          />
 
           <div className="mt-4 grid grid-cols-3 gap-2 border-y border-slate-700/50 py-3 text-center">
             <div>
