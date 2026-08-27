@@ -51,6 +51,22 @@ beforeEach(async () => {
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * The response body, as the page would read it.
+ *
+ * These tests assert on shapes the routes return rather than on types they
+ * import, on purpose: a contract that only holds because both sides share a
+ * TypeScript interface is not a contract that survives a client on a different
+ * deploy. So the shape is stated here, loosely, and checked at runtime.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Body = any;
+
+async function body(response: Response): Promise<Body> {
+  return (await response.json()) as Body;
+}
+
+
 let seq = 0;
 let refCounter = 0;
 
@@ -148,7 +164,7 @@ describe("impeachment: who may bring it", () => {
 
     const response = await file(stranger.cookie, leader.userId);
     expect(response.status).toBe(400);
-    expect((await response.json()).code).toBe("not_a_delegator");
+    expect((await body(response)).code).toBe("not_a_delegator");
 
     expect(await prisma.impeachment.count()).toBe(0);
   });
@@ -156,14 +172,14 @@ describe("impeachment: who may bring it", () => {
   test("a delegator can file, and the electorate is every delegator at that moment", async () => {
     const { leader, delegators } = await leaderWithDelegators(4);
 
-    const response = await file(delegators[0].cookie, leader.userId);
+    const response = await file(delegators[0]!.cookie, leader.userId);
     expect(response.status).toBe(201);
 
-    const body = await response.json();
-    expect(body.electorCount).toBe(4);
+    const payload = await body(response);
+    expect(payload.electorCount).toBe(4);
 
     const electors = await prisma.impeachmentElector.findMany({
-      where: { impeachmentId: body.impeachmentId },
+      where: { impeachmentId: payload.impeachmentId },
       select: { voterId: true },
     });
     expect(new Set(electors.map((e) => e.voterId))).toEqual(
@@ -175,12 +191,12 @@ describe("impeachment: who may bring it", () => {
     const { leader } = await leaderWithDelegators(1);
     const response = await file(leader.cookie, leader.userId);
     expect(response.status).toBe(400);
-    expect((await response.json()).code).toBe("self_filing");
+    expect((await body(response)).code).toBe("self_filing");
   });
 
   test("articles that say nothing are refused", async () => {
     const { leader, delegators } = await leaderWithDelegators(1);
-    const response = await file(delegators[0].cookie, leader.userId, "bad", "worse");
+    const response = await file(delegators[0]!.cookie, leader.userId, "bad", "worse");
     expect(response.status).toBe(400);
     expect(await prisma.impeachment.count()).toBe(0);
   });
@@ -188,11 +204,11 @@ describe("impeachment: who may bring it", () => {
   test("a second proceeding against the same leader is refused while one is open", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
 
-    expect((await file(delegators[0].cookie, leader.userId)).status).toBe(201);
+    expect((await file(delegators[0]!.cookie, leader.userId)).status).toBe(201);
 
-    const second = await file(delegators[1].cookie, leader.userId);
+    const second = await file(delegators[1]!.cookie, leader.userId);
     expect(second.status).toBe(409);
-    expect((await second.json()).code).toBe("already_open");
+    expect((await body(second)).code).toBe("already_open");
     expect(await prisma.impeachment.count()).toBe(1);
   });
 });
@@ -204,14 +220,14 @@ describe("impeachment: the frozen electorate", () => {
     // and a mob brigades in to manufacture a threshold.
     const { leader, delegators } = await leaderWithDelegators(3);
 
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     const latecomer = await citizen("latecomer");
     expect((await delegate(latecomer.cookie, leader.userId)).status).toBe(201);
 
     const attempt = await voteToImpeach(latecomer.cookie, filed.impeachmentId, 30);
     expect(attempt.status).toBe(403);
-    expect((await attempt.json()).code).toBe("not_an_elector");
+    expect((await body(attempt)).code).toBe("not_an_elector");
 
     // And they did not enlarge the denominator either.
     expect(
@@ -223,29 +239,29 @@ describe("impeachment: the frozen electorate", () => {
     // They lent power and were harmed while lending it. The freeze already
     // stops attrition attacks, so stripping a departing delegator gains nothing.
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     const theirs = await prisma.delegation.findFirstOrThrow({
-      where: { fromUserId: delegators[1].userId, toUserId: leader.userId },
+      where: { fromUserId: delegators[1]!.userId, toUserId: leader.userId },
     });
     const revoked = await fetch(`${BASE_URL}/api/delegations/${theirs.id}`, {
       method: "DELETE",
-      headers: freshClientHeaders({ cookie: delegators[1].cookie }),
+      headers: freshClientHeaders({ cookie: delegators[1]!.cookie }),
     });
     expect(revoked.status).toBe(200);
 
-    expect((await voteToImpeach(delegators[1].cookie, filed.impeachmentId, 30)).status).toBe(200);
+    expect((await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 30)).status).toBe(200);
   });
 
   test("one elector, one vote — a second is refused", async () => {
     const { leader, delegators } = await leaderWithDelegators(5);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
-    expect((await voteToImpeach(delegators[1].cookie, filed.impeachmentId, 30)).status).toBe(200);
+    expect((await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 30)).status).toBe(200);
 
-    const again = await voteToImpeach(delegators[1].cookie, filed.impeachmentId, 90);
+    const again = await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 90);
     expect(again.status).toBe(400);
-    expect((await again.json()).code).toBe("already_voted");
+    expect((await body(again)).code).toBe("already_voted");
 
     expect(
       await prisma.impeachmentElector.count({
@@ -256,26 +272,26 @@ describe("impeachment: the frozen electorate", () => {
 
   test("a vote can be withdrawn while the window is open", async () => {
     const { leader, delegators } = await leaderWithDelegators(5);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
-    await voteToImpeach(delegators[1].cookie, filed.impeachmentId, 30);
+    await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 30);
     const withdrawn = await fetch(`${BASE_URL}/api/impeachments/${filed.impeachmentId}/vote`, {
       method: "DELETE",
-      headers: freshClientHeaders({ cookie: delegators[1].cookie }),
+      headers: freshClientHeaders({ cookie: delegators[1]!.cookie }),
     });
     expect(withdrawn.status).toBe(200);
-    expect((await withdrawn.json()).votes).toBe(0);
+    expect((await body(withdrawn)).votes).toBe(0);
   });
 });
 
 describe("impeachment: the threshold", () => {
   test("below two thirds, nothing happens at all", async () => {
     const { leader, delegators } = await leaderWithDelegators(6);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     // Three of six is a half. Two thirds is four.
     for (let i = 0; i < 3; i += 1) {
-      expect((await voteToImpeach(delegators[i].cookie, filed.impeachmentId, 30)).status).toBe(200);
+      expect((await voteToImpeach(delegators[i]!.cookie, filed.impeachmentId, 30)).status).toBe(200);
     }
 
     const row = await prisma.impeachment.findUniqueOrThrow({ where: { id: filed.impeachmentId } });
@@ -291,10 +307,10 @@ describe("impeachment: the threshold", () => {
 
   test("at two thirds it passes, and the delegations go back", async () => {
     const { leader, delegators } = await leaderWithDelegators(6);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     for (let i = 0; i < 4; i += 1) {
-      await voteToImpeach(delegators[i].cookie, filed.impeachmentId, 30);
+      await voteToImpeach(delegators[i]!.cookie, filed.impeachmentId, 30);
     }
 
     const row = await prisma.impeachment.findUniqueOrThrow({ where: { id: filed.impeachmentId } });
@@ -308,8 +324,8 @@ describe("impeachment: the threshold", () => {
 
   test("a proceeding whose week runs out without two thirds simply expires", async () => {
     const { leader, delegators } = await leaderWithDelegators(6);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
-    await voteToImpeach(delegators[1].cookie, filed.impeachmentId, 30);
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
+    await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 30);
 
     await prisma.impeachment.update({
       where: { id: filed.impeachmentId },
@@ -326,7 +342,7 @@ describe("impeachment: the threshold", () => {
     ).toBe(6);
 
     // And with the old one closed, a new proceeding may be brought.
-    expect((await file(delegators[2].cookie, leader.userId)).status).toBe(201);
+    expect((await file(delegators[2]!.cookie, leader.userId)).status).toBe(201);
   });
 
   test("the backend threshold is the same 2/3 the Bill of Rights states", async () => {
@@ -346,10 +362,10 @@ describe("impeachment: the sentence", () => {
     // Six electors, so two thirds is exactly four and the fourth vote is the
     // one that decides it. 10, 20, 40 and 50 average to 30.
     const { leader, delegators } = await leaderWithDelegators(6);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     for (const [index, days] of [10, 20, 40, 50].entries()) {
-      expect((await voteToImpeach(delegators[index].cookie, filed.impeachmentId, days)).status).toBe(200);
+      expect((await voteToImpeach(delegators[index]!.cookie, filed.impeachmentId, days)).status).toBe(200);
     }
 
     const row = await prisma.impeachment.findUniqueOrThrow({ where: { id: filed.impeachmentId } });
@@ -361,14 +377,14 @@ describe("impeachment: the sentence", () => {
 
   test("a duration outside 1..365 days is refused", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
-    expect((await voteToImpeach(delegators[0].cookie, filed.impeachmentId, 0)).status).toBe(400);
-    expect((await voteToImpeach(delegators[0].cookie, filed.impeachmentId, 366)).status).toBe(400);
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
+    expect((await voteToImpeach(delegators[0]!.cookie, filed.impeachmentId, 0)).status).toBe(400);
+    expect((await voteToImpeach(delegators[0]!.cookie, filed.impeachmentId, 366)).status).toBe(400);
   });
 
   test("the suspension lapses on time, and delegation works again", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
     for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
 
     expect((await suspensionState(leader.userId)).suspended).toBe(true);
@@ -391,7 +407,7 @@ describe("impeachment: what is actually taken away", () => {
   /** A leader who has just been impeached, plus their delegators. */
   async function impeached() {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
     for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
     expect((await suspensionState(leader.userId)).suspended).toBe(true);
     return { leader, delegators, impeachmentId: filed.impeachmentId as string };
@@ -404,9 +420,9 @@ describe("impeachment: what is actually taken away", () => {
     const response = await delegate(hopeful.cookie, leader.userId);
     expect(response.status).toBe(403);
 
-    const body = await response.json();
-    expect(body.impeachment.suspendedUntil).toBeTruthy();
-    expect(new Date(body.impeachment.suspendedUntil).getTime()).toBeGreaterThan(Date.now());
+    const payload = await body(response);
+    expect(payload.impeachment.suspendedUntil).toBeTruthy();
+    expect(new Date(payload.impeachment.suspendedUntil).getTime()).toBeGreaterThan(Date.now());
   });
 
   test("they can still post", async () => {
@@ -437,14 +453,14 @@ describe("impeachment: what is actually taken away", () => {
     // average is over the votes that were in when it crossed. A vote arriving
     // afterwards is refused rather than quietly discarded.
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
-    await voteToImpeach(delegators[0].cookie, filed.impeachmentId, 10);
-    await voteToImpeach(delegators[1].cookie, filed.impeachmentId, 20);
+    await voteToImpeach(delegators[0]!.cookie, filed.impeachmentId, 10);
+    await voteToImpeach(delegators[1]!.cookie, filed.impeachmentId, 20);
 
-    const late = await voteToImpeach(delegators[2].cookie, filed.impeachmentId, 365);
+    const late = await voteToImpeach(delegators[2]!.cookie, filed.impeachmentId, 365);
     expect(late.status).toBe(400);
-    expect((await late.json()).code).toBe("closed");
+    expect((await body(late)).code).toBe("closed");
 
     const row = await prisma.impeachment.findUniqueOrThrow({ where: { id: filed.impeachmentId } });
     expect(Math.round((row.suspendedUntil!.getTime() - row.decidedAt!.getTime()) / DAY)).toBe(15);
@@ -453,7 +469,7 @@ describe("impeachment: what is actually taken away", () => {
   test("they can still comment", async () => {
     const { leader, delegators } = await impeached();
     const post = await prisma.post.create({
-      data: { authorId: delegators[0].userId, content: "A post to reply to." },
+      data: { authorId: delegators[0]!.userId, content: "A post to reply to." },
     });
     const response = await fetch(`${BASE_URL}/api/posts/${post.id}/comments`, {
       method: "POST",
@@ -466,7 +482,7 @@ describe("impeachment: what is actually taken away", () => {
   test("they can still share somebody else's post", async () => {
     const { leader, delegators } = await impeached();
     const post = await prisma.post.create({
-      data: { authorId: delegators[0].userId, content: "Worth passing on." },
+      data: { authorId: delegators[0]!.userId, content: "Worth passing on." },
     });
     const response = await fetch(`${BASE_URL}/api/posts/${post.id}/repost`, {
       method: "POST",
@@ -480,10 +496,10 @@ describe("impeachment: what is actually taken away", () => {
 
     // Somebody was already following them before the vote.
     await prisma.follow.create({
-      data: { followerId: delegators[0].userId, followingId: leader.userId },
+      data: { followerId: delegators[0]!.userId, followingId: leader.userId },
     });
 
-    const response = await fetch(`${BASE_URL}/api/users/${delegators[1].userId}/follow`, {
+    const response = await fetch(`${BASE_URL}/api/users/${delegators[1]!.userId}/follow`, {
       method: "POST",
       headers: freshClientHeaders({ cookie: leader.cookie }),
     });
@@ -546,7 +562,7 @@ describe("impeachment: what is actually taken away", () => {
     });
     expect((await prisma.governmentReference.findUniqueOrThrow({ where: { id: bill.id } })).supportVotes).toBe(4);
 
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
     for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
 
     expect((await prisma.governmentReference.findUniqueOrThrow({ where: { id: bill.id } })).supportVotes).toBe(1);
@@ -556,7 +572,7 @@ describe("impeachment: what is actually taken away", () => {
 describe("impeachment: service of the articles", () => {
   test("the accused is told what they are accused of, in their own inbox", async () => {
     const { leader, delegators } = await leaderWithDelegators(2);
-    await file(delegators[0].cookie, leader.userId);
+    await file(delegators[0]!.cookie, leader.userId);
 
     const served = await prisma.notification.findFirst({
       where: { userId: leader.userId, type: "impeachment_served" },
@@ -568,7 +584,7 @@ describe("impeachment: service of the articles", () => {
 
   test("every elector is told the proceeding exists", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    await file(delegators[0].cookie, leader.userId);
+    await file(delegators[0]!.cookie, leader.userId);
 
     const told = await prisma.notification.count({ where: { type: "impeachment_opened" } });
     expect(told).toBe(3);
@@ -595,13 +611,13 @@ describe("impeachment: service of the articles", () => {
       });
     }
 
-    await file(delegators[0].cookie, leader.userId);
+    await file(delegators[0]!.cookie, leader.userId);
     expect(await prisma.notification.count({ where: { type: "impeachment_opened" } })).toBe(2);
   });
 
   test("both sides are told the outcome", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
     for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
 
     // Three electors and the leader.
@@ -619,66 +635,66 @@ describe("impeachment: what the page can read", () => {
     });
     expect(response.status).toBe(200);
 
-    const body = await response.json();
-    expect(body.proceeding).toBeNull();
-    expect(body.delegatorCount).toBe(2);
-    expect(body.canBeImpeached).toBe(true);
-    expect(body.suspension.suspended).toBe(false);
+    const payload = await body(response);
+    expect(payload.proceeding).toBeNull();
+    expect(payload.delegatorCount).toBe(2);
+    expect(payload.canBeImpeached).toBe(true);
+    expect(payload.suspension.suspended).toBe(false);
   });
 
   test("somebody with no delegators is not subject to Article V at all", async () => {
     const nobody = await citizen("nobody");
     const response = await fetch(`${BASE_URL}/api/impeachments/leader/${nobody.userId}`);
-    const body = await response.json();
-    expect(body.canBeImpeached).toBe(false);
-    expect(body.delegatorCount).toBe(0);
+    const payload = await body(response);
+    expect(payload.canBeImpeached).toBe(false);
+    expect(payload.delegatorCount).toBe(0);
   });
 
   test("an elector sees the articles, the tally, and that they may vote", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     const response = await fetch(`${BASE_URL}/api/impeachments/leader/${leader.userId}`, {
-      headers: freshClientHeaders({ cookie: delegators[1].cookie }),
+      headers: freshClientHeaders({ cookie: delegators[1]!.cookie }),
     });
-    const body = await response.json();
+    const payload = await body(response);
 
-    expect(body.proceeding.grounds).toBe(GROUNDS);
-    expect(body.proceeding.evidence).toBe(EVIDENCE);
-    expect(body.proceeding.electorCount).toBe(3);
-    expect(body.proceeding.votes).toBe(0);
-    expect(body.proceeding.votesNeeded).toBe(2);
-    expect(body.proceeding.viewerIsElector).toBe(true);
-    expect(body.proceeding.viewerHasVoted).toBe(false);
+    expect(payload.proceeding.grounds).toBe(GROUNDS);
+    expect(payload.proceeding.evidence).toBe(EVIDENCE);
+    expect(payload.proceeding.electorCount).toBe(3);
+    expect(payload.proceeding.votes).toBe(0);
+    expect(payload.proceeding.votesNeeded).toBe(2);
+    expect(payload.proceeding.viewerIsElector).toBe(true);
+    expect(payload.proceeding.viewerHasVoted).toBe(false);
   });
 
   test("a non-elector sees the accusation but is told plainly they have no vote", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    await file(delegators[0].cookie, leader.userId);
+    await file(delegators[0]!.cookie, leader.userId);
     const stranger = await citizen("onlooker");
 
     const response = await fetch(`${BASE_URL}/api/impeachments/leader/${leader.userId}`, {
       headers: freshClientHeaders({ cookie: stranger.cookie }),
     });
-    const body = await response.json();
-    expect(body.proceeding.grounds).toBe(GROUNDS);
-    expect(body.proceeding.viewerIsElector).toBe(false);
+    const payload = await body(response);
+    expect(payload.proceeding.grounds).toBe(GROUNDS);
+    expect(payload.proceeding.viewerIsElector).toBe(false);
   });
 
   test("the ballot box lists the proceedings you are an elector in", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 
     const response = await fetch(`${BASE_URL}/api/impeachments/me`, {
-      headers: freshClientHeaders({ cookie: delegators[1].cookie }),
+      headers: freshClientHeaders({ cookie: delegators[1]!.cookie }),
     });
-    const body = await response.json();
+    const payload = await body(response);
 
-    expect(body.proceedings).toHaveLength(1);
-    expect(body.proceedings[0].id).toBe(filed.impeachmentId);
-    expect(body.proceedings[0].leader.id).toBe(leader.userId);
-    expect(body.proceedings[0].electorCount).toBe(3);
-    expect(body.proceedings[0].viewerHasVoted).toBe(false);
+    expect(payload.proceedings).toHaveLength(1);
+    expect(payload.proceedings[0].id).toBe(filed.impeachmentId);
+    expect(payload.proceedings[0].leader.id).toBe(leader.userId);
+    expect(payload.proceedings[0].electorCount).toBe(3);
+    expect(payload.proceedings[0].viewerHasVoted).toBe(false);
   });
 
   test("somebody who is an elector in nothing gets an empty list, not an error", async () => {
@@ -687,7 +703,7 @@ describe("impeachment: what the page can read", () => {
       headers: freshClientHeaders({ cookie: alone.cookie }),
     });
     expect(response.status).toBe(200);
-    expect((await response.json()).proceedings).toEqual([]);
+    expect((await body(response)).proceedings).toEqual([]);
   });
 });
 
@@ -715,7 +731,7 @@ describe("impeachment: nobody can stop it", () => {
 
   test("evaluate() is idempotent — running it again does not re-punish", async () => {
     const { leader, delegators } = await leaderWithDelegators(3);
-    const filed = await (await file(delegators[0].cookie, leader.userId)).json();
+    const filed = await body(await file(delegators[0]!.cookie, leader.userId));
     for (const person of delegators) await voteToImpeach(person.cookie, filed.impeachmentId, 30);
 
     const first = await prisma.impeachment.findUniqueOrThrow({ where: { id: filed.impeachmentId } });
@@ -727,5 +743,66 @@ describe("impeachment: nobody can stop it", () => {
     const second = await prisma.impeachment.findUniqueOrThrow({ where: { id: filed.impeachmentId } });
     expect(second.suspendedUntil!.getTime()).toBe(first.suspendedUntil!.getTime());
     expect(await prisma.notification.count({ where: { type: "impeachment_decided" } })).toBe(notices);
+  });
+});
+
+describe("impeachment: the articles reach the admins", () => {
+  const ADMIN_EMAIL = "articles-admin@example.com";
+  const ADMIN_PASSWORD = "correct horse battery staple";
+
+  async function adminToken(): Promise<string> {
+    const owner = await signUp({
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      name: "Articles Admin",
+    });
+    await prisma.user.update({ where: { id: owner.userId }, data: { role: "superadmin" } });
+
+    const response = await fetch(`${BASE_URL}/api/admin/login`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ username: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+    });
+    const payload = await body(response);
+    return payload.token ?? payload.data?.token ?? "";
+  }
+
+  test("a filing shows up in the admin queue with both sides named", async () => {
+    const token = await adminToken();
+    const { leader, delegators } = await leaderWithDelegators(3);
+    await file(delegators[0]!.cookie, leader.userId);
+
+    const response = await fetch(`${BASE_URL}/api/admin/articles`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+
+    const payload = await body(response);
+    expect(payload.total).toBe(1);
+    expect(payload.openCount).toBe(1);
+
+    const filing = payload.articles[0];
+    expect(filing.kind).toBe("impeachment");
+    expect(filing.grounds).toBe(GROUNDS);
+    expect(filing.evidence).toBe(EVIDENCE);
+    expect(filing.accused.id).toBe(leader.userId);
+    expect(filing.filedBy.id).toBe(delegators[0]!.userId);
+    expect(filing.electorCount).toBe(3);
+  });
+
+  test("the queue says out loud that it cannot stop anything", async () => {
+    const token = await adminToken();
+    const response = await fetch(`${BASE_URL}/api/admin/articles`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect((await body(response)).canStopProceedings).toBe(false);
+  });
+
+  test("an unauthenticated request gets nothing", async () => {
+    const { leader, delegators } = await leaderWithDelegators(2);
+    await file(delegators[0]!.cookie, leader.userId);
+
+    const response = await fetch(`${BASE_URL}/api/admin/articles`);
+    expect(response.status).toBe(401);
   });
 });

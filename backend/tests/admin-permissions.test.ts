@@ -137,6 +137,7 @@ const GATED: { capability: string; method: string; path: () => string; body?: un
   { capability: "logs.view", method: "GET", path: () => "/api/admin/logs" },
   { capability: "b2b.view", method: "GET", path: () => "/api/admin/b2b-clients" },
   { capability: "merges.decide", method: "POST", path: () => "/api/admin/reference-merges/decide", body: { candidateId: "nope", decision: "reject" } },
+  { capability: "articles.review", method: "GET", path: () => "/api/admin/articles" },
 ];
 
 describe("a role without a capability is refused the thing it names", () => {

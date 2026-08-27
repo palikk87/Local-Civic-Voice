@@ -109,6 +109,17 @@ export const CAPABILITIES = [
     group: "Content",
   },
   {
+    key: "articles.review",
+    label: "Read Articles of Impeachment and System Reset",
+    grants:
+      "Read every Article V filing and who brought it. READ ONLY, and " +
+      "deliberately: no permission level can stop, pause or overturn a " +
+      "proceeding — that is the people's right, not the platform's. The remedy " +
+      "against a filing brought in bad faith is against the person who brought " +
+      "it, through the ordinary suspend and ban powers.",
+    group: "Content",
+  },
+  {
     key: "content.repair",
     label: "Run content repairs",
     grants:
@@ -204,6 +215,7 @@ export const BUILT_IN_ROLES: {
       // through the reviewed path, which is backwards. They are one capability
       // now, and an owner who wants merges reserved to themselves unticks it.
       "merges.decide",
+      "articles.review",
       "content.repair",
       "b2b.view",
       "logs.view",
@@ -215,6 +227,15 @@ export const BUILT_IN_ROLES: {
     slug: "moderator",
     name: "Moderator",
     description: "Looks after what people post and what they report about each other.",
-    capabilities: ["users.view", "users.ban", "posts.moderate", "bugReports.manage"],
+    // Articles are here because acting on a frivolous filer is a moderation
+    // call, and a moderator who can ban somebody for a filing they are not
+    // allowed to read is being asked to act blind.
+    capabilities: [
+      "users.view",
+      "users.ban",
+      "posts.moderate",
+      "bugReports.manage",
+      "articles.review",
+    ],
   },
 ];

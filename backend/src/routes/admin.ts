@@ -3430,3 +3430,96 @@ adminRouter.post("/reference-merges/journal/:id/undo", async (c) => {
     return c.json({ error: error instanceof Error ? error.message : "Could not undo" }, 400);
   }
 });
+
+/**
+ * GET /api/admin/articles
+ *
+ * Every Article V filing — Articles of Impeachment, and Articles of System
+ * Reset once that exists — newest first, with who brought it and where the
+ * proceeding stands.
+ *
+ * READ ONLY, AND THAT IS THE WHOLE DESIGN. There is no companion route that
+ * cancels, pauses, or overturns a proceeding, at any permission level,
+ * including the owner's. Article V is the people's remedy against borrowed
+ * power; a remedy the platform can switch off is not a remedy, and a queue with
+ * a Dismiss button on it would quietly become one.
+ *
+ * What an admin CAN do about a filing brought in bad faith is act against the
+ * person who brought it, through the ordinary suspend and ban powers — which
+ * now genuinely bite on every request. That runs alongside the proceeding
+ * rather than stopping it: the right to bring a charge does not belong to the
+ * people being charged, and a filer being sanctioned does not make the
+ * accusation untrue.
+ */
+adminRouter.get("/articles", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "articles.review");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const limit = Math.min(Number(c.req.query("limit") ?? 50) || 50, 200);
+  const offset = Math.max(Number(c.req.query("offset") ?? 0) || 0, 0);
+
+  const person = { id: true, name: true, username: true, email: true } as const;
+
+  const [filings, total, openCount] = await Promise.all([
+    prisma.impeachment.findMany({
+      orderBy: { openedAt: "desc" },
+      take: limit,
+      skip: offset,
+      select: {
+        id: true,
+        status: true,
+        grounds: true,
+        evidence: true,
+        openedAt: true,
+        expiresAt: true,
+        decidedAt: true,
+        suspendedUntil: true,
+        leader: { select: person },
+        filedBy: { select: person },
+        _count: { select: { electors: true } },
+      },
+    }),
+    prisma.impeachment.count(),
+    prisma.impeachment.count({ where: { status: "open" } }),
+  ]);
+
+  const voteCounts = new Map<string, number>();
+  if (filings.length > 0) {
+    const grouped = await prisma.impeachmentElector.groupBy({
+      by: ["impeachmentId"],
+      where: { impeachmentId: { in: filings.map((f) => f.id) }, votedAt: { not: null } },
+      _count: { _all: true },
+    });
+    for (const group of grouped) voteCounts.set(group.impeachmentId, group._count._all);
+  }
+
+  return c.json({
+    articles: filings.map((filing) => ({
+      id: filing.id,
+      kind: "impeachment" as const,
+      status: filing.status,
+      grounds: filing.grounds,
+      evidence: filing.evidence,
+      accused: filing.leader,
+      filedBy: filing.filedBy,
+      openedAt: filing.openedAt.toISOString(),
+      expiresAt: filing.expiresAt.toISOString(),
+      decidedAt: filing.decidedAt?.toISOString() ?? null,
+      suspendedUntil: filing.suspendedUntil?.toISOString() ?? null,
+      votes: voteCounts.get(filing.id) ?? 0,
+      electorCount: filing._count.electors,
+    })),
+    total,
+    openCount,
+    limit,
+    offset,
+    // Said out loud in the payload so a console cannot render an action the
+    // server would refuse anyway.
+    canStopProceedings: false,
+  });
+});
