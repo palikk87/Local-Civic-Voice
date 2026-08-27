@@ -27,6 +27,7 @@ import {
   Vote,
   Building2,
   GitMerge,
+  Scale,
   ShieldCheck,
 } from 'lucide-react-native';
 import { adminCan, useAdminStore } from '@/lib/admin-store';
@@ -328,6 +329,15 @@ export default function AdminDashboardScreen() {
           This screen existed with nothing linking to it — reachable only by
           typing the path. Same console, same tabs as web, so it belongs here.
         */}
+        {adminCan(session, 'articles.review') ? (
+          <MenuItem
+            title="Article V filings"
+            subtitle="Articles of Impeachment and System Reset — read only"
+            icon={<Scale size={24} color="#F59E0B" />}
+            onPress={() => router.push('/admin/articles')}
+          />
+        ) : null}
+
         {adminCan(session, 'b2b.view') ? (
           <MenuItem
             title="B2B Clients"
