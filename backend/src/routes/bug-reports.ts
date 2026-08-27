@@ -20,6 +20,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { Prisma } from "@prisma/client";
 import { createRateLimiter } from "../middleware/rate-limit";
 import type { auth } from "../auth";
 
@@ -45,6 +46,32 @@ const submitSchema = z.object({
   pagePath: z.string().max(500),
   elementLabel: z.string().max(200).optional(),
   elementPath: z.string().max(500).optional(),
+  /**
+   * What the element actually is — component, record, selector, markup.
+   *
+   * Shaped rather than a free-form blob, so a client cannot quietly turn this
+   * into a place to post whatever it likes, and capped hard: a report is a
+   * paragraph of evidence, not a page dump. Unknown keys are stripped.
+   *
+   * Every field optional, because a page that does not say is a real answer.
+   * The web fills most of them; mobile has no DOM and fills almost none.
+   */
+  elementDetail: z
+    .object({
+      selector: z.string().max(500).optional(),
+      tag: z.string().max(50).optional(),
+      component: z.string().max(200).optional(),
+      control: z.string().max(200).optional(),
+      action: z.string().max(500).optional(),
+      attributes: z.record(z.string().max(60), z.string().max(300)).optional(),
+      data: z.record(z.string().max(60), z.string().max(300)).optional(),
+      html: z.string().max(1200).optional(),
+      screen: z.string().max(200).optional(),
+      params: z.record(z.string().max(60), z.string().max(300)).optional(),
+      tap: z.string().max(200).optional(),
+    })
+    .strict()
+    .optional(),
   problem: z.string().min(3, "Say what happened").max(4000),
   wanted: z.string().max(4000).optional(),
   userAgent: z.string().max(500).optional(),
@@ -67,6 +94,7 @@ bugReportsRouter.post("/", submitLimit, zValidator("json", submitSchema), async 
       pagePath: body.pagePath,
       elementLabel: body.elementLabel ?? null,
       elementPath: body.elementPath ?? null,
+      elementDetail: body.elementDetail ?? Prisma.DbNull,
       problem: body.problem,
       wanted: body.wanted ?? null,
       userAgent: body.userAgent ?? null,
@@ -76,9 +104,12 @@ bugReportsRouter.post("/", submitLimit, zValidator("json", submitSchema), async 
     select: { id: true, createdAt: true },
   });
 
+  // The operator line names the component, not just the word, for the same
+  // reason the stored report does.
   console.log(
     `[BugReport] ${report.id} on ${body.pagePath}` +
-      (body.elementLabel ? ` — "${body.elementLabel}"` : "")
+      (body.elementLabel ? ` — "${body.elementLabel}"` : "") +
+      (body.elementDetail?.component ? ` [${body.elementDetail.component}]` : ""),
   );
 
   return c.json({ success: true, id: report.id, createdAt: report.createdAt }, 201);

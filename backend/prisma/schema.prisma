@@ -1301,6 +1301,19 @@ model BugReport {
   elementLabel String?
   elementPath  String?
 
+  /// WHAT IT ACTUALLY IS, as opposed to what it said.
+  ///
+  /// elementLabel is the word on the screen, which is the right thing to show
+  /// the person reporting and the one thing the admin already had — it is in
+  /// the complaint. This carries the identity: the component that rendered it,
+  /// the record it was showing (data-* attributes from the element and its
+  /// ancestors), a selector that finds it again, where the control leads, and
+  /// the markup with typed-in values removed.
+  ///
+  /// JSON because the shape differs by platform and will grow: the web reads a
+  /// DOM, and mobile has none to read.
+  elementDetail Json?
+
   /// Their words, in two parts, because "what is wrong" and "what would be
   /// right" are different questions and the second one is the useful one.
   problem String

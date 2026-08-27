@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bug, Check, ExternalLink, X } from "lucide-react";
+import { Bug, Check, ChevronDown, ChevronRight, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { adminAuthHeader } from "@/lib/mobile/admin-store";
@@ -22,6 +22,23 @@ interface BugReport {
   pagePath: string;
   elementLabel: string | null;
   elementPath: string | null;
+  /**
+   * What the element actually is. Null for every report filed before this
+   * existed, and for a report where nothing was pointed at.
+   */
+  elementDetail: {
+    selector?: string;
+    tag?: string;
+    component?: string;
+    control?: string;
+    action?: string;
+    attributes?: Record<string, string>;
+    data?: Record<string, string>;
+    html?: string;
+    screen?: string;
+    params?: Record<string, string>;
+    tap?: string;
+  } | null;
   problem: string;
   wanted: string | null;
   userAgent: string | null;
@@ -34,6 +51,106 @@ interface BugReport {
 }
 
 const FILTERS = ["open", "acknowledged", "fixed", "declined", "all"] as const;
+
+/**
+ * What the reporter was actually pointing at.
+ *
+ * Collapsed by default. An admin triaging a list wants the complaint; an admin
+ * fixing one wants all of this, and the difference is one click.
+ *
+ * NOTHING HERE IS INVENTED. Every line is read off the page the person was
+ * looking at, and a field the page did not carry is left out rather than
+ * filled with a plausible guess.
+ */
+function ElementDetail({
+  detail,
+  path,
+}: {
+  detail: BugReport["elementDetail"];
+  path: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (!detail) {
+    // Reports filed before this existed, and reports where nobody pointed at
+    // anything. Say which rather than showing an empty panel.
+    return path ? (
+      <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">{path}</p>
+    ) : null;
+  }
+
+  const record = Object.entries(detail.data ?? {});
+  const params = Object.entries(detail.params ?? {});
+  const attributes = Object.entries(detail.attributes ?? {});
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        What it actually is
+      </button>
+
+      {open ? (
+        <dl className="mt-2 space-y-1.5 rounded-md border border-border bg-muted/30 p-3 text-[11px]">
+          {detail.component ? (
+            <Row label="Component" value={detail.component} />
+          ) : null}
+          {detail.screen ? <Row label="Screen" value={detail.screen} /> : null}
+          {detail.control ? <Row label="Control" value={detail.control} /> : null}
+          {detail.action ? <Row label="Goes to" value={detail.action} /> : null}
+          {detail.tag ? <Row label="Tag" value={detail.tag} /> : null}
+
+          {/* THE RECORD. data-* from the element and its ancestors is where a
+              bill id or a post id lives — the answer to "which one". */}
+          {record.length ? (
+            <Row
+              label="Record"
+              value={record.map(([k, v]) => `${k}=${v}`).join("  ")}
+            />
+          ) : null}
+          {params.length ? (
+            <Row label="Route params" value={params.map(([k, v]) => `${k}=${v}`).join("  ")} />
+          ) : null}
+          {attributes.length ? (
+            <Row
+              label="Attributes"
+              value={attributes.map(([k, v]) => `${k}="${v}"`).join("  ")}
+            />
+          ) : null}
+          {detail.tap ? <Row label="Tap" value={detail.tap} /> : null}
+          {detail.selector ? <Row label="Selector" value={detail.selector} /> : null}
+
+          {detail.html ? (
+            <div>
+              <dt className="text-muted-foreground">Markup</dt>
+              <dd className="mt-0.5">
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-background/60 p-2 font-mono text-[10px] text-foreground">
+                  {detail.html}
+                </pre>
+                <span className="text-muted-foreground">
+                  Anything typed into a field is removed before this is stored.
+                </span>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="w-24 shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-all font-mono text-foreground">{value}</dd>
+    </div>
+  );
+}
 
 export function BugReportsTab() {
   const queryClient = useQueryClient();
@@ -113,6 +230,14 @@ export function BugReportsTab() {
                 <p className="mb-2 text-sm">
                   <span className="text-muted-foreground">Pointed at </span>
                   <span className="font-medium text-foreground">“{report.elementLabel}”</span>
+                  {report.elementDetail?.component ? (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      in <span className="font-mono text-foreground">
+                        {report.elementDetail.component}
+                      </span>
+                    </span>
+                  ) : null}
                 </p>
               ) : null}
 
@@ -124,11 +249,15 @@ export function BugReportsTab() {
                 </p>
               ) : null}
 
-              {/* The three things that decide whether this is reproducible. */}
+              {/* WHAT IT ACTUALLY IS, not just what it said.
+                  The label above is the word on the screen, which the
+                  complaint already contains. This is the part that says which
+                  one, on which record, rendered by what. */}
+              <ElementDetail detail={report.elementDetail} path={report.elementPath} />
+
+              {/* The two things that decide whether this is reproducible. */}
               <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
-                {[report.viewport, report.appCommit?.slice(0, 7), report.elementPath]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {[report.viewport, report.appCommit?.slice(0, 7)].filter(Boolean).join(" · ")}
               </p>
 
               {report.resolvedBy ? (

@@ -191,6 +191,14 @@ const CHECKS: Check[] = [
       "revoked, with no new sign-in",
   },
   {
+    name: "web bug-report-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "bug-report-check"],
+    guards:
+      "a bug report names the component that rendered the thing, the record it was "
+      + "showing and a selector that finds it again — and never what somebody typed",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],

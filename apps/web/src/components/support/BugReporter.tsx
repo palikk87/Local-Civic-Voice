@@ -31,6 +31,45 @@ type Stage = "idle" | "picking" | "writing" | "sending";
 interface Picked {
   label: string;
   path: string;
+  detail: ElementDetail;
+}
+
+/**
+ * What was actually pointed at, as opposed to what it said.
+ *
+ * THE FLAW THIS FIXES. A report used to carry the visible words and a path
+ * made of tag names and the first two Tailwind classes — "div.flex.items-center
+ * > button.w-full.text-left". To the person reporting, "the Nay button" is the
+ * right thing to see. To the admin who has to fix it, the word is the one
+ * piece of information they already had: it is in the complaint. What they
+ * could not get was WHICH Nay button, on which record, rendered by what.
+ *
+ * Everything below is read off the element itself. Nothing is inferred and
+ * nothing is guessed — where the page does not say, the field is absent rather
+ * than filled with something plausible.
+ */
+interface ElementDetail {
+  /** A selector that finds this exact element again, not a family of them. */
+  selector: string;
+  tag: string;
+  /** The React component that rendered it. Absent if the fiber is unreadable. */
+  component?: string;
+  /** The clickable thing the click really belonged to, when it was not the target. */
+  control?: string;
+  /** Where a link or form actually goes. */
+  action?: string;
+  /** The identifying attributes on the element. Never a field's value. */
+  attributes?: Record<string, string>;
+  /**
+   * The app's own markers, from the element and its ancestors.
+   *
+   * This is where the RECORD lives: data-reference-id, data-post-id and the
+   * like say which bill or which post the thing was showing, which is the
+   * question "what were you pointing at" actually means.
+   */
+  data?: Record<string, string>;
+  /** The markup, with anything typed into a field removed. */
+  html?: string;
 }
 
 /** A short, human description of an element — what a person would call it. */
@@ -48,24 +87,211 @@ function describe(element: Element): string {
   return element.tagName.toLowerCase();
 }
 
-/** Enough of a path for somebody to find it in the source. */
-function domPath(element: Element): string {
+/** A short, readable name for an element, for the `control` line. */
+function shortName(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const label = element.getAttribute("aria-label") ?? describe(element);
+  return label && label !== tag ? `${tag} "${label.slice(0, 60)}"` : tag;
+}
+
+/**
+ * A selector that re-finds this element and only this element.
+ *
+ * Stops early at an id or a test id, because those are stable and everything
+ * above them is noise. Falls back to :nth-of-type, which survives the Tailwind
+ * class churn that made the old path useless.
+ */
+function uniqueSelector(element: Element): string {
   const parts: string[] = [];
   let node: Element | null = element;
-  for (let depth = 0; node && depth < 5; depth += 1) {
-    let part = node.tagName.toLowerCase();
+
+  for (let depth = 0; node && node !== document.body && depth < 8; depth += 1) {
+    const testId = node.getAttribute("data-testid");
     if (node.id) {
-      part += `#${node.id}`;
-    } else {
-      // First two classes only. Tailwind puts thirty on everything, and the
-      // whole list is noise in a report somebody has to read.
-      const cls = (node.getAttribute("class") ?? "").split(/\s+/).filter(Boolean).slice(0, 2);
-      if (cls.length) part += `.${cls.join(".")}`;
+      parts.unshift(`#${CSS.escape(node.id)}`);
+      break;
     }
-    parts.unshift(part);
+    if (testId) {
+      parts.unshift(`[data-testid="${CSS.escape(testId)}"]`);
+      break;
+    }
+
+    const tag = node.tagName.toLowerCase();
+    const parent: Element | null = node.parentElement;
+    if (parent) {
+      const sameTag = [...parent.children].filter((c) => c.tagName === node!.tagName);
+      parts.unshift(sameTag.length > 1 ? `${tag}:nth-of-type(${sameTag.indexOf(node) + 1})` : tag);
+    } else {
+      parts.unshift(tag);
+    }
+    node = parent;
+  }
+
+  return parts.join(" > ").slice(0, 500);
+}
+
+/**
+ * The React component that rendered this node.
+ *
+ * Walks up the fiber past the host elements (div, button — lowercase) to the
+ * first named component. Vite is configured with keepNames so this survives
+ * minification; without it every answer here would be a minified shard, which
+ * is worse than no answer because it looks like one.
+ */
+function reactComponent(element: Element): string | undefined {
+  const key = Object.keys(element).find(
+    (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"),
+  );
+  if (!key) return undefined;
+
+  let fiber = (element as unknown as Record<string, unknown>)[key] as
+    | { elementType?: unknown; type?: unknown; return?: unknown }
+    | undefined;
+
+  const seen: string[] = [];
+  for (let depth = 0; fiber && depth < 40; depth += 1) {
+    const type = (fiber.elementType ?? fiber.type) as
+      | { displayName?: string; name?: string }
+      | string
+      | undefined;
+    if (type && typeof type !== "string") {
+      const name = type.displayName ?? type.name;
+      // Lowercase means a host element; anonymous and internal wrappers are
+      // not worth reporting either.
+      if (name && /^[A-Z]/.test(name) && !seen.includes(name) && !isScaffolding(name)) {
+        seen.push(name);
+        if (seen.length === 3) break;
+      }
+    }
+    fiber = fiber.return as typeof fiber;
+  }
+
+  // The innermost first, then what it sits inside — "VoteButtons in BillCard"
+  // locates a thing far better than either name alone.
+  return seen.length ? seen.join(" in ") : undefined;
+}
+
+/**
+ * Wrappers that are true of everything and therefore say nothing.
+ *
+ * The first run of this reported "AppShell in RenderedRoute in Routes". The
+ * first name locates the thing; the other two are react-router internals that
+ * would appear on every report ever filed. Noise that looks like information is
+ * worse than a shorter answer.
+ */
+const FRAMEWORK = new Set([
+  "Routes",
+  "Route",
+  "RenderedRoute",
+  "Router",
+  "BrowserRouter",
+  "Outlet",
+  "Suspense",
+  "SuspenseList",
+  "Fragment",
+  "StrictMode",
+  "Profiler",
+  "Slot",
+  "Primitive",
+  "Presence",
+]);
+
+/**
+ * A RULE RATHER THAN A LONGER LIST.
+ *
+ * The list above caught the router; the next run reported "AppShell in
+ * AuthUIProvider in TooltipProviderProvider". Providers wrap the whole tree by
+ * definition, so every one of them is true of every report — and a denylist of
+ * them is a thing somebody has to remember to extend every time a library is
+ * added. The suffix is what makes them uninformative, so the suffix is what is
+ * matched.
+ */
+function isScaffolding(name: string): boolean {
+  return FRAMEWORK.has(name) || /(Provider|Context|Boundary|Portal|Root)$/.test(name);
+}
+
+/** Identity attributes. Deliberately never `value` — that is what a person typed. */
+const REPORTED_ATTRIBUTES = [
+  "id",
+  "name",
+  "type",
+  "role",
+  "href",
+  "src",
+  "alt",
+  "title",
+  "placeholder",
+  "aria-label",
+  "aria-labelledby",
+  "aria-describedby",
+  "aria-disabled",
+  "aria-expanded",
+  "aria-selected",
+  "aria-current",
+  "disabled",
+  "data-state",
+];
+
+/**
+ * The markup, with anything anybody typed taken out.
+ *
+ * A report is sent to an administrator, and the element somebody points at may
+ * be the field they were filling in. The attribute names and structure are the
+ * useful part; the contents of an input never are.
+ */
+function redactedHtml(element: Element): string {
+  const copy = element.cloneNode(true) as Element;
+  for (const field of [copy, ...copy.querySelectorAll("input, textarea, select")]) {
+    if (!(field instanceof Element)) continue;
+    if (!/^(input|textarea|select)$/i.test(field.tagName)) continue;
+    if (field.hasAttribute("value")) field.setAttribute("value", "[removed]");
+    if (field.textContent) field.textContent = "[removed]";
+  }
+  return copy.outerHTML.replace(/\s+/g, " ").slice(0, 800);
+}
+
+/** Everything the element and its ancestors say about what they are. */
+function detailFor(element: Element): ElementDetail {
+  const attributes: Record<string, string> = {};
+  for (const name of REPORTED_ATTRIBUTES) {
+    const value = element.getAttribute(name);
+    if (value !== null && value !== "") attributes[name] = value.slice(0, 200);
+  }
+
+  // Data attributes from the element upwards. Nearest wins, so a card's id does
+  // not overwrite the button's own.
+  const data: Record<string, string> = {};
+  let node: Element | null = element;
+  for (let depth = 0; node && depth < 8; depth += 1) {
+    for (const attr of Array.from(node.attributes)) {
+      if (!attr.name.startsWith("data-")) continue;
+      if (attr.name === "data-bug-reporter") continue;
+      if (data[attr.name] === undefined && attr.value) {
+        data[attr.name] = attr.value.slice(0, 200);
+      }
+    }
     node = node.parentElement;
   }
-  return parts.join(" > ").slice(0, 500);
+
+  // People click the text inside a button, not the button.
+  const control = element.closest("button, a, input, select, textarea, [role='button'], [role='tab'], [role='link']");
+  const action =
+    control instanceof HTMLAnchorElement
+      ? control.getAttribute("href") ?? undefined
+      : control instanceof HTMLFormElement
+        ? control.getAttribute("action") ?? undefined
+        : (control?.closest("form")?.getAttribute("action") ?? undefined);
+
+  return {
+    selector: uniqueSelector(element),
+    tag: element.tagName.toLowerCase(),
+    component: reactComponent(element),
+    control: control && control !== element ? shortName(control) : undefined,
+    action: action ?? undefined,
+    attributes: Object.keys(attributes).length ? attributes : undefined,
+    data: Object.keys(data).length ? data : undefined,
+    html: redactedHtml(element),
+  };
 }
 
 export function BugReporter() {
@@ -93,7 +319,14 @@ export function BugReporter() {
 
       event.preventDefault();
       event.stopPropagation();
-      setPicked({ label: describe(target), path: domPath(target) });
+      const detail = detailFor(target);
+      setPicked({
+        label: describe(target),
+        // The old `path` was tag names and two Tailwind classes. The selector
+        // is the same idea done properly: it finds the element again.
+        path: detail.selector,
+        detail,
+      });
       stopPicking();
     };
 
@@ -130,6 +363,8 @@ export function BugReporter() {
         pagePath: window.location.pathname,
         elementLabel: picked?.label,
         elementPath: picked?.path,
+        // What it actually is, as opposed to what it said.
+        elementDetail: picked?.detail,
         problem: problem.trim(),
         wanted: wanted.trim() || undefined,
         userAgent: navigator.userAgent,

@@ -40,6 +40,9 @@ function versionStamp() {
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
+  // Paired with build.minify above — see the note there. keepNames is what
+  // actually preserves function and class names through minification.
+  esbuild: { keepNames: true },
   server: {
     host: "::",
     port: 8000,
@@ -52,6 +55,18 @@ export default defineConfig(() => ({
     },
   },
   build: {
+    /**
+     * KEEP COMPONENT NAMES IN THE PRODUCTION BUNDLE.
+     *
+     * A bug report captures which component rendered the thing somebody
+     * pointed at, by walking the React fiber. Minified, every one of those
+     * names is a two-letter shard — an admin reading "Sx" learns less than
+     * nothing, because it looks like information.
+     *
+     * The cost is a few kB of identifiers that gzip well, against the
+     * difference between a report that names PostCard and one that does not.
+     */
+    minify: "esbuild" as const,
     rollupOptions: {
       output: {
         /**

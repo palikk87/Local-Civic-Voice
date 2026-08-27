@@ -33,7 +33,7 @@ import {
   Alert,
   type GestureResponderEvent,
 } from 'react-native';
-import { usePathname } from 'expo-router';
+import { useLocalSearchParams, usePathname, useSegments } from 'expo-router';
 import { Bug, Crosshair, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
@@ -73,6 +73,17 @@ const FIELD =
 
 export function BugReporter() {
   const pathname = usePathname();
+  /**
+   * WHICH RECORD THE SCREEN WAS SHOWING.
+   *
+   * A phone has no DOM, so there is no element to interrogate the way the web
+   * reporter does — a tap gives coordinates and nothing else, and coordinates
+   * tell an admin almost nothing. What IS knowable here is the screen and its
+   * parameters, and that is the part the admin actually needs: not "the upper
+   * middle of the screen" but "the bill detail screen, showing hr-3194-119".
+   */
+  const params = useLocalSearchParams();
+  const segments = useSegments();
   const [stage, setStage] = useState<Stage>('idle');
   const [picked, setPicked] = useState<Picked | null>(null);
   const [problem, setProblem] = useState('');
@@ -110,6 +121,16 @@ export function BugReporter() {
         pagePath: pathname,
         elementLabel: picked?.label,
         elementPath: picked?.path,
+        // What the screen actually was, since there is no element to inspect.
+        elementDetail: {
+          screen: segments.length ? `/${segments.join('/')}` : pathname,
+          params: Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v !== undefined && v !== null)
+              .map(([k, v]) => [k, String(Array.isArray(v) ? v.join(',') : v).slice(0, 300)]),
+          ),
+          tap: picked?.path,
+        },
         problem: problem.trim(),
         wanted: wanted.trim() || undefined,
         userAgent: `AYE & NAY mobile — ${Platform.OS} ${Platform.Version}`,
