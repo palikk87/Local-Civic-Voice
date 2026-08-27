@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import "./env";
 import { corsOriginPatterns } from "./env";
 import { auth } from "./auth";
+import { prisma } from "./prisma";
 import { governmentRouter } from "./routes/government";
 import { usersRouter } from "./routes/users";
 import { messagesRouter } from "./routes/messages";
@@ -96,6 +97,51 @@ app.use("*", async (c, next) => {
     await next();
     return;
   }
+
+  // A BAN HAS TO ACTUALLY STOP SOMEBODY.
+  //
+  // Banning wrote five columns — banned, banReason, bannedAt, bannedBy,
+  // banExpiresAt — and NOTHING outside the admin console ever read one of
+  // them. The console said "User Citizen 0500 has been banned", the row said
+  // banned = true, and the account went on signing in and voting. Found by
+  // running the permission work against the thousand test citizens: a banned
+  // account cast a vote and the tally moved from 1 to 2.
+  //
+  // That is the worst version of this bug the platform could have. The Public
+  // Pulse is the one number AYE & NAY exists to report, and it was countable
+  // by accounts the platform had already thrown out. The moderator pressing
+  // Ban was told it worked.
+  //
+  // CHECKED ON EVERY REQUEST, not at sign-in. Banning somebody who is already
+  // signed in has to end what they can do now — a check only at the door
+  // leaves every open session untouched until it expires, which for a session
+  // that lasts a week means a week.
+  //
+  // The definition of an ACTIVE ban is the one the console's own list filter
+  // uses: banned, and either no expiry or an expiry still in the future. A
+  // lapsed temporary ban is not a ban.
+  const account = await prisma.user
+    .findUnique({
+      where: { id: session.user.id },
+      select: { banned: true, banExpiresAt: true, banReason: true },
+    })
+    .catch(() => null);
+
+  if (account?.banned && (!account.banExpiresAt || account.banExpiresAt > new Date())) {
+    // The auth routes stay open so a banned person can still sign out, and so
+    // the sign-in attempt itself is answered by Better Auth rather than here.
+    if (!c.req.path.startsWith("/api/auth/")) {
+      return c.json(
+        {
+          error: "This account is suspended.",
+          reason: account.banReason ?? undefined,
+          until: account.banExpiresAt?.toISOString(),
+        },
+        403,
+      );
+    }
+  }
+
   c.set("user", session.user);
   c.set("session", session.session);
   await next();
