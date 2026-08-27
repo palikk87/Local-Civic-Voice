@@ -1274,7 +1274,8 @@ model MergeJournal {
 model MergeJournalRow {
   id        String @id @default(cuid())
   journalId String
-  /// The Prisma model name: Post, GovernmentReferenceVote, PositionEvent, RollCall.
+  /// The Prisma model name: Post, GovernmentReferenceVote, PositionEvent,
+  /// RollCall, SystemResetJournalVote.
   model     String
   rowId     String
 

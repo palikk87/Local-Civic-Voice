@@ -647,6 +647,46 @@ export async function mergeReferences(
       data: { governmentReferenceId: targetId },
     });
 
+    // --- The System-Wide Reset journal ---------------------------------------
+    //
+    // Article V's reset deletes every vote on the platform and keeps each one
+    // here so it can be put back. Those rows are keyed by record, so a merge
+    // that leaves them behind means undoing a reset would restore somebody's
+    // position onto a tombstone — the vote would exist and appear in no tally,
+    // which is the same failure the Representation Gap had.
+    //
+    // COLLISIONS ARE SKIPPED, NOT DELETED. The key is (reset, record, voter),
+    // so a person who had voted on both records has a row on each. Moving both
+    // would violate the key; deleting one would make this undo lossy, and this
+    // file's whole standard is that a merge a machine decided must be
+    // reversible exactly. So the duplicate stays on the losing record, where it
+    // is in fact a truthful record of a deletion that happened while the two
+    // were still separate.
+    const sourceResetRows = await tx.systemResetJournalVote.findMany({
+      where: { governmentReferenceId: sourceId },
+      select: { id: true, resetId: true, userId: true },
+    });
+
+    const targetResetKeys = new Set(
+      (
+        await tx.systemResetJournalVote.findMany({
+          where: { governmentReferenceId: targetId },
+          select: { resetId: true, userId: true },
+        })
+      ).map((row) => `${row.resetId}:${row.userId}`),
+    );
+
+    const movedResetJournalIds = sourceResetRows
+      .filter((row) => !targetResetKeys.has(`${row.resetId}:${row.userId}`))
+      .map((row) => row.id);
+
+    if (movedResetJournalIds.length > 0) {
+      await tx.systemResetJournalVote.updateMany({
+        where: { id: { in: movedResetJournalIds } },
+        data: { governmentReferenceId: targetId },
+      });
+    }
+
     // --- The journal --------------------------------------------------------
     //
     // Written inside the same transaction as the merge itself, so a merge and
@@ -676,6 +716,7 @@ export async function mergeReferences(
       ...movedVoteIds.map((rowId) => ({ model: "GovernmentReferenceVote", rowId })),
       ...movedLedgerIds.map((rowId) => ({ model: "PositionEvent", rowId })),
       ...movedRollCallIds.map((rowId) => ({ model: "RollCall", rowId })),
+      ...movedResetJournalIds.map((rowId) => ({ model: "SystemResetJournalVote", rowId })),
     ];
     if (movedRows.length > 0) {
       await tx.mergeJournalRow.createMany({
@@ -1014,6 +1055,14 @@ export async function unmergeReferences(
 
     const rollCalls = await tx.rollCall.updateMany({
       where: { id: { in: idsFor("RollCall") } },
+      data: { governmentReferenceId: journal.sourceId },
+    });
+
+    // Article V reset-journal rows go back to the record the vote was cast on,
+    // so undoing the reset later restores it where it belongs. Only the ones
+    // this merge actually moved — the duplicates it skipped never left.
+    await tx.systemResetJournalVote.updateMany({
+      where: { id: { in: idsFor("SystemResetJournalVote") } },
       data: { governmentReferenceId: journal.sourceId },
     });
 

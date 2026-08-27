@@ -227,6 +227,93 @@ describe("a merge carries the government's own vote", () => {
   });
 });
 
+describe("the Article V reset journal comes with it", () => {
+  test("a journaled vote moves to the survivor, so undoing a reset restores it there", async () => {
+    const duplicate = await law();
+    const survivor = await law();
+    const person = await citizen();
+
+    const reset = await prisma.systemReset.create({
+      data: {
+        filedById: person.userId,
+        status: "executed",
+        grounds: "Grounds long enough to be a real filing rather than a placeholder string.",
+        evidence: "Evidence long enough to be a real filing rather than a placeholder string.",
+        expiresAt: new Date(),
+        eligibleCount: 1,
+        executedAt: new Date(),
+      },
+    });
+
+    const journaled = await prisma.systemResetJournalVote.create({
+      data: {
+        resetId: reset.id,
+        governmentReferenceId: duplicate.id,
+        userId: person.userId,
+        position: "support",
+        isAnonymous: false,
+        castAt: new Date(),
+      },
+    });
+
+    await mergeReferences(duplicate.id, survivor.id);
+
+    // Left behind, undoing the reset would put this position back on a
+    // tombstone: a vote that exists and appears in no tally anywhere.
+    expect(
+      (
+        await prisma.systemResetJournalVote.findUniqueOrThrow({
+          where: { id: journaled.id },
+        })
+      ).governmentReferenceId,
+    ).toBe(survivor.id);
+
+    await prisma.systemReset.delete({ where: { id: reset.id } });
+  });
+
+  test("a person who was journaled on both keeps a row for each", async () => {
+    // The key is (reset, record, voter). Moving both would break it, and
+    // deleting one would make the undo lossy — so the duplicate stays put.
+    const duplicate = await law();
+    const survivor = await law();
+    const person = await citizen();
+
+    const reset = await prisma.systemReset.create({
+      data: {
+        filedById: person.userId,
+        status: "executed",
+        grounds: "Grounds long enough to be a real filing rather than a placeholder string.",
+        evidence: "Evidence long enough to be a real filing rather than a placeholder string.",
+        expiresAt: new Date(),
+        eligibleCount: 1,
+        executedAt: new Date(),
+      },
+    });
+
+    for (const referenceId of [duplicate.id, survivor.id]) {
+      await prisma.systemResetJournalVote.create({
+        data: {
+          resetId: reset.id,
+          governmentReferenceId: referenceId,
+          userId: person.userId,
+          position: "support",
+          isAnonymous: false,
+          castAt: new Date(),
+        },
+      });
+    }
+
+    // Merging must not throw on the unique key, and must not lose a row.
+    await mergeReferences(duplicate.id, survivor.id);
+
+    expect(
+      await prisma.systemResetJournalVote.count({ where: { resetId: reset.id } }),
+    ).toBe(2);
+
+    await prisma.systemReset.delete({ where: { id: reset.id } });
+  });
+});
+
 describe("the guard that stops the next table being forgotten", () => {
   test("every table keyed on a record is either carried by the merge or declared exempt", () => {
     // THIS IS THE POINT OF THE FILE. The merge is a hand-maintained list, and
