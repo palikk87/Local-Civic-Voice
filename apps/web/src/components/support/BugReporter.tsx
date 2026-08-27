@@ -160,7 +160,7 @@ function reactComponent(element: Element): string | undefined {
       // not worth reporting either.
       if (name && /^[A-Z]/.test(name) && !seen.includes(name) && !isScaffolding(name)) {
         seen.push(name);
-        if (seen.length === 3) break;
+        if (seen.length === 4) break;
       }
     }
     fiber = fiber.return as typeof fiber;
@@ -305,20 +305,54 @@ export function BugReporter() {
     setStage("writing");
   }, []);
 
-  // While picking, the next click anywhere is the answer rather than the
-  // action. Captured on the way down and stopped, so pointing at a Delete
-  // button does not delete anything.
+  /**
+   * While picking, the next click anywhere is the answer rather than the
+   * action — and EVERY PIXEL HAS TO BE POINTABLE.
+   *
+   * This used to listen for a click on the document. That misses the things
+   * people most want to report:
+   *
+   *   A DISABLED BUTTON DISPATCHES NO CLICK AT ALL. "This button is greyed out
+   *   and I do not know why" is one of the commonest reports there is, and it
+   *   was the one thing nobody could point at. The same is true of anything
+   *   with pointer-events: none.
+   *
+   *   ANYTHING UNDER A TRANSPARENT LAYER got reported as the layer. The person
+   *   pointed at a vote button and the report named the invisible thing on top
+   *   of it, which sends whoever reads it looking in the wrong place.
+   *
+   * So picking puts a sheet over the whole viewport and lets that take the
+   * click. Reading the real element is then a hit test at the same point with
+   * the sheet made see-through — and elementFromPoint answers with the element
+   * that is really there, disabled or not.
+   */
   useEffect(() => {
     if (stage !== "picking") return undefined;
 
     document.body.style.cursor = "crosshair";
 
-    const onClick = (event: MouseEvent) => {
-      const target = event.target as Element | null;
-      if (!target || target.closest("[data-bug-reporter]")) return;
+    const sheet = document.createElement("div");
+    sheet.setAttribute("data-bug-reporter", "picker-sheet");
+    sheet.style.cssText =
+      "position:fixed;inset:0;z-index:2147483646;cursor:crosshair;background:transparent";
+    document.body.appendChild(sheet);
 
+    const onClick = (event: MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
+
+      // Look through the sheet to whatever is actually under the pointer.
+      sheet.style.pointerEvents = "none";
+      const under = document.elementFromPoint(event.clientX, event.clientY);
+      sheet.style.pointerEvents = "";
+
+      // Pointing at the reporter's own panel is not a report about anything.
+      const target = under?.closest("[data-bug-reporter]") ? null : under;
+      if (!target) {
+        stopPicking();
+        return;
+      }
+
       const detail = detailFor(target);
       setPicked({
         label: describe(target),
@@ -334,10 +368,11 @@ export function BugReporter() {
       if (event.key === "Escape") stopPicking();
     };
 
-    document.addEventListener("click", onClick, true);
+    sheet.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
     return () => {
-      document.removeEventListener("click", onClick, true);
+      sheet.removeEventListener("click", onClick, true);
+      sheet.remove();
       document.removeEventListener("keydown", onKey, true);
       document.body.style.cursor = "";
     };
@@ -395,13 +430,30 @@ export function BugReporter() {
 
   if (stage === "picking") {
     return (
+      /*
+       * THE BANNER MUST NOT BLOCK POINTING AT WHAT IS UNDER IT.
+       *
+       * This is a full-width bar across the top of the screen, and the hit test
+       * that finds the real element ignores anything with pointer-events: none
+       * — so without this, everything beneath the bar was unpointable: the
+       * logo, the top of the sidebar, the first row of any page scrolled to the
+       * top. Somebody trying to report the thing at the top of their screen got
+       * a report with nothing attached to it.
+       *
+       * Cancel takes its own events back, because it is the one thing here that
+       * still has to be clickable.
+       */
       <div
         data-bug-reporter
-        className="fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 bg-amber-500 px-4 py-2.5 text-sm font-medium text-amber-950"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 bg-amber-500 px-4 py-2.5 text-sm font-medium text-amber-950"
       >
         <Crosshair className="h-4 w-4" />
         Click the thing that is giving you trouble.
-        <button type="button" onClick={stopPicking} className="underline">
+        <button
+          type="button"
+          onClick={stopPicking}
+          className="pointer-events-auto underline"
+        >
           Cancel
         </button>
       </div>

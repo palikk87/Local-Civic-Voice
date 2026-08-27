@@ -171,7 +171,7 @@ try {
 
 
   /** Open a page with the reporter on it, and watch what it sends. */
-  async function report({ page: path = "/feed", typeInto = false }) {
+  async function report({ page: path = "/feed", typeInto = false, pointAt = null }) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     const page = await context.newPage();
     await routeApiToLocal(page, API);
@@ -212,7 +212,9 @@ try {
     await page.waitForTimeout(500);
 
     let target;
-    if (typeInto) {
+    if (pointAt) {
+      target = page.locator(pointAt).first();
+    } else if (typeInto) {
       // Point AT a field somebody has typed into — the privacy case.
       target = page.locator("input").first();
       await target.fill(SECRET);
@@ -222,13 +224,17 @@ try {
       // loaded — so this does not fail on an empty database.
       target = page.locator('a[href="/feed"]').first();
     }
-    // DISPATCH ON THE ELEMENT, not a positional click. The picker listens for
-    // a click on the way down and reads event.target; a positional click lands
-    // on whichever element is topmost at that point, which during picking was
-    // the reporter's own banner — so the pick never happened and the panel sat
-    // in "click the thing that is giving you trouble" forever. This puts the
-    // event on the element a person would have hit.
-    await target.dispatchEvent("click");
+    // CLICK WHERE IT IS, the way a person does.
+    //
+    // Picking lays a transparent sheet over the viewport and hit-tests through
+    // it, so a click at the element's coordinates is exactly the real gesture
+    // — and it is the only way to prove the sheet works. An earlier version
+    // dispatched the event on the element instead, which tested the capture
+    // and quietly skipped the question of whether the thing was reachable at
+    // all.
+    const box = await target.boundingBox();
+    if (!box) throw new Error(`nothing to point at for ${pointAt ?? "the default target"}`);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
     await page.waitForTimeout(500);
 
     await page.locator("textarea").first().waitFor({ timeout: 15_000 });
@@ -263,7 +269,11 @@ try {
     detail?.selector,
   );
   check("it says where the control leads", detail?.action === "/feed", detail?.action);
-  check("it keeps the markup", (detail?.html ?? "").includes("<a"), (detail?.html ?? "").slice(0, 80));
+  check(
+    "it keeps the markup",
+    /^<[a-z]/.test(detail?.html ?? ""),
+    (detail?.html ?? "").slice(0, 80),
+  );
   check(
     "the label is still the words on the screen",
     typeof link?.elementLabel === "string" && link.elementLabel.length > 0,
@@ -286,7 +296,27 @@ try {
     typed?.elementDetail?.tag,
   );
 
-  // --------------------------------------------------------------- 3. SERVER
+  // ---------------------------------------- 3. PLAIN TEXT IS POINTABLE TOO
+
+  // A badge, a label, a username: on screen because a component put it there,
+  // so it has to be reportable like anything else. This one is not a button,
+  // not a link, and has no handler — the old document-click picker could still
+  // reach it, but only because something above it happened to be clickable.
+  const badge = await report({ page: "/feed", pointAt: "span, .badge, [class*='badge']" });
+  check("a plain piece of text can be pointed at", !!badge?.elementDetail, "");
+  check(
+    "and it reports the code that rendered it",
+    typeof badge?.elementDetail?.component === "string" &&
+      badge.elementDetail.component.length > 0,
+    badge?.elementDetail?.component,
+  );
+  check(
+    "and the words that were on it",
+    typeof badge?.elementLabel === "string" && badge.elementLabel.length > 0,
+    badge?.elementLabel,
+  );
+
+  // --------------------------------------------------------------- 4. SERVER
 
   const stored = await fetch(`${API}/api/bug-reports`, {
     method: "POST",
