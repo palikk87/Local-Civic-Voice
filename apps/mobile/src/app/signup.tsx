@@ -67,6 +67,19 @@ export default function SignUpScreen() {
                   they think before it shows them anybody. */}
               <AuthForm mode="signup" onSuccess={() => router.replace('/start')} />
 
+              {/* Consent by action, the standard mobile pattern: creating an
+                  account is agreement, and the Terms are one tap away. */}
+              <Text className="text-slate-500 text-xs text-center mt-4">
+                By creating an account you agree to our{' '}
+                <Text
+                  className="text-amber-400 underline"
+                  onPress={() => router.push('/terms')}
+                >
+                  Terms of Use
+                </Text>
+                .
+              </Text>
+
               <Pressable
                 onPress={() => router.replace('/(tabs)/discover')}
                 className="mt-6 flex-row items-center justify-center py-2"

@@ -23,6 +23,7 @@ const Documents = lazy(() => import("./pages/Documents"));
 const Constitution = lazy(() => import("./pages/Constitution"));
 const BillOfRights = lazy(() => import("./pages/BillOfRights"));
 const ArticleV = lazy(() => import("./pages/ArticleV"));
+const Terms = lazy(() => import("./pages/Terms"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -90,6 +91,7 @@ const App = () => (
               <Route path="/constitution" element={<Constitution />} />
               <Route path="/bill-of-rights" element={<BillOfRights />} />
               <Route path="/article-v" element={<ArticleV />} />
+              <Route path="/terms" element={<Terms />} />
               <Route path="/trending" element={<Trending />} />
               <Route path="/search" element={<Search />} />
 

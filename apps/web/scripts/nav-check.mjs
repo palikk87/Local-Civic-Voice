@@ -82,24 +82,53 @@ function check(label, condition, detail) {
 
 /**
  * A brand-new visitor every time. A fresh context means empty localStorage,
- * which means the pre-beta notice is showing — the exact state the bug needed.
+ * which means the welcome modal is showing — the exact state the old bug needed.
+ *
+ * The welcome is now a consent modal: a real first-time visitor accepts the
+ * Terms before doing anything else, so by default this does the same, then the
+ * navigation tests run against the app as a person actually reaches it. Pass
+ * { accept: false } to inspect the modal itself.
  */
-async function firstVisit(path = "/feed") {
+async function acceptWelcome(page) {
+  const box = page.getByLabel("I have read and agree to the Terms of Use");
+  if (!(await box.count())) return false;
+  await box.first().click();
+  await page.getByRole("button", { name: /agree & continue/i }).click();
+  await page.waitForTimeout(300);
+  return true;
+}
+
+async function firstVisit(path = "/feed", { accept = true } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
   await routeApiToLocal(page, base);
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
   await page.waitForTimeout(600);
+  if (accept) await acceptWelcome(page);
   return { context, page };
 }
 
 // ---------------------------------------------------------------- 1. geometry
 
 {
-  const { context, page } = await firstVisit();
+  // The welcome is a deliberate consent modal now, so a first visit SHOULD have
+  // an overlay — the property that matters is that it is genuinely a modal (its
+  // dialog is on screen and readable) and that ACCEPTING IT clears the overlay
+  // completely, so nothing is left covering the app afterwards. A modal that
+  // could not be dismissed would be the new version of the old trap.
+  const { context, page } = await firstVisit("/feed", { accept: false });
 
-  // Anything covering most of the viewport at a raised z-index will swallow a
-  // click meant for something underneath it, whatever component drew it.
+  check(
+    "a first visit shows the welcome, and it is a real modal",
+    (await page.getByRole("dialog").count()) > 0 &&
+      (await page.getByText("still in beta", { exact: false }).count()) > 0,
+    "dialog + copy",
+  );
+
+  await acceptWelcome(page);
+
+  // After accepting, nothing may be left covering the viewport — the overlay is
+  // gone and the app is reachable.
   const covering = await page.evaluate(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -114,16 +143,11 @@ async function firstVisit(path = "/feed") {
       })
       .map((el) => `${el.tagName.toLowerCase()}.${el.className}`.slice(0, 90));
   });
-
   check(
-    "a first visit puts nothing over the whole viewport",
+    "accepting the Terms clears the overlay completely",
     covering.length === 0,
     covering.length ? covering.join(" | ") : "none",
   );
-
-  // The notice still has to be READ, or the fix traded one bug for another.
-  const notice = await page.getByText("still in pre-beta", { exact: false }).count();
-  check("and the pre-beta notice is still visible", notice > 0, `matches=${notice}`);
 
   await context.close();
 }

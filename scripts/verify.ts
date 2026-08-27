@@ -97,6 +97,12 @@ const CHECKS: Check[] = [
     guards: "no lint errors (warnings are allowed)",
   },
   {
+    name: "web terms parity",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "terms-parity-check"],
+    guards: "the web and mobile Terms of Use say exactly the same thing",
+  },
+  {
     name: "web route targets",
     cwd: "apps/web",
     cmd: ["bun", "run", "route-target-check"],
