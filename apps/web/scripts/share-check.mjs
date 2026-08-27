@@ -18,7 +18,7 @@
  *   3. It does not post for you. It opens the composer with the law attached
  *      and waits — the post is theirs, so the words are too.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -102,6 +102,7 @@ function check(label, condition, detail) {
 }
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+await acceptTermsBeforeLoad(page);
 await routeApiToLocal(page, base);
 
 // The composer, reached the way a share arrives: with a law already resolved.

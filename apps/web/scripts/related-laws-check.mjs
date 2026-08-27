@@ -20,7 +20,7 @@
  *      local array first and disabled the real fetch, so a live record could
  *      never win. That is the regression this second case guards.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -114,6 +114,7 @@ const failures = [];
 /** Open a bill, switch to Related, and report what the panel contains. */
 async function inspect(id) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   // Uncaught exceptions only.
   //

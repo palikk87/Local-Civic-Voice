@@ -9,7 +9,7 @@
  * trusting what the screen shows. A page that renders an optimistic count and
  * never persists it would pass a screen-only check and fail every user.
  */
-import { launchChromium } from "./chromium.mjs";
+import { launchChromium, acceptTermsBeforeLoad } from "./chromium.mjs";
 
 const [siteOrigin, billId, leaderEmail, followerEmail, leaderName, password, leaderId] =
   process.argv.slice(2);
@@ -72,6 +72,7 @@ const browser = await launchChromium();
  */
 async function asCitizen(email) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await acceptTermsBeforeLoad(context);
   const page = await context.newPage();
 
   // A request that never completes shows up in the app as "Failed to fetch" and

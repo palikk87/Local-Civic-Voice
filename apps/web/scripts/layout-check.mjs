@@ -23,7 +23,7 @@
  * overlap": these two buttons are a pair, and a fix that stacked them would
  * pass an overlap test while changing what the panel is.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -111,6 +111,7 @@ const failures = [];
 
 for (const width of WIDTHS) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
+  await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   await page.goto(`${base}/reference/layout-check`, { waitUntil: "networkidle" });
   await page.waitForSelector("text=Support", { timeout: 10_000 });

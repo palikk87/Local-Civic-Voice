@@ -11,7 +11,7 @@
  *
  * Nothing is listening on the port the bundle points at. Real refusal.
  */
-import { launchChromium } from "./chromium.mjs";
+import { launchChromium, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -38,6 +38,7 @@ const base = `http://127.0.0.1:${site.address().port}`;
 
 const browser = await launchChromium();
 const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+await acceptTermsBeforeLoad(context);
 const page = await context.newPage();
 const errors = [];
 // Counted so a silent screen cannot be confused with a click that never landed.

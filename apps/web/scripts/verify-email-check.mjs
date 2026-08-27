@@ -23,7 +23,7 @@
  *   4. A server that cannot send email says so on the screen, and "send
  *      another code" reports the refusal instead of claiming success.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -141,6 +141,7 @@ async function dismissWelcome(page) {
   USER.emailVerified = false;
 
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   await page.goto(`${base}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
@@ -192,6 +193,7 @@ async function dismissWelcome(page) {
   sends.length = 0;
 
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   await page.goto(`${base}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);

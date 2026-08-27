@@ -29,7 +29,7 @@
  *   THE SERVER stores it and hands it back, and refuses a payload carrying
  *              keys the schema does not name.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname, resolve } from "node:path";
@@ -173,6 +173,7 @@ try {
   /** Open a page with the reporter on it, and watch what it sends. */
   async function report({ page: path = "/feed", typeInto = false, pointAt = null }) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    await acceptTermsBeforeLoad(context);
     const page = await context.newPage();
     await routeApiToLocal(page, API);
 

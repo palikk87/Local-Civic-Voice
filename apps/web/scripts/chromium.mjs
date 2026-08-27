@@ -92,3 +92,54 @@ export async function launchChromium(options = {}) {
     return chromium.launch({ ...options, executablePath: found });
   }
 }
+
+/**
+ * The version the beta welcome dialog stores when somebody accepts the terms.
+ *
+ * MUST MATCH TERMS_VERSION in apps/web/src/lib/legal/terms.ts. A stale value
+ * here does not fail loudly; it just stops working, and the dialog comes back.
+ */
+const ACCEPTED_TERMS_KEY = "ayeandnay:accepted-terms-version";
+
+/**
+ * Start a browser context with the beta terms already accepted.
+ *
+ * WHY EVERY CHECK THAT CAN REACH THE FEED NEEDS THIS. The welcome dialog is a
+ * consent gate: a full-screen overlay whose backdrop deliberately does nothing,
+ * so it cannot be clicked away. That is correct for a citizen and fatal for a
+ * check — Playwright reports it as "subtree intercepts pointer events" and then
+ * spends thirty seconds retrying a click that can never land. Two checks broke
+ * this way the first time the whole suite ran after the dialog shipped, and
+ * neither failure said anything about a dialog.
+ *
+ * Reading the version out of the app's own source rather than repeating it
+ * means bumping TERMS_VERSION for a real re-consent does not silently start
+ * failing the suite.
+ */
+export async function acceptTermsBeforeLoad(target) {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const { dirname, join } = await import("node:path");
+
+  const here = dirname(fileURLToPath(import.meta.url));
+  const source = readFileSync(join(here, "..", "src", "lib", "legal", "terms.ts"), "utf8");
+  const version = source.match(/TERMS_VERSION\s*=\s*"([^"]+)"/)?.[1];
+
+  if (!version) {
+    throw new Error(
+      "Could not read TERMS_VERSION from apps/web/src/lib/legal/terms.ts, so the beta " +
+        "welcome dialog cannot be pre-accepted and every click on the feed will time out.",
+    );
+  }
+
+  await target.addInitScript(
+    ([key, value]) => {
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        /* a context with no storage is a context with no dialog */
+      }
+    },
+    [ACCEPTED_TERMS_KEY, version],
+  );
+}

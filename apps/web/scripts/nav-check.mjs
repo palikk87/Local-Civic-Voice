@@ -26,7 +26,7 @@
  *      state cannot be linked to, shared, or returned to with Back, and a
  *      person who reloads on Gaps and lands on For You reads it as data loss.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -100,6 +100,7 @@ async function acceptWelcome(page) {
 
 async function firstVisit(path = "/feed", { accept = true } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  await acceptTermsBeforeLoad(context);
   const page = await context.newPage();
   await routeApiToLocal(page, base);
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });

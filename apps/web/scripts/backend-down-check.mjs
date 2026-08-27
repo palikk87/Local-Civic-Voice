@@ -17,7 +17,7 @@
  * page reading "we cannot reach the server" both "work" to a typecheck and are
  * completely different to the person holding the phone.
  */
-import { launchChromium } from "./chromium.mjs";
+import { launchChromium, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -76,6 +76,7 @@ const rows = [];
 
 for (const route of list) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await acceptTermsBeforeLoad(context);
   const page = await context.newPage();
 
   const errors = [];

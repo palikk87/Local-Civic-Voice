@@ -21,7 +21,7 @@
  *   4. A record the server reports as stuck mid-write is shown the button, not
  *      a spinner. This is the load loop, and it must not be reachable.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -164,6 +164,7 @@ const failures = [];
 /** Open a law and report what the brief card is showing. */
 async function open(id) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   await page.goto(`${base}/reference/${id}`, { waitUntil: "networkidle" });
   await page.waitForSelector("text=Citizen's Brief", { timeout: 15_000 });

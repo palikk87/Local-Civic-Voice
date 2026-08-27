@@ -21,7 +21,7 @@
  * Both are the sort of gap a typecheck cannot see: the markup is valid, the
  * page renders, and the thing simply is not a link. Only a click finds it.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -149,6 +149,7 @@ function check(label, condition, detail) {
 }
 
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+await acceptTermsBeforeLoad(context);
 const page = await context.newPage();
 await routeApiToLocal(page, base);
 

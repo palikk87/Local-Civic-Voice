@@ -30,7 +30,7 @@
  * "Exactly one search" therefore means one search PER BRANCH, and that is what
  * the counting below is written against.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -146,6 +146,7 @@ function check(label, condition, detail) {
 }
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+await acceptTermsBeforeLoad(page);
 await routeApiToLocal(page, base);
 await page.goto(`${base}/library`, { waitUntil: "networkidle" });
 

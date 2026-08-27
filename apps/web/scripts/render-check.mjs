@@ -17,7 +17,7 @@
  * /api is answered with 503 on purpose: this checks that the app BOOTS, and an
  * unreachable API must not be mistaken for a broken bundle.
  */
-import { launchChromium, routeApiToLocal } from "./chromium.mjs";
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -58,6 +58,7 @@ const chunkRequests = new Set();
 
 for (const path of ["/", "/discover", "/government", "/people"]) {
   const page = await browser.newPage();
+  await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   page.on("console", (m) => {
     if (m.type() === "error" && !/503|Failed to load resource|api not served/i.test(m.text())) {
