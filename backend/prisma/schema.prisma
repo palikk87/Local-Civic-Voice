@@ -106,6 +106,11 @@ model User {
   reportsAbout           Report[]                  @relation("ReportedUser")
   positionEvents         PositionEvent[]
 
+  // Article V. Impeachment does not touch the account — see the model below.
+  impeachmentsAgainst    Impeachment[]             @relation("ImpeachmentLeader")
+  impeachmentsFiled      Impeachment[]             @relation("ImpeachmentFiler")
+  impeachmentVotes       ImpeachmentElector[]
+
   // Aggregating the Pulse by geography is the whole purpose of the two
   // jurisdiction columns above, and it is a grouped count over the whole table.
   @@index([stateCode])
@@ -1458,4 +1463,103 @@ model AdminRole {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// ARTICLE V — SELF-CORRECTION
+//
+// Constitution Article V says political power on this platform is borrowed and
+// can be recalled. These two tables are the recall.
+// ---------------------------------------------------------------------------
+
+/// A proceeding to suspend one person from RECEIVING delegated voice.
+///
+/// It is deliberately narrow. An impeached leader keeps their account, their
+/// followers, their posts, and their own vote — including the right to delegate
+/// it to somebody else. The single power removed is the borrowed one: for the
+/// length of the suspension, nobody may lend them a vote, and the delegations
+/// they held are returned to the people who lent them.
+///
+/// One open proceeding per leader at a time. Not one platform-wide: a global
+/// lock would let anybody shield a real target by opening a frivolous case
+/// against a nobody.
+model Impeachment {
+  id        String @id @default(cuid())
+  /// The person accused. Anyone holding at least one active delegation.
+  leaderId  String
+  /// Who brought it. Must have been delegating to the leader when they filed.
+  filedById String
+
+  /// open | passed | expired
+  ///
+  /// There is deliberately no "failed". An elector who does not vote is not
+  /// voting against — the threshold is two thirds of everyone entitled, so
+  /// silence already counts against, and until the window shuts silence is
+  /// indistinguishable from a vote not yet cast. A proceeding therefore cannot
+  /// be known to have failed early; it either reaches two thirds or the clock
+  /// runs out. Anything else would be the platform declaring a result the
+  /// people had not yet given.
+  status String @default("open")
+
+  /// ARTICLES OF IMPEACHMENT, in the filer's own words. Served on the accused
+  /// in-app and by email at the moment proceedings open, and queued for admins.
+  /// Admins may act against a bad-faith filer; they may not stop a proceeding.
+  grounds  String
+  evidence String
+
+  openedAt  DateTime @default(now())
+  /// openedAt + 7 days. A proceeding is not infinitely standing.
+  expiresAt DateTime
+  /// When the threshold was crossed, or the window closed without it.
+  decidedAt DateTime?
+
+  /// The average of every impeaching voter's proposed length, from now.
+  /// Null unless status is "passed". Read live — a lapsed suspension needs no
+  /// sweep, and a column saying "suspended" that a job forgot to clear is how
+  /// a punishment outlives its sentence.
+  suspendedUntil DateTime?
+
+  leader   User                 @relation("ImpeachmentLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  filedBy  User                 @relation("ImpeachmentFiler", fields: [filedById], references: [id], onDelete: Cascade)
+  electors ImpeachmentElector[]
+
+  /// Every read is either "is there one open against this leader" or "is this
+  /// leader suspended right now", and both are (leaderId, status).
+  @@index([leaderId, status])
+  @@index([status, expiresAt])
+  @@index([filedById])
+}
+
+/// THE FROZEN ELECTORATE. Exactly who could vote, captured when proceedings
+/// opened.
+///
+/// A row here IS the right to vote. No row, no vote — so somebody who delegates
+/// to the leader after the filing gets none, which kills the obvious attack in
+/// both directions: flooding a leader with sympathetic new delegators to dilute
+/// the vote, or brigading in to manufacture a threshold.
+///
+/// The same rows are the notification list and the denominator, so those three
+/// things cannot drift apart.
+///
+/// Leaving the delegation does not remove the row. They lent power and were
+/// harmed while lending it; the freeze already prevents attrition attacks, so
+/// nothing is gained by stripping a departing delegator's say.
+model ImpeachmentElector {
+  id            String @id @default(cuid())
+  impeachmentId String
+  voterId       String
+
+  /// Null until they vote. Only ever set to a vote FOR impeachment — there is
+  /// no "against" ballot, because the threshold is two thirds of everyone
+  /// entitled, so silence already counts against.
+  votedAt      DateTime?
+  /// How long this voter thinks the suspension should run, 1..365 days. The
+  /// average of these sets the end date.
+  proposedDays Int?
+
+  impeachment Impeachment @relation(fields: [impeachmentId], references: [id], onDelete: Cascade)
+  voter       User        @relation(fields: [voterId], references: [id], onDelete: Cascade)
+
+  @@unique([impeachmentId, voterId])
+  @@index([voterId])
 }

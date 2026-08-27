@@ -67,6 +67,12 @@ export const FIRST_RUN = {
   governmentSync: 30_000,
   /** Cheap, local, and the one with a visible backlog. */
   provenance: 60_000,
+  /**
+   * Early, and entirely local. It closes Article V proceedings whose week has
+   * run out, and an unclosed proceeding blocks the next one from being brought
+   * against the same person — so a late sweep is a right nobody can exercise.
+   */
+  impeachment: 75_000,
   /** One local pass plus a few calls. */
   selfHeal: 90_000,
   /** Reads congress.gov lineage for stored records. */

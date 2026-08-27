@@ -13,6 +13,7 @@ import {
 } from "../services/delegation-service";
 import { alignmentWith } from "../services/common-ground";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
+import { suspensionState } from "../services/impeachment";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -166,6 +167,31 @@ delegationsRouter.post(
     const toUser = await prisma.user.findUnique({ where: { id: toUserId } });
     if (!toUser) {
       return c.json({ error: "User not found" }, 404);
+    }
+
+    // ARTICLE V. An impeached leader is suspended from RECEIVING delegations,
+    // and this is the one place that means anything. Checked before eligibility
+    // so the reason given is the true one — a suspended leader usually still
+    // meets every activity requirement, and "not an eligible delegate" would be
+    // both wrong and impossible to act on.
+    //
+    // Nothing else about them is blocked. They post, comment, share, follow,
+    // keep their followers, and may still delegate their own vote away. The
+    // penalty is the loan being called in, not the citizen being silenced.
+    const suspension = await suspensionState(toUserId);
+    if (suspension.suspended) {
+      return c.json(
+        {
+          error:
+            "This person was impeached by their delegators and cannot receive delegations " +
+            "until the suspension lifts.",
+          impeachment: {
+            suspendedUntil: suspension.until?.toISOString() ?? null,
+            impeachmentId: suspension.impeachmentId,
+          },
+        },
+        403
+      );
     }
 
     // Eligibility is EARNED — only routinely active accounts may receive

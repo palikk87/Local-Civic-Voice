@@ -24,6 +24,7 @@ import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
 import { verificationRouter } from "./routes/verification";
 import { bugReportsRouter } from "./routes/bug-reports";
+import { impeachmentsRouter } from "./routes/impeachments";
 import { logger } from "hono/logger";
 import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
@@ -57,6 +58,7 @@ import { runContentSelfHeal } from "./services/content-self-heal";
 import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
+import { startImpeachmentSweep } from "./services/impeachment";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
 
@@ -282,6 +284,7 @@ app.route("/api/delegations", delegationsRouter);
 app.route("/api/ai", aiRouter);
 app.route("/api/verification", verificationRouter);
 app.route("/api/bug-reports", bugReportsRouter);
+app.route("/api/impeachments", impeachmentsRouter);
 
 // Serve user uploads — only when storage is local disk.
 //
@@ -624,6 +627,17 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
       }
     },
   });
+}
+
+// ARTICLE V. Close impeachment proceedings whose week has run out.
+//
+// Local only — no external call, no courtesy budget. It exists because a
+// proceeding that reaches two thirds closes itself on the vote that got it
+// there, so the only ones left open are the ones that did NOT pass, and while
+// one sits open nobody can bring another against the same person. A sweep that
+// never runs turns "one proceeding at a time" into "one proceeding, ever".
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  startImpeachmentSweep();
 }
 
 // Accounts live in Postgres, external to this container, so they survive

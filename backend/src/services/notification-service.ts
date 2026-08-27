@@ -12,6 +12,15 @@ export const NotificationType = {
   LAW_UPDATED: "law_updated",
   MESSAGE: "message",
   VOICE_USED: "voice_used",
+
+  // ARTICLE V. These four have no preference switch and cannot be turned off —
+  // see preferenceFieldMap below for why.
+  /// Proceedings have opened against a leader you delegate to. You are an elector.
+  IMPEACHMENT_OPENED: "impeachment_opened",
+  /// Proceedings have closed. Says what happened and, if it passed, until when.
+  IMPEACHMENT_DECIDED: "impeachment_decided",
+  /// Articles of Impeachment have been filed against you. Served on the accused.
+  IMPEACHMENT_SERVED: "impeachment_served",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
@@ -30,10 +39,22 @@ export interface NotificationData {
   masterReferenceId?: string;
   /** The position cast in somebody's name, for a voice_used notification. */
   position?: string;
+  /** The proceeding, for an Article V notification. Deep-links to Article V. */
+  impeachmentId?: string;
+  /** Who the proceeding is against, so the notification can name them. */
+  leaderId?: string;
 }
 
-// Preference field mapping for notification types
-const preferenceFieldMap: Record<NotificationTypeValue, string> = {
+// Preference field mapping for notification types.
+//
+// PARTIAL ON PURPOSE. A type with no entry here has no switch and is always
+// delivered. That is not an oversight for the Article V types: an impeachment
+// notice is not a social nicety, it is service of process. The whole design
+// rests on the electorate being told the proceeding exists — a frozen
+// electorate that never hears about the vote is a quorum you can silence by
+// waiting — and on the accused being told what they are accused of. Neither
+// survives a preference toggle, so neither gets one.
+const preferenceFieldMap: Partial<Record<NotificationTypeValue, string>> = {
   [NotificationType.LIKE]: "likes",
   [NotificationType.COMMENT]: "comments",
   [NotificationType.REPLY]: "replies",
@@ -70,8 +91,13 @@ export async function shouldSendNotification(
   userId: string,
   type: NotificationTypeValue
 ): Promise<boolean> {
-  const preferences = await getUserNotificationPreferences(userId);
   const fieldName = preferenceFieldMap[type];
+
+  // No switch means no way to decline it. Checked BEFORE the preferences are
+  // read, so an unmuteable notice never depends on a preference row existing.
+  if (!fieldName) return true;
+
+  const preferences = await getUserNotificationPreferences(userId);
 
   // Type assertion needed due to dynamic field access
   return (preferences as Record<string, unknown>)[fieldName] as boolean;

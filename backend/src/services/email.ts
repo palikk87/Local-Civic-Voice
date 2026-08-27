@@ -233,3 +233,60 @@ export async function trySendingEmail(to: string): Promise<
     };
   }
 }
+
+/**
+ * Send a plain notice — no code, no call to action beyond reading it.
+ *
+ * ARTICLE V NEEDS THIS. A person accused of abusing borrowed power has the
+ * right to face the accusation, and an in-app notification alone does not
+ * discharge that: somebody who has stopped opening the app is precisely the
+ * person a quiet proceeding would run past. So the articles go to the address
+ * on file as well.
+ *
+ * DELIVERY IS BEST EFFORT AND THE CALLER MUST TREAT IT THAT WAY. A proceeding
+ * is the people's right and does not wait on a mail provider, so a failure here
+ * is reported and swallowed rather than allowed to roll back a filing. The
+ * in-app copy is the record; this is the reach.
+ */
+export async function sendNoticeEmail(args: {
+  to: string;
+  subject: string;
+  heading: string;
+  /** Rendered as separate paragraphs, in order. Plain text — escaped. */
+  paragraphs: string[];
+}): Promise<{ ok: true } | { ok: false; code: EmailFailureCode; detail: string }> {
+  const escape = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+  const text = [args.heading, "", ...args.paragraphs].join("\n\n");
+  const html = `
+    <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;color:#0F172A">
+      <h1 style="font-size:20px;margin:0 0 4px">AYE &amp; NAY</h1>
+      <p style="margin:0 0 20px;font-size:16px;font-weight:600">${escape(args.heading)}</p>
+      ${args.paragraphs
+        .map(
+          (paragraph) =>
+            `<p style="margin:0 0 16px;color:#334155;line-height:1.5;white-space:pre-wrap">${escape(paragraph)}</p>`
+        )
+        .join("\n      ")}
+    </div>
+  `.trim();
+
+  try {
+    await sendEmail({ to: args.to, subject: args.subject, html, text });
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof EmailNotSent) {
+      return { ok: false, code: error.code, detail: error.message };
+    }
+    return {
+      ok: false,
+      code: "email_send_failed",
+      detail: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
