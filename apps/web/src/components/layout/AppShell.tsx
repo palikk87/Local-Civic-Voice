@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { VerifyEmailBanner } from "@/components/auth/VerifyEmailBanner";
+import { JuryGate } from "@/components/jury/JuryGate";
 import { BugReporter } from "@/components/support/BugReporter";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -97,6 +98,10 @@ export function AppShell({
       {/* A gate with no sign on it is indistinguishable from a broken app.
           Renders nothing unless the reader is signed in and unverified. */}
       <VerifyEmailBanner />
+      {/* ARTICLE IV. A summons puts a banner here; an accepted summons takes
+          them to the case and keeps them there. The server enforces it either
+          way — this is so the app behaves like it means it. */}
+      <JuryGate />
 
       {/* ---------- Desktop left sidebar ---------- */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border bg-background/95 px-3 py-5 backdrop-blur lg:flex">

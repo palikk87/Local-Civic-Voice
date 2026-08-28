@@ -11,6 +11,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { empanel } from "../services/jury";
 import type { auth } from "../auth";
 import { block, blockExistsBetween, forgetCachedFeeds } from "../services/relationships";
 
@@ -229,7 +230,30 @@ safetyRouter.post(
       },
     });
 
-    return c.json({ success: true, reportId: report.id }, 201);
+    // ARTICLE IV. THE REPORT IS NOW HEARD BY SOMEBODY.
+    //
+    // Before this line, every report on this platform went into a queue no
+    // screen anywhere showed — written down, and then nothing, for anybody,
+    // ever. A jury of randomly drawn citizens is empanelled here, at the moment
+    // the complaint is made, which is the only moment nobody has to remember.
+    //
+    // Caught and never rethrown: a draw that fails must not turn into "your
+    // report was not filed". The report row stands either way, and the sweep
+    // picks up a jury that could not be seated.
+    const empanelled = await empanel(report.id).catch((error) => {
+      console.error("[safety] could not empanel a jury:", error);
+      return { ok: false as const, code: "report_not_found" as const, message: "" };
+    });
+
+    return c.json(
+      {
+        success: true,
+        reportId: report.id,
+        juryId: empanelled.ok ? empanelled.juryId : null,
+        jurorsSummoned: empanelled.ok ? empanelled.summoned : 0,
+      },
+      201,
+    );
   },
 );
 

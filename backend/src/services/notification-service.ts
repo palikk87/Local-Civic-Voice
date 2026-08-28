@@ -27,6 +27,13 @@ export const NotificationType = {
   SYSTEM_RESET_SCHEDULED: "system_reset_scheduled",
   /// It has run, or it failed. Either way everybody is told.
   SYSTEM_RESET_SETTLED: "system_reset_settled",
+
+  // ARTICLE IV — the Community Juries. These cannot be turned off either: a
+  // summons somebody never saw is a duty they are then marked down for missing.
+  /// You have been drawn for a jury. Twenty-four hours to answer.
+  JURY_SUMMONS: "jury_summons",
+  /// The jury you sat on, or were reported to, has reached a verdict.
+  JURY_VERDICT: "jury_verdict",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
@@ -47,6 +54,8 @@ export interface NotificationData {
   position?: string;
   /** The proceeding, for an Article V notification. Deep-links to Article V. */
   impeachmentId?: string;
+  /// Article IV. Which case a summons or a verdict is about.
+  juryId?: string;
   /** Who the proceeding is against, so the notification can name them. */
   leaderId?: string;
   /** The reset being voted on, for an Article V reset notification. */

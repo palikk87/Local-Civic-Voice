@@ -80,6 +80,13 @@ export const FIRST_RUN = {
    * platform breaking a promise it made to every account at once.
    */
   systemReset: 80_000,
+  /**
+   * Local, and the clock somebody is actually waiting on. It redraws jurors who
+   * never answered and RELEASES JURORS WHOSE DAY HAS RUN OUT — the second half
+   * is the safety valve on sequestration, so a late sweep is somebody still
+   * locked out of their own account.
+   */
+  jury: 85_000,
   /** One local pass plus a few calls. */
   selfHeal: 90_000,
   /** Reads congress.gov lineage for stored records. */

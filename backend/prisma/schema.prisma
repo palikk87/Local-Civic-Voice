@@ -114,6 +114,10 @@ model User {
   // Article III §2. Kept only to rate-limit re-running the same audit; the
   // audit itself never carries who asked for it.
   auditsRequested IntegrityAudit[] @relation("IntegrityAuditRequester")
+  // Article IV. Every summons this person was ever sent, answered or not, and
+  // every jury that has heard a report about them.
+  jurySeats       JurySeat[]
+  juriesAccusedIn Jury[]           @relation("JuryAccused")
 
   // Aggregating the Pulse by geography is the whole purpose of the two
   // jurisdiction columns above, and it is a grouped count over the whole table.
@@ -1082,6 +1086,8 @@ model Report {
 
   reporter     User  @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
   reportedUser User? @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  /// Article IV. The jury hearing this report, once one has been drawn.
+  jury         Jury?
 
   @@index([status])
   @@index([reporterId])
@@ -1755,4 +1761,98 @@ model IntegrityAudit {
   @@index([subjectType, subjectId, runAt])
   @@index([requestedById])
   @@index([impeachmentId])
+}
+
+// ---------------------------------------------------------------------------
+// THE JUDICIARY — Community Juries. Constitution Article IV.
+//
+// "Disputes are settled by randomly chosen trusted users."
+//
+// The report button has existed since the first build and its reports went into
+// a queue no screen anywhere showed. This is the branch of government that
+// clause promised, and the reports are what it hears.
+//
+// A JURY IS CHECKABLE AFTERWARDS OR IT IS NOTHING. Every seat ever drawn is
+// kept — answered, unanswered, recused, replaced — because a draw nobody can
+// walk backwards is a draw nobody should trust. The same rows are what the
+// Trust Score reads about showing up.
+// ---------------------------------------------------------------------------
+model Jury {
+  id       String @id @default(cuid())
+  /// One jury per report. A second on the same complaint is a retrial nobody
+  /// asked for.
+  reportId String @unique
+
+  /// WHO IS ACTUALLY ON TRIAL, resolved once at the draw: the author for a post
+  /// or a comment, the account itself for an account report. Stored rather than
+  /// re-derived, because a post can be deleted and a finding against a person
+  /// has to outlive the thing that was reported.
+  accusedId String
+
+  /// comment | post | leader — what was reported, which sets the panel size.
+  panelKind     String
+  /// 5 for a comment or an ordinary member's post, 7 for a civil leader's.
+  seats         Int
+  /// 3 of 5, or 4 of 7.
+  votesToDecide Int
+
+  /// drawing | deliberating | decided | abandoned
+  status  String  @default("drawing")
+  /// upheld | dismissed. Null until decided.
+  verdict String?
+
+  /// How many delegations the accused held when the jury was drawn, frozen.
+  /// Somebody who crosses fifty mid-case does not change the size of the panel
+  /// already hearing it.
+  accusedDelegations Int @default(0)
+
+  openedAt  DateTime  @default(now())
+  decidedAt DateTime?
+
+  report   Report     @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  accused  User       @relation("JuryAccused", fields: [accusedId], references: [id], onDelete: Cascade)
+  seatRows JurySeat[]
+
+  @@index([status, openedAt])
+  @@index([accusedId, verdict])
+}
+
+/// One summons. Kept whatever becomes of it.
+model JurySeat {
+  id      String @id @default(cuid())
+  juryId  String
+  jurorId String
+
+  /// summoned | accepted | voted | lapsed | recused
+  ///
+  /// "accepted" is the state that sequesters an account, and it is read live
+  /// rather than mirrored onto the user row: a flag saying "sequestered" that a
+  /// job forgot to clear is how somebody gets locked out of their own account.
+  state String @default("summoned")
+
+  summonedAt DateTime  @default(now())
+  acceptedAt DateTime?
+
+  /// uphold | dismiss
+  vote      String?
+  /// Why. Required to vote — a verdict nobody had to explain is a verdict
+  /// nobody can answer.
+  reasoning String?
+  votedAt   DateTime?
+
+  recusedReason String?
+  closedAt      DateTime?
+
+  /// The seat this one was drawn to replace, so the draw can be walked
+  /// backwards afterwards.
+  replacesSeatId String?
+
+  jury  Jury @relation(fields: [juryId], references: [id], onDelete: Cascade)
+  juror User @relation(fields: [jurorId], references: [id], onDelete: Cascade)
+
+  @@unique([juryId, jurorId])
+  @@index([jurorId, state])
+  @@index([juryId, state])
+  @@index([state, summonedAt])
+  @@index([state, acceptedAt])
 }

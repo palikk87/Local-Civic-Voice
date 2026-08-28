@@ -19,6 +19,7 @@ const People = lazy(() => import("./pages/People"));
 const Government = lazy(() => import("./pages/Government"));
 const Library = lazy(() => import("./pages/Library"));
 const ReferenceDetail = lazy(() => import("./pages/ReferenceDetail"));
+const JuryCasePage = lazy(() => import("./pages/JuryCase"));
 const Documents = lazy(() => import("./pages/Documents"));
 const Constitution = lazy(() => import("./pages/Constitution"));
 const BillOfRights = lazy(() => import("./pages/BillOfRights"));
@@ -91,6 +92,8 @@ const App = () => (
               <Route path="/constitution" element={<Constitution />} />
               <Route path="/bill-of-rights" element={<BillOfRights />} />
               <Route path="/article-v" element={<ArticleV />} />
+              {/* Article IV. Reachable signed out too: a decided case is public. */}
+              <Route path="/jury/:id" element={<JuryCasePage />} />
               <Route path="/terms" element={<Terms />} />
               <Route path="/trending" element={<Trending />} />
               <Route path="/search" element={<Search />} />

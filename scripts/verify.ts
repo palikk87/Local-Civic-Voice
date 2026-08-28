@@ -227,6 +227,16 @@ const CHECKS: Check[] = [
       + "carries a name",
   },
   {
+    name: "web jury-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "jury-check"],
+    guards:
+      "a report draws a jury of five, the juror is told on the page, the case shows the post, "
+      + "the report and the law's brief, accepting closes the rest of the platform, a verdict "
+      + "cannot be cast without saying why, stepping aside releases them, and the decided case "
+      + "is public to a stranger with every reason and no juror named",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],

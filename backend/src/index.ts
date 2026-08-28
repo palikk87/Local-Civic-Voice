@@ -25,6 +25,8 @@ import { aiRouter } from "./routes/ai";
 import { verificationRouter } from "./routes/verification";
 import { bugReportsRouter } from "./routes/bug-reports";
 import { auditsRouter } from "./routes/audits";
+import { juriesRouter } from "./routes/juries";
+import { sequestration } from "./middleware/sequestration";
 import { impeachmentsRouter } from "./routes/impeachments";
 import { systemResetRouter } from "./routes/system-reset";
 import { logger } from "hono/logger";
@@ -61,6 +63,7 @@ import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { startImpeachmentSweep } from "./services/impeachment";
+import { scheduleJurySweeps } from "./services/jury";
 import { startSystemResetSweep } from "./services/system-reset";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
@@ -151,6 +154,18 @@ app.use("*", async (c, next) => {
   c.set("session", session.session);
   await next();
 });
+
+// ARTICLE IV — SEQUESTRATION.
+//
+// Directly after the auth middleware, because it needs the user and nothing
+// else needs to run before it. A juror who accepted a summons gets the decision
+// page and the short list in middleware/sequestration.ts, and 423 everywhere
+// else, until they have voted or stepped aside or the platform has let them go.
+//
+// On the server rather than in the app on purpose: a rule the client enforces
+// is bypassed by a second browser tab, and a duty that can be bypassed is not
+// a duty.
+app.use("*", sequestration);
 
 // Apply auth rate limiting to auth routes
 app.use("/api/auth/*", authRateLimit);
@@ -289,6 +304,7 @@ app.route("/api/verification", verificationRouter);
 app.route("/api/bug-reports", bugReportsRouter);
 app.route("/api/impeachments", impeachmentsRouter);
 app.route("/api/audits", auditsRouter);
+app.route("/api/juries", juriesRouter);
 app.route("/api/system-reset", systemResetRouter);
 
 // Serve user uploads — only when storage is local disk.
@@ -644,6 +660,17 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   startImpeachmentSweep();
   startSystemResetSweep();
+
+  // ARTICLE IV. Redraw jurors who never answered, and RELEASE JURORS WHOSE DAY
+  // HAS RUN OUT.
+  //
+  // The second half is the safety valve on sequestration and the reason it is
+  // defensible at all. It is belt to the braces rather than the braces: the
+  // release is computed from the seat row on every request, so an account comes
+  // back after twenty-four hours whether or not this ever fires. What the sweep
+  // adds is closing the seat properly, so the record says "lapsed" rather than
+  // "still sitting" — and that record is what the Trust Score reads.
+  scheduleJurySweeps();
 }
 
 // Accounts live in Postgres, external to this container, so they survive

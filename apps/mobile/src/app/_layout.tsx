@@ -11,6 +11,7 @@ import { AuthUIProvider } from '@/lib/auth/use-civic-auth';
 import { AuthSheet } from '@/components/auth/AuthSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { BugReporter } from '@/components/support/BugReporter';
+import { JuryGate } from '@/components/JuryGate';
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -41,6 +42,8 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         <Stack.Screen name="bill-of-rights" options={{ headerShown: false }} />
         <Stack.Screen name="constitution" options={{ headerShown: false }} />
         <Stack.Screen name="article-v" options={{ headerShown: false }} />
+        {/* Article IV. Reachable signed out too: a decided case is public. */}
+        <Stack.Screen name="jury/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="user/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="admin/login" options={{ headerShown: false }} />
         <Stack.Screen name="admin/dashboard" options={{ headerShown: false }} />
@@ -67,6 +70,13 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         lib/permissions.ts.
       */}
       <AuthSheet />
+      {/*
+        ARTICLE IV. A summons puts a banner here; an accepted summons takes them
+        to the case and keeps them there. The server enforces it either way —
+        this is so the app behaves like it means it, rather than showing a juror
+        five hundred failed requests.
+      */}
+      <JuryGate />
       {/*
         On every screen, including the ones a guest is on. The people most
         likely to hit a blocking bug are the ones who could not get past

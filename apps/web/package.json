@@ -26,6 +26,7 @@
     "bug-report-check": "node scripts/bug-report-check.mjs dist",
     "article-v-check": "node scripts/article-v-check.mjs dist",
     "integrity-audit-check": "node scripts/integrity-audit-check.mjs dist",
+    "jury-check": "node scripts/jury-check.mjs dist",
     "terms-parity-check": "node scripts/terms-parity-check.mjs"
   },
   "dependencies": {

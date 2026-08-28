@@ -151,7 +151,7 @@ export const CONSTITUTION: Constitution = {
           id: 'art4-sec3',
           title: 'The Judiciary (The Community Juries)',
           content: `Randomly selected high-trust users who resolve disputes regarding the Code of Conduct and the Bill of Rights.`,
-          enforcedInCode: false,
+          enforcedInCode: true,
         },
       ],
     },
