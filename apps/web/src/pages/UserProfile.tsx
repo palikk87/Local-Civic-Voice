@@ -2,6 +2,7 @@
 // and shares), with follow and delegate actions. Mobile twin: mobile/src/app/user/[id].tsx
 // Data: GET /api/users/:id, GET /api/posts?authorId=:id, POST /api/users/:id/follow,
 // POST /api/delegations (server enforces earned delegate eligibility).
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -32,6 +33,7 @@ import { TrustPanel } from "@/components/trust/TrustPanel";
 import { FileAgainstDelegate } from "@/components/articlev/FileArticles";
 import type { MyDelegation } from "@/lib/article-v";
 import { CivicRecord } from "@/components/record/CivicRecord";
+import { ReportDialog } from "@/components/safety/ReportDialog";
 import { useStartConversation } from "@/lib/api/messages";
 
 interface PublicUser {
@@ -80,6 +82,7 @@ export default function UserProfile() {
   const { openAuth } = useAuthUI();
   const isSelf = me?.id === id;
   const startConversation = useStartConversation();
+  const [reporting, setReporting] = useState(false);
 
   const { data: profile, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["public-user", id],
@@ -382,22 +385,20 @@ export default function UserProfile() {
                 Mute
               </button>
 
+              {/* IT USED TO FIRE INSTANTLY, with the reason hardcoded to
+                  "other" and nothing written, and then claim a moderator would
+                  look at it. Nobody could act on a report that said "other"
+                  about nothing in particular. It opens a form now. */}
               <button
                 type="button"
+                data-testid="report-user"
                 className="text-slate-400 underline-offset-2 hover:text-white hover:underline"
                 onClick={() => {
                   if (!isAuthenticated) {
                     openAuth("Sign in to report people.");
                     return;
                   }
-                  safetyApi
-                    .report({ userId: id!, reason: "other" })
-                    .then(() =>
-                      toast.success("Reported", {
-                        description: "A moderator will look at this.",
-                      }),
-                    )
-                    .catch(() => toast.error("Couldn't send the report"));
+                  setReporting(true);
                 }}
               >
                 Report
@@ -556,6 +557,14 @@ export default function UserProfile() {
           )}
         </div>
       </div>
+
+      <ReportDialog
+        target={
+          profile ? { userId: profile.id, what: `@${profile.username}` } : null
+        }
+        open={reporting}
+        onOpenChange={setReporting}
+      />
     </AppShell>
   );
 }

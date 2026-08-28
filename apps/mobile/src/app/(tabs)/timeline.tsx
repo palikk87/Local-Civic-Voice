@@ -64,6 +64,7 @@ import { castReferenceVote } from '@/lib/reference-votes';
 import CreatePostModal from '@/components/CreatePostModal';
 import ShareModal from '@/components/ShareModal';
 import PostOptionsModal from '@/components/PostOptionsModal';
+import { ReportSheet } from '@/components/ReportSheet';
 import { safetyApi } from '@/lib/api/safety';
 import { repostPost } from '@/lib/api/feed';
 import CommentSection, { parseContentWithMentions } from '@/components/CommentSection';
@@ -816,6 +817,7 @@ function TimelineFeed() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [reportingPost, setReportingPost] = useState<string | null>(null);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<TimelinePost | null>(null);
   const [showPostDetail, setShowPostDetail] = useState(false);
@@ -911,14 +913,12 @@ function TimelineFeed() {
   // Each now calls the endpoint, says so only when it succeeded, and says so
   // plainly when it did not.
 
+  // FIRED INSTANTLY, with the reason hardcoded to 'other' and nothing written.
+  // Six reasons and two thousand characters of detail have been in the API the
+  // whole time and nothing sent either, so every report arrived saying "other"
+  // about nothing in particular. It opens the sheet now.
   const handleReportPost = (postId: string) => {
-    safetyApi
-      .report({ postId, reason: 'other' })
-      .then(() => {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Reported', 'A moderator will look at this.');
-      })
-      .catch(() => Alert.alert("Couldn't send the report", 'Please try again.'));
+    setReportingPost(postId);
   };
 
   const handleBlockUser = (userId: string) => {
@@ -1107,6 +1107,17 @@ function TimelineFeed() {
         onReport={handleReportPost}
         onBlock={handleBlockUser}
         onMute={handleMuteUser}
+      />
+
+      <ReportSheet
+        target={reportingPost ? { postId: reportingPost, what: 'this post' } : null}
+        onClose={() => setReportingPost(null)}
+        onFiled={() =>
+          Alert.alert(
+            'Report filed',
+            'A jury of citizens is drawn to hear it, and you will be told what they decide.',
+          )
+        }
       />
 
       <PostDetailModal

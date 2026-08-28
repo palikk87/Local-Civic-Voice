@@ -29,6 +29,7 @@ import {
   Wrench,
   Settings,
   Bug,
+  Flag,
   Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import { MergeReviewTab } from "@/components/admin/MergeReviewTab";
 import { LogsTab } from "@/components/admin/LogsTab";
 import { SettingsTab } from "@/components/admin/SettingsTab";
 import { BugReportsTab } from "@/components/admin/BugReportsTab";
+import { ReportsTab } from "@/components/admin/ReportsTab";
 import { ArticlesTab } from "@/components/admin/ArticlesTab";
 import { MaintenanceTab } from "@/components/admin/MaintenanceTab";
 import { RolesTab } from "@/components/admin/RolesTab";
@@ -59,6 +61,10 @@ const ADMIN_TABS = [
   "announcements",
   "merge-review",
   "b2b-clients",
+  // Reports about people and posts. The endpoints behind this existed for
+  // months with no screen calling them, so a report went into the database and
+  // an administrator looking for it found nothing.
+  "reports",
   // "bug-reports" had a tab trigger but was missing from this list, so the URL
   // /admin/bug-reports fell back to the dashboard on a reload or a shared link
   // — the tab worked, the address did not.
@@ -88,6 +94,9 @@ const TAB_CAPABILITY: Partial<Record<AdminTab, string>> = {
   announcements: "announcements.write",
   "merge-review": "merges.decide",
   "b2b-clients": "b2b.view",
+  // The capability already said "Remove posts and act on what people report" —
+  // it was written for this and had nowhere to be spent.
+  reports: "posts.moderate",
   "bug-reports": "bugReports.manage",
   articles: "articles.review",
   roles: "roles.manage",
@@ -211,6 +220,12 @@ export default function Admin() {
                 B2B clients
               </TabsTrigger>
             ) : null}
+            {allows(TAB_CAPABILITY["reports"]) ? (
+              <TabsTrigger value="reports">
+                <Flag className="mr-2 h-4 w-4" />
+                Reports
+              </TabsTrigger>
+            ) : null}
             {allows(TAB_CAPABILITY["bug-reports"]) ? (
               <TabsTrigger value="bug-reports">
                 <Bug className="mr-2 h-4 w-4" />
@@ -279,6 +294,9 @@ export default function Admin() {
           </TabsContent>
           <TabsContent value="logs" className="mt-6">
             <LogsTab />
+          </TabsContent>
+          <TabsContent value="reports" className="mt-6">
+            <ReportsTab />
           </TabsContent>
           <TabsContent value="bug-reports" className="mt-6">
             <BugReportsTab />

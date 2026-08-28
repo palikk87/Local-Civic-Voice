@@ -689,6 +689,28 @@ export async function sweepJuries(): Promise<{
     redrawn += await fillSeats(seat.juryId, seat.id);
   }
 
+  // A JURY THAT SEATED NOBODY IS TRIED AGAIN.
+  //
+  // THE BUG THIS FIXES. `empanel` seats whoever is eligible at the moment a
+  // report is filed, and on a young platform that can be nought. The loop
+  // above only redraws seats that LAPSED — and a jury with no seats has none
+  // to lapse — so a case born short stayed short forever, in "drawing",
+  // decided by nobody, visible to nobody. Reported as "doesn't do anything
+  // just says a report has been sent, checked on the admin side there is
+  // nothing there that shows that report", and that was exactly right.
+  //
+  // The pool grows as accounts qualify. This asks again, every hour, so a
+  // report waits for jurors instead of dying at the moment it was made.
+  // `fillSeats` already works out how many are missing and draws only that
+  // many, so a full panel costs one query and nothing else.
+  const short = await prisma.jury.findMany({
+    where: { status: "drawing" },
+    select: { id: true },
+  });
+  for (const jury of short) {
+    redrawn += await fillSeats(jury.id);
+  }
+
   // A case whose remaining jurors have already reached the threshold closes
   // here rather than waiting for somebody to press something.
   const open = await prisma.jury.findMany({

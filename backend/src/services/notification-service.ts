@@ -39,6 +39,11 @@ export const NotificationType = {
   /// keep lending them your voice, and a right you were never told about is a
   /// right you do not have.
   LEADER_FINDING: "leader_finding",
+  /// A report you filed was closed by an administrator. Not switchable off: it
+  /// is the answer to something you did, and a report that vanishes into
+  /// silence is why people stop filing them. A jury verdict already reaches
+  /// the reporter through JURY_VERDICT; this is the other way a report ends.
+  REPORT_DECIDED: "report_decided",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];
@@ -65,6 +70,8 @@ export interface NotificationData {
   leaderId?: string;
   /** The reset being voted on, for an Article V reset notification. */
   systemResetId?: string;
+  /** The report an administrator closed, for the person who filed it. */
+  reportId?: string;
 }
 
 // Preference field mapping for notification types.

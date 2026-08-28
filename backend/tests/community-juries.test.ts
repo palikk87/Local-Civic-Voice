@@ -839,3 +839,72 @@ describe("[bor-art5] a leader is held to what they said", () => {
     expect(body.findings.length).toBe(1);
   });
 });
+
+/**
+ * THE DEAD END. This is the bug the report walked into.
+ *
+ * `empanel` seats whoever is eligible at the moment a report is filed, and on a
+ * young platform that can be nought. The sweep only ever redrew seats that
+ * LAPSED — and a jury with no seats has none to lapse — so a case born short
+ * stayed short forever, in "drawing", decided by nobody, visible to nobody.
+ *
+ * Reported as: "doesn't do anything just says a report has been sent, checked
+ * on the admin side there is nothing there that shows that report."
+ *
+ * The report row was there the whole time. Nothing was ever going to happen to
+ * it.
+ */
+describe("[art4-sec3] a jury that seated nobody is tried again", () => {
+  test("A REPORT FILED WITH NOBODY ELIGIBLE STILL EMPANELS, AND SEATS NOBODY", async () => {
+    const reporter = await citizen("lonely-reporter");
+    const accused = await citizen("lonely-accused");
+    const written = await post(accused.userId);
+
+    // Nobody has been made eligible. This is a brand-new platform.
+    const filed = await report(reporter.cookie, { postId: written.id });
+    expect(filed.status).toBe(201);
+    expect(filed.body.jurorsSummoned).toBe(0);
+
+    const jury = await prisma.jury.findFirst({ where: { accusedId: accused.userId } });
+    expect(jury?.status).toBe("drawing");
+    expect(await prisma.jurySeat.count({ where: { juryId: jury!.id } })).toBe(0);
+  });
+
+  test("THE SWEEP FILLS IT ONCE PEOPLE QUALIFY — the case waits instead of dying", async () => {
+    const reporter = await citizen("waiting-reporter");
+    const accused = await citizen("waiting-accused");
+    const written = await post(accused.userId);
+
+    await report(reporter.cookie, { postId: written.id });
+    const jury = await prisma.jury.findFirst({ where: { accusedId: accused.userId } });
+    expect(await prisma.jurySeat.count({ where: { juryId: jury!.id } })).toBe(0);
+
+    // Time passes and the platform grows. Nothing about the report changes.
+    await pool(5);
+
+    const swept = await sweepJuries();
+    expect(swept.redrawn).toBeGreaterThan(0);
+
+    const seated = await prisma.jurySeat.count({ where: { juryId: jury!.id } });
+    expect(seated).toBe(5);
+  });
+
+  test("a jury that is already full is not redrawn by the sweep", async () => {
+    // The retry must not summon a second panel onto a case that has one. Before
+    // the fix there was no retry at all; the risk of adding one is that it runs
+    // every hour, forever, on every open case.
+    const reporter = await citizen("full-reporter");
+    const accused = await citizen("full-accused");
+    await pool(5);
+    const written = await post(accused.userId);
+
+    await report(reporter.cookie, { postId: written.id });
+    const jury = await prisma.jury.findFirst({ where: { accusedId: accused.userId } });
+    const before = await prisma.jurySeat.count({ where: { juryId: jury!.id } });
+    expect(before).toBe(5);
+
+    const swept = await sweepJuries();
+    expect(swept.redrawn).toBe(0);
+    expect(await prisma.jurySeat.count({ where: { juryId: jury!.id } })).toBe(before);
+  });
+});

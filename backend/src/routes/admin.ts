@@ -8,6 +8,7 @@ import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { emailConfiguration, trySendingEmail } from "../services/email";
 import { keyReport, keyWarnings } from "../services/key-report";
+import { createNotification, NotificationType } from "../services/notification-service";
 import {
   capabilitiesFor,
   consoleRoleSlugs,
@@ -3265,6 +3266,20 @@ adminRouter.get("/reports", async (c) => {
     include: {
       reporter: { select: { id: true, name: true, username: true } },
       reportedUser: { select: { id: true, name: true, username: true, banned: true } },
+      // THE THING THAT COULD NOT BE SEEN. A report empanels a jury at the
+      // moment it is filed, and on a young platform that jury can seat nobody.
+      // Without this the queue showed a case waiting on seven jurors and a
+      // case waiting on nobody as the same row.
+      jury: {
+        select: {
+          id: true,
+          status: true,
+          seats: true,
+          panelKind: true,
+          verdict: true,
+          seatRows: { select: { state: true } },
+        },
+      },
     },
   });
 
@@ -3317,6 +3332,21 @@ adminRouter.get("/reports", async (c) => {
         ? commentById.get(r.commentId) ?? { id: r.commentId, deleted: true }
         : null,
       reportedUser: r.reportedUser,
+      // Counted from the seat rows rather than asserted, so "0 of 7 filled"
+      // is a fact about the case and not a hopeful default.
+      jury: r.jury
+        ? {
+            id: r.jury.id,
+            status: r.jury.status,
+            seats: r.jury.seats,
+            panelKind: r.jury.panelKind,
+            verdict: r.jury.verdict,
+            filled: r.jury.seatRows.filter(
+              (seat) => seat.state !== "lapsed" && seat.state !== "recused",
+            ).length,
+            voted: r.jury.seatRows.filter((seat) => seat.state === "voted").length,
+          }
+        : null,
     })),
   });
 });
@@ -3326,6 +3356,17 @@ adminRouter.get("/reports", async (c) => {
  * Close a report as actioned or dismissed. Whatever the moderator did about the
  * content — delete it, ban the author, nothing — they did through the existing
  * tools; this records that the report itself is finished with.
+ *
+ * IT DOES NOT TOUCH THE JURY, and that is deliberate. Article IV §3 gives
+ * conduct to a jury of citizens and Article V §3 says no Officer may halt a
+ * proceeding. Closing the report here says an administrator has dealt with the
+ * safety of it; the jury still reaches its own verdict, and that verdict still
+ * stands on the record. Two different questions, answered by two different
+ * bodies, neither cancelling the other.
+ *
+ * THE REPORTER IS TOLD. A jury verdict already notifies them; an administrator
+ * closing it did not, so a report handled this way was the one that vanished
+ * into silence. Reporting into silence is why people stop reporting.
  */
 adminRouter.post("/reports/:id", async (c) => {
   const session = await getAdminFromToken(c.req.header("Authorization"));
@@ -3350,6 +3391,22 @@ adminRouter.post("/reports/:id", async (c) => {
       reviewedBy: session.username,
       reviewedAt: new Date(),
     },
+  });
+
+  // Not awaited into the answer: the report is closed whether or not a
+  // notification was delivered, and an admin should not see a failure for
+  // something that already happened.
+  void createNotification(
+    report.reporterId,
+    NotificationType.REPORT_DECIDED,
+    body.status === "actioned" ? "Your report was acted on" : "Your report was closed",
+    body.status === "actioned"
+      ? "Somebody read the report you filed and took action on it. Thank you for flagging it."
+      : "Somebody read the report you filed and found nothing to act on. Thank you for " +
+        "flagging it anyway — it is better to be told.",
+    { reportId: report.id },
+  ).catch((error) => {
+    console.error("[admin] could not tell the reporter their report was closed:", error);
   });
 
   return c.json({ id: updated.id, status: updated.status });

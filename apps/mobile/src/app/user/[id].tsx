@@ -2,7 +2,7 @@
 // and shares), with follow and delegate actions. Web twin: webapp/src/pages/UserProfile.tsx
 // Data: GET /api/users/:id, GET /api/posts?authorId=:id, POST /api/users/:id/follow,
 // POST /api/delegations (server enforces earned delegate eligibility).
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,10 @@ import {
   Pressable,
   Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { ReportSheet } from '@/components/ReportSheet';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
@@ -91,6 +93,7 @@ export default function UserProfileScreen() {
   const requireAuth = useRequireAuth();
   const me = useAuthStore((s) => s.user);
   const isSelf = me?.id === id;
+  const [reporting, setReporting] = useState(false);
 
   const { data: profile, isLoading } = useQuery({
     queryKey: ['public-user', id],
@@ -325,6 +328,26 @@ export default function UserProfileScreen() {
                 </View>
               ) : null}
 
+              {/* REPORTING A PERSON DID NOT EXIST ON THE PHONE AT ALL. The web
+                  profile has had it (badly) for months; this screen had Follow,
+                  Message and Delegate and no way to raise a concern about
+                  anybody. Same sheet as the timeline uses.
+
+                  Block and Mute are still missing here — a separate gap, said
+                  out loud rather than quietly left. */}
+              {!isSelf ? (
+                <Pressable
+                  testID="report-user"
+                  onPress={() => {
+                    if (!requireAuth('Sign in to report people.')) return;
+                    setReporting(true);
+                  }}
+                  className="mt-4 items-center"
+                >
+                  <Text className="text-slate-400 text-sm underline">Report</Text>
+                </Pressable>
+              ) : null}
+
               {delegateMutation.isError ? (
                 <View className="mx-4 mt-3 bg-amber-900/30 border border-amber-700/40 rounded-xl p-3">
                   <Text className="text-amber-300 text-sm text-center">
@@ -436,6 +459,19 @@ export default function UserProfileScreen() {
             </View>
           </ScrollView>
         </SafeAreaView>
+
+        <ReportSheet
+          target={
+            reporting && profile ? { userId: profile.id, what: `@${profile.username}` } : null
+          }
+          onClose={() => setReporting(false)}
+          onFiled={() =>
+            Alert.alert(
+              'Report filed',
+              'A jury of citizens is drawn to hear it, and you will be told what they decide.',
+            )
+          }
+        />
       </View>
     </>
   );

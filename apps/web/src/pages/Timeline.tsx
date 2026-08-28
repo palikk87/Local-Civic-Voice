@@ -52,6 +52,7 @@ import { useCurrentUser, useRequireAuth } from "@/hooks/use-civic-auth";
 import GlobalPulseDrawer from "@/components/mobile/GlobalPulseDrawer";
 import { cn } from "@/lib/utils";
 import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
+import { ReportDialog } from "@/components/safety/ReportDialog";
 
 // Time ago helper
 function getTimeAgo(dateString: string): string {
@@ -686,6 +687,7 @@ export default function TimelineScreen() {
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [reportingPost, setReportingPost] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<TimelinePost | null>(null);
   const [showPostDetail, setShowPostDetail] = useState(false);
   const [showGlobalPulse, setShowGlobalPulse] = useState(false);
@@ -768,13 +770,15 @@ export default function TimelineScreen() {
   // Each now calls the endpoint, says so only when it succeeded, and says so
   // plainly when it did not.
 
+  // FIRED INSTANTLY, with the reason hardcoded to "other" and nothing written.
+  // Six reasons and two thousand characters of detail have been in the API the
+  // whole time; nothing sent either, so every report arrived saying "other"
+  // about nothing in particular. It opens the form now — the same one the
+  // profile uses, because two forms is two places for the reasons to drift.
   const handleReportPost = (postId: string) => {
     if (!requireAuth("Sign in to report a post.")) return;
     setShowOptionsModal(false);
-    safetyApi
-      .report({ postId, reason: "other" })
-      .then(() => toast.success("Reported", { description: "A moderator will look at this." }))
-      .catch(() => toast.error("Couldn't send the report"));
+    setReportingPost(postId);
   };
 
   const handleBlockUser = (userId: string) => {
@@ -929,6 +933,14 @@ export default function TimelineScreen() {
         onReport={handleReportPost}
         onBlock={handleBlockUser}
         onMute={handleMuteUser}
+      />
+
+      <ReportDialog
+        target={reportingPost ? { postId: reportingPost, what: "this post" } : null}
+        open={reportingPost !== null}
+        onOpenChange={(open) => {
+          if (!open) setReportingPost(null);
+        }}
       />
 
       <PostDetailModal

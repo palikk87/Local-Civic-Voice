@@ -32,7 +32,8 @@
     "founding-documents-check": "node scripts/founding-documents-check.mjs dist",
     "record-privacy-check": "node scripts/record-privacy-check.mjs dist",
     "one-law-page-check": "node scripts/one-law-page-check.mjs dist",
-    "vote-anonymity-check": "node scripts/vote-anonymity-check.mjs dist"
+    "vote-anonymity-check": "node scripts/vote-anonymity-check.mjs dist",
+    "report-flow-check": "node scripts/report-flow-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
