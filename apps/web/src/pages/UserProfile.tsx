@@ -14,6 +14,7 @@ import {
   MessageCircle,
   UserMinus,
   UserPlus,
+  Gavel,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -25,6 +26,8 @@ import { failureMessage } from "@/lib/request-failure";
 import { safetyApi } from "@/lib/civic";
 import { CommonGround } from "@/components/civic/CommonGround";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
+import { FileAgainstDelegate } from "@/components/articlev/FileArticles";
+import type { MyDelegation } from "@/lib/article-v";
 import { CivicRecord } from "@/components/record/CivicRecord";
 import { useStartConversation } from "@/lib/api/messages";
 
@@ -55,11 +58,10 @@ interface UserPost {
   createdAt: string;
 }
 
-interface MyDelegation {
-  id: string;
-  toUser: { id: string };
-  isActive: boolean;
-}
+// The delegation shape comes from lib/article-v, which is also what the
+// filing form takes. This file used to declare a narrower local copy with
+// three of its fields, which was fine until the same object had to be handed
+// to something that needed the rest of them.
 
 function referenceRoute(post: UserPost): string {
   const id = post.referenceId ?? "";
@@ -431,6 +433,40 @@ export default function UserProfile() {
         <div className="px-4">
           <ImpeachmentRecord userId={id!} />
         </div>
+
+        {/* BRINGING PROCEEDINGS, WHERE THE PERSON IS.
+            Only shown to somebody who currently delegates to them, which is
+            the same bar the server enforces — and it is exactly the person
+            entitled to bring it. Before this, the only way in was a card on
+            your own profile leading to a page most people never open, so the
+            remedy existed and could not be found. */}
+        {myDelegation ? (
+          <div className="px-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Gavel className="h-4 w-4 text-red-500" />
+              <h2 className="text-sm font-semibold text-foreground">
+                You lend this person your vote
+              </h2>
+            </div>
+            <p className="mb-3 text-xs leading-5 text-muted-foreground">
+              You can take it back on your own at any time, with the button above. Article V is
+              the other route: if you think everybody who lends to them should decide together,
+              file Articles of Impeachment and all of their current delegators vote on it.
+            </p>
+            <FileAgainstDelegate
+              delegation={myDelegation}
+              minLength={40}
+              maxLength={5000}
+              onFiled={() => {
+                toast.success("Articles of Impeachment filed", {
+                  description:
+                    "Every current delegator has been notified, and the person named has been served.",
+                });
+                navigate("/article-v");
+              }}
+            />
+          </div>
+        ) : null}
 
         {/* Where the two of you actually agree — and where you do not. Sits
             above their timeline: knowing you are with somebody on three

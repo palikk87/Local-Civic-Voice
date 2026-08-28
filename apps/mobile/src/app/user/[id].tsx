@@ -24,6 +24,7 @@ import {
   UserMinus,
   UserPlus,
   AlertCircle,
+  Gavel,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -33,6 +34,8 @@ import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/cn';
 import { CommonGroundPanel } from '@/components/CivicPanels';
 import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
+import { FileAgainstDelegate } from '@/components/FileArticles';
+import type { MyDelegation } from '@/lib/article-v';
 import { useStartConversation } from '@/lib/api/messages';
 
 interface PublicUser {
@@ -60,11 +63,10 @@ interface UserPost {
   createdAt: string;
 }
 
-interface MyDelegation {
-  id: string;
-  toUser: { id: string };
-  isActive: boolean;
-}
+// The delegation shape comes from lib/article-v, which is also what the filing
+// form takes. This file used to declare a narrower local copy with three of its
+// fields, which was fine until the same object had to be handed to something
+// that needed the rest of them.
 
 function referenceRoute(post: UserPost): string {
   const id = post.referenceId ?? '';
@@ -335,6 +337,35 @@ export default function UserProfileScreen() {
                 before they read the rest. Renders nothing for almost every
                 profile. */}
             <ImpeachmentRecord userId={id} />
+
+            {/* BRINGING PROCEEDINGS, WHERE THE PERSON IS.
+                Only for somebody who currently delegates to them — the same
+                bar the server enforces, and exactly the person entitled to
+                bring it. Before this the only way in was a card on your own
+                profile leading to a screen most people never open, so the
+                remedy existed and could not be found. */}
+            {myDelegation ? (
+              <View className="px-4 pt-6">
+                <View className="mb-2 flex-row items-center">
+                  <Gavel size={16} color="#EF4444" />
+                  <Text className="ml-2 text-sm font-semibold text-white">
+                    You lend this person your vote
+                  </Text>
+                </View>
+                <Text className="mb-3 text-xs leading-5 text-slate-400">
+                  You can take it back on your own at any time, with the button above. Article V
+                  is the other route: if you think everybody who lends to them should decide
+                  together, file Articles of Impeachment and all of their current delegators vote
+                  on it.
+                </Text>
+                <FileAgainstDelegate
+                  delegation={myDelegation}
+                  minLength={40}
+                  maxLength={5000}
+                  onFiled={() => router.push('/article-v')}
+                />
+              </View>
+            ) : null}
 
             {/* Where the two of you actually agree — and where you do not.
                 Above their timeline: knowing you are with somebody on three

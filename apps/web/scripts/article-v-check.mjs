@@ -364,6 +364,51 @@ try {
     await context.close();
   }
 
+  // -------------------- the way in: on the profile of somebody you delegate to
+
+  {
+    // THE GAP THIS CHECK EXISTS FOR. Article V is not in the navigation; the
+    // only route in was a card on your own profile. Somebody who wants to
+    // impeach a delegate is looking at that delegate, so the filing has to be
+    // reachable from there or the remedy cannot be found at all.
+    const { context, page } = await open(ELECTOR, `/user/${LEADER.id}`);
+    await page.waitForTimeout(2_000);
+    const text = await screen(page);
+
+    check(
+      "a delegator is offered Article V on their delegate's profile",
+      /You lend this person your vote/i.test(text),
+      text.slice(0, 500).replace(/\n/g, " | "),
+    );
+    check(
+      "…with a way to file the articles",
+      (await page.locator('[data-testid="open-articles-form"]').count()) > 0,
+    );
+
+    await page.locator('[data-testid="open-articles-form"]').first().click();
+    await page.waitForTimeout(500);
+    check(
+      "…that opens the real form",
+      (await page.locator('[data-testid="articles-grounds"]').count()) > 0,
+    );
+    await context.close();
+  }
+
+  {
+    // And NOT to somebody who lends them nothing. The server would refuse them
+    // anyway; offering the button would be inviting a refusal.
+    const { context, page } = await open(OUTSIDER, `/user/${LEADER.id}`);
+    await page.waitForTimeout(2_000);
+    const text = await screen(page);
+
+    check(
+      "somebody who does not delegate to them is not offered it",
+      !/You lend this person your vote/i.test(text),
+      text.slice(0, 300).replace(/\n/g, " | "),
+    );
+    await context.close();
+  }
+
   // --------------------------------------------------------- articles are filed
 
   {
