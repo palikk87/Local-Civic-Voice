@@ -54,6 +54,17 @@ export type BriefOutcome =
   | { state: "ready"; brief: CitizenBrief; model: string }
   | { state: "unavailable"; reason: string };
 
+/**
+ * The brief was written, and the check that it matches the law did not run.
+ *
+ * NOT PUBLISHED. Boiling legalese into plain terms is the whole point of this
+ * platform, and an unchecked summary of somebody's law is exactly the thing it
+ * exists not to be. It is retried rather than shown.
+ */
+export const UNCHECKED_REASON =
+  "The brief was written but could not be checked against the law's own text just now, " +
+  "so it is not being shown. Nothing is guessed at — it will be rebuilt and checked shortly.";
+
 /** The reader-facing reason when no source publishes the text. */
 export const NO_TEXT_REASON =
   "The full text of this law isn't published anywhere we can read yet. A brief is " +
@@ -348,12 +359,31 @@ async function readSection(
   return notes || null;
 }
 
+/**
+ * The result of checking a brief against the law.
+ *
+ * THE BUG THIS TYPE EXISTS TO KILL. This used to return `string[] | null`,
+ * where null meant BOTH "the law raises no objection" and "the check could not
+ * run". Those are opposite facts, and collapsing them meant a brief nobody
+ * checked was published as though it had been checked and passed. There was no
+ * way, from the outside or the inside, to tell the two apart.
+ *
+ * Boiling legalese down into plain terms is the point of this platform. A
+ * summary that was never checked against the law is precisely the thing it
+ * exists to not be.
+ */
+type VerifyResult =
+  /** The check ran. `objections` is what the text does not support — often empty. */
+  | { checked: true; objections: string[] }
+  /** The check did NOT run. Nothing may be published on the strength of this. */
+  | { checked: false; reason: string };
+
 async function verify(
   model: string,
   brief: CitizenBrief,
   source: string,
   partial: boolean
-): Promise<string[] | null> {
+): Promise<VerifyResult> {
   const result = await generateAI({
     system:
       "You are a fact-checker. You compare a written brief against a source text and " +
@@ -366,12 +396,20 @@ async function verify(
     maxCompletionTokens: 600,
     temperature: 0,
   });
-  if (!result.ok) return null;
+  if (!result.ok) return { checked: false, reason: result.error };
+
   const parsed = parseJsonObject<{ unsupported?: unknown }>(result.content);
-  if (!parsed || !Array.isArray(parsed.unsupported)) return null;
-  return parsed.unsupported.filter(
-    (item): item is string => typeof item === "string" && !!item.trim()
-  );
+  if (!parsed || !Array.isArray(parsed.unsupported)) {
+    // A 200 that is not the shape asked for is not a clean bill of health.
+    return { checked: false, reason: "the checker did not answer in the agreed shape" };
+  }
+
+  return {
+    checked: true,
+    objections: parsed.unsupported.filter(
+      (item): item is string => typeof item === "string" && !!item.trim()
+    ),
+  };
 }
 
 /**
@@ -459,15 +497,28 @@ export async function composeBrief(officialText: string | null): Promise<BriefOu
   // so it is not dropped; it is given a budget, and if it cannot run in time
   // the brief ships unrevised rather than the reader getting nothing.
   const objections: string[] = [];
+
+  // EVERY PART OF THE LAW MUST ACTUALLY BE CHECKED. A check that did not run is
+  // not a check that passed, and a brief may not be published on the strength
+  // of one — so a failure here fails the whole brief rather than shipping an
+  // unverified summary of somebody's law.
   if (parts.length === 1) {
     const found = await verify(model, brief, text, false);
-    if (found) objections.push(...found);
+    if (!found.checked) {
+      console.error(`[Brief] NOT PUBLISHED — the check did not run: ${found.reason}`);
+      return { state: "unavailable", reason: UNCHECKED_REASON };
+    }
+    objections.push(...found.objections);
   } else {
     for (const [index, part] of parts.entries()) {
       const found = await verify(model, brief, part, true);
-      if (found?.length) {
-        console.warn(`[Brief] section ${index + 1} contradicts ${found.length} statement(s)`);
-        objections.push(...found);
+      if (!found.checked) {
+        console.error(`[Brief] NOT PUBLISHED — section ${index + 1} was not checked: ${found.reason}`);
+        return { state: "unavailable", reason: UNCHECKED_REASON };
+      }
+      if (found.objections.length) {
+        console.warn(`[Brief] section ${index + 1} contradicts ${found.objections.length} statement(s)`);
+        objections.push(...found.objections);
       }
     }
   }
@@ -476,6 +527,16 @@ export async function composeBrief(officialText: string | null): Promise<BriefOu
     console.warn(`[Brief] rewriting with ${objections.length} objection(s)`);
     const second = await draftFromText(text, objections);
     if (second) brief = second.brief;
+
+    // AND THE REWRITE IS CHECKED TOO. A second draft written to answer
+    // objections is not exempt from the rule that produced them.
+    if (parts.length === 1) {
+      const again = await verify(model, brief, text, false);
+      if (!again.checked) {
+        console.error(`[Brief] NOT PUBLISHED — the rewrite was not checked: ${again.reason}`);
+        return { state: "unavailable", reason: UNCHECKED_REASON };
+      }
+    }
   }
 
   return { state: "ready", brief, model };

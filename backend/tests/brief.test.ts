@@ -392,6 +392,49 @@ describe("a brief request always ends somewhere", () => {
   });
 });
 
+describe("[art3-sec3] a brief nobody checked is never published", () => {
+  test("the fact-check failing does NOT ship the brief", async () => {
+    // THE DEFECT THIS PINS, and it is the worst one in this file's history.
+    // verify() used to return `string[] | null`, where null meant BOTH "the
+    // law raises no objection" and "the check could not run". Those are
+    // opposite facts. Collapsing them meant a brief nobody had checked was
+    // stored and shown exactly as if it had been checked and passed — with
+    // nothing, anywhere, able to tell the two apart.
+    //
+    // Turning legalese into plain terms is what this platform is for. An
+    // unchecked summary of somebody's law is precisely what it must not be.
+    const law = await record();
+
+    const realFetchHere = globalThis.fetch;
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("api.openai.com") || url.includes("generativelanguage.googleapis.com")) {
+        const body = JSON.parse((init?.body as string) ?? "{}") as { messages?: Array<{ content?: string }> };
+        const prompt = body.messages?.map((m) => m.content ?? "").join("\n") ?? "";
+        // The WRITE pass succeeds. Only the CHECK fails — which is the case
+        // that used to look identical to a clean pass.
+        if (/unsupported/i.test(prompt)) {
+          return new Response(JSON.stringify({ error: { message: "checker unavailable" } }), { status: 500 });
+        }
+        return Response.json({ choices: [{ message: { content: JSON.stringify(BRIEF) } }] });
+      }
+      return realFetchHere(input, init);
+    }) as typeof fetch;
+
+    try {
+      await processReferenceBrief(law.id, false);
+    } finally {
+      globalThis.fetch = realFetchHere;
+    }
+
+    const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
+
+    // NOTHING WAS STORED. Not a draft, not a partial, not a "good enough".
+    expect(row.citizenBriefJson).toBeNull();
+    expect(row.contentStatus).not.toBe("ready");
+  });
+});
+
 describe("the Get Citizen Brief button", () => {
   // The server runs in its own process, so the network stub in this file does
   // not reach it. Anything here that goes over HTTP is therefore written to
