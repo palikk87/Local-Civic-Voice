@@ -545,6 +545,66 @@ describe("what the console reports", () => {
   });
 });
 
+describe("a key you add shows up, whatever it is called", () => {
+  // THE RULE, and it is the only one that matters in this panel: adding a key
+  // must never need a developer. The report used to be a hand-written list, so
+  // a key nobody had thought to add to it was stored, in use, and invisible —
+  // the panel said "None added yet." about a key guarding sign-up. The list is
+  // no longer the authority. The database is.
+
+  test("a name this codebase has never heard of appears in the panel", async () => {
+    const name = "ACLED_API_KEY";
+    await clearKey(name, superadminToken);
+
+    const before = (await (await readKeys(superadminToken)).json()) as any;
+    expect(before.data.keys.some((key: any) => key.name === name)).toBe(false);
+
+    const set = await setKey(name, "a-throwaway-value-for-this-test", superadminToken);
+    expect(set.status).toBe(200);
+
+    const after = (await (await readKeys(superadminToken)).json()) as any;
+    const row = after.data.keys.find((key: any) => key.name === name);
+
+    // Present, with a fingerprint and a length — the same shape every built-in
+    // row has, because the panel renders them all the same way.
+    expect(row).toBeDefined();
+    expect(row.present).toBe(true);
+    expect(row.fingerprint).toMatch(/^[0-9a-f]{4}$/);
+    expect(row.source).toBe("database");
+
+    // AND NOT FLAGGED AS THE WRONG KEY. This codebase does not know what this
+    // provider's keys look like, so it must not guess — a good key reported as
+    // "unexpected format" sends somebody hunting for a problem that is not there.
+    expect(row.looksRight).toBe(true);
+
+    // Never returned, only fingerprinted.
+    expect(JSON.stringify(after.data.keys)).not.toContain("a-throwaway-value-for-this-test");
+  });
+
+  test("clearing it takes it back off the list", async () => {
+    const name = "ACLED_API_KEY";
+    await setKey(name, "another-throwaway-value", superadminToken);
+    await clearKey(name, superadminToken);
+
+    const after = (await (await readKeys(superadminToken)).json()) as any;
+    expect(after.data.keys.some((key: any) => key.name === name)).toBe(false);
+  });
+
+  test("a built-in key that is stored is shown once, not twice and not never", async () => {
+    // The exact failure this replaces: TURNSTILE_SECRET_KEY was built-in, so
+    // the panel's "other keys" list skipped it, and it was absent from the
+    // report, so the main list skipped it too. It fell between them.
+    await setKey("TURNSTILE_SECRET_KEY", "a-throwaway-secret-for-this-test", superadminToken);
+
+    const after = (await (await readKeys(superadminToken)).json()) as any;
+    const rows = after.data.keys.filter((key: any) => key.name === "TURNSTILE_SECRET_KEY");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].present).toBe(true);
+
+    await clearKey("TURNSTILE_SECRET_KEY", superadminToken);
+  });
+});
+
 // ---------------------------------------------------------------------------
 
 function decryptWith(name: string, stored: string, base64Key: string): string {

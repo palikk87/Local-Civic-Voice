@@ -7,7 +7,7 @@ import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { emailConfiguration, trySendingEmail } from "../services/email";
-import { keyReport, keyWarnings } from "../services/key-report";
+import { fullKeyReport, keyWarnings } from "../services/key-report";
 import { createNotification, NotificationType } from "../services/notification-service";
 import {
   capabilitiesFor,
@@ -2164,18 +2164,27 @@ adminRouter.get("/keys", async (c) => {
     return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
   }
 
-  const keys = keyReport();
+  // THE DATABASE DECIDES WHAT IS SHOWN, not a hand-written list. Anything an
+  // operator has stored appears here under the name they stored it as, so
+  // adding a key never needs a developer and a key can never be present and
+  // invisible at the same time.
+  const stored = await listPlatformSecrets();
+  const keys = fullKeyReport(
+    stored.filter((secret) => secret.storedInDatabase).map((secret) => secret.name),
+  );
   const encryption = encryptionStatus();
   return c.json({
     data: {
       keys,
-      warnings: keyWarnings(keys),
+      // Warnings still read the described rows: they are statements about what
+      // this platform needs, and it needs nothing from a key it does not use.
+      warnings: keyWarnings(),
       // Every key can now come from either of two places, so each one says
       // which. "I set it" and "this process is using it" are different
       // statements, and the gap between them was the whole problem three
       // separate times here.
       storage: {
-        stored: await listPlatformSecrets(),
+        stored,
         storable: STORABLE_SECRETS,
         // The panel is an on-ramp: an operator can add a NEW provider's key,
         // not only replace one of the built-ins. This is the rule its name has

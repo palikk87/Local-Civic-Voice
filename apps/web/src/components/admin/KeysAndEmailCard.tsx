@@ -220,7 +220,14 @@ export function KeysAndEmailCard() {
 
           {canManageKeys && data?.data.storage ? (
             <CustomKeys
-              stored={data.data.storage.stored.filter((s) => !s.builtIn)}
+              // ANYTHING STORED IS ALREADY IN THE LIST ABOVE, under whatever
+              // name it was stored as — that is what stops a key being present
+              // and invisible. This section is the ADD FORM, plus any stored
+              // key the list above somehow did not carry, so the two can never
+              // disagree about what exists.
+              stored={data.data.storage.stored.filter(
+                (s) => !s.builtIn && !data.data.keys.some((k) => k.name === s.name),
+              )}
               canStore={data.data.storage.encryptionAvailable}
               whyNot={data.data.storage.encryptionUnavailableReason}
               rule={data.data.storage.customNamingRule}
@@ -374,10 +381,11 @@ function CustomKeys({
 }) {
   return (
     <div className="mt-5">
-      <p className="font-medium text-foreground">Other API keys</p>
+      <p className="font-medium text-foreground">Add a key</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Keys for providers this platform does not use yet. Add one here, then it can be wired
-        into the code by name — it takes effect immediately, with no redeploy.
+        Add a key for any provider, under any name that follows the rule below. It is stored
+        encrypted, takes effect immediately with no redeploy, and appears in the list above
+        from the moment you save it.
       </p>
 
       {stored.length ? (
@@ -393,7 +401,10 @@ function CustomKeys({
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-xs text-muted-foreground">None added yet.</p>
+        // Not "none added yet" — everything added is shown above. This
+        // section only ever lists a stored key the list above did not carry,
+        // which should now be impossible.
+        null
       )}
 
       {canStore ? (

@@ -175,6 +175,49 @@ export function keyReport(): KeyStatus[] {
 }
 
 /**
+ * EVERY KEY THE PANEL MUST SHOW — the described ones, plus anything that is
+ * actually stored, whether this file has ever heard of it or not.
+ *
+ * WHY THIS EXISTS, and it is the only rule that matters here: adding a key must
+ * never require a developer. The list above is hand-written, so a key nobody
+ * had thought to add to it was invisible — the panel said "None added yet."
+ * about a key sitting in the database guarding sign-up. The panel's other list
+ * only held names that are NOT built-in, so a built-in absent from the report
+ * fell between the two and appeared in neither.
+ *
+ * So the list is no longer the authority. THE DATABASE IS. Anything stored
+ * shows up, always, under whatever name it was stored as. The rows above only
+ * add description — what a key powers and what breaks without it — for the ones
+ * this codebase actually consumes. A key it has never heard of is shown plainly
+ * and says so, which is honest rather than silent.
+ */
+export function fullKeyReport(storedNames: string[]): KeyStatus[] {
+  const described = keyReport();
+  const alreadyShown = new Set(described.map((key) => key.name));
+
+  const extras = [...new Set(storedNames)]
+    .filter((name) => !alreadyShown.has(name))
+    .sort()
+    .map((name) =>
+      status(
+        name,
+        // Stored secrets are applied into the process, so this reads the value
+        // actually in use — the same thing every consumer of it would read.
+        process.env[name]?.trim() || undefined,
+        // NO PREFIX EXPECTATION. This key belongs to a provider this codebase
+        // does not know, so it has no idea what its keys look like, and
+        // guessing would mean flagging a perfectly good key as the wrong one.
+        null,
+        "Added here. Nothing in this codebase reads it yet — it is stored and ready to be " +
+          "wired in by name, with no redeploy.",
+        "Nothing, yet.",
+      ),
+    );
+
+  return [...described, ...extras];
+}
+
+/**
  * The problems worth saying out loud, in the words of somebody who has to fix
  * them. Ordered by how much of the platform stops working.
  */
