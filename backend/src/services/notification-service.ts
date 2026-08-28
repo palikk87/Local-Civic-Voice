@@ -34,6 +34,11 @@ export const NotificationType = {
   JURY_SUMMONS: "jury_summons",
   /// The jury you sat on, or were reported to, has reached a verdict.
   JURY_VERDICT: "jury_verdict",
+  /// A jury found that somebody you lend your vote to misrepresented a law.
+  /// Cannot be turned off: it is the notice that lets you decide whether to
+  /// keep lending them your voice, and a right you were never told about is a
+  /// right you do not have.
+  LEADER_FINDING: "leader_finding",
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];

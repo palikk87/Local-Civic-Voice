@@ -648,3 +648,194 @@ describe("[art4-sec3] the rules are published and the draw is checkable", () => 
     if (!again.ok) expect(again.code).toBe("already_empanelled");
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe("[bor-art5] a leader is held to what they said", () => {
+  /**
+   * Run a misinformation report all the way to an upheld verdict.
+   *
+   * Returns the accused, the people lending them a vote, and the jury id.
+   */
+  async function upheldMisinformation(lenderCount: number) {
+    const leader = await citizen("leader");
+    const reporter = await citizen("reporter");
+    const jurors = await pool(8);
+
+    const lenders = [];
+    for (let i = 0; i < lenderCount; i += 1) lenders.push(await citizen("lender"));
+    if (lenders.length > 0) {
+      await prisma.delegation.createMany({
+        data: lenders.map((l) => ({ fromUserId: l.userId, toUserId: leader.userId })),
+      });
+    }
+
+    const written = await post(leader.userId, "This bill removes the protection in section four.");
+    const filed = await report(reporter.cookie, { postId: written.id });
+    const juryId = filed.body.juryId as string;
+
+    const seats = await prisma.jurySeat.findMany({ where: { juryId }, select: { jurorId: true } });
+    const seated = jurors.filter((j) => seats.some((s) => s.jurorId === j.userId));
+
+    for (const juror of seated.slice(0, 3)) {
+      await api(juror.cookie, `/api/juries/${juryId}/accept`, "POST");
+      await api(juror.cookie, `/api/juries/${juryId}/verdict`, "POST", {
+        vote: "uphold",
+        reasoning: "Section four plainly keeps the protection this post says it removes.",
+      });
+    }
+
+    return { leader, reporter, lenders, juryId };
+  }
+
+  test("AN UPHELD MISINFORMATION REPORT BECOMES A FINDING ON THE RECORD", async () => {
+    const { leader, juryId } = await upheldMisinformation(3);
+
+    const response = await api(null, `/api/juries/findings/${leader.userId}`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      findings: Array<{ juryId: string; uphold: number; detail: string | null; reasons: unknown[]; delegationsAtTheTime: number }>;
+    };
+
+    expect(body.findings.length).toBe(1);
+    expect(body.findings[0]!.juryId).toBe(juryId);
+    expect(body.findings[0]!.uphold).toBe(3);
+    // The claim, not just the label — a reader judges what was said.
+    expect(body.findings[0]!.detail).toContain("misstates what the bill actually says");
+    // And the jurors' reasons, so the finding can be argued with.
+    expect(body.findings[0]!.reasons.length).toBe(3);
+    expect(body.findings[0]!.delegationsAtTheTime).toBe(3);
+  });
+
+  test("EVERY PERSON LENDING THEM A VOTE IS TOLD — at one delegation, not fifty", async () => {
+    const { lenders } = await upheldMisinformation(3);
+
+    // Not awaited into the verdict, so give the side effect a moment.
+    await Bun.sleep(1_500);
+
+    for (const lender of lenders) {
+      const told = await prisma.notification.count({
+        where: { userId: lender.userId, type: "leader_finding" },
+      });
+      expect(told).toBe(1);
+    }
+  });
+
+  test("NOTHING IS TAKEN AWAY BY A FINDING — the remedy belongs to the lenders", async () => {
+    const { leader, lenders } = await upheldMisinformation(3);
+
+    const after = await prisma.user.findUnique({
+      where: { id: leader.userId },
+      select: { banned: true },
+    });
+    expect(after?.banned).toBe(false);
+
+    // Every delegation is still standing. A jury decides whether something
+    // broke the rules; whether to keep lending a voice is the lender's call,
+    // and Article V is how they make it together.
+    const stillLending = await prisma.delegation.count({
+      where: { toUserId: leader.userId, isActive: true },
+    });
+    expect(stillLending).toBe(lenders.length);
+
+    // And they can still speak — nothing about the account changed at all.
+    // A post has to name the record it is about, so this one does.
+    refSeq += 1;
+    const about = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `finding-${refSeq}-119`,
+        referenceType: "bill",
+        title: "A bill they still have every right to talk about",
+        status: "proposed",
+        category: "healthcare",
+      },
+    });
+    const canStillPost = await api(leader.cookie, "/api/posts", "POST", {
+      content: "Still able to speak, which is the point.",
+      governmentReferenceId: about.id,
+    });
+    expect(canStillPost.status).toBe(201);
+  });
+
+  test("a dismissed report is never a finding", async () => {
+    const leader = await citizen("leader");
+    const reporter = await citizen("reporter");
+    const jurors = await pool(8);
+    await prisma.delegation.create({
+      data: { fromUserId: reporter.userId, toUserId: leader.userId },
+    });
+
+    const written = await post(leader.userId);
+    const filed = await report(reporter.cookie, { postId: written.id });
+    const juryId = filed.body.juryId as string;
+    const seats = await prisma.jurySeat.findMany({ where: { juryId }, select: { jurorId: true } });
+    const seated = jurors.filter((j) => seats.some((s) => s.jurorId === j.userId));
+
+    for (const juror of seated.slice(0, 3)) {
+      await api(juror.cookie, `/api/juries/${juryId}/accept`, "POST");
+      await api(juror.cookie, `/api/juries/${juryId}/verdict`, "POST", {
+        vote: "dismiss",
+        reasoning: "Disagreeable, but it does not misstate what the law says.",
+      });
+    }
+
+    const body = (await (await api(null, `/api/juries/findings/${leader.userId}`)).json()) as {
+      findings: unknown[];
+    };
+    expect(body.findings).toEqual([]);
+  });
+
+  test("an upheld report of another kind is not a falsehood finding", async () => {
+    const leader = await citizen("leader");
+    const reporter = await citizen("reporter");
+    const jurors = await pool(8);
+
+    const written = await post(leader.userId);
+    // Reported as spam, not as misrepresenting a law.
+    const filed = await api(reporter.cookie, "/api/safety/reports", "POST", {
+      postId: written.id,
+      reason: "spam",
+      detail: "Posted this same thing eleven times today.",
+    });
+    const juryId = ((await filed.json()) as { juryId: string }).juryId;
+
+    const seats = await prisma.jurySeat.findMany({ where: { juryId }, select: { jurorId: true } });
+    const seated = jurors.filter((j) => seats.some((s) => s.jurorId === j.userId));
+    for (const juror of seated.slice(0, 3)) {
+      await api(juror.cookie, `/api/juries/${juryId}/accept`, "POST");
+      await api(juror.cookie, `/api/juries/${juryId}/verdict`, "POST", {
+        vote: "uphold",
+        reasoning: "Eleven identical posts in a day is spam by any reading.",
+      });
+    }
+
+    const body = (await (await api(null, `/api/juries/findings/${leader.userId}`)).json()) as {
+      findings: unknown[];
+    };
+    // Upheld, and on the record as a decided case — but Bill of Rights Article V
+    // is about verifiable falsehoods, and this was not one.
+    expect(body.findings).toEqual([]);
+  });
+
+  test("somebody lending nobody a vote still gets the finding, and nobody is told", async () => {
+    const { leader } = await upheldMisinformation(0);
+    await Bun.sleep(1_000);
+
+    const body = (await (await api(null, `/api/juries/findings/${leader.userId}`)).json()) as {
+      findings: Array<{ delegationsAtTheTime: number }>;
+    };
+    expect(body.findings.length).toBe(1);
+    expect(body.findings[0]!.delegationsAtTheTime).toBe(0);
+
+    const told = await prisma.notification.count({ where: { type: "leader_finding" } });
+    expect(told).toBe(0);
+  });
+
+  test("the record is public — a stranger can read it, signed out", async () => {
+    const { leader } = await upheldMisinformation(2);
+    const response = await api(null, `/api/juries/findings/${leader.userId}`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { findings: unknown[] };
+    expect(body.findings.length).toBe(1);
+  });
+});

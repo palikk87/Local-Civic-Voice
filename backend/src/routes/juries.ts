@@ -24,6 +24,7 @@ import { publicHandle, PUBLIC_AUTHOR_SELECT } from "../services/public-identity"
 import {
   acceptSummons,
   castVerdict,
+  findingsAgainst,
   recuse,
   sequesteredBy,
   CIVIL_LEADER_DELEGATIONS,
@@ -280,6 +281,32 @@ juriesRouter.get("/me", async (c) => {
       releasedAt: seat.acceptedAt
         ? new Date(seat.acceptedAt.getTime() + DELIBERATION_WINDOW_MS).toISOString()
         : null,
+    })),
+  });
+});
+
+/**
+ * GET /api/juries/findings/:userId — every upheld misinformation finding
+ * against one person. Public, and kept for good.
+ *
+ * Bill of Rights Article V. Registered before the `/:id` route so a user id is
+ * never read as a case id.
+ *
+ * NOTHING HERE IS A SCORE. A finding is one jury's verdict on one specific
+ * claim, with the reasons they gave, and it is shown as that. Turning it into a
+ * number would let a reader skip the part that matters.
+ */
+juriesRouter.get("/findings/:userId", async (c) => {
+  const findings = await findingsAgainst(c.req.param("userId"));
+  return c.json({
+    findings: findings.map((finding) => ({
+      juryId: finding.juryId,
+      decidedAt: finding.decidedAt?.toISOString() ?? null,
+      detail: finding.detail,
+      uphold: finding.uphold,
+      dismiss: finding.dismiss,
+      reasons: finding.reasons,
+      delegationsAtTheTime: finding.delegationsAtTheTime,
     })),
   });
 });

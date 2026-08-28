@@ -603,6 +603,23 @@ export async function settle(juryId: string): Promise<VoteResult> {
       ...jury.seatRows.filter((s) => s.vote !== null).map((s) => s.jurorId),
     ]);
 
+    // BILL OF RIGHTS ARTICLE V. An upheld misinformation report against
+    // somebody carrying borrowed votes is a finding, and the people who lent
+    // those votes are told — "as determined by the collective will of their
+    // followers". Not awaited into the verdict: the finding stands whether or
+    // not a notification was delivered.
+    if (verdict === "upheld") {
+      const reported = await prisma.report.findUnique({
+        where: { id: jury.reportId },
+        select: { reason: true },
+      });
+      if (reported?.reason === FALSEHOOD_REASON) {
+        void tellTheDelegators(jury.accusedId, juryId).catch((error) => {
+          console.error("[jury] could not tell the delegators about a finding:", error);
+        });
+      }
+    }
+
     await Promise.all(
       [...told].map((userId) =>
         createNotification(
@@ -703,4 +720,126 @@ export function scheduleJurySweeps(): void {
     everyMs: 60 * 60 * 1000,
     run: async () => sweepJuries(),
   });
+}
+
+// ---------------------------------------------------------------------------
+// FINDINGS — Bill of Rights Article V.
+//
+// "The community retains the right to Impeach or demote any leader who
+// violates the platform's integrity or SPREADS VERIFIABLE FALSEHOODS, as
+// determined by the collective will of their followers."
+//
+// What existed for this was a function that calculated a penalty and that
+// nothing had ever called, working from an `impeachmentVotes = 0 // Would come
+// from database` — a formula over a number that was never fetched. This is the
+// real thing, and it is deliberately not a score: a finding is one jury's
+// verdict on one specific claim, kept as that.
+//
+// DERIVED, NEVER DUPLICATED. A finding is not a new row. It is a jury that
+// upheld a misinformation report, which the Jury table already records against
+// a named accused. Copying that into a "findings" table would be a second
+// source of truth that can disagree with the first, and the first is the one
+// people can read the reasoning of.
+//
+// "AS DETERMINED BY THE COLLECTIVE WILL OF THEIR FOLLOWERS" is the whole point,
+// so the people who lent this person a vote are told. They lent the voice; what
+// to do about it is theirs to decide, not the platform's. Nothing is taken away
+// automatically — no demotion, no suspension, no hidden reach penalty. The
+// remedy for borrowed power is Article V, and it belongs to the lenders.
+// ---------------------------------------------------------------------------
+
+/** The report reason a finding is made of. */
+export const FALSEHOOD_REASON = "misinformation";
+
+export interface Finding {
+  juryId: string;
+  decidedAt: Date | null;
+  /** What the reporter said, so a reader judges the claim and not the label. */
+  detail: string | null;
+  /** How the panel split. */
+  uphold: number;
+  dismiss: number;
+  /** The jurors' reasons, unattributed — the same ones on the case page. */
+  reasons: Array<{ vote: string | null; reasoning: string | null }>;
+  /** Delegations the person held when the jury was drawn. */
+  delegationsAtTheTime: number;
+}
+
+/**
+ * Every jury that has upheld a misinformation report against this person.
+ *
+ * Public, and kept for good. Like a passed impeachment, this is a finding other
+ * people made about how somebody used a public voice, and a record that expires
+ * is one a person can simply wait out.
+ */
+export async function findingsAgainst(userId: string): Promise<Finding[]> {
+  const juries = await prisma.jury.findMany({
+    where: {
+      accusedId: userId,
+      verdict: "upheld",
+      report: { reason: FALSEHOOD_REASON },
+    },
+    orderBy: { decidedAt: "desc" },
+    select: {
+      id: true,
+      decidedAt: true,
+      accusedDelegations: true,
+      report: { select: { detail: true } },
+      seatRows: { select: { vote: true, reasoning: true } },
+    },
+  });
+
+  return juries.map((jury) => ({
+    juryId: jury.id,
+    decidedAt: jury.decidedAt,
+    detail: jury.report.detail,
+    uphold: jury.seatRows.filter((s) => s.vote === "uphold").length,
+    dismiss: jury.seatRows.filter((s) => s.vote === "dismiss").length,
+    reasons: jury.seatRows
+      .filter((s) => s.vote !== null)
+      .map((s) => ({ vote: s.vote, reasoning: s.reasoning })),
+    delegationsAtTheTime: jury.accusedDelegations,
+  }));
+}
+
+/**
+ * Tell the people who lent this person their vote.
+ *
+ * AT ONE DELEGATION, NOT FIFTY. The duty does not wait for the title: somebody
+ * carrying a single borrowed vote misrepresented a law to the person who lent
+ * it, and that person is entitled to know. The fifty-vote line buys a bigger
+ * jury and the name "civil leader"; it buys nothing here.
+ *
+ * NOTHING IS TAKEN AWAY BY THIS FUNCTION. It notifies, and that is all it does.
+ * A platform that automatically demoted somebody on a jury verdict would have
+ * made the jury a sentencing court; the Bill of Rights puts the decision with
+ * the followers, so the notification IS the remedy being handed to them.
+ *
+ * Never throws. A finding stands whether or not a notification was delivered.
+ */
+async function tellTheDelegators(accusedId: string, juryId: string): Promise<number> {
+  const delegations = await prisma.delegation.findMany({
+    where: { toUserId: accusedId, isActive: true },
+    select: { fromUserId: true },
+    distinct: ["fromUserId"],
+  });
+  if (delegations.length === 0) return 0;
+
+  await Promise.all(
+    delegations.map((d) =>
+      createNotification(
+        d.fromUserId,
+        NotificationType.LEADER_FINDING,
+        "A jury found that somebody you lend your vote to misrepresented a law",
+        "A randomly drawn jury upheld a report that they misrepresented what a law says. " +
+          "Their reasons are on the case. Nothing has been taken away from anybody — you lent " +
+          "them your voice, so what happens next is yours to decide.",
+        { juryId },
+      ).catch((error) => {
+        console.error("[jury] finding notification failed:", error);
+        return { created: false };
+      }),
+    ),
+  );
+  return delegations.length;
 }

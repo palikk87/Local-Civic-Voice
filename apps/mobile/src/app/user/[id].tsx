@@ -35,6 +35,7 @@ import { cn } from '@/lib/cn';
 import { CommonGroundPanel } from '@/components/CivicPanels';
 import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
 import { DelegateAuditPanel } from '@/components/IntegrityAuditPanel';
+import { FindingsRecord } from '@/components/FindingsRecord';
 import { FileAgainstDelegate } from '@/components/FileArticles';
 import type { MyDelegation } from '@/lib/article-v';
 import { useStartConversation } from '@/lib/api/messages';
@@ -343,6 +344,12 @@ export default function UserProfileScreen() {
                 up whether to lend this person their vote can check the support
                 they already carry, in counts, without seeing a single name. */}
             <DelegateAuditPanel userId={id} />
+
+            {/* BILL OF RIGHTS ARTICLE V. Beside the impeachment record, for
+                the same reason: somebody deciding whether to lend this person
+                their vote is entitled to know what a jury found about how
+                they used one. */}
+            <FindingsRecord userId={id} />
 
             {/* BRINGING PROCEEDINGS, WHERE THE PERSON IS.
                 Only for somebody who currently delegates to them — the same

@@ -26,6 +26,7 @@ import { failureMessage } from "@/lib/request-failure";
 import { safetyApi } from "@/lib/civic";
 import { CommonGround } from "@/components/civic/CommonGround";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
+import { FindingsRecord } from "@/components/profile/FindingsRecord";
 import { DelegateAuditPanel } from "@/components/audit/IntegrityAuditPanel";
 import { FileAgainstDelegate } from "@/components/articlev/FileArticles";
 import type { MyDelegation } from "@/lib/article-v";
@@ -433,6 +434,13 @@ export default function UserProfile() {
             almost every profile. */}
         <div className="px-4">
           <ImpeachmentRecord userId={id!} />
+        </div>
+
+        {/* BILL OF RIGHTS ARTICLE V. Beside the impeachment record, for the
+            same reason: somebody deciding whether to lend this person their
+            vote is entitled to know what a jury found about how they used one. */}
+        <div className="px-4">
+          <FindingsRecord userId={id!} />
         </div>
 
         {/* ARTICLE III §2, where the support actually is. Somebody weighing up

@@ -135,6 +135,8 @@ function restorePopulation() {
       select: { id: true },
     });
     const refIds = refs.map((r) => r.id);
+    await prisma.delegation.deleteMany({ where: { toUserId: { in: ids } } });
+    await prisma.delegation.deleteMany({ where: { fromUserId: { in: ids } } });
     await prisma.jurySeat.deleteMany({ where: { jurorId: { in: ids } } });
     await prisma.jury.deleteMany({ where: { accusedId: { in: ids } } });
     await prisma.report.deleteMany({ where: { reporterId: { in: ids } } });
@@ -162,13 +164,15 @@ async function cleanup() {
       const j = await prisma.jury.count();
       const s = await prisma.jurySeat.count();
       const r = await prisma.report.count();
+      const d = await prisma.delegation.count();
       const u = await prisma.user.count();
-      console.log(JSON.stringify({ j, s, r, u }));
+      console.log(JSON.stringify({ j, s, r, d, u }));
     `);
     const state = JSON.parse(left);
     check("the population is put back — no juries left", state.j === 0, left);
     check("…no seats left", state.s === 0, left);
     check("…no reports left", state.r === 0, left);
+    check("…no delegations left", state.d === 0, left);
     check("…and all thousand citizens still there", state.u >= 1000, left);
   } catch (error) {
     console.error(`Could not restore the population rows: ${error.message}`);
@@ -222,7 +226,9 @@ try {
   // them — the same bar as becoming a delegate. The date is the one thing a
   // check cannot earn honestly; the rest are real rows of the real kind.
   db(`
-    const pool = ${JSON.stringify(POOL.map((p) => p.id))};
+    // The accused earns delegate standing too — somebody has to be able to lend
+    // them a vote for Bill of Rights Article V to have anybody to notify.
+    const pool = ${JSON.stringify([...POOL.map((p) => p.id), ACCUSED.id])};
     const refs = [];
     for (let i = 0; i < 20; i += 1) {
       const row = await prisma.governmentReference.create({
@@ -277,6 +283,14 @@ try {
 
   const cookies = {};
   for (const person of EVERYONE) cookies[person.id] = await signIn(person);
+
+  // Somebody lends the accused their vote, so Bill of Rights Article V has
+  // somebody to notify when the verdict lands: "as determined by the collective
+  // will of their followers".
+  const lent = await asCitizen(cookies[STRANGER.id], "/api/delegations", "POST", {
+    toUserId: ACCUSED.id,
+  });
+  check("somebody lends the accused their vote", lent.status === 201, String(lent.status));
 
   // The report, through the real endpoint the button calls.
   const filed = await asCitizen(cookies[REPORTER.id], "/api/safety/reports", "POST", {
@@ -351,7 +365,7 @@ try {
     await routeApiToLocal(page, API);
     await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("#root", { timeout: 25_000 });
-    await page.waitForTimeout(700);
+    await page.waitForTimeout(500);
     return { context, page };
   }
 
@@ -499,8 +513,56 @@ try {
         console.log(JSON.stringify({ ...jury, report: report?.status }));
       `).split("\n").filter(Boolean).pop(),
     );
+    // The notice to the delegators is deliberately not awaited into the verdict
+    // — a finding stands whether or not a notification was delivered — so poll
+    // for it rather than assuming it has already landed.
+    let told = { n: 0 };
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      told = JSON.parse(
+        db(`
+          const n = await prisma.notification.count({
+            where: { userId: "${STRANGER.id}", type: "leader_finding" },
+          });
+          console.log(JSON.stringify({ n }));
+        `).split("\n").filter(Boolean).pop(),
+      );
+      if (told.n > 0) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    check("EVERY PERSON LENDING THEM A VOTE IS TOLD", told.n === 1, JSON.stringify(told));
+
     check("THREE JURORS DECIDE IT", decided.status === "decided" && decided.verdict === "upheld", JSON.stringify(decided));
     check("…and the report stops being open", decided.report === "actioned", JSON.stringify(decided));
+  }
+
+  {
+    // BILL OF RIGHTS ARTICLE V. The finding, on the accused's own profile.
+    const { context, page } = await open(STRANGER, `/user/${ACCUSED.id}`);
+    await page.waitForSelector('[data-testid="findings-record"]', { timeout: 20_000 }).catch(() => undefined);
+    const text = await screen(page);
+
+    check(
+      "AN UPHELD MISINFORMATION VERDICT IS A FINDING ON THE PROFILE",
+      /Findings against this account/i.test(text) &&
+        /found this account misrepresented a law/i.test(text),
+      text.slice(0, 400).replace(/\n/g, " | "),
+    );
+    check(
+      "…and it says plainly that nothing was taken away",
+      /Nothing has been taken away from this account/i.test(text),
+      text.slice(-400).replace(/\n/g, " | "),
+    );
+
+    await page.locator('[data-testid="finding-entry"]').first().click();
+    await page.waitForTimeout(600);
+    const opened = await screen(page);
+    check(
+      "…and opens to what was reported and what the jury said",
+      /Section four does the opposite/i.test(opened) &&
+        /says the opposite of the claim/i.test(opened),
+      opened.slice(0, 700).replace(/\n/g, " | "),
+    );
+    await context.close();
   }
 
   {

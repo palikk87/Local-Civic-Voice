@@ -135,11 +135,31 @@ export function panelSentence(file: JuryCase): string {
   return `${file.seats} jurors, ${file.votesToDecide} to decide — this is ${what}.`;
 }
 
+export interface LeaderFinding {
+  juryId: string;
+  decidedAt: string | null;
+  /** What the reporter said, so a reader judges the claim and not the label. */
+  detail: string | null;
+  uphold: number;
+  dismiss: number;
+  /** The jurors' reasons, unattributed. */
+  reasons: Array<{ vote: string | null; reasoning: string | null }>;
+  /** Delegations the person held when the jury was drawn. */
+  delegationsAtTheTime: number;
+}
+
 export const juries = {
   rules: () => api.get<JuryRules>("/api/juries/rules"),
   /** The summonses waiting on you, and whether you are sequestered right now. */
   mine: () => api.get<{ sequesteredBy: string | null; summonses: Summons[] }>("/api/juries/me"),
   case: (id: string) => api.get<{ case: JuryCase }>(`/api/juries/${id}`),
+  /**
+   * Bill of Rights Article V. Every jury that upheld a misinformation report
+   * against one person, kept for good. Public — a finding other people made
+   * about how somebody used a public voice.
+   */
+  findings: (userId: string) =>
+    api.get<{ findings: LeaderFinding[] }>(`/api/juries/findings/${userId}`),
   accept: (id: string) => api.post<{ accepted: boolean; case: JuryCase }>(`/api/juries/${id}/accept`, {}),
   recuse: (id: string, reason: string) =>
     api.post<{ recused: boolean }>(`/api/juries/${id}/recuse`, { reason }),

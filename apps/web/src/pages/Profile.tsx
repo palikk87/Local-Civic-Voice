@@ -28,6 +28,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { CivicRecord } from "@/components/record/CivicRecord";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
+import { FindingsRecord } from "@/components/profile/FindingsRecord";
 import { DelegateAuditPanel } from "@/components/audit/IntegrityAuditPanel";
 import { recordApi } from "@/lib/civic";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
@@ -753,6 +754,15 @@ export default function Profile() {
           {sessionUser?.id ? (
             <div className="px-4">
               <ImpeachmentRecord userId={sessionUser.id} />
+            </div>
+          ) : null}
+
+          {/* BILL OF RIGHTS ARTICLE V, on your own profile too. A finding
+              hidden from the person it is about is a finding they cannot
+              answer. */}
+          {sessionUser?.id ? (
+            <div className="px-4">
+              <FindingsRecord userId={sessionUser.id} />
             </div>
           ) : null}
 
