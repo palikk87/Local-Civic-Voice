@@ -235,21 +235,12 @@ function PostCard({
   };
 
   const handleViewContent = () => {
-    // Navigate to internal detail pages for all posts (including library posts)
+    // ONE LAW, ONE PAGE. This forked three ways by content type into three
+    // ports of the phone app, none of which carried the audit, the gap, the
+    // other side or the comments. Every id is a government reference id, which
+    // is what /reference/:id takes.
     if (post.sharedContent?.id) {
-      switch (post.contentType) {
-        case "bill":
-          navigate(`/bill/${post.sharedContent.id}`);
-          break;
-        case "executive_order":
-          navigate(`/executive-order/${post.sharedContent.id}`);
-          break;
-        case "scotus_case":
-          navigate(`/scotus/${post.sharedContent.id}`);
-          break;
-        default:
-          navigate(`/bill/${post.sharedContent.id}`);
-      }
+      navigate(`/reference/${post.sharedContent.id}`);
     }
   };
 

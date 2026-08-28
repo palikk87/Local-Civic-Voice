@@ -67,15 +67,9 @@ interface UserPost {
 // to something that needed the rest of them.
 
 function referenceRoute(post: UserPost): string {
-  const id = post.referenceId ?? "";
-  switch (post.referenceType) {
-    case "executive_order":
-      return `/executive-order/${id}`;
-    case "scotus_case":
-      return `/scotus/${id}`;
-    default:
-      return `/bill/${id}`;
-  }
+  // One law, one page — see the note in Feed.tsx. The three branch-specific
+  // screens were ports of the phone app and are redirects now.
+  return `/reference/${post.referenceId ?? ""}`;
 }
 
 export default function UserProfile() {

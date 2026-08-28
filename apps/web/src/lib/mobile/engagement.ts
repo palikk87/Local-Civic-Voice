@@ -530,7 +530,7 @@ export function createGapNotification(bill: Bill, gapPct: number): Omit<AppNotif
     title: 'Representation Gap Found!',
     body: `${Math.round(gapPct)}% gap on "${bill.shortTitle}" - See how Congress differs from citizens`,
     data: { billId: bill.id, gapPct },
-    actionUrl: `/bill/${bill.id}`,
+    actionUrl: `/reference/${bill.id}`,
   };
 }
 
@@ -540,7 +540,7 @@ export function createLocalBillNotification(bill: Bill, state: string): Omit<App
     title: `Bill Affecting ${state}`,
     body: `"${bill.shortTitle}" could impact your community. Make your voice heard!`,
     data: { billId: bill.id },
-    actionUrl: `/bill/${bill.id}`,
+    actionUrl: `/reference/${bill.id}`,
   };
 }
 
@@ -570,7 +570,7 @@ export function createTrendingNotification(bill: Bill, voteCount: number): Omit<
     title: `Trending: ${bill.shortTitle}`,
     body: `${voteCount.toLocaleString()} people have voted. Join the conversation!`,
     data: { billId: bill.id, voteCount },
-    actionUrl: `/bill/${bill.id}`,
+    actionUrl: `/reference/${bill.id}`,
   };
 }
 
@@ -584,7 +584,7 @@ export function createRepVotedNotification(
     title: `${repName} Voted ${vote.toUpperCase()}`,
     body: `Your representative voted on "${bill.shortTitle}". Do you agree?`,
     data: { billId: bill.id, repName, vote },
-    actionUrl: `/bill/${bill.id}`,
+    actionUrl: `/reference/${bill.id}`,
   };
 }
 

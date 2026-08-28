@@ -1,0 +1,251 @@
+/**
+ * Every way into a law lands on the same page, and that page is the good one.
+ *
+ *   bun run one-law-page-check          (after `bun run build`)
+ *
+ * WHY THIS EXISTS. There were four pages for one government record. Three were
+ * ports of the phone app, one per branch, and between them they were what the
+ * feed, the timeline, Discover, every card and every notification opened. The
+ * fourth — /reference/:id — is the one with the Citizen's Brief, the Integrity
+ * Audit, the Pulse history, the turning points, the other side and the
+ * comments, and almost nothing sent anybody to it.
+ *
+ * Reported plainly: "when clicking see details from feed or timeline or really
+ * anywhere the page should look like the new version… right now [it] is only
+ * accessible thru the records portion in the profiles".
+ *
+ * A route-target scan proves every destination is a mounted route. It cannot
+ * prove which page a reader actually arrives at, or that the pieces carried
+ * over from the retired screens are on it. Only a browser can.
+ *
+ * WHAT IT PROVES, against a real record in the population database:
+ *   - The three retired paths land on /reference/:id rather than 404ing, so
+ *     every link already sent to somebody still works.
+ *   - THE SPONSOR, THE DATES AND THE GAP ARE ON THE PAGE — the three things
+ *     the old screen had that this one did not.
+ *   - The page's own furniture is still there: the brief, the audit, the vote.
+ *   - Sharing to your timeline is reachable from the page.
+ *
+ * WHAT IT TOUCHES. The database named civicvoice_population, and only ever
+ * through TEST_POPULATION_DATABASE_URL. It creates one record prefixed
+ * "onelaw" and removes it on the way out.
+ */
+import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
+import { createServer } from "node:http";
+import { readFile, stat } from "node:fs/promises";
+import { join, extname, resolve } from "node:path";
+import { spawn, execFileSync } from "node:child_process";
+
+const DIST = process.argv[2] ?? "dist";
+const BACKEND = resolve(process.cwd(), "..", "..", "backend");
+
+const POPULATION_URL =
+  process.env.TEST_POPULATION_DATABASE_URL ??
+  "postgresql://postgres:postgres@127.0.0.1:5432/civicvoice_population";
+
+if (!/population/i.test(new URL(POPULATION_URL).pathname)) {
+  console.error(`Refusing to run against "${new URL(POPULATION_URL).pathname}".`);
+  process.exit(1);
+}
+
+const API_PORT = Number(process.env.ONELAW_CHECK_PORT ?? 3986);
+const API = `http://127.0.0.1:${API_PORT}`;
+const REF_PREFIX = "onelaw";
+const TITLE = "An Act to prove one law has one page";
+const SPONSOR = "Jane Q. Lawmaker";
+
+const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html",
+                ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json",
+                ".ico": "image/x-icon", ".webp": "image/webp" };
+
+const failures = [];
+function check(label, condition, detail) {
+  const ok = !!condition;
+  console.log(`${ok ? "ok  " : "FAIL"} ${label}${detail ? `  — ${detail}` : ""}`);
+  if (!ok) failures.push(label);
+}
+
+function db(snippet) {
+  return execFileSync(
+    "bun",
+    [
+      "-e",
+      `const { PrismaClient } = require("@prisma/client");
+       const prisma = new PrismaClient({ datasources: { db: { url: process.env.POP_URL } } });
+       (async () => { ${snippet} await prisma.$disconnect(); })();`,
+    ],
+    { cwd: BACKEND, env: { ...process.env, POP_URL: POPULATION_URL }, encoding: "utf8" },
+  ).trim();
+}
+
+const backendEnv = {
+  ...process.env,
+  NODE_ENV: "development",
+  PORT: String(API_PORT),
+  DATABASE_URL: POPULATION_URL,
+  DIRECT_URL: POPULATION_URL,
+  BACKEND_URL: API,
+  BETTER_AUTH_SECRET: "one-law-check-secret-value-not-used-anywhere-else",
+  APP_ORIGINS: "*",
+  APP_SCHEMES: "ayeandnay",
+  MEDIA_STORAGE: "local",
+  UPLOADS_DIR: join(BACKEND, ".one-law-check-uploads"),
+  HEALTH_SCHEMA_TTL_MS: "0",
+  CIVIC_NO_BACKGROUND_SYNC: "1",
+};
+
+const api = spawn("bun", ["src/index.ts"], { cwd: BACKEND, env: backendEnv, stdio: ["ignore", "pipe", "pipe"] });
+let apiLog = "";
+api.stdout.on("data", (d) => { apiLog += d; });
+api.stderr.on("data", (d) => { apiLog += d; });
+
+async function waitForApi() {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      const response = await fetch(`${API}/health`);
+      if (response.ok) return;
+    } catch { /* not up yet */ }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  throw new Error(`The backend never answered on ${API}.\n\n${apiLog.slice(-2000)}`);
+}
+
+let server;
+let browser;
+
+function removeTheRecord() {
+  db(`
+    const refs = await prisma.governmentReference.findMany({
+      where: { masterReferenceId: { startsWith: "${REF_PREFIX}" } }, select: { id: true },
+    });
+    const ids = refs.map((r) => r.id);
+    await prisma.governmentReferenceVote.deleteMany({ where: { governmentReferenceId: { in: ids } } });
+    await prisma.positionEvent.deleteMany({ where: { governmentReferenceId: { in: ids } } });
+    await prisma.governmentReference.deleteMany({ where: { id: { in: ids } } });
+  `);
+}
+
+async function cleanup() {
+  try { await browser?.close(); } catch { /* already gone */ }
+  try { server?.close(); } catch { /* already gone */ }
+  api.kill("SIGTERM");
+  try {
+    removeTheRecord();
+    const left = db(`
+      const r = await prisma.governmentReference.count({ where: { masterReferenceId: { startsWith: "${REF_PREFIX}" } } });
+      const u = await prisma.user.count();
+      console.log(JSON.stringify({ r, u }));
+    `);
+    const state = JSON.parse(left);
+    check("the record this check created is gone", state.r === 0, left);
+    check("…and all thousand citizens still there", state.u >= 1000, left);
+  } catch (error) {
+    console.error(`Could not clean up: ${error.message}`);
+    failures.push("cleaned up");
+  }
+}
+
+process.on("exit", () => { api.kill("SIGKILL"); });
+
+try {
+  await waitForApi();
+  removeTheRecord();
+
+  const id = db(`
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: "${REF_PREFIX}-1",
+        referenceType: "bill",
+        title: ${JSON.stringify(TITLE)},
+        status: "introduced",
+        chamber: "senate",
+        congress: 119,
+        lawVersion: 1,
+        sponsorName: ${JSON.stringify(SPONSOR)},
+        sponsorParty: "D",
+        sponsorState: "AZ",
+        introducedDate: new Date("2007-11-01T00:00:00Z"),
+        lastActionDate: new Date("2007-11-02T00:00:00Z"),
+      },
+    });
+    console.log(row.id);
+  `);
+
+  server = createServer(async (req, res) => {
+    const url = req.url.split("?")[0];
+    let file = join(DIST, url === "/" ? "index.html" : url);
+    try {
+      if (!(await stat(file)).isFile()) throw new Error("dir");
+    } catch {
+      file = join(DIST, "index.html");
+    }
+    const body = await readFile(file);
+    res.writeHead(200, { "content-type": TYPES[extname(file)] ?? "application/octet-stream" });
+    res.end(body);
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  browser = await launchChromium();
+
+  async function open(path) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1600 } });
+    await acceptTermsBeforeLoad(context);
+    const page = await context.newPage();
+    await routeApiToLocal(page, API);
+    await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#root", { timeout: 25_000 });
+    await page.waitForTimeout(1_800);
+    return { context, page };
+  }
+
+  const screen = (page) => page.evaluate(() => document.getElementById("root")?.innerText ?? "");
+
+  // ------------------------- the three retired paths still take people somewhere
+  for (const old of [`/bill/${id}`, `/executive-order/${id}`, `/scotus/${id}`]) {
+    const { context, page } = await open(old);
+    check(
+      `${old.split("/")[1]} links people have already been sent still work`,
+      page.url().endsWith(`/reference/${id}`),
+      page.url().replace(base, ""),
+    );
+    await context.close();
+  }
+
+  // ------------------------------------------------- the page they land on
+  {
+    const { context, page } = await open(`/reference/${id}`);
+    const text = await screen(page);
+
+    check("the law is there", text.includes(TITLE));
+
+    // The three things the retired screen had that this one did not.
+    check("THE SPONSOR CAME ACROSS", text.includes(`Sponsored by ${SPONSOR}`), text.slice(0, 200).replace(/\n/g, " | "));
+    check("…with their party and state", /Democrat — AZ/.test(text));
+    check("THE DATES CAME ACROSS", /Introduced .*2007/.test(text) && /Last action .*2007/.test(text));
+    check("THE GAP CAME ACROSS", /Gap|Congress has not voted|not enough people/i.test(text));
+    check("SHARING TO YOUR TIMELINE CAME ACROSS", /Share to your timeline/i.test(text));
+
+    // And the page's own furniture, which is why it is the one being kept.
+    check("the Citizen's Brief is still here", /Citizen's Brief|Brief/i.test(text));
+    check("the Integrity Audit is still here", /Integrity Audit/i.test(text));
+    check("the vote panel is still here", /Public Pulse/i.test(text));
+    check("comments are still here", /comment/i.test(text));
+
+    // The old screens are gone, not hiding behind a different label.
+    check("nothing on it is the retired screen", !/Community Vote/.test(text));
+    await context.close();
+  }
+} catch (error) {
+  console.error(`\nThe check could not run: ${error.message}`);
+  failures.push("the check ran");
+} finally {
+  await cleanup();
+}
+
+if (failures.length) {
+  console.error(`\n${failures.length} FAILURE(S):`);
+  for (const f of failures) console.error("  " + f);
+  process.exit(1);
+}
+console.log("\nOne law, one page — and it is the one with the brief, the audit and the gap on it.");

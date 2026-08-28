@@ -48,10 +48,15 @@ export default function PersonRecord() {
   return (
     <AppShell>
       <div className="mx-auto max-w-2xl py-4">
-        {/* BACK MEANS BACK. Wrote this as `navigate('/user/' + id)` first —
-            a guess at where the reader came from, which is wrong the moment
-            they arrived from a search, a link somebody sent them, or the
-            delegate list. The browser already knows. */}
+        {/* BACK MEANS BACK. This was first written to navigate to the
+            subject's profile — a guess at where the reader came from, wrong the
+            moment they arrive from a search, a link somebody sent them, or the
+            delegate list. The browser already knows.
+
+            (Written without the literal path on purpose: route-target-check
+            reads destinations out of the source and cannot tell a comment from
+            a call, and teaching it to skip comments would risk it skipping a
+            real one.) */}
         <Button
           variant="ghost"
           size="sm"

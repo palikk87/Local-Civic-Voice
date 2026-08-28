@@ -5,6 +5,7 @@ import {
   ExternalLink,
   Building2,
   CalendarDays,
+  Clock,
   Hash,
   MessageSquare,
   Share2,
@@ -24,8 +25,10 @@ import {
   CategoryBadge,
   StatusBadge,
 } from "@/components/civic/badges";
-import { civicApi, formatDate, ordinal, titleCase } from "@/lib/civic";
+import { civicApi, formatDate, ordinal, titleCase, type ReferenceType } from "@/lib/civic";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
+import { RepresentationGapPanel } from "@/components/civic/RepresentationGapPanel";
+import { ShareToTimeline, type ShareBranch } from "@/components/civic/ShareToTimeline";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 
 function MetaRow({
@@ -48,6 +51,13 @@ function MetaRow({
     </div>
   );
 }
+
+/** A record's branch, in the vocabulary the share sheet speaks. */
+const BRANCH_OF: Record<ReferenceType, ShareBranch> = {
+  bill: "legislative",
+  executive_order: "executive",
+  scotus_case: "judicial",
+};
 
 export default function ReferenceDetail() {
   const navigate = useNavigate();
@@ -137,7 +147,76 @@ export default function ReferenceDetail() {
                 </p>
               ) : null}
 
-              <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
+              {/*
+                SPONSOR — a member, or nothing at all.
+
+                This block lived only on /bill/:id, the older screen, and this
+                page is the one everything now opens. A bill is sponsored by a
+                person and congress.gov names them; until the provenance pass
+                has reached this record the field is absent and nothing renders
+                rather than a placeholder standing in for a human being.
+              */}
+              {reference.sponsor ? (
+                <div className="mt-5 flex items-center gap-3 rounded-xl border border-border bg-card p-4">
+                  {reference.sponsor.bioguideId ? (
+                    <img
+                      src={`https://www.congress.gov/img/member/${reference.sponsor.bioguideId.toLowerCase()}_200.jpg`}
+                      alt=""
+                      className="h-11 w-11 shrink-0 rounded-full object-cover"
+                      // A portrait that 404s leaves a broken-image icon, which
+                      // reads as a bug rather than as a missing photograph.
+                      onError={(event) => {
+                        event.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground">
+                      Sponsored by {reference.sponsor.name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {reference.sponsor.party === "D"
+                        ? "Democrat"
+                        : reference.sponsor.party === "R"
+                          ? "Republican"
+                          : "Independent"}
+                      {reference.sponsor.state ? ` — ${reference.sponsor.state}` : ""}
+                    </p>
+                  </div>
+                </div>
+              ) : null}
+
+              {/*
+                DATES — from congress.gov, or absent.
+
+                Both used to be our own row's createdAt on the old screen, so a
+                statute from 2007 read "Introduced today". They come from
+                provenance now, and a record that has not been reached yet
+                shows neither rather than inventing one.
+              */}
+              {reference.introducedDate || reference.lastActionDate ? (
+                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                  {reference.introducedDate ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock className="h-4 w-4" />
+                      Introduced {formatDate(reference.introducedDate)}
+                    </span>
+                  ) : null}
+                  {reference.lastActionDate ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <Building2 className="h-4 w-4" />
+                      Last action {formatDate(reference.lastActionDate)}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              {reference.lastActionText ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {reference.lastActionText}
+                </p>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <MessageSquare className="h-4 w-4" />
                   {reference.engagement.comments} comments
@@ -146,6 +225,19 @@ export default function ReferenceDetail() {
                   <Share2 className="h-4 w-4" />
                   {reference.engagement.shares} shares
                 </span>
+
+                {/* The count was here and the button was not, on the one screen
+                    where somebody has actually read the law. It lived on the
+                    older /bill/:id page and on the Discover cards. */}
+                <ShareToTimeline
+                  target={{
+                    branch: BRANCH_OF[reference.referenceType],
+                    title: reference.title,
+                    masterReferenceId: reference.masterReferenceId,
+                    sourceUrl: reference.sourceUrl ?? undefined,
+                  }}
+                  label="Share to your timeline"
+                />
               </div>
 
               <Separator className="my-6" />
@@ -238,6 +330,17 @@ export default function ReferenceDetail() {
             {/* Vote sidebar */}
             <aside className="xl:sticky xl:top-20">
               <VotePanel reference={reference} />
+
+              {/* THE GAP — the people here against the chamber that voted.
+                  It sat only on /bill/:id, which is to say on the screen this
+                  page replaces, so the single most compelling thing the
+                  platform can show was on the page nobody was being sent to.
+                  It says which state it is in rather than rendering nothing:
+                  "Congress has not voted yet" and "not enough people here have
+                  voted yet" are different sentences. */}
+              <div className="mt-4">
+                <RepresentationGapPanel referenceId={reference.id} />
+              </div>
 
               {/* Only this platform can do either of these: every post is
                   attached to a government record, and every position on that

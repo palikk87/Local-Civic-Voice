@@ -26,9 +26,9 @@ export function TrendingBillCard({ bill, index }: { bill: Bill; index: number })
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate(`/bill/${bill.id}`)}
+        onClick={() => navigate(`/reference/${bill.id}`)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") navigate(`/bill/${bill.id}`);
+          if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
         }}
         className="mr-3 w-[280px] cursor-pointer rounded-xl border border-border/50 bg-card/70 p-4 transition-colors hover:bg-card"
       >

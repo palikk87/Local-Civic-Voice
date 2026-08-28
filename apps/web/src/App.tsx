@@ -48,11 +48,28 @@ const B2BStates = lazy(() => import("./pages/b2b/B2BStates"));
 const B2BSettings = lazy(() => import("./pages/b2b/B2BSettings"));
 const B2BAdmin = lazy(() => import("./pages/b2b/B2BAdmin"));
 const Search = lazy(() => import("./pages/Search"));
-const BillDetail = lazy(() => import("./pages/BillDetail"));
-const ExecutiveOrderDetail = lazy(() => import("./pages/ExecutiveOrderDetail"));
-const ScotusDetail = lazy(() => import("./pages/ScotusDetail"));
+/*
+ * BillDetail, ExecutiveOrderDetail and ScotusDetail were deleted here.
+ *
+ * They were three ports of the phone app, one per branch, showing the same
+ * government record three slightly different ways — and between them they were
+ * what almost every link in this app opened. Meanwhile /reference/:id, the page
+ * with the Citizen's Brief, the Integrity Audit, the Pulse history, the turning
+ * points, the other side and the comments, was reachable from a profile's
+ * record and very little else.
+ *
+ * Everything they had that the reference page did not — the sponsor, the
+ * introduced and last-action dates, the Gap, and sharing to your timeline — was
+ * moved across first. One thing was deliberately left behind: BillDetail's news
+ * carousel read `mockNewsReels`, a hand-written list of invented clips with
+ * fake video URLs. It is not a feature, and it is not coming with us.
+ *
+ * The routes live on as redirects, in LawRedirect, because links to them exist
+ * in notifications and in posts people have already shared.
+ */
 const UserProfile = lazy(() => import("./pages/UserProfile"));
 const PersonRecord = lazy(() => import("./pages/PersonRecord"));
+const LawRedirect = lazy(() => import("./pages/LawRedirect"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const StartHere = lazy(() => import("./pages/StartHere"));
 const HashtagPage = lazy(() => import("./pages/HashtagPage"));
@@ -214,9 +231,15 @@ const App = () => (
               <Route path="/hashtag/:tag" element={<HashtagPage />} />
               <Route path="/record" element={<MyRecord />} />
               <Route path="/record/review" element={<PositionReview />} />
-              <Route path="/bill/:id" element={<BillDetail />} />
-              <Route path="/executive-order/:id" element={<ExecutiveOrderDetail />} />
-              <Route path="/scotus/:id" element={<ScotusDetail />} />
+              {/* One law, one page. These three were ports of the phone app,
+                  one per branch, and between them they were what almost every
+                  link in the app opened — while the page with the brief, the
+                  audit, the gap and the comments sat behind a profile's record.
+                  Kept as redirects because links to them exist in notifications
+                  and in posts people have already shared. See LawRedirect. */}
+              <Route path="/bill/:id" element={<LawRedirect />} />
+              <Route path="/executive-order/:id" element={<LawRedirect />} />
+              <Route path="/scotus/:id" element={<LawRedirect />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

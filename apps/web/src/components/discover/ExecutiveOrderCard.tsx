@@ -37,9 +37,9 @@ export function ExecutiveOrderCard({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate(`/executive-order/${eo.id}`)}
+        onClick={() => navigate(`/reference/${eo.id}`)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") navigate(`/executive-order/${eo.id}`);
+          if (e.key === "Enter" || e.key === " ") navigate(`/reference/${eo.id}`);
         }}
         className="cursor-pointer rounded-xl border border-amber-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
       >

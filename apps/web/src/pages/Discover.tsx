@@ -347,9 +347,9 @@ export default function Discover() {
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/bill/${bill.id}`)}
+                    onClick={() => navigate(`/reference/${bill.id}`)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") navigate(`/bill/${bill.id}`);
+                      if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
                     }}
                     className="cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
                   >
@@ -398,9 +398,9 @@ export default function Discover() {
                     <div
                       role="button"
                       tabIndex={0}
-                      onClick={() => navigate(`/bill/${bill.id}`)}
+                      onClick={() => navigate(`/reference/${bill.id}`)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") navigate(`/bill/${bill.id}`);
+                        if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
                       }}
                       className="cursor-pointer rounded-xl border border-blue-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
                     >
@@ -446,9 +446,9 @@ export default function Discover() {
                     key={`latest-${bill.id}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/bill/${bill.id}`)}
+                    onClick={() => navigate(`/reference/${bill.id}`)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") navigate(`/bill/${bill.id}`);
+                      if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
                     }}
                     className="mb-3 cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
                   >

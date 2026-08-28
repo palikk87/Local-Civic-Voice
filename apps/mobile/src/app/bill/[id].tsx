@@ -68,7 +68,6 @@ import {
   OtherSidePanel,
   PulseHistoryPanel,
 } from '@/components/CivicPanels';
-import { NewsReelCarousel } from '@/components/NewsReelCarousel';
 import { TransparencyIndicator, ArticleBadge } from '@/components/BillOfRightsBadge';
 import type { Bill, Representative } from '@/lib/types';
 import { useTimelineStore } from '@/lib/timeline-store';
@@ -810,10 +809,21 @@ export default function BillDetailScreen() {
               <TransparencyIndicator referenceId={billRefData?.reference?.id} />
             </Animated.View>
 
-            {/* News Coverage Carousel */}
-            <Animated.View entering={FadeInDown.delay(140).springify()}>
-              <NewsReelCarousel billId={bill.id} />
-            </Animated.View>
+            {/*
+              THE NEWS CAROUSEL WAS INVENTED, so it is gone.
+
+              It read `mockNewsReels` — a hand-written list of made-up clips
+              with fake video URLs, fake outlets and fake durations — filtered
+              by bill id. Every real record's id is a cuid and every mock reel's
+              is "bill-1", so in practice it drew nothing; the only way it could
+              ever draw something was by showing a citizen news coverage that
+              does not exist, attributed to real outlets, on a page about a real
+              law. The web twin carried the same component and was deleted with
+              the screen it sat on.
+
+              Real coverage would need a real source. When there is one, it can
+              come back.
+            */}
 
             {/* View Mode Tabs */}
             <Animated.View

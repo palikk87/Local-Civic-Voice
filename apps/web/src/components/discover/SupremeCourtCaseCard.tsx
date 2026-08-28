@@ -37,9 +37,9 @@ export function SupremeCourtCaseCard({
       <div
         role="button"
         tabIndex={0}
-        onClick={() => navigate(`/scotus/${scotusCase.id}`)}
+        onClick={() => navigate(`/reference/${scotusCase.id}`)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") navigate(`/scotus/${scotusCase.id}`);
+          if (e.key === "Enter" || e.key === " ") navigate(`/reference/${scotusCase.id}`);
         }}
         className="cursor-pointer rounded-xl border border-purple-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
       >

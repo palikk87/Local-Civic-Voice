@@ -99,7 +99,7 @@ function VoteHistoryCard({
       className="mb-3"
     >
       <button
-        onClick={() => navigate(`/bill/${displayBill.id}`)}
+        onClick={() => navigate(`/reference/${displayBill.id}`)}
         className="w-full text-left bg-slate-800/60 rounded-xl p-4 border border-slate-700/40"
       >
         <div className="flex items-start">

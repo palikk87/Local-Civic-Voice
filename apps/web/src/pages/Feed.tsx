@@ -84,24 +84,23 @@ import {
   selectClearSeenBills,
 } from "@/lib/mobile/seen-bills-store";
 
-// Helper to get correct detail route based on branch
+/** Where a card opens. One law, one page. */
 function getDetailRoute(bill: Bill): string {
-  // Safety check - ensure we have a valid bill ID
+  // A card with no id cannot open anything, and "/bill/unknown" was a route
+  // that rendered a detail page for a record that does not exist. The catch-all
+  // is the honest answer to a link we cannot build.
   if (!bill?.id) {
     console.warn("getDetailRoute: Bill ID is missing", bill);
-    return "/bill/unknown"; // Fallback route
+    return "/not-found";
   }
 
-  const branch = bill.branch ?? "legislative";
-  switch (branch) {
-    case "executive":
-      return `/executive-order/${bill.id}`;
-    case "judicial":
-      return `/scotus/${bill.id}`;
-    case "legislative":
-    default:
-      return `/bill/${bill.id}`;
-  }
+  // ONE LAW, ONE PAGE. This used to fork three ways by branch, into three
+  // separate screens that were ports of the phone app — and the richer page,
+  // the one with the audit, the gap, the brief, the other side and the
+  // comments, was reachable only from a profile's record. Every id here is a
+  // government reference id, which is exactly what /reference/:id takes, so
+  // the fork was never buying anything.
+  return `/reference/${bill.id}`;
 }
 
 function formatTimeAgo(timestamp: string): string {
