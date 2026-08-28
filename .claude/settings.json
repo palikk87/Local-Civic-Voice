@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git rev-parse --show-toplevel >/dev/null 2>&1 || exit 0; printf \"=== PROJECT IDENTITY ===\\nrepo:   %s\\nbranch: %s (ships from main)\\ntree:   %s uncommitted file(s)\\nIf this is not the project named in this chat, STOP and say so. Never derive a repo, a branch or a project name from the chat title. Read CLAUDE.md in this directory before your first action.\\n=======================\\n\" \"$(git config --get remote.origin.url)\" \"$(git rev-parse --abbrev-ref HEAD)\" \"$(git status --porcelain | wc -l | tr -d ' ')\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git rev-parse --show-toplevel >/dev/null 2>&1 || exit 0; printf \"[git ground truth] branch=%s | %s uncommitted | %s unpushed commit(s) — work that is not on main is not shipped\\n\" \"$(git rev-parse --abbrev-ref HEAD)\" \"$(git status --porcelain | wc -l | tr -d ' ')\" \"$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0)\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
