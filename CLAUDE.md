@@ -47,11 +47,15 @@ Before pushing: `bun run verify`. After: `bun run deploy-check`.
 
 ## Where things stand
 
-Features are numbered and shipped one at a time. Article V (impeachment and
-system-wide reset) is built and on `main`. Features 1–3 — emails no longer
-public handles, "enforced in code" earned by a named test, and the Integrity
-Audit — are done and pushed. **Feature 4, Community Juries, is the current
-job.** It is the last clause needed to reach 14 of 14.
+Features are numbered and shipped one at a time. Verified on `main` at 28 Aug
+2026: Article V (impeachment and system-wide reset); Features 1-3 — emails no
+longer public handles, "enforced in code" earned by a named test, and the
+Integrity Audit; Community Juries (`1bdc4e8`), which took the Constitution to 14
+of 14; findings against leaders (`1d8c9bd`); and the Trust Score (`a39cb5b`).
+
+**Do not trust this paragraph over the repository.** It goes stale the moment
+something ships. Run `git log --oneline -15 origin/main` before assuming what is
+done or what is next.
 
 Khalid keeps a hand-written status file (`AYEANDNAYstatusandplan.md`) and pastes
 it into new sessions. If he does, that file wins over this section.
