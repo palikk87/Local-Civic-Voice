@@ -587,3 +587,73 @@ describe("who changed their mind", () => {
     expect(response.status).toBe(404);
   });
 });
+
+/**
+ * THE ANONYMITY RULE HAD NO TEST, ON ANY LAYER.
+ *
+ * `positionHistory` and `positionSummary` both carry
+ * `...(isOwner ? {} : { isAnonymous: false })`, and nothing anywhere proved
+ * either of them. A rule that is enforced and unproven is a rule waiting to be
+ * refactored away by somebody who does not know it is there — and the thing
+ * being protected here is a person's vote.
+ *
+ * A bug report asked whether the record page broke the anonymity the platform
+ * promises. It did not. This is what makes that answer keep being true.
+ *
+ * Note the second half: the COUNTS have to hide it too. A record showing
+ * "3 positions" and listing two is an invitation to work out the third.
+ */
+describe("[bor-art4] an anonymous position is nobody else's business", () => {
+  test("A STRANGER SEES NEITHER THE POSITION NOR ITS TRACE IN THE COUNTS", async () => {
+    const subject = await citizen("subject");
+    const stranger = await citizen("stranger");
+
+    const inTheOpen = await law("A law they backed with their name on it");
+    const quietly = await law("A law they backed without their name");
+
+    await vote(subject.cookie, inTheOpen.id, "support");
+
+    // The anonymous one goes in the way a citizen's own setting would send it.
+    await fetch(`${BASE_URL}/api/government-references/${quietly.id}/vote`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie: subject.cookie }),
+      body: JSON.stringify({ position: "support", anonymous: true }),
+    });
+
+    const theirs = await settled(subject.cookie, subject.userId, 2);
+    expect(theirs.summary.total).toBe(2);
+    expect(theirs.results.map((r) => r.reference.id).sort()).toEqual(
+      [inTheOpen.id, quietly.id].sort(),
+    );
+
+    const seen = await record(stranger.cookie, subject.userId);
+    expect(seen.results.map((r) => r.reference.id)).toEqual([inTheOpen.id]);
+
+    // The count agrees with the list. Two numbers that disagree is the leak.
+    expect(seen.summary.total).toBe(1);
+    expect(seen.summary.support).toBe(1);
+  });
+
+  test("nor does a reader with no account at all", async () => {
+    const subject = await citizen("quiet");
+    const quietly = await law("Backed without a name, read by nobody");
+
+    await fetch(`${BASE_URL}/api/government-references/${quietly.id}/vote`, {
+      method: "POST",
+      headers: freshClientHeaders({ "Content-Type": "application/json", cookie: subject.cookie }),
+      body: JSON.stringify({ position: "support", anonymous: true }),
+    });
+    await settled(subject.cookie, subject.userId, 1);
+
+    const response = await fetch(`${BASE_URL}/api/users/${subject.userId}/positions`, {
+      headers: freshClientHeaders({}),
+    });
+    const seen = (await response.json()) as {
+      results: unknown[];
+      summary: { total: number };
+    };
+
+    expect(seen.results).toEqual([]);
+    expect(seen.summary.total).toBe(0);
+  });
+});

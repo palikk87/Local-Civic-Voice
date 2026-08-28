@@ -13,11 +13,26 @@
  * withheld from everybody but their author, and the two private sections —
  * where you stand alone, and what was said in your name — appear only on your
  * own record. A mirror is for the person holding it.
+ *
+ * TWO SHAPES, AFTER A BUG REPORT. "should this be viewable… does it violate
+ * the anonymity guaranteed by the constitution". It does not — anonymity here
+ * is a switch a person turns on, and when it is on the server never hands
+ * those positions to anybody else. But somebody else's whole voting history
+ * sitting open on their profile, no click required, is further than the report
+ * was comfortable with, and the call was: keep the numbers, put the list
+ * behind a button.
+ *
+ *   `summary` — the counts, and a way through to the rest. Somebody else's.
+ *   `full`    — everything. Your own, and the page the button leads to.
+ *
+ * The phone has always worked this way; it pushes to /record?user=<id>. This
+ * is the web catching up rather than a new idea.
  */
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
+  ChevronRight,
   EyeOff,
   RefreshCw,
   Scale,
@@ -113,9 +128,16 @@ interface CivicRecordProps {
   userId: string | undefined;
   /** Their own. Unlocks the two private sections and the anonymous positions. */
   isMine: boolean;
+  /**
+   * `full` renders the positions themselves. `summary` renders the counts and
+   * a link to the page that does. Defaults to full, so a caller that has not
+   * thought about it shows everything rather than silently hiding a record.
+   */
+  variant?: "full" | "summary";
 }
 
-export function CivicRecord({ userId, isMine }: CivicRecordProps) {
+export function CivicRecord({ userId, isMine, variant = "full" }: CivicRecordProps) {
+  const summaryOnly = variant === "summary";
   const { data, isLoading } = useQuery({
     queryKey: ["positions", userId],
     queryFn: () => recordApi.positions(userId!),
@@ -150,10 +172,14 @@ export function CivicRecord({ userId, isMine }: CivicRecordProps) {
           <h2 className="font-display text-xl font-semibold tracking-tight text-foreground">
             {isMine ? "Your record" : "Their record"}
           </h2>
+          {/* THIS LINE WAS NOT TRUE. "Every position they have taken" — except
+              the anonymous ones, which are withheld from everybody but their
+              author, so it was never every position. A document that says what
+              it withholds is worth more than one that quietly withholds. */}
           <p className="mt-1 text-sm text-muted-foreground">
             {isMine
-              ? "Every position you have taken, and everything said in your name."
-              : "Every position they have taken on the government's business."}
+              ? "Every position you have taken, and everything said in your name — including the ones you took anonymously, which only you can see."
+              : "Every position they have taken publicly. Anything they chose to take anonymously is not here, and only they can see it."}
           </p>
         </div>
 
@@ -281,7 +307,29 @@ export function CivicRecord({ userId, isMine }: CivicRecordProps) {
           </div>
         ) : null}
 
-        {isLoading ? (
+        {/* SOMEBODY ELSE'S RECORD STOPS HERE, at the numbers, until a reader
+            asks for the rest. Nothing is hidden that was not already public —
+            the same list is one click away and needs no account — but reading
+            what a stranger has ever voted for is now something you do on
+            purpose rather than something that happens to you while looking at
+            their picture. */}
+        {summaryOnly ? (
+          <Link
+            to={`/user/${userId}/record`}
+            data-testid="see-full-record"
+            className="flex items-center justify-between rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/60"
+          >
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                See what they backed and opposed
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Every public position, with the version of the law it was taken on.
+              </p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </Link>
+        ) : isLoading ? (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-24 w-full rounded-xl" />

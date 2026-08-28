@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -50,6 +50,7 @@ function MetaRow({
 }
 
 export default function ReferenceDetail() {
+  const navigate = useNavigate();
   const { id = "" } = useParams();
 
   const { data, isLoading, isError } = useQuery({
@@ -77,10 +78,18 @@ export default function ReferenceDetail() {
   return (
     <AppShell wide>
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-        <Button variant="ghost" size="sm" asChild className="mb-6 -ml-2">
-          <Link to="/explore">
-            <ArrowLeft className="mr-1 h-4 w-4" /> Back to Explore
-          </Link>
+        {/* BACK MEANS BACK. This said "Back to Explore" and went to /explore
+            no matter where the reader came from — the feed, their timeline, a
+            search, a link somebody sent them, their own record. Most people
+            arriving here have never seen Explore, and the button took them
+            somewhere they had not been. The browser already knows. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate(-1)}
+          className="mb-6 -ml-2"
+        >
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back
         </Button>
 
         {isLoading ? (

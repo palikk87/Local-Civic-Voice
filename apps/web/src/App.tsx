@@ -52,6 +52,7 @@ const BillDetail = lazy(() => import("./pages/BillDetail"));
 const ExecutiveOrderDetail = lazy(() => import("./pages/ExecutiveOrderDetail"));
 const ScotusDetail = lazy(() => import("./pages/ScotusDetail"));
 const UserProfile = lazy(() => import("./pages/UserProfile"));
+const PersonRecord = lazy(() => import("./pages/PersonRecord"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const StartHere = lazy(() => import("./pages/StartHere"));
 const HashtagPage = lazy(() => import("./pages/HashtagPage"));
@@ -205,6 +206,9 @@ const App = () => (
               {/* Same path as the mobile route, so a reset link works on either client. */}
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/user/:id" element={<UserProfile />} />
+              {/* Somebody else's positions, on their own page. Public, like the
+                  profile it hangs off — the click is the point, not a gate. */}
+              <Route path="/user/:id/record" element={<PersonRecord />} />
               <Route path="/post/:id" element={<PostDetail />} />
               <Route path="/start" element={<StartHere />} />
               <Route path="/hashtag/:tag" element={<HashtagPage />} />

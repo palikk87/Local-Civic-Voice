@@ -293,10 +293,14 @@ function RecordContent() {
           <Text className="text-white text-xl font-semibold">
             {isMine ? 'Your record' : 'Their record'}
           </Text>
+          {/* THIS LINE WAS NOT TRUE. "Every position they have taken" — except
+              the anonymous ones, which are withheld from everybody but their
+              author, so it was never every position. Saying what is withheld is
+              worth more than quietly withholding it. */}
           <Text className="text-slate-400 text-xs">
             {isMine
-              ? 'Every position you have taken, and everything said in your name.'
-              : "Every position they have taken on the government's business."}
+              ? 'Every position you have taken, including the anonymous ones only you can see.'
+              : 'Every position they have taken publicly. Anonymous ones are not here.'}
           </Text>
         </View>
       </View>

@@ -265,14 +265,24 @@ export default function UserProfile() {
                 platform asks for public positions on public business, and a
                 position nobody can look up is a poll answer.
 
-                This used to point at /record?user=<id>, a separate page. The
-                record is on this page now, so the count jumps to it. */}
-            <a href="#record" className="flex flex-col items-center">
-              <span className="text-lg font-bold text-white">{profile.votesCount}</span>
-              <span className="text-sm text-slate-400 underline-offset-2 hover:underline">
-                Positions
-              </span>
-            </a>
+                Somebody else's list is a page again, reached by a deliberate
+                click; your own stays in place below. See the bug report in
+                CivicRecord for why. */}
+            {isSelf ? (
+              <a href="#record" className="flex flex-col items-center">
+                <span className="text-lg font-bold text-white">{profile.votesCount}</span>
+                <span className="text-sm text-slate-400 underline-offset-2 hover:underline">
+                  Positions
+                </span>
+              </a>
+            ) : (
+              <Link to={`/user/${id}/record`} className="flex flex-col items-center">
+                <span className="text-lg font-bold text-white">{profile.votesCount}</span>
+                <span className="text-sm text-slate-400 underline-offset-2 hover:underline">
+                  Positions
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Actions */}
@@ -501,9 +511,12 @@ export default function UserProfile() {
             posts: everything a generic social profile shows and nothing this
             platform exists for. Positions are public; the anonymous ones are
             withheld from everybody but their author, and the two private
-            sections do not render for a visitor. See the component. */}
+            sections do not render for a visitor.
+
+            A visitor gets the counts and a way through. You get the whole
+            thing, because it is yours. See the component. */}
         <div id="record" className="scroll-mt-4 px-4 pb-8">
-          <CivicRecord userId={id} isMine={isSelf} />
+          <CivicRecord userId={id} isMine={isSelf} variant={isSelf ? "full" : "summary"} />
         </div>
 
         {/* Their timeline */}
