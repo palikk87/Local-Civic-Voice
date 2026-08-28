@@ -70,6 +70,8 @@ const BRIEF = {
 
 /** Every model call this pipeline makes, in the order it makes them. */
 let modelCalls: Array<{ model: string; kind: "write" | "factcheck" }> = [];
+/** What was actually sent, so "which half carried the rules" is measurable. */
+let sentPrompts: Array<{ system: string; user: string }> = [];
 
 const realFetch = globalThis.fetch;
 
@@ -107,6 +109,10 @@ function stubNetwork(options: { text: string }): void {
       };
       const prompt = body.messages?.map((m) => m.content ?? "").join("\n") ?? "";
       const isFactCheck = /unsupported/i.test(prompt);
+      sentPrompts.push({
+        system: body.messages?.[0]?.content ?? "",
+        user: body.messages?.slice(1).map((m) => m.content ?? "").join("\n") ?? "",
+      });
       modelCalls.push({
         model: body.model ?? "unknown",
         kind: isFactCheck ? "factcheck" : "write",
@@ -389,6 +395,29 @@ describe("a brief request always ends somewhere", () => {
       where: { id: running.id },
     });
     expect(untouched.contentStatus).toBe("fetching");
+  });
+});
+
+describe("the standing rules are sent as rules, not rebuilt per law", () => {
+  test("the per-law prompt carries the law and nothing else", async () => {
+    // The rules a brief is written under — only the text, invent nothing, and
+    // the exact JSON to return — are identical for every law there has ever
+    // been. They belong in the system parameter, sent once as a standing
+    // instruction. Appending them to each law's prompt puts a constant where a
+    // variable goes and leaves two places to keep in step for one fact.
+    const law = await record();
+    await processReferenceBrief(law.id, false);
+
+    const write = sentPrompts.find((p) => !/unsupported/i.test(p.user));
+    expect(write).toBeDefined();
+
+    // The shape and the prohibitions are in the standing rules...
+    expect(write!.system).toContain("Return exactly this JSON");
+    expect(write!.system).toContain("That text is your ONLY source");
+
+    // ...and not repeated in the message that carries this particular law.
+    expect(write!.user).not.toContain("Return exactly this JSON");
+    expect(write!.user).toContain("Official text of the law");
   });
 });
 

@@ -142,9 +142,11 @@ const SYSTEM = [
   "- Write for someone with no legal training. No jargon, no section numbers, no",
   "  quoting the text back.",
   "- Always return valid JSON and nothing else.",
-].join("\n");
-
-const SHAPE = [
+  "",
+  // THE SHAPE IS A RULE, NOT AN INSTRUCTION FOR THIS LAW. It is identical for
+  // every brief ever written, so it belongs with the other things that never
+  // change. Appending it to each law's prompt put a constant where a variable
+  // goes, and left two places to keep in step for one fact.
   "Return exactly this JSON:",
   "{",
   '  "summary": "One paragraph. Plain English. What this law does and who it affects. Neutral — no judgement, no recommendation.",',
@@ -163,8 +165,6 @@ function firstPassPrompt(text: string, objections?: string[]): string {
     "Official text of the law, in full:",
     "",
     text,
-    "",
-    SHAPE,
   ]
     .filter(Boolean)
     .join("\n");
@@ -219,8 +219,6 @@ function writeFromNotesPrompt(notes: string[], objections?: string[]): string {
     "",
     "Write the brief for the WHOLE law from all of the above. These notes are the only",
     "source — nothing from your own knowledge of this law or of similar laws.",
-    "",
-    SHAPE,
   ]
     .filter(Boolean)
     .join("\n");
