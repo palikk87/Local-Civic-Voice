@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
 import { HumanCheck, useHumanCheck } from "@/components/auth/HumanCheck";
 import { VerifyEmailStep } from "./VerifyEmailStep";
+import { DistrictStep } from "./DistrictStep";
 import { api } from "@/lib/api";
 import { isUnreachable } from "@/lib/request-failure";
 
@@ -67,6 +68,7 @@ export function AuthForm({
 
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [askingDistrict, setAskingDistrict] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
@@ -195,12 +197,30 @@ export function AuthForm({
       <div className={className}>
         <VerifyEmailStep
           email={email.trim().toLowerCase()}
+          // ASKED ONCE, HERE, because a district set later is a district almost
+          // nobody sets — Edit profile is not somewhere people go on their
+          // first day. Skipping the code still reaches it: somebody who has not
+          // verified yet can still say where they live, and it costs them
+          // nothing if they never come back.
           onVerified={() => {
             setVerifying(false);
-            onSuccess?.();
+            setAskingDistrict(true);
           }}
           onSkip={() => {
             setVerifying(false);
+            setAskingDistrict(true);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (askingDistrict) {
+    return (
+      <div className={className}>
+        <DistrictStep
+          onDone={() => {
+            setAskingDistrict(false);
             onSuccess?.();
           }}
         />

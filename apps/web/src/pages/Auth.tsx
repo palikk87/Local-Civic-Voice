@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Vote, Compass } from "lucide-react";
 import { AuthForm } from "@/components/auth/AuthForm";
@@ -12,8 +12,28 @@ export default function Auth() {
   const { isAuthenticated, isLoading } = useCurrentUser();
   const navigate = useNavigate();
 
+  /**
+   * WAS THIS PERSON ALREADY SIGNED IN WHEN THEY ARRIVED?
+   *
+   * THE BUG THIS FIXES. Signing up creates a session immediately — that is
+   * what autoSignIn means — and the form then invalidates every query, so
+   * isAuthenticated flipped true one render later and this effect navigated
+   * away. The two steps that come AFTER the password (the emailed code, and
+   * the optional district) were unmounted before anybody saw them. Sign-up on
+   * this page went straight from a password to the feed, and the code screen
+   * the platform depends on for Article I §3 simply never appeared.
+   *
+   * So the redirect is for people who were ALREADY signed in and typed /auth
+   * by hand. A session this form just created is the form's own business, and
+   * it decides when sign-up is finished by calling onSuccess.
+   */
+  const arrivedSignedIn = useRef<boolean | null>(null);
+  if (arrivedSignedIn.current === null && !isLoading) {
+    arrivedSignedIn.current = isAuthenticated;
+  }
+
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && arrivedSignedIn.current) {
       navigate("/explore", { replace: true });
     }
   }, [isAuthenticated, isLoading, navigate]);

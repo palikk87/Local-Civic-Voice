@@ -15,6 +15,7 @@ import type { auth } from "../auth";
 import { verifyPasswordOrDummy } from "../password-check";
 import { setUserPassword } from "../services/credentials";
 import { MIN_COHORT, listDistricts } from "../services/jurisdiction";
+import { districtsForZip } from "../services/zip-districts";
 import { trustScore, WEIGHTS } from "../services/trust-score";
 import { publicHandle } from "../services/public-identity";
 
@@ -809,6 +810,52 @@ usersRouter.get("/jurisdiction/districts", async (c) => {
     source,
     total: districts.length,
   });
+});
+
+/**
+ * GET /api/jurisdiction/by-zip/:zip
+ *
+ * The districts a ZIP code falls in, so somebody can find theirs by typing the
+ * one thing they know.
+ *
+ * WHY. The picker asked for a state, a district number, or a representative's
+ * name. Reported plainly: "almost no one knows what their district or reps
+ * are". Asking somebody to name their district in order to be counted in it
+ * asks them to already know the answer they came for.
+ *
+ * THE ZIP IS NOT STORED. It arrives in the path, is used to read a lookup
+ * table, and is gone when this returns. Nothing is written by this route — it
+ * is a GET, and the only thing that ever gets saved is the district the person
+ * then chooses, exactly as before.
+ *
+ * PUBLIC, like the district list beside it. It is a fact about the map of the
+ * United States and says nothing about anybody here.
+ *
+ * IT SUGGESTS AND NEVER SETS. Seventeen ZIPs in every hundred lie across more
+ * than one district, so this answers with all of them, largest share first, and
+ * the person picks the one whose representative they recognise.
+ */
+usersRouter.get("/jurisdiction/by-zip/:zip", async (c) => {
+  const zip = c.req.param("zip");
+
+  if (!/^\d{5}$/.test(zip)) {
+    return c.json({ error: "A ZIP code is five digits." }, 400);
+  }
+
+  try {
+    const found = await districtsForZip(zip);
+    return c.json(found);
+  } catch (error) {
+    // THE HONEST FAILURE. Answering "no districts" when the lookup itself could
+    // not be reached would tell somebody their home is in no district at all.
+    console.error("[jurisdiction] ZIP lookup failed:", error);
+    return c.json(
+      {
+        error: "The district lookup is unavailable right now. You can still search by state.",
+      },
+      503,
+    );
+  }
 });
 
 /**

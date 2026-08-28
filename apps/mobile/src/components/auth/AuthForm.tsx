@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { authClient } from '@/lib/auth/auth-client';
 import { HumanCheck, useHumanCheck } from '@/components/auth/HumanCheck';
 import { VerifyEmailStep } from './VerifyEmailStep';
+import { DistrictStep } from './DistrictStep';
 import { SESSION_QUERY_KEY } from '@/lib/auth/use-session';
 import { api } from '@/lib/api/api';
 
@@ -63,6 +64,8 @@ export function AuthForm({
 
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  // The optional third step. Only new accounts see it — signing in never asks.
+  const [askingDistrict, setAskingDistrict] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === 'signup';
@@ -188,6 +191,19 @@ export function AuthForm({
     'flex-row items-center bg-slate-800/60 border border-slate-700 rounded-xl px-4';
   const fieldInput = 'flex-1 py-4 px-3 text-white text-base';
 
+  // Last, and skippable: where the vote should count. Shown after the code so
+  // it can never stand between somebody and their own account.
+  if (askingDistrict) {
+    return (
+      <DistrictStep
+        onDone={() => {
+          setAskingDistrict(false);
+          onSuccess?.();
+        }}
+      />
+    );
+  }
+
   // The account is made; the code is what is left. Shown in place of the form
   // rather than over it, so there is one obvious next thing to do.
   if (verifying) {
@@ -196,11 +212,11 @@ export function AuthForm({
         email={email.trim().toLowerCase()}
         onVerified={() => {
           setVerifying(false);
-          onSuccess?.();
+          setAskingDistrict(true);
         }}
         onSkip={() => {
           setVerifying(false);
-          onSuccess?.();
+          setAskingDistrict(true);
         }}
       />
     );

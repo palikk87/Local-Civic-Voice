@@ -35,7 +35,8 @@
     "vote-anonymity-check": "node scripts/vote-anonymity-check.mjs dist",
     "report-flow-check": "node scripts/report-flow-check.mjs dist",
     "dialog-fits-check": "node scripts/dialog-fits-check.mjs dist",
-    "bug-reporter-reach-check": "node scripts/bug-reporter-reach-check.mjs dist"
+    "bug-reporter-reach-check": "node scripts/bug-reporter-reach-check.mjs dist",
+    "zip-district-check": "node scripts/zip-district-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

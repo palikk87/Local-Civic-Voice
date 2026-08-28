@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -28,8 +28,26 @@ export default function SignUpScreen() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useCurrentUser();
 
+  /**
+   * WAS THIS PERSON ALREADY SIGNED IN WHEN THEY ARRIVED?
+   *
+   * THE BUG THIS FIXES. Signing up creates a session immediately — that is
+   * what autoSignIn means — and the form then invalidates every query, so
+   * isAuthenticated flipped true one render later and this effect navigated
+   * away. The two steps that come AFTER the password (the emailed code, and
+   * the optional district) were unmounted before anybody saw them.
+   *
+   * So the redirect is for people who were ALREADY signed in and opened this
+   * screen anyway. A session the form just created is the form's own business,
+   * and it says when sign-up is finished by calling onSuccess.
+   */
+  const arrivedSignedIn = useRef<boolean | null>(null);
+  if (arrivedSignedIn.current === null && !isLoading) {
+    arrivedSignedIn.current = isAuthenticated;
+  }
+
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
+    if (!isLoading && isAuthenticated && arrivedSignedIn.current) {
       router.replace('/(tabs)');
     }
   }, [isAuthenticated, isLoading, router]);
