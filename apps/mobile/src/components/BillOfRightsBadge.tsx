@@ -6,7 +6,7 @@ import { api } from '@/lib/api/api';
 import { Scroll, Shield, Scale, Eye, Crown, Award, BookOpen, CheckCircle, Lock, Unlock } from 'lucide-react-native';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { BILL_OF_RIGHTS } from '@/lib/bill-of-rights';
+import { BILL_OF_RIGHTS, getAmendmentEnforcement } from '@/lib/bill-of-rights';
 import { CONSTITUTION } from '@/lib/constitution';
 
 interface BillOfRightsBadgeProps {
@@ -25,6 +25,7 @@ export function BillOfRightsBadge({
   className = '',
 }: BillOfRightsBadgeProps) {
   const router = useRouter();
+  const enforcement = getAmendmentEnforcement();
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -61,8 +62,14 @@ export function BillOfRightsBadge({
             <Text className="text-amber-100 font-semibold">
               Bill of Rights Protected
             </Text>
+            {/*
+              This printed `BILL_OF_RIGHTS.articles.length` — the article count,
+              wearing the words "enshrined in code". It would have read "5" with
+              nothing behind any of them. It is the enforced count now, earned
+              the way Article VI requires.
+            */}
             <Text className="text-amber-300/70 text-xs">
-              {BILL_OF_RIGHTS.articles.length} Articles enshrined in code
+              {enforcement.enforced} of {enforcement.total} Amendments enforced in code
             </Text>
           </View>
           <Scroll size={16} color="#FCD34D" />
@@ -391,8 +398,10 @@ export function ConstitutionalPowerBadge({ branch }: ConstitutionalPowerBadgePro
       icon: Crown,
     },
     vanguard: {
+      // "Magnification through merit" described nothing that exists. The title
+      // marks how many people have lent a voice, and confers nothing else.
       label: 'Civil Leader',
-      description: 'Magnification through merit',
+      description: 'Carrying a voice that was lent',
       color: '#F59E0B',
       icon: Award,
     },

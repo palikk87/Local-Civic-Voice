@@ -44,6 +44,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ size: number; color: string
   Eye,
   Scale,
   RotateCcw,
+  Shield,
 };
 
 function ArticleIcon({ iconName, color }: { iconName: string; color: string }) {
@@ -58,6 +59,8 @@ const ARTICLE_COLORS: Record<string, string> = {
   III: '#22C55E', // Green - Transparency
   IV: '#8B5CF6', // Purple - Separation of Powers
   V: '#F59E0B', // Amber - Self-Correction
+  VI: '#14B8A6', // Teal - How This Constitution Is Kept
+  VII: '#94A3B8', // Slate - Definitions
 };
 
 interface SectionCardProps {
@@ -219,6 +222,69 @@ function ComplianceStatus() {
   );
 }
 
+/**
+ * Article VII — Definitions.
+ *
+ * A definition is not decoration. It is the difference between "Verified"
+ * meaning a confirmed sign-up and "Verified" meaning whatever a reader hoped
+ * it meant. The document this one is modelled on defined almost nothing, and
+ * two centuries of argument followed.
+ */
+function DefinitionsCard() {
+  const color = ARTICLE_COLORS['VII'] ?? '#94A3B8';
+  const { number, title, note, terms } = CONSTITUTION.definitions;
+
+  return (
+    <Animated.View entering={FadeInDown.delay(700).springify()}>
+      <View className="mb-4 overflow-hidden rounded-2xl border border-slate-700/50">
+        <LinearGradient
+          colors={['#1E293B', '#0F172A']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ padding: 16 }}
+        >
+          <View className="flex-row items-start">
+            <View
+              className="w-12 h-12 rounded-full items-center justify-center mr-4"
+              style={{ backgroundColor: `${color}20` }}
+            >
+              <BookOpen size={24} color={color} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-slate-400 text-xs font-semibold tracking-widest mb-1">
+                ARTICLE {number}
+              </Text>
+              <Text className="text-white font-bold text-lg leading-tight">
+                {title}
+              </Text>
+              <Text className="text-slate-400 text-xs mt-1 italic">
+                {note}
+              </Text>
+            </View>
+          </View>
+
+          <View className="mt-4 pt-4 border-t border-slate-700/50">
+            {terms.map((entry) => (
+              <View
+                key={entry.term}
+                className="mb-3 ml-4 pl-4 border-l-2"
+                style={{ borderColor: `${color}40` }}
+              >
+                <Text className="text-white font-semibold text-sm mb-1">
+                  {entry.term}
+                </Text>
+                <Text className="text-slate-300 text-sm leading-5">
+                  {entry.meaning}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </LinearGradient>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function ConstitutionScreen() {
   const router = useRouter();
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
@@ -337,6 +403,9 @@ export default function ConstitutionScreen() {
             />
           ))}
 
+          {/* Article VII */}
+          <DefinitionsCard />
+
           {/* Compliance Status */}
           <ComplianceStatus />
 
@@ -363,10 +432,10 @@ export default function ConstitutionScreen() {
                     <Shield size={24} color="#FCD34D" />
                     <View className="ml-3">
                       <Text className="text-amber-100 font-semibold">
-                        Bill of Rights
+                        The Amendments — Bill of Rights
                       </Text>
                       <Text className="text-amber-300/70 text-xs">
-                        Individual protections under this Constitution
+                        {CONSTITUTION.amendmentsNote}
                       </Text>
                     </View>
                   </View>

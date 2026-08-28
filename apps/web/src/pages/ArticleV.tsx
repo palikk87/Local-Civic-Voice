@@ -39,6 +39,10 @@ import { cn } from "@/lib/utils";
 import { useRequireAuth, useCurrentUser } from "@/hooks/use-civic-auth";
 import { ArticlesForm, FileAgainstDelegate } from "@/components/articlev/FileArticles";
 import { IntegrityAuditPanel } from "@/components/audit/IntegrityAuditPanel";
+import { CONSTITUTION } from "@/lib/founding-documents";
+
+/** Article V, read from the Constitution rather than retyped beside it. */
+const ARTICLE_V = CONSTITUTION.articles.find((article) => article.number === "V");
 import {
   articleV,
   daysLeft,
@@ -880,11 +884,25 @@ export default function ArticleV() {
               <span className="block text-sm text-red-300/70">Constitutional Article V</span>
             </div>
           </div>
-          <p className="italic leading-6 text-red-200/80">
-            "The community retains the right to Impeach or demote any leader who misrepresents
-            facts or violates the Code of Conduct, and may trigger a System-Wide Reset via
-            super-majority vote."
-          </p>
+          {/*
+            THIS QUOTE USED TO BE HAND-TYPED, and it quoted a sentence the
+            Constitution does not contain: "Impeach or demote any leader". No
+            jury demotes anybody. A page that misquotes the document it is
+            enforcing is the same failure as a badge that claims a test it does
+            not have — so it reads the clauses instead of retyping them.
+          */}
+          <div className="space-y-3">
+            {ARTICLE_V?.sections.map((section) => (
+              <div key={section.id}>
+                <div className="text-xs font-semibold uppercase tracking-wide text-red-300/70">
+                  §{section.title}
+                </div>
+                <p className="whitespace-pre-line italic leading-6 text-red-200/80">
+                  {section.content}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="mb-6 flex">

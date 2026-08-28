@@ -1,16 +1,30 @@
-// Civil Voice Bill of Rights
-// A Covenant for the Digital Body Politic
-// These principles govern the operation of the entire platform
+// THE AMENDMENTS — the Bill of Rights of AYE & NAY.
+//
+// THIS FILE NO LONGER HOLDS A DOCUMENT. It holds a view of one.
+//
+// The Bill of Rights is part of the Constitution — Amendments I to V — and the
+// text lives with the rest of it in ./constitution.ts. It used to be a second
+// document with its own preamble, its own version and its own effective date,
+// and it drifted: it promised encrypted personal data the platform does not
+// encrypt, a check on citizenship the platform never makes, and a Trust Score
+// that determines influence it does not determine.
+//
+// Two founding documents that can disagree is one founding document and one
+// forgery, and no reader can tell which is which. So there is one now. The
+// `BILL_OF_RIGHTS` export survives because a dozen screens import it by that
+// name, and because "the Bill of Rights" is what people call it.
 
-export interface Article {
-  id: string;
-  number: string; // Roman numeral
-  title: string;
-  subtitle: string;
-  content: string;
-  principles: string[]; // Key principles enforced in code
-  icon: string; // Icon name from lucide-react-native
-}
+import {
+  CONSTITUTION,
+  getAmendmentEnforcement,
+  type Amendment,
+} from './constitution';
+
+/**
+ * An article of the Bill of Rights is an Amendment. The alias is kept because
+ * the two clients import `Article` from here.
+ */
+export type Article = Amendment;
 
 export interface BillOfRights {
   preamble: string;
@@ -20,105 +34,43 @@ export interface BillOfRights {
 }
 
 export const BILL_OF_RIGHTS: BillOfRights = {
-  preamble: `We, the Users of AYE & NAY, in order to form a more perfect Union of citizens and technology, do hereby establish these fundamental rights to ensure the integrity of our collective voice and the security of our individual sovereignty.`,
-
-  articles: [
-    {
-      id: 'article-1',
-      number: 'I',
-      title: 'The Right of Individual Sovereignty',
-      subtitle: 'Liquid Democracy',
-      content: `No user shall be permanently bound to any representative or leader. The power of the vote originates in the individual and is only lent, never given. Every citizen retains the absolute right to instantly revoke or reassign their delegation at any time, for any reason, without delay or penalty.`,
-      principles: [
-        'Instant delegation revocation',
-        'No lock-in periods on delegations',
-        'Individual vote always overrides delegation',
-        'Transparent delegation chains',
-      ],
-      icon: 'Crown',
-    },
-    {
-      id: 'article-2',
-      number: 'II',
-      title: 'The Right to Algorithmic Neutrality',
-      subtitle: 'Public Pulse Integrity',
-      content: `The "Public Pulse" shall not be manipulated for profit, engagement, or bias. The platform shall remain a neutral conduit for human intent. No "Black Box" algorithm shall amplify one voice over another based on outrage or commercial interest; only the verifiable weight of Liquid Democracy shall determine the prominence of an idea.`,
-      principles: [
-        'No engagement-based manipulation',
-        'No profit-driven amplification',
-        'Transparent ranking factors',
-        'Equal voice weight by default',
-      ],
-      icon: 'Scale',
-    },
-    {
-      id: 'article-3',
-      number: 'III',
-      title: 'The Right of Redress & Transparency',
-      subtitle: 'Vote Details',
-      content: `The "Vote Details" of any federal action shall be a public record within the platform. Every user has the right to see the mathematical path of a decision—to know exactly how many direct votes and delegated weights formed the Pulse. No "Dark Money" or bot-driven influence shall be permitted to obscure the true will of the people.`,
-      principles: [
-        'Public vote tallies',
-        'Visible delegation weights',
-        'Anti-bot verification',
-        'No hidden influence',
-      ],
-      icon: 'Eye',
-    },
-    {
-      id: 'article-4',
-      number: 'IV',
-      title: 'The Right to Data Security & Anonymity',
-      subtitle: 'Digital Privacy',
-      content: `The right of the people to be secure in their digital persons, papers, and effects shall not be violated. AYE & NAY shall collect only the minimum data necessary to verify citizenship and jurisdiction. Personal identity shall remain shielded from the federal government and third parties, ensuring that the "Public Pulse" is a reflection of honest conviction, not a target for surveillance.`,
-      principles: [
-        'Minimal data collection',
-        'No government data sharing',
-        'Anonymous voting option',
-        'Encrypted personal data',
-      ],
-      icon: 'Shield',
-    },
-    {
-      id: 'article-5',
-      number: 'V',
-      title: 'The Right to Meritocratic Leadership',
-      subtitle: 'Civil Leader Accountability',
-      content: `The status of "Civil Leader" is a privilege granted by the community, not a right of the platform. A Leader's magnification is tied directly to their Trust Score. The community retains the right to "Impeach" or demote any leader who violates the platform's integrity or spreads verifiable falsehoods, as determined by the collective will of their followers.`,
-      principles: [
-        'Community-granted leadership',
-        'Trust Score determines influence',
-        'Community impeachment rights',
-        'Falsehood accountability',
-      ],
-      icon: 'Award',
-    },
-  ],
-
-  effectiveDate: '2025-01-01',
-  version: '1.0',
+  preamble: CONSTITUTION.amendmentsNote,
+  articles: CONSTITUTION.amendments,
+  effectiveDate: CONSTITUTION.effectiveDate,
+  version: CONSTITUTION.version,
 };
 
-// Helper functions to check compliance with Bill of Rights principles
+export { getAmendmentEnforcement };
+
+// ==========================================
+// WHAT THE AMENDMENTS LEAN ON
+// ==========================================
 
 /**
- * Article I: Check if a delegation can be revoked immediately
- * Returns true always - delegations must be instantly revocable
+ * Amendment I: a Delegation is always revocable. There is no state of this
+ * platform in which it is not, which is why this takes no argument.
  */
 export function canRevokeDelegate(): boolean {
-  return true; // Always true per Article I
+  return true;
 }
 
 /**
- * Article I: Check if individual vote overrides delegation
+ * Amendment I: a Citizen's own vote overrides the voice they lent.
  */
 export function doesIndividualVoteOverride(): boolean {
-  return true; // Always true per Article I
+  return true;
 }
 
 /**
- * Article II: Validate feed algorithm neutrality
- * Returns factors that are allowed to influence ranking
+ * Amendment II: what the feed is allowed to weigh.
+ *
+ * These are not decoration. packages/civic-core/src/feed-algorithm.ts reads
+ * this object and multiplies its weights by it, so a prohibited factor
+ * switched on here would be switched on there — and switching one off zeroes
+ * the weight rather than quietly leaving it in place.
+ *
+ * `backend/tests/constitution-compliance.test.ts` publishes and checks these
+ * factors against the running feed, under [art3-sec1].
  */
 export interface AlgorithmFactors {
   liquidDemocracyWeight: boolean; // Allowed
@@ -141,7 +93,7 @@ export function getAlgorithmCompliance(): AlgorithmFactors {
 }
 
 /**
- * Article III: Get transparency requirements for vote display
+ * Amendment III: what a vote breakdown must show.
  */
 export interface VoteTransparency {
   showDirectVotes: boolean;
@@ -160,44 +112,31 @@ export function getVoteTransparencyRequirements(): VoteTransparency {
 }
 
 /**
- * Article IV: Data collection limits
+ * DATA POLICY — deliberately not here any more.
+ *
+ * `getDataPolicy()` returned a hardcoded object whose last field was
+ * `encryptsPersonalData: true`. Nothing about a Citizen is encrypted.
+ * Passwords are hashed and the platform's own API keys are encrypted at rest;
+ * a name, a post and a vote are stored as they are, like every other row.
+ *
+ * Nothing read the object, so nothing behaved differently for it — it existed
+ * only to be true, and it was not. Amendment IV now says what the platform
+ * actually does, and ends with the sentence that makes a repeat of this a
+ * breach rather than an oversight: it shall claim no protection it does not
+ * provide.
  */
-export interface DataCollectionPolicy {
-  collectsOnlyEssential: boolean;
-  sharesWithGovernment: boolean;
-  sharesWithThirdParties: boolean;
-  allowsAnonymousVoting: boolean;
-  encryptsPersonalData: boolean;
-}
-
-export function getDataPolicy(): DataCollectionPolicy {
-  return {
-    collectsOnlyEssential: true,
-    sharesWithGovernment: false,
-    sharesWithThirdParties: false,
-    allowsAnonymousVoting: true,
-    encryptsPersonalData: true,
-  };
-}
 
 /**
- * Article V: Civil Leader requirements
+ * LEADER REQUIREMENTS — deliberately not here any more.
+ *
+ * `getLeaderRequirements()` claimed `trustScoreBased: true`. The Trust Score
+ * is shown beside a delegate and changes nothing: not reach, not ranking, not
+ * standing, not the title. backend/tests/trust-score.test.ts has a source scan
+ * that fails the build if any feed or ordering code so much as imports it.
+ *
+ * What actually governs the Vanguard is Article IV §2 and Amendment V, both of
+ * which now say the title confers nothing.
  */
-export interface LeaderRequirements {
-  communityGranted: boolean;
-  trustScoreBased: boolean;
-  canBeImpeached: boolean;
-  accountableForFalsehoods: boolean;
-}
-
-export function getLeaderRequirements(): LeaderRequirements {
-  return {
-    communityGranted: true,
-    trustScoreBased: true,
-    canBeImpeached: true,
-    accountableForFalsehoods: true,
-  };
-}
 
 /**
  * FALSEHOOD PENALTIES — deliberately not here any more.
@@ -215,8 +154,10 @@ export function getLeaderRequirements(): LeaderRequirements {
  */
 
 /**
- * Check if a leader can be impeached based on follower votes
- * Per Article V, community retains impeachment rights
+ * Amendment V: the share of Delegators an Impeachment needs.
+ *
+ * The running threshold is in backend/src/services/impeachment.ts, and
+ * backend/tests/impeachment.test.ts asserts the two are the same number.
  */
 export function canImpeachLeader(
   followerCount: number,

@@ -68,8 +68,13 @@ export function TrustPanel({
     enabled: Boolean(userId),
   });
 
-  if (isLoading || !data) return null;
-  const result = data.trust;
+  // GUARD THE CONTAINER, DEREFERENCE THE FIELD. `!data` was checked and then
+  // `data.trust.enough` was read, so any answer without a `trust` key threw
+  // during render and took the whole page into the error boundary — /profile
+  // and /record both white-screened on it. An older deploy with no such route,
+  // or an error envelope, is exactly that shape.
+  const result = data?.trust;
+  if (isLoading || !result) return null;
 
   if (!result.enough) {
     if (compact) return <NotEnough result={result} compact />;

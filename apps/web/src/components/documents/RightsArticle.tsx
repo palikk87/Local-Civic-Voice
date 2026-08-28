@@ -1,7 +1,20 @@
-import { CheckCircle2 } from "lucide-react";
+import { Code2 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import type { RightsArticle as ArticleType } from "@/lib/founding-documents";
 
+/**
+ * An Amendment, as a card.
+ *
+ * WHAT WENT. Each of these used to carry four bullets under "Enforced
+ * principles" — hand-typed lines with a green tick beside them. Two of the
+ * twenty were false ("Encrypted personal data", "Trust Score determines
+ * influence"), and none of the twenty was checked by anything. A tick that
+ * cannot fail is decoration.
+ *
+ * In their place is the one badge that has to be earned: an Amendment may
+ * claim enforcement only if a test under backend/tests names it, which is
+ * Article VI and is checked by constitution-enforced.test.ts.
+ */
 export function RightsArticleCard({
   article,
   index,
@@ -24,7 +37,7 @@ export function RightsArticleCard({
         </div>
         <div>
           <div className="font-mono text-xs font-semibold uppercase tracking-institutional text-accent">
-            Article {article.number}
+            Amendment {article.number}
           </div>
           <h3 className="font-display text-lg font-semibold leading-tight text-foreground">
             {article.title}
@@ -33,22 +46,26 @@ export function RightsArticleCard({
         </div>
       </div>
 
-      <p className="mt-4 text-sm leading-relaxed text-foreground/90">
+      <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
         {article.content}
       </p>
 
-      <div className="mt-4 border-t border-border/60 pt-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Enforced principles
+      {article.enforcedInCode ? (
+        <div className="mt-4 border-t border-border/60 pt-4">
+          <span
+            data-testid="amendment-enforced"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-support"
+          >
+            <Code2 className="h-3.5 w-3.5" /> Enforced in code
+          </span>
         </div>
-        <ul className="mt-2 space-y-1.5">
-          {article.principles.map((p) => (
-            <li key={p} className="flex items-center gap-2 text-sm text-foreground/80">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-support" /> {p}
-            </li>
-          ))}
-        </ul>
-      </div>
+      ) : (
+        <div className="mt-4 border-t border-border/60 pt-4">
+          <span className="text-xs font-medium text-muted-foreground">
+            Not yet enforced in code
+          </span>
+        </div>
+      )}
     </MotionDiv>
   );
 }

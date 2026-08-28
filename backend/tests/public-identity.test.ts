@@ -87,7 +87,7 @@ describe("the handle a person is given in public", () => {
   });
 });
 
-describe("no endpoint publishes an email address", () => {
+describe("[bor-art4] no endpoint publishes an email address", () => {
   test("A POST BY SOMEBODY WITH NO USERNAME DOES NOT NAME THEIR EMAIL", async () => {
     const person = await citizen("jane.smith.1987");
     const bill = await reference();

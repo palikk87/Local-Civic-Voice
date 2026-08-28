@@ -100,9 +100,13 @@ export function ImpeachmentRecord({ userId }: { userId: string }) {
   // Nothing to say is said by saying nothing. Almost every profile has an
   // empty record, and a heading reading "no impeachments" on all of them would
   // make the platform look like a place where this is expected.
-  if (!data || data.record.length === 0) return null;
+  // GUARD THE CONTAINER, DEREFERENCE THE FIELD. `!data` was checked and then
+  // `data.record.length` was read — so any answer without a `record` key threw
+  // during render and took the whole screen down with it.
+  const record = data?.record ?? [];
+  if (record.length === 0) return null;
 
-  const inForce = data.record.some((entry) => entry.inForce);
+  const inForce = record.some((entry) => entry.inForce);
 
   return (
     <View className="px-4 pt-6" testID="impeachment-record">
@@ -120,7 +124,7 @@ export function ImpeachmentRecord({ userId }: { userId: string }) {
             'ended and they can receive delegations again; the record stays.'}
       </Text>
 
-      {data.record.map((entry) => (
+      {record.map((entry) => (
         <Entry key={entry.id} entry={entry} />
       ))}
     </View>

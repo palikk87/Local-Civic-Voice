@@ -12,20 +12,21 @@
  * Three clauses of the platform's own founding documents bear on that, and all
  * three are marked enforcedInCode:
  *
- *   Constitution, Article III §3 — "Every data point must link back to an
- *   official Executive, Legislative, or Judicial source ID to prevent the
- *   'Digital Government' from drifting into fiction." Invented districts,
- *   invented representatives and invented parties are that drift, exactly.
+ *   Constitution, Article III §3 (Nothing Invented) — "Every Record the
+ *   platform carries shall trace back to a real act of government and to the
+ *   source that issued it ... and shall not invent, embellish or estimate it."
+ *   Invented districts, invented representatives and invented parties are that
+ *   drift, exactly.
  *
- *   Bill of Rights, Article IV — "shall collect only the minimum data necessary
- *   to verify citizenship AND JURISDICTION", and "personal identity shall
- *   remain shielded from ... third parties." The first half authorises knowing
- *   somebody's district. The second half governs what a paying client may be
- *   told about it.
+ *   Amendment IV — "The platform shall collect only what it needs to function.
+ *   It shall demand no proof of a Citizen's identity or nationality." A
+ *   jurisdiction is offered by the person it describes and is never required;
+ *   nothing here checks anybody's citizenship, and the Amendment no longer
+ *   claims otherwise.
  *
- *   Constitution, Article I §1 — "The Public Pulse (the aggregated, weighted
- *   sentiment of verified citizens) shall be the only official output of this
- *   platform." Aggregate is the product. An individual never is.
+ *   Constitution, Article I §1 — "The Public Pulse shall be the only official
+ *   output of this platform." Aggregate is the product. An individual never
+ *   is.
  *
  * So: districts and representatives come from congress.gov and nowhere else, a
  * person's district comes from that person and nowhere else, and a place with

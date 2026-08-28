@@ -1,14 +1,16 @@
-// Web port of webapp/mobile/src/app/bill-of-rights.tsx — the platform Bill of Rights.
-// Content comes from the shared founding-documents lib (same text as mobile).
+// The Bill of Rights — Amendments I–V of the Constitution.
+// Text comes from packages/civic-core/src/constitution.ts. There is no second
+// copy of it anywhere, on either client.
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Scroll, Scale } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { RightsArticleCard } from "@/components/documents/RightsArticle";
-import { BILL_OF_RIGHTS } from "@/lib/founding-documents";
+import { BILL_OF_RIGHTS, getAmendmentEnforcement } from "@/lib/founding-documents";
 
 export default function BillOfRights() {
   const navigate = useNavigate();
+  const { enforced, total, outstanding } = getAmendmentEnforcement();
 
   return (
     <AppShell wide>
@@ -32,7 +34,7 @@ export default function BillOfRights() {
               The Bill of Rights
             </h1>
             <p className="font-mono text-xs text-muted-foreground">
-              v{BILL_OF_RIGHTS.version} · Effective{" "}
+              Amendments I–V · v{BILL_OF_RIGHTS.version} · Effective{" "}
               {new Date(BILL_OF_RIGHTS.effectiveDate).toLocaleDateString()}
             </p>
           </div>
@@ -40,11 +42,19 @@ export default function BillOfRights() {
 
         <blockquote className="mt-6 rounded-2xl border border-accent/30 bg-accent/5 p-6">
           <div className="text-xs font-semibold uppercase tracking-institutional text-accent">
-            Preamble
+            Part of the Constitution
           </div>
           <p className="mt-3 font-display text-lg italic leading-relaxed text-foreground">
             “{BILL_OF_RIGHTS.preamble}”
           </p>
+          <Button
+            variant="link"
+            size="sm"
+            onClick={() => navigate("/constitution")}
+            className="mt-2 -ml-3 text-accent"
+          >
+            Read the Articles
+          </Button>
         </blockquote>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -57,10 +67,28 @@ export default function BillOfRights() {
           <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-accent/30 bg-secondary">
             <Scale className="h-6 w-6 text-accent" />
           </div>
-          <p className="mt-4 max-w-md text-sm text-muted-foreground">
-            These rights are enshrined in code and cannot be circumvented by platform
-            operators.
+          {/*
+            This used to read "These rights are enshrined in code and cannot be
+            circumvented by platform operators" — a claim no reader could check
+            and no test could break. It is a count now, and it is allowed to be
+            a number smaller than five.
+          */}
+          <p
+            data-testid="amendments-enforced-count"
+            className="mt-4 max-w-md text-sm text-muted-foreground"
+          >
+            {enforced} of {total} Amendments are enforced in code — each one proven by a
+            test named for it, and counted here rather than typed.
           </p>
+          {outstanding.length > 0 ? (
+            <ul className="mt-3 text-xs text-muted-foreground">
+              {outstanding.map((item) => (
+                <li key={item.article}>
+                  Not yet enforced: Amendment {item.article} — {item.section}
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </div>
     </AppShell>

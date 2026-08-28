@@ -428,7 +428,7 @@ describe("a finding costs, and stops costing after a year", () => {
   });
 });
 
-describe("IT RANKS NOBODY", () => {
+describe("[bor-art2] IT RANKS NOBODY", () => {
   test("no feed, ordering or ranking code imports the trust score", () => {
     // The Bill of Rights reserves what gets seen to delegated votes alone. A
     // score that quietly boosted somebody's reach would be the platform voting,

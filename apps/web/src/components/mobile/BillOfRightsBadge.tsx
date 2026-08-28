@@ -17,7 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
-import { BILL_OF_RIGHTS } from "@/lib/mobile/bill-of-rights";
+import { BILL_OF_RIGHTS, getAmendmentEnforcement } from "@/lib/mobile/bill-of-rights";
 import { CONSTITUTION } from "@/lib/mobile/constitution";
 
 interface BillOfRightsBadgeProps {
@@ -36,6 +36,7 @@ export function BillOfRightsBadge({
   className = "",
 }: BillOfRightsBadgeProps) {
   const navigate = useNavigate();
+  const enforcement = getAmendmentEnforcement();
 
   const handlePress = () => {
     navigate("/bill-of-rights");
@@ -67,8 +68,14 @@ export function BillOfRightsBadge({
           </div>
           <div className="flex-1">
             <p className="text-amber-100 font-semibold">Bill of Rights Protected</p>
-            <p className="text-amber-300/70 text-xs">
-              {BILL_OF_RIGHTS.articles.length} Articles enshrined in code
+            {/*
+              This printed `BILL_OF_RIGHTS.articles.length` — the article count,
+              wearing the words "enshrined in code". It would have read "5" with
+              nothing behind any of them. It is the enforced count now, earned
+              the way Article VI requires.
+            */}
+            <p data-testid="badge-enforced-count" className="text-amber-300/70 text-xs">
+              {enforcement.enforced} of {enforcement.total} Amendments enforced in code
             </p>
           </div>
           <Scroll size={16} color="#FCD34D" />
@@ -355,8 +362,10 @@ export function ConstitutionalPowerBadge({ branch }: ConstitutionalPowerBadgePro
       icon: Crown,
     },
     vanguard: {
+      // "Magnification through merit" described nothing that exists. The title
+      // marks how many people have lent a voice, and confers nothing else.
       label: "Civil Leader",
-      description: "Magnification through merit",
+      description: "Carrying a voice that was lent",
       color: "#F59E0B",
       icon: Award,
     },

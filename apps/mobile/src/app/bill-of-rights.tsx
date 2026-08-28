@@ -32,7 +32,7 @@ import Animated, {
   withSequence,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { BILL_OF_RIGHTS, type Article } from '@/lib/bill-of-rights';
+import { BILL_OF_RIGHTS, getAmendmentEnforcement, type Article } from '@/lib/bill-of-rights';
 import { cn } from '@/lib/cn';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -105,7 +105,7 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
               </View>
               <View className="flex-1">
                 <Text className="text-slate-400 text-xs font-semibold tracking-widest mb-1">
-                  ARTICLE {article.number}
+                  AMENDMENT {article.number}
                 </Text>
                 <Text className="text-white font-bold text-lg leading-tight">
                   {article.title}
@@ -126,33 +126,42 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
               </Text>
             </View>
 
-            {/* Principles (shown when expanded) */}
+            {/*
+              WHAT WENT. Four hand-typed bullets under "ENFORCED PRINCIPLES",
+              each with a green tick. Two of the twenty were false — "Encrypted
+              personal data" and "Trust Score determines influence" — and none
+              of the twenty was checked by anything. A tick that cannot fail is
+              decoration.
+
+              What is left is the one badge that has to be earned: an Amendment
+              may claim enforcement only if a test under backend/tests names it.
+              That is Article VI, and constitution-enforced.test.ts is what
+              makes it true.
+            */}
             {isExpanded && (
               <Animated.View
                 entering={FadeIn.duration(300)}
                 className="mt-4 pt-4 border-t border-slate-700/50"
               >
-                <Text className="text-slate-400 text-xs font-semibold tracking-wider mb-3">
-                  ENFORCED PRINCIPLES
-                </Text>
-                {article.principles.map((principle, pIndex) => (
-                  <View
-                    key={pIndex}
-                    className="flex-row items-center mb-2"
-                  >
+                {article.enforcedInCode ? (
+                  <View className="flex-row items-center">
                     <CheckCircle2 size={14} color={color} />
-                    <Text className="text-slate-300 text-sm ml-2">
-                      {principle}
+                    <Text className="text-sm ml-2" style={{ color }}>
+                      Enforced in code
                     </Text>
                   </View>
-                ))}
+                ) : (
+                  <Text className="text-slate-400 text-sm">
+                    Not yet enforced in code
+                  </Text>
+                )}
               </Animated.View>
             )}
 
             {/* Expand indicator */}
             <Pressable onPress={handlePress} className="mt-3">
               <Text className="text-center text-sm" style={{ color }}>
-                {isExpanded ? 'Show less' : 'Read more & see principles'}
+                {isExpanded ? 'Show less' : 'Read more'}
               </Text>
             </Pressable>
           </LinearGradient>
@@ -165,6 +174,7 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
 export default function BillOfRightsScreen() {
   const router = useRouter();
   const [expandedArticle, setExpandedArticle] = useState<string | null>(null);
+  const enforcement = getAmendmentEnforcement();
 
   const handleToggle = (articleId: string) => {
     setExpandedArticle(prev => prev === articleId ? null : articleId);
@@ -229,7 +239,7 @@ export default function BillOfRightsScreen() {
               Bill of Rights
             </Text>
             <Text className="text-slate-400 text-sm text-center mt-1 italic">
-              A Covenant for the Digital Body Politic
+              Amendments I–V of the Constitution
             </Text>
           </Animated.View>
 
@@ -248,7 +258,7 @@ export default function BillOfRightsScreen() {
                 <View className="flex-row items-center mb-3">
                   <Feather size={18} color="#FCD34D" />
                   <Text className="text-amber-300 text-xs font-bold tracking-widest ml-2">
-                    PREAMBLE
+                    PART OF THE CONSTITUTION
                   </Text>
                 </View>
                 <Text className="text-amber-100 text-base leading-7 italic">
@@ -266,7 +276,7 @@ export default function BillOfRightsScreen() {
             <View className="h-px flex-1 bg-slate-700" />
             <View className="mx-4">
               <Text className="text-slate-500 text-xs font-semibold tracking-widest">
-                ARTICLES
+                AMENDMENTS
               </Text>
             </View>
             <View className="h-px flex-1 bg-slate-700" />
@@ -327,12 +337,23 @@ export default function BillOfRightsScreen() {
             <View className="w-20 h-20 rounded-full bg-slate-800/60 border-2 border-amber-500/30 items-center justify-center mb-3">
               <Shield size={36} color="#F59E0B" />
             </View>
+            {/*
+              This read "These rights are enshrined in code / and cannot be
+              circumvented by platform operators" — a claim no reader could
+              check and no test could break. It is a count now, and it is
+              allowed to be a number smaller than five.
+            */}
             <Text className="text-slate-400 text-sm text-center">
-              These rights are enshrined in code
+              {enforcement.enforced} of {enforcement.total} Amendments are enforced in code
             </Text>
             <Text className="text-slate-500 text-xs text-center mt-1">
-              and cannot be circumvented by platform operators
+              each one proven by a test named for it, and counted here rather than typed
             </Text>
+            {enforcement.outstanding.map((item) => (
+              <Text key={item.article} className="text-amber-400/80 text-xs text-center mt-1">
+                Not yet enforced: Amendment {item.article} — {item.section}
+              </Text>
+            ))}
           </Animated.View>
         </ScrollView>
       </SafeAreaView>

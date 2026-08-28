@@ -681,7 +681,7 @@ describe("system reset: it can be put back", () => {
 });
 
 describe("system reset: nobody can stop it", () => {
-  test("no route stops, pauses or overturns a proceeding that has not run", async () => {
+  test("[art5-sec3] no route stops, pauses or overturns a proceeding that has not run", async () => {
     // The only thing allowed to touch a SystemReset row outside the service is
     // the owner's undo of one that has ALREADY executed, and that lives in
     // admin.ts guarded by its own capability. Nothing may cancel one in flight.

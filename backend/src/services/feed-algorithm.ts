@@ -95,10 +95,11 @@ const ALGORITHM_CONFIG = {
 /**
  * THE RANKING, IN PUBLIC.
  *
- * Constitution Article III, Section 1: "The logic used to calculate the Pulse,
- * the Trust Scores, and the Magnification of Leaders must be publicly
- * auditable." Bill of Rights Article II lists "Transparent ranking factors" as
- * a principle.
+ * Constitution Article III §1: "The method by which the Pulse and every
+ * published measure is calculated shall be open to inspection. The platform
+ * shall publish no figure it will not explain." Amendment II requires the same
+ * of the feed: no black-box algorithm, and prominence conferred by Delegation
+ * and by nothing else.
  *
  * Neither was true. The only thing any screen could show was
  * getAlgorithmCompliance(), a hardcoded object in the client bundle that

@@ -14,7 +14,8 @@
  * modules entirely.
  *
  * Change the words in packages/civic-core/src/constitution.ts, and both
- * clients change together, because there is only one of them now.
+ * clients change together, because there is only one of them now — and the
+ * Bill of Rights is part of that one, as Amendments I to V.
  */
 
 import type { LucideIcon } from "lucide-react";
@@ -28,8 +29,13 @@ import {
   Scale,
   Shield,
 } from "lucide-react";
-import { CONSTITUTION as CORE_CONSTITUTION } from "@civic/core/constitution";
-import { BILL_OF_RIGHTS as CORE_BILL_OF_RIGHTS } from "@civic/core/bill-of-rights";
+import {
+  CONSTITUTION as CORE_CONSTITUTION,
+  getAmendmentEnforcement,
+  getConstitutionalEnforcement,
+} from "@civic/core/constitution";
+
+export { getAmendmentEnforcement, getConstitutionalEnforcement };
 
 export interface ConstitutionSection {
   id: string;
@@ -38,7 +44,7 @@ export interface ConstitutionSection {
   /**
    * True only when a test under backend/tests carries this clause's id in its
    * name. See backend/tests/constitution-enforced.test.ts — the badge cannot
-   * outrun the suite.
+   * outrun the suite. That rule is Article VI.
    */
   enforcedInCode: boolean;
 }
@@ -51,14 +57,20 @@ export interface ConstitutionArticle {
   sections: ConstitutionSection[];
 }
 
+export interface Definition {
+  term: string;
+  meaning: string;
+}
+
+/** An Amendment — what the Bill of Rights is made of. */
 export interface RightsArticle {
   id: string;
   number: string;
   title: string;
   subtitle: string;
   content: string;
-  principles: string[];
   icon: LucideIcon;
+  enforcedInCode: boolean;
 }
 
 /**
@@ -84,10 +96,22 @@ function icon(name: string): LucideIcon {
   return ICONS[name] ?? Scale;
 }
 
+const AMENDMENTS = CORE_CONSTITUTION.amendments.map((amendment) => ({
+  id: amendment.id,
+  number: amendment.number,
+  title: amendment.title,
+  subtitle: amendment.subtitle,
+  content: amendment.content,
+  icon: icon(amendment.icon),
+  enforcedInCode: amendment.enforcedInCode,
+})) as RightsArticle[];
+
 export const CONSTITUTION = {
   version: CORE_CONSTITUTION.version,
   effectiveDate: CORE_CONSTITUTION.effectiveDate,
   preamble: CORE_CONSTITUTION.preamble,
+  amendmentsNote: CORE_CONSTITUTION.amendmentsNote,
+  definitions: CORE_CONSTITUTION.definitions,
   articles: CORE_CONSTITUTION.articles.map((article) => ({
     id: article.id,
     number: article.number,
@@ -100,19 +124,16 @@ export const CONSTITUTION = {
       enforcedInCode: section.enforcedInCode,
     })),
   })) as ConstitutionArticle[],
+  amendments: AMENDMENTS,
 };
 
+/**
+ * The Bill of Rights is not a second document. It is the Amendments, under the
+ * name people actually call them.
+ */
 export const BILL_OF_RIGHTS = {
-  version: CORE_BILL_OF_RIGHTS.version,
-  effectiveDate: CORE_BILL_OF_RIGHTS.effectiveDate,
-  preamble: CORE_BILL_OF_RIGHTS.preamble,
-  articles: CORE_BILL_OF_RIGHTS.articles.map((article) => ({
-    id: article.id,
-    number: article.number,
-    title: article.title,
-    subtitle: article.subtitle,
-    content: article.content,
-    principles: article.principles,
-    icon: icon(article.icon),
-  })) as RightsArticle[],
+  version: CORE_CONSTITUTION.version,
+  effectiveDate: CORE_CONSTITUTION.effectiveDate,
+  preamble: CORE_CONSTITUTION.amendmentsNote,
+  articles: AMENDMENTS,
 };

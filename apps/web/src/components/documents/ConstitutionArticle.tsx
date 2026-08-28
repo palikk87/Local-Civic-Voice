@@ -37,7 +37,7 @@ export function ConstitutionArticleCard({ article }: { article: ArticleType }) {
               className="border-l-2 border-accent/40 pl-4"
             >
               <h4 className="font-semibold text-foreground">{section.title}</h4>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                 {section.content}
               </p>
               {section.enforcedInCode ? (

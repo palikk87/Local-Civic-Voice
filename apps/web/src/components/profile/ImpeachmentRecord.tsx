@@ -109,9 +109,17 @@ export function ImpeachmentRecord({ userId }: { userId: string }) {
   // NOTHING TO SAY IS SAID BY SAYING NOTHING. Almost every profile has an empty
   // record, and a heading reading "no impeachments" on all of them would make
   // the platform look like a place where this is expected.
-  if (!data || data.record.length === 0) return null;
+  //
+  // GUARD THE CONTAINER, DEREFERENCE THE FIELD. `!data` was checked and then
+  // `data.record.length` was read — so any answer without a `record` key threw
+  // during render and took the whole page into the error boundary. It is not a
+  // hypothetical shape: an older deploy, an error envelope, or a route that has
+  // not shipped yet all look like that, and /profile and /record both
+  // white-screened on it.
+  const record = data?.record ?? [];
+  if (record.length === 0) return null;
 
-  const inForce = data.record.some((entry) => entry.inForce);
+  const inForce = record.some((entry) => entry.inForce);
 
   return (
     <section className="mt-6" data-testid="impeachment-record">
@@ -132,7 +140,7 @@ export function ImpeachmentRecord({ userId }: { userId: string }) {
       </p>
 
       <div className="space-y-2">
-        {data.record.map((entry) => (
+        {record.map((entry) => (
           <Entry key={entry.id} entry={entry} />
         ))}
       </div>

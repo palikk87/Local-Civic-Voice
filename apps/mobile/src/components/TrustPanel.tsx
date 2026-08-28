@@ -57,8 +57,11 @@ export function TrustPanel({ userId, compact = false }: { userId: string; compac
     enabled: Boolean(userId),
   });
 
-  if (isLoading || !data) return null;
-  const result = data.trust;
+  // GUARD THE CONTAINER, DEREFERENCE THE FIELD. `!data` was checked and then
+  // `data.trust.enough` was read, so any answer without a `trust` key threw
+  // during render and took the whole screen down with it.
+  const result = data?.trust;
+  if (isLoading || !result) return null;
 
   if (!result.enough) {
     if (compact) return <NotEnough result={result} compact />;

@@ -185,7 +185,7 @@ describe("liquid democracy", () => {
     expect(mine.activeCount).toBe(1);
   });
 
-  test("[art2-sec2] revoking a delegation takes the weight back immediately", async () => {
+  test("[art2-sec2][bor-art1] revoking a delegation takes the weight back immediately", async () => {
     const leader = await citizen("leader");
     const follower = await citizen("follower");
     await makeEligible(leader.userId);

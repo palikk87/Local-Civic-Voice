@@ -194,7 +194,7 @@ describe("[art3-sec2] the privacy floor", () => {
   });
 });
 
-describe("[art3-sec2] the recount", () => {
+describe("[art3-sec2][bor-art3] the recount", () => {
   test("a published tally that matches the votes passes", async () => {
     const ref = await reference();
     const voters = [];

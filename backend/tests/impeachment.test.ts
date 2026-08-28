@@ -788,7 +788,7 @@ describe("impeachment: the record on their profile", () => {
 });
 
 describe("impeachment: nobody can stop it", () => {
-  test("there is no route, at any permission level, that cancels a proceeding", async () => {
+  test("[art5-sec3] there is no route, at any permission level, that cancels a proceeding", async () => {
     // Article V is the people's remedy against borrowed power. A remedy the
     // platform can switch off is not a remedy, so this asserts on the source:
     // no handler anywhere may set a proceeding's status by hand.

@@ -6,10 +6,17 @@ import { Accordion } from "@/components/ui/accordion";
 import { Seal } from "@/components/civic/Seal";
 import { ConstitutionArticleCard } from "@/components/documents/ConstitutionArticle";
 import { RightsArticleCard } from "@/components/documents/RightsArticle";
-import { CONSTITUTION, BILL_OF_RIGHTS } from "@/lib/founding-documents";
+import {
+  CONSTITUTION,
+  BILL_OF_RIGHTS,
+  getAmendmentEnforcement,
+  getConstitutionalEnforcement,
+} from "@/lib/founding-documents";
 
 export default function Documents() {
   const location = useLocation();
+  const articleCount = getConstitutionalEnforcement();
+  const amendmentCount = getAmendmentEnforcement();
 
   useEffect(() => {
     if (location.hash) {
@@ -67,6 +74,29 @@ export default function Documents() {
               <ConstitutionArticleCard key={article.id} article={article} />
             ))}
           </Accordion>
+
+          {/* Article VII — the binding glossary. */}
+          <div className="mt-6 rounded-2xl border border-border bg-card p-6">
+            <div className="font-mono text-xs font-semibold uppercase tracking-institutional text-accent">
+              Article {CONSTITUTION.definitions.number}
+            </div>
+            <h3 className="font-display text-xl font-semibold text-foreground">
+              {CONSTITUTION.definitions.title}
+            </h3>
+            <p className="mt-1 text-sm italic text-muted-foreground">
+              {CONSTITUTION.definitions.note}
+            </p>
+            <dl className="mt-4 space-y-3 border-t border-border/60 pt-4">
+              {CONSTITUTION.definitions.terms.map((entry) => (
+                <div key={entry.term} className="border-l-2 border-accent/40 pl-4">
+                  <dt className="font-semibold text-foreground">{entry.term}</dt>
+                  <dd className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+                    {entry.meaning}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
         </section>
 
         {/* Bill of Rights */}
@@ -78,13 +108,13 @@ export default function Documents() {
             </h2>
           </div>
           <p className="mt-1 font-mono text-xs text-muted-foreground">
-            v{BILL_OF_RIGHTS.version} · Effective{" "}
+            Amendments I–V · v{BILL_OF_RIGHTS.version} · Effective{" "}
             {new Date(BILL_OF_RIGHTS.effectiveDate).toLocaleDateString()}
           </p>
 
           <blockquote className="mt-6 rounded-2xl border border-accent/30 bg-accent/5 p-6">
             <div className="text-xs font-semibold uppercase tracking-institutional text-accent">
-              Preamble
+              Part of the Constitution
             </div>
             <p className="mt-3 font-display text-lg italic leading-relaxed text-foreground">
               “{BILL_OF_RIGHTS.preamble}”
@@ -103,9 +133,11 @@ export default function Documents() {
           <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-accent/30 bg-secondary">
             <Scale className="h-7 w-7 text-accent" />
           </div>
-          <p className="mt-4 text-sm text-muted-foreground">
-            These rights are enshrined in code and cannot be circumvented by
-            platform operators.
+          {/* Counted, not claimed — Article VI. */}
+          <p data-testid="documents-enforced-count" className="mt-4 text-sm text-muted-foreground">
+            {articleCount.enforced} of {articleCount.total} clauses and{" "}
+            {amendmentCount.enforced} of {amendmentCount.total} Amendments are enforced in
+            code — each one proven by a test named for it.
           </p>
         </div>
       </div>

@@ -28,7 +28,8 @@
     "integrity-audit-check": "node scripts/integrity-audit-check.mjs dist",
     "jury-check": "node scripts/jury-check.mjs dist",
     "trust-check": "node scripts/trust-check.mjs dist",
-    "terms-parity-check": "node scripts/terms-parity-check.mjs"
+    "terms-parity-check": "node scripts/terms-parity-check.mjs",
+    "founding-documents-check": "node scripts/founding-documents-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

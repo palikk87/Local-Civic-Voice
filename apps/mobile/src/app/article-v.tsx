@@ -36,6 +36,10 @@ import { cn } from '@/lib/cn';
 import { usePermissions } from '@/lib/auth/use-civic-auth';
 import { ArticlesForm, FileAgainstDelegate } from '@/components/FileArticles';
 import { IntegrityAuditPanel } from '@/components/IntegrityAuditPanel';
+import { CONSTITUTION } from '@/lib/constitution';
+
+/** Article V, read from the Constitution rather than retyped beside it. */
+const ARTICLE_V = CONSTITUTION.articles.find((article) => article.number === 'V');
 import {
   articleV,
   daysLeft,
@@ -826,11 +830,23 @@ export default function ArticleVScreen() {
                 <Text className="text-sm text-red-300">Constitutional Article V</Text>
               </View>
             </View>
-            <Text className="italic leading-6 text-red-200">
-              "The community retains the right to Impeach or demote any leader who misrepresents
-              facts or violates the Code of Conduct, and may trigger a System-Wide Reset via
-              super-majority vote."
-            </Text>
+            {/*
+              THIS QUOTE USED TO BE HAND-TYPED, and it quoted a sentence the
+              Constitution does not contain: "Impeach or demote any leader". No
+              jury demotes anybody. A page that misquotes the document it is
+              enforcing is the same failure as a badge that claims a test it
+              does not have — so it reads the clauses instead of retyping them.
+            */}
+            {ARTICLE_V?.sections.map((section) => (
+              <View key={section.id} className="mb-3">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-red-300">
+                  §{section.title}
+                </Text>
+                <Text className="italic leading-6 text-red-200">
+                  {section.content}
+                </Text>
+              </View>
+            ))}
           </LinearGradient>
         </Animated.View>
 
