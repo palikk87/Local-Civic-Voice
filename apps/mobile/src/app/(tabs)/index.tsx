@@ -703,10 +703,19 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
         {/* Feed Reason Badge */}
         <FeedReasonBadge item={item} />
 
-        {/* User Header */}
+        {/* User Header.
+
+            THIS WAS A BUTTON WIRED TO AN EMPTY FUNCTION. It looked pressable,
+            it gave no feedback, and it went nowhere — worse than plain text,
+            because plain text at least does not promise. You could read
+            somebody's position on a law and have no way to find out what else
+            they had ever stood for. */}
         <Pressable
           className="flex-row items-center mb-3"
-          onPress={() => {}}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push(`/user/${item.user.id}`);
+          }}
         >
           <Image
             source={{ uri: item.user.avatar }}

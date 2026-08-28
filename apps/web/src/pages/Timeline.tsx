@@ -626,9 +626,17 @@ function PostCard({
         <div className="px-4 pb-3 border-t border-slate-700/30 pt-3">
           {post.comments.slice(0, 2).map((comment) => (
             <div key={comment.id} className="flex mb-2">
-              <img src={comment.author.avatar} alt={comment.author.displayName} className="w-8 h-8 rounded-full" />
+              {/* The post's author above is a link; the commenter here was not.
+                  Same person, same platform, half a rule. */}
+              <PersonAvatar
+                person={comment.author}
+                className="w-8 h-8 rounded-full"
+                fallbackClassName="bg-slate-700 text-white text-xs"
+              />
               <div className="flex-1 ml-2 bg-slate-700/40 rounded-xl rounded-tl-sm px-3 py-2">
-                <p className="text-white text-sm font-medium">{comment.author.displayName}</p>
+                <p className="text-white text-sm font-medium">
+                  <PersonName person={comment.author} />
+                </p>
                 {parseContentWithMentions(comment.content, comment.taggedUsers)}
               </div>
             </div>

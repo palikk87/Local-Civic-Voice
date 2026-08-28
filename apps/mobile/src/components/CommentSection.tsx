@@ -13,6 +13,7 @@ import {
 import { Heart, Reply, Send, AtSign, ChevronDown, ChevronUp } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown, SlideInDown, FadeOut, Layout } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { useTimelineStore, type TimelineComment, type TaggedUser } from '@/lib/timeline-store';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
@@ -73,6 +74,7 @@ function CommentItem({
   onReply: (commentId: string, username: string) => void;
   depth?: number;
 }) {
+  const router = useRouter();
   const [showReplies, setShowReplies] = useState(true);
   const likeComment = useTimelineStore((s) => s.likeComment);
 
@@ -96,21 +98,31 @@ function CommentItem({
       className={cn('mb-3', depth > 0 && 'ml-10')}
     >
       <View className="flex-row">
-        <Image
-          source={{ uri: comment.author.avatar }}
-          className={cn('rounded-full', depth === 0 ? 'w-10 h-10' : 'w-8 h-8')}
-        />
+        {/* THE WEB TWIN LINKS ALL THREE OF THESE and this screen linked none
+            of them: face, name and handle were inert. Somebody could argue with
+            you about a law and you had no way to see what they had ever stood
+            for. */}
+        <Pressable onPress={() => router.push(`/user/${comment.author.id}`)}>
+          <Image
+            source={{ uri: comment.author.avatar }}
+            className={cn('rounded-full', depth === 0 ? 'w-10 h-10' : 'w-8 h-8')}
+          />
+        </Pressable>
 
         <View className="flex-1 ml-3">
           {/* Comment bubble */}
           <View className="bg-slate-800/60 rounded-2xl rounded-tl-sm px-3 py-2">
             <View className="flex-row items-center mb-1">
-              <Text className="text-white font-semibold text-sm">
-                {comment.author.displayName}
-              </Text>
-              <Text className="text-slate-500 text-xs ml-2">
-                @{comment.author.username}
-              </Text>
+              <Pressable onPress={() => router.push(`/user/${comment.author.id}`)}>
+                <Text className="text-white font-semibold text-sm">
+                  {comment.author.displayName}
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => router.push(`/user/${comment.author.id}`)}>
+                <Text className="text-slate-500 text-xs ml-2">
+                  @{comment.author.username}
+                </Text>
+              </Pressable>
             </View>
             {parseContentWithMentions(comment.content, comment.taggedUsers)}
           </View>

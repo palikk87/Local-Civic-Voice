@@ -70,6 +70,7 @@ import { verifyBill, getTrustBadge } from "@/lib/mobile/trust-verification";
 import ShareModal from "@/components/mobile/ShareModal";
 import { BillOfRightsBadge } from "@/components/mobile/BillOfRightsBadge";
 import { PulseGapBadge } from "@/components/mobile/PulseGap";
+import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 import { DailyBillDigest } from "@/components/mobile/DailyBillDigest";
 import {
   useAlgorithmicFeed,
@@ -675,17 +676,25 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
         {/* Feed Reason Badge */}
         <FeedReasonBadge item={item} />
 
-        {/* User Header */}
+        {/* User Header.
+
+            THE NAME WENT NOWHERE. Avatar, name and handle were plain markup on
+            the busiest screen in the app: you could read somebody's position on
+            a law and have no way to find out what else they had ever stood for.
+            PersonLink exists precisely so that cannot happen, and this is the
+            screen it never reached. */}
         <div className="flex items-center mb-3">
-          <img
-            src={item.user.avatar}
-            alt={item.user.displayName}
+          <PersonAvatar
+            person={item.user}
             className="w-10 h-10 rounded-full"
+            fallbackClassName="bg-slate-700 text-white text-sm"
           />
           <div className="ml-3 flex-1">
-            <p className="text-white font-semibold">{item.user.displayName}</p>
+            <p className="text-white font-semibold">
+              <PersonName person={item.user} />
+            </p>
             <p className="text-slate-400 text-xs">
-              @{item.user.username} · {formatTimeAgo(item.timestamp)}
+              <PersonHandle person={item.user} /> · {formatTimeAgo(item.timestamp)}
             </p>
           </div>
           {item.vote ? (

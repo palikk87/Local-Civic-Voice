@@ -8,6 +8,7 @@ import { adminAuthHeader } from "@/lib/mobile/admin-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -103,11 +104,19 @@ export function PostsTab() {
               key={post.id}
               className="flex items-start gap-3 border-b border-border p-4 last:border-b-0"
             >
-              <img src={post.author.avatar} alt="" className="h-9 w-9 shrink-0 rounded-full" />
+              {/* An admin reading a reported post needs to see who wrote it,
+                  which is one click away on their public profile — and it is
+                  the same rule as everywhere else, so this needs no exception
+                  to it. */}
+              <PersonAvatar person={post.author} className="h-9 w-9 shrink-0 rounded-full" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-foreground">{post.author.displayName}</span>
-                  <span className="text-sm text-muted-foreground">@{post.author.username}</span>
+                  <span className="font-medium text-foreground">
+                    <PersonName person={post.author} />
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    <PersonHandle person={post.author} />
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {new Date(post.createdAt).toLocaleString()}
                   </span>

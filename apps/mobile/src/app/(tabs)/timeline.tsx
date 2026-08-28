@@ -404,17 +404,25 @@ function PostCard({
         </View>
       )}
 
-      {/* Author header with Follow button */}
+      {/* Author header with Follow button.
+
+          THE AUTHOR OF A POST WENT NOWHERE HERE — face, name and handle all
+          inert, on the screen where people argue with each other. The web twin
+          links all three. */}
       <View className="flex-row items-center p-4 pb-2">
-        <Image
-          source={{ uri: post.author.avatar }}
-          className="w-12 h-12 rounded-full"
-        />
+        <Pressable onPress={() => router.push(`/user/${post.author.id}`)}>
+          <Image
+            source={{ uri: post.author.avatar }}
+            className="w-12 h-12 rounded-full"
+          />
+        </Pressable>
         <View className="flex-1 ml-3">
           <View className="flex-row items-center">
-            <Text className="text-white font-semibold">
-              {post.author.displayName}
-            </Text>
+            <Pressable onPress={() => router.push(`/user/${post.author.id}`)}>
+              <Text className="text-white font-semibold">
+                {post.author.displayName}
+              </Text>
+            </Pressable>
             {/* The timestamp is the permalink, the way it is everywhere else.
                 Until now a post had no address at all and this was plain
                 text. */}
@@ -422,7 +430,9 @@ function PostCard({
               <Text className="text-slate-500 text-sm ml-2">· {timeAgo}</Text>
             </Pressable>
           </View>
-          <Text className="text-slate-400 text-sm">@{post.author.username}</Text>
+          <Pressable onPress={() => router.push(`/user/${post.author.id}`)}>
+            <Text className="text-slate-400 text-sm">@{post.author.username}</Text>
+          </Pressable>
         </View>
 
         {/* Follow button - show for other users' posts */}
@@ -699,9 +709,15 @@ function PostCard({
         <View className="px-4 pb-3 border-t border-slate-700/30 pt-3">
           {post.comments.slice(0, 2).map((comment) => (
             <View key={comment.id} className="flex-row mb-2">
-              <Image source={{ uri: comment.author.avatar }} className="w-8 h-8 rounded-full" />
+              {/* The post's author above goes to their profile; the commenter
+                  here did not. Same person, same platform, half a rule. */}
+              <Pressable onPress={() => router.push(`/user/${comment.author.id}`)}>
+                <Image source={{ uri: comment.author.avatar }} className="w-8 h-8 rounded-full" />
+              </Pressable>
               <View className="flex-1 ml-2 bg-slate-700/40 rounded-xl rounded-tl-sm px-3 py-2">
-                <Text className="text-white text-sm font-medium">{comment.author.displayName}</Text>
+                <Pressable onPress={() => router.push(`/user/${comment.author.id}`)}>
+                  <Text className="text-white text-sm font-medium">{comment.author.displayName}</Text>
+                </Pressable>
                 {parseContentWithMentions(comment.content, comment.taggedUsers)}
               </View>
             </View>

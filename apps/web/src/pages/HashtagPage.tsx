@@ -5,6 +5,7 @@ import { Hash } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { postsApi } from "@/lib/civic";
+import { PersonHandle, PersonName } from "@/components/people/PersonLink";
 
 /**
  * Everything written under one tag.
@@ -67,31 +68,41 @@ export default function HashtagPage() {
           </div>
         ) : (
           <div className="space-y-3">
+            {/* THE CARD USED TO BE ONE BIG LINK to the law, with the author's
+                name inside it — so clicking their name took you to a bill. A
+                link cannot contain a link, which is why the name could not
+                simply be made clickable here: the card had to come apart
+                first. It is a plain card now with two honest targets, the
+                person and the post. */}
             {posts.map((post) => (
-              <Link
+              <div
                 key={post.id}
-                to={
-                  post.governmentReferenceId
-                    ? `/reference/${post.governmentReferenceId}`
-                    : "/timeline"
-                }
-                className="block rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40"
+                className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40"
               >
                 <p className="text-sm font-semibold text-foreground">
-                  {post.author.displayName}{" "}
+                  <PersonName person={post.author} />{" "}
                   <span className="font-normal text-muted-foreground">
-                    @{post.author.username}
+                    <PersonHandle person={post.author} />
                   </span>
                 </p>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                  {post.content}
-                </p>
-                {post.referenceTitle ? (
+                <Link to={`/post/${post.id}`} className="block">
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+                    {post.content}
+                  </p>
+                </Link>
+                {post.referenceTitle && post.governmentReferenceId ? (
+                  <Link
+                    to={`/reference/${post.governmentReferenceId}`}
+                    className="mt-2 block truncate text-xs text-muted-foreground hover:underline"
+                  >
+                    on {post.referenceTitle}
+                  </Link>
+                ) : post.referenceTitle ? (
                   <p className="mt-2 truncate text-xs text-muted-foreground">
                     on {post.referenceTitle}
                   </p>
                 ) : null}
-              </Link>
+              </div>
             ))}
           </div>
         )}
