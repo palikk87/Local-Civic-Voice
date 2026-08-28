@@ -35,6 +35,7 @@ import { cn } from '@/lib/cn';
 import { CommonGroundPanel } from '@/components/CivicPanels';
 import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
 import { DelegateAuditPanel } from '@/components/IntegrityAuditPanel';
+import { TrustPanel } from '@/components/TrustPanel';
 import { FindingsRecord } from '@/components/FindingsRecord';
 import { FileAgainstDelegate } from '@/components/FileArticles';
 import type { MyDelegation } from '@/lib/article-v';
@@ -343,6 +344,10 @@ export default function UserProfileScreen() {
             {/* ARTICLE III §2, where the support actually is. Somebody weighing
                 up whether to lend this person their vote can check the support
                 they already carry, in counts, without seeing a single name. */}
+            {/* THE TRUST SCORE. Everything it is made of, on the same
+                panel — it exists to inform a decision, not to be believed. */}
+            <TrustPanel userId={id} />
+
             <DelegateAuditPanel userId={id} />
 
             {/* BILL OF RIGHTS ARTICLE V. Beside the impeachment record, for

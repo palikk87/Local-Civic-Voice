@@ -1,3 +1,4 @@
+import { TrustPanel } from "@/components/trust/TrustPanel";
 // Delegates directory — EARNED eligibility only. The list comes from
 // GET /api/delegations/delegates, which the backend computes from real,
 // routine activity (account age, votes, posts, recent activity). Delegating
@@ -174,6 +175,11 @@ function DelegateCard({
               <p className="text-muted-foreground">Followers</p>
             </div>
           </div>
+
+          {/* THE TRUST SCORE, WHERE THE DECISION IS MADE. A score that only
+              lived on a profile would inform nobody at the moment they are
+              choosing. It ranks nothing: this list's order is unchanged. */}
+          <TrustPanel userId={delegate.id} compact />
         </div>
       </div>
 

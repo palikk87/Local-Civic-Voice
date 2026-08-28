@@ -44,6 +44,7 @@ import type { VoteWithBill } from '@/lib/database.types';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
 import { DelegateAuditPanel } from '@/components/IntegrityAuditPanel';
+import { TrustPanel } from '@/components/TrustPanel';
 import { FindingsRecord } from '@/components/FindingsRecord';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/api';
@@ -707,6 +708,10 @@ function ProfileContent() {
               whenever they want and the result is kept, so a clean history is
               something they can point at — and a stacked one is something they
               find out about before anybody else does. */}
+          {/* THE TRUST SCORE, on your own profile too — the same number
+              everybody else can see, with the same working shown. */}
+          {sessionUser?.id ? <TrustPanel userId={sessionUser.id} /> : null}
+
           {sessionUser?.id ? <DelegateAuditPanel userId={sessionUser.id} /> : null}
 
           {/* BILL OF RIGHTS ARTICLE V, on your own profile too. A finding

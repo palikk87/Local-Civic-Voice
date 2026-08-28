@@ -237,6 +237,16 @@ const CHECKS: Check[] = [
       + "is public to a stranger with every reason and no juror named",
   },
   {
+    name: "web trust-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "trust-check"],
+    guards:
+      "a new account is told there is not enough of a record rather than shown a low number, "
+      + "an established one shows a score with every part that produced it and the parts add up "
+      + "to the number, the score is on the delegate card where the choice is made, the page "
+      + "says out loud that it ranks nobody, and a finding pulls it down",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],

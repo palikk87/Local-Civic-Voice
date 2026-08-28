@@ -11,7 +11,6 @@
 // ============================================
 
 import type { Bill, Representative, OfficialVoteTally } from './types';
-import { calculateFalsehoodPenalty, canImpeachLeader, getLeaderRequirements } from './bill-of-rights';
 
 // ==========================================
 // DATA SOURCE VERIFICATION
@@ -522,134 +521,25 @@ export function getAlignmentBadge(score: number): {
 }
 
 // ==========================================
-// CIVIL LEADER TRUST SYSTEM (Article V)
+// CIVIL LEADER TRUST — DELIBERATELY NOT HERE
 // ==========================================
-
-export interface CivilLeaderTrust {
-  userId: string;
-  displayName: string;
-  trustScore: number; // 0-100, determines "magnification"
-  followerCount: number;
-  delegatorCount: number;
-
-  // Falsehood tracking
-  falsehoodReports: FalsehoodReport[];
-  verifiedFalsehoods: number;
-
-  // Impeachment status
-  impeachmentVotes: number;
-  canBeImpeached: boolean;
-  isImpeached: boolean;
-
-  // Article V compliance
-  isCommunityGranted: boolean;
-  magnificationMultiplier: number; // Based on trust score
-}
-
-export interface FalsehoodReport {
-  id: string;
-  reportedAt: string;
-  reportedBy: string;
-  claimText: string;
-  evidence: string;
-  severity: 'minor' | 'moderate' | 'severe';
-  verified: boolean;
-  verifiedAt?: string;
-}
-
-/**
- * ARTICLE V: Calculate Civil Leader trust and magnification
- * "A Leader's magnification is tied directly to their Trust Score"
- */
-export function calculateCivilLeaderTrust(
-  userId: string,
-  displayName: string,
-  followerCount: number,
-  delegatorCount: number,
-  falsehoodReports: FalsehoodReport[]
-): CivilLeaderTrust {
-  const requirements = getLeaderRequirements();
-
-  // Base trust score starts at 70 (must earn higher)
-  let trustScore = 70;
-
-  // Bonus for engagement (community granted status)
-  if (followerCount >= 100) trustScore += 5;
-  if (followerCount >= 1000) trustScore += 10;
-  if (delegatorCount >= 10) trustScore += 5;
-  if (delegatorCount >= 100) trustScore += 10;
-
-  // Apply falsehood penalties per Article V
-  const verifiedFalsehoods = falsehoodReports.filter(r => r.verified);
-  for (const falsehood of verifiedFalsehoods) {
-    trustScore = calculateFalsehoodPenalty(trustScore, falsehood.severity);
-  }
-
-  // Calculate impeachment threshold
-  // Per Article V: "community retains the right to Impeach"
-  const impeachmentVotes = 0; // Would come from database
-  const canBeImpeached = requirements.canBeImpeached && followerCount > 0;
-  const isImpeached = canImpeachLeader(followerCount, impeachmentVotes);
-
-  // Magnification is directly tied to trust score
-  // Score of 100 = 2x magnification, 50 = 1x, 0 = 0x
-  const magnificationMultiplier = isImpeached ? 0 : trustScore / 50;
-
-  return {
-    userId,
-    displayName,
-    trustScore: Math.max(0, Math.min(100, trustScore)),
-    followerCount,
-    delegatorCount,
-    falsehoodReports,
-    verifiedFalsehoods: verifiedFalsehoods.length,
-    impeachmentVotes,
-    canBeImpeached,
-    isImpeached,
-    isCommunityGranted: requirements.communityGranted,
-    magnificationMultiplier,
-  };
-}
-
-/**
- * ARTICLE V: Report a falsehood by a Civil Leader
- */
-export function reportLeaderFalsehood(
-  leaderId: string,
-  reporterId: string,
-  claimText: string,
-  evidence: string
-): FalsehoodReport {
-  return {
-    id: `falsehood-${Date.now()}`,
-    reportedAt: new Date().toISOString(),
-    reportedBy: reporterId,
-    claimText,
-    evidence,
-    severity: 'moderate', // Would be determined by verification
-    verified: false,
-  };
-}
-
-/**
- * Get trust badge for Civil Leaders
- */
-export function getCivilLeaderBadge(trust: CivilLeaderTrust): {
-  label: string;
-  color: string;
-  icon: string;
-} {
-  if (trust.isImpeached) {
-    return { label: 'Impeached', color: '#EF4444', icon: '⚠️' };
-  }
-  if (trust.trustScore >= 90) {
-    return { label: 'Highly Trusted Leader', color: '#22C55E', icon: '⭐' };
-  }
-  if (trust.trustScore >= 70) {
-    return { label: 'Trusted Leader', color: '#3B82F6', icon: '✓' };
-  }
-  if (trust.trustScore >= 50) {
-    return { label: 'Emerging Leader', color: '#F59E0B', icon: '○' };
-  }
-  return { label: 'New Leader', color: '#64748B', icon: '·' };
-}
+//
+// This file used to carry `CivilLeaderTrust`, `calculateCivilLeaderTrust`,
+// `FalsehoodReport`, `reportLeaderFalsehood` and `getCivilLeaderBadge`. All of
+// it was deleted, and none of it was replaced in kind.
+//
+// WHY IT WENT. Nothing had ever called any of it, and it could not have worked
+// if anything had: the calculation read `const impeachmentVotes = 0; // Would
+// come from database`, so every score it produced was a formula over a number
+// nobody fetched. It also returned a `magnificationMultiplier` — a leader's
+// reach, multiplied by their score.
+//
+// WHY IT IS NOT COMING BACK IN THIS SHAPE. "Trust scores are not meant to rank
+// anyone. They are meant to inform people when delegating votes." A score that
+// multiplies reach is the platform deciding what people see, which the Bill of
+// Rights reserves to delegated votes alone.
+//
+// The real thing lives in backend/src/services/trust-score.ts. It is computed
+// from rows that exist, it publishes every part it is made of, it says "not
+// enough yet" rather than scoring an empty record, and it touches nothing but
+// the screens where somebody is choosing a delegate.

@@ -15,6 +15,7 @@ import type { auth } from "../auth";
 import { verifyPasswordOrDummy } from "../password-check";
 import { setUserPassword } from "../services/credentials";
 import { MIN_COHORT, listDistricts } from "../services/jurisdiction";
+import { trustScore, WEIGHTS } from "../services/trust-score";
 import { publicHandle } from "../services/public-identity";
 
 type AuthVariables = {
@@ -1160,6 +1161,26 @@ usersRouter.get("/me/standing", async (c) => {
   return c.json(await standing(currentUser.id));
 });
 
+
+/**
+ * GET /api/users/:id/trust — the Trust Score, and everything it is made of.
+ *
+ * PUBLIC, AND THE WHOLE POINT IS THE WORKING. The number is returned with every
+ * part that produced it, because a bare score is something a reader either
+ * believes or does not, and this exists to inform a decision rather than to be
+ * believed.
+ *
+ * Registered before `/:id/common-ground` for no reason but ordering; it does
+ * not need a session, because somebody weighing up whether to sign up and
+ * delegate should be able to look first.
+ */
+usersRouter.get("/:id/trust", async (c) => {
+  const result = await trustScore(c.req.param("id"));
+  if (!result) {
+    return c.json({ error: "User not found" }, 404);
+  }
+  return c.json({ trust: result, weights: WEIGHTS });
+});
 
 /**
  * GET /api/users/:id/common-ground

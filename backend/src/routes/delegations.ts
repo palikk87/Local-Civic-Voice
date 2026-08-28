@@ -12,6 +12,7 @@ import {
   DELEGATE_REQUIREMENTS,
 } from "../services/delegation-service";
 import { alignmentWith } from "../services/common-ground";
+import { trustScores } from "../services/trust-score";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import { suspensionState } from "../services/impeachment";
 
@@ -106,10 +107,19 @@ delegationsRouter.get("/delegates", async (c) => {
     : [];
   const byUser = new Map(alignment.map((a) => [a.userId, a]));
 
+  // THE TRUST SCORE, ON THE CARD. "Trust scores are not meant to rank anyone.
+  // They are meant to inform people when delegating votes." This list is where
+  // that decision is actually made, so a score that only appeared on a profile
+  // would inform nobody at the moment it mattered.
+  //
+  // NOTHING IS SORTED OR FILTERED BY IT. The order of this list is unchanged.
+  const trust = await trustScores(delegates.map((d) => d.id));
+
   return c.json({
     delegates: delegates.map((delegate) => ({
       ...delegate,
       alignment: byUser.get(delegate.id) ?? null,
+      trust: trust.get(delegate.id) ?? null,
     })),
     requirements: DELEGATE_REQUIREMENTS,
   });

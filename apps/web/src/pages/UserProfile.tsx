@@ -28,6 +28,7 @@ import { CommonGround } from "@/components/civic/CommonGround";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
 import { FindingsRecord } from "@/components/profile/FindingsRecord";
 import { DelegateAuditPanel } from "@/components/audit/IntegrityAuditPanel";
+import { TrustPanel } from "@/components/trust/TrustPanel";
 import { FileAgainstDelegate } from "@/components/articlev/FileArticles";
 import type { MyDelegation } from "@/lib/article-v";
 import { CivicRecord } from "@/components/record/CivicRecord";
@@ -446,6 +447,12 @@ export default function UserProfile() {
         {/* ARTICLE III §2, where the support actually is. Somebody weighing up
             whether to lend this person their vote can check the support they
             already carry, in counts, without seeing a single name. */}
+        {/* THE TRUST SCORE. Everything it is made of, on the same panel —
+            it exists to inform a decision, not to be believed. */}
+        <div className="px-4 pb-4">
+          <TrustPanel userId={id!} />
+        </div>
+
         <div className="px-4">
           <DelegateAuditPanel userId={id!} />
         </div>

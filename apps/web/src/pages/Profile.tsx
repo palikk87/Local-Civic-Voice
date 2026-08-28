@@ -30,6 +30,7 @@ import { CivicRecord } from "@/components/record/CivicRecord";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
 import { FindingsRecord } from "@/components/profile/FindingsRecord";
 import { DelegateAuditPanel } from "@/components/audit/IntegrityAuditPanel";
+import { TrustPanel } from "@/components/trust/TrustPanel";
 import { recordApi } from "@/lib/civic";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
 import { api } from "@/lib/api";
@@ -770,6 +771,14 @@ export default function Profile() {
               whenever they want and the result is kept, so a clean history is
               something they can point at — and a stacked one is something they
               find out about before anybody else does. */}
+          {/* THE TRUST SCORE, on your own profile too — the same number
+              everybody else can see, with the same working shown. */}
+          {sessionUser?.id ? (
+            <div className="px-4 pb-4">
+              <TrustPanel userId={sessionUser.id} />
+            </div>
+          ) : null}
+
           {sessionUser?.id ? (
             <div className="px-4">
               <DelegateAuditPanel userId={sessionUser.id} />

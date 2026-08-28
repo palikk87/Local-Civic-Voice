@@ -200,21 +200,19 @@ export function getLeaderRequirements(): LeaderRequirements {
 }
 
 /**
- * Calculate Trust Score penalty for falsehoods
- * Per Article V, leaders spreading verifiable falsehoods face penalties
+ * FALSEHOOD PENALTIES — deliberately not here any more.
+ *
+ * `calculateFalsehoodPenalty` used to take a trust score and a severity of
+ * 'minor' | 'moderate' | 'severe' and shave a percentage off. Nothing called
+ * it, and nothing could have called it honestly: no part of this platform has
+ * ever graded a falsehood by severity, so the input did not exist.
+ *
+ * What exists now is a jury. It decides one question — did this break the
+ * rules — and a finding either stands or it does not. The arithmetic lives in
+ * backend/src/services/trust-score.ts, where a standing finding costs a fixed
+ * amount and stops counting after a year, and every part of that is published
+ * next to the number it produced.
  */
-export function calculateFalsehoodPenalty(
-  currentTrustScore: number,
-  falsehoodSeverity: 'minor' | 'moderate' | 'severe'
-): number {
-  const penalties = {
-    minor: 0.05, // 5% reduction
-    moderate: 0.15, // 15% reduction
-    severe: 0.30, // 30% reduction
-  };
-
-  return Math.max(0, currentTrustScore * (1 - penalties[falsehoodSeverity]));
-}
 
 /**
  * Check if a leader can be impeached based on follower votes

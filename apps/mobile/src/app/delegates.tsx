@@ -34,6 +34,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api/api';
 import { categoryLabels, categoryColors } from '@/lib/mock-data';
 import { cn } from '@/lib/cn';
+import { TrustPanel } from '@/components/TrustPanel';
 import { DelegationRightIndicator, ArticleBadge } from '@/components/BillOfRightsBadge';
 import { AuthGate } from '@/components/auth/AuthGate';
 
@@ -210,6 +211,11 @@ function DelegateCard({
             </Text>
           </View>
         </View>
+
+        {/* THE TRUST SCORE, WHERE THE DECISION IS MADE. A score that only lived
+            on a profile would inform nobody at the moment they are choosing. It
+            ranks nothing: this list's order is unchanged. */}
+        <TrustPanel userId={delegate.id} compact />
 
         {isDelegatedTo && chain.length > 0 ? (
           <View className="mt-3 rounded-xl border border-amber-700/40 bg-amber-900/20 p-3">
