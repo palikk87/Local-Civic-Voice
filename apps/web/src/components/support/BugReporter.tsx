@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bug, Crosshair, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,22 @@ import { api } from "@/lib/api";
  * SIGNED OUT CAN REPORT. The people most likely to hit a blocking bug are the
  * ones who could not get past sign-up, and they are exactly who a gate would
  * silence.
+ *
+ * AND IT WORKS WHILE A DIALOG IS OPEN, which it did not.
+ *
+ * Reported as "the bug reporter doesnt work with these screens", after two
+ * reports about dialogs that could only point at the BUTTON that opened them.
+ * That was not a coincidence: a modal dialog sets `pointer-events: none` on the
+ * body, so this button inherited it, sat at the same z-index as the overlay
+ * that now painted over it, and was inside an aria-hidden subtree. Measured in
+ * a browser with a dialog open: elementFromPoint over the launcher returned the
+ * overlay, and clicking it timed out.
+ *
+ * The one part of the app whose whole job is reporting the others cannot be the
+ * part that stops working when something is wrong. So it renders in its own
+ * portal, above everything, takes its own pointer events back, keeps itself
+ * announced, and — the part that matters most — swallows its own pointer-downs
+ * so that clicking it does not dismiss the dialog you are trying to report.
  */
 
 type Stage = "idle" | "picking" | "writing" | "sending";
@@ -300,6 +317,75 @@ export function BugReporter() {
   const [problem, setProblem] = useState("");
   const [wanted, setWanted] = useState("");
 
+  /**
+   * ITS OWN NODE, DIRECTLY UNDER BODY.
+   *
+   * Rendered in the tree it sits in, this inherits every stacking context and
+   * every `pointer-events: none` its ancestors acquire — and a modal dialog
+   * puts exactly that on the body. Its own portal is the only place it is
+   * reliably reachable, and the only place a z-index means what it says.
+   */
+  const host = useRef<HTMLDivElement | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const node = document.createElement("div");
+    node.setAttribute("data-bug-reporter-host", "");
+    document.body.appendChild(node);
+    host.current = node;
+    setReady(true);
+
+    /**
+     * KEEP IT ANNOUNCED.
+     *
+     * A modal dialog aria-hides everything outside it, this node included, so
+     * a screen-reader user loses the reporter the moment anything opens.
+     * aria-hidden cannot be undone from inside — a descendant saying false does
+     * not escape an ancestor saying true — so the attribute is taken back off
+     * this node whenever it is put on. Deliberate: the way to report a broken
+     * dialog must not disappear because a dialog is open.
+     */
+    const watcher = new MutationObserver(() => {
+      if (node.getAttribute("aria-hidden") === "true") node.removeAttribute("aria-hidden");
+    });
+    watcher.observe(node, { attributes: true, attributeFilter: ["aria-hidden"] });
+
+    return () => {
+      watcher.disconnect();
+      node.remove();
+      host.current = null;
+    };
+  }, []);
+
+  /**
+   * CLICKING THIS MUST NOT CLOSE WHAT YOU ARE REPORTING.
+   *
+   * A modal dialog dismisses on any pointer-down outside itself. Once this
+   * button is reachable again, pressing it counts as outside — so the dialog
+   * you opened the reporter to complain about would vanish before you could
+   * point at it, which is the same bug wearing a hat.
+   *
+   * Registered once, at mount, in the capture phase on the document. Radix adds
+   * its own document listener when a dialog opens, which is always later, and
+   * listeners on the same node in the same phase run in the order they were
+   * added — so this one goes first and `stopImmediatePropagation` keeps the
+   * dismissal from ever running. Only for events inside the reporter; every
+   * other outside click still closes the dialog exactly as before.
+   */
+  useEffect(() => {
+    const swallow = (event: Event) => {
+      const target = event.target as Element | null;
+      if (target?.closest?.("[data-bug-reporter],[data-bug-reporter-host]")) {
+        event.stopImmediatePropagation();
+      }
+    };
+    const events = ["pointerdown", "mousedown", "touchstart", "focusin"] as const;
+    for (const name of events) document.addEventListener(name, swallow, true);
+    return () => {
+      for (const name of events) document.removeEventListener(name, swallow, true);
+    };
+  }, []);
+
   const stopPicking = useCallback(() => {
     document.body.style.cursor = "";
     setStage("writing");
@@ -333,8 +419,11 @@ export function BugReporter() {
 
     const sheet = document.createElement("div");
     sheet.setAttribute("data-bug-reporter", "picker-sheet");
+    // `pointer-events:auto` is not decoration: a modal dialog sets the body to
+    // `none`, and this sheet is a child of the body, so without it the sheet
+    // received nothing and pointing at anything inside a dialog was impossible.
     sheet.style.cssText =
-      "position:fixed;inset:0;z-index:2147483646;cursor:crosshair;background:transparent";
+      "position:fixed;inset:0;z-index:2147483646;cursor:crosshair;background:transparent;pointer-events:auto";
     document.body.appendChild(sheet);
 
     const onClick = (event: MouseEvent) => {
@@ -414,22 +503,36 @@ export function BugReporter() {
     }
   }
 
+  // Nothing renders until the host node exists; one frame, and it avoids
+  // rendering into a portal that is not there yet.
+  if (!ready || !host.current) return null;
+
+  /**
+   * Above the dialog layer, and taking its own pointer events back.
+   *
+   * The z-index is deliberately absurd. Dialogs here sit at z-50, and the point
+   * of this button is that it works when something is on top of everything
+   * else — so it is above the thing that is above everything else.
+   */
+  const ABOVE_EVERYTHING = "pointer-events-auto z-[2147483000]";
+
   if (stage === "idle") {
-    return (
+    return createPortal(
       <button
         type="button"
         data-bug-reporter
         onClick={() => setStage("writing")}
         aria-label="Report a problem with this page"
-        className="fixed bottom-20 right-4 z-50 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground lg:bottom-6"
+        className={`fixed bottom-20 right-4 ${ABOVE_EVERYTHING} flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground lg:bottom-6`}
       >
         <Bug className="h-5 w-5" />
-      </button>
+      </button>,
+      host.current,
     );
   }
 
   if (stage === "picking") {
-    return (
+    return createPortal(
       /*
        * THE BANNER MUST NOT BLOCK POINTING AT WHAT IS UNDER IT.
        *
@@ -445,7 +548,7 @@ export function BugReporter() {
        */
       <div
         data-bug-reporter
-        className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex items-center justify-center gap-3 bg-amber-500 px-4 py-2.5 text-sm font-medium text-amber-950"
+        className="pointer-events-none fixed inset-x-0 top-0 z-[2147483647] flex items-center justify-center gap-3 bg-amber-500 px-4 py-2.5 text-sm font-medium text-amber-950"
       >
         <Crosshair className="h-4 w-4" />
         Click the thing that is giving you trouble.
@@ -456,14 +559,18 @@ export function BugReporter() {
         >
           Cancel
         </button>
-      </div>
+      </div>,
+      host.current,
     );
   }
 
-  return (
+  return createPortal(
     <div
       data-bug-reporter
-      className="fixed bottom-20 right-4 z-50 w-[min(92vw,22rem)] rounded-xl border border-border bg-card p-4 shadow-2xl lg:bottom-6"
+      // A short screen is exactly where this gets used, so it caps its own
+      // height and scrolls rather than running off the bottom — the bug it
+      // exists to let somebody report.
+      className={`fixed bottom-20 right-4 ${ABOVE_EVERYTHING} max-h-[calc(100dvh-7rem)] w-[min(92vw,22rem)] overflow-y-auto rounded-xl border border-border bg-card p-4 shadow-2xl lg:bottom-6 lg:max-h-[calc(100dvh-3rem)]`}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -532,6 +639,7 @@ export function BugReporter() {
         Sends the page you are on, what you pointed at, your browser size and the app
         version. Nothing else.
       </p>
-    </div>
+    </div>,
+    host.current,
   );
 }
