@@ -135,6 +135,35 @@ export function keyReport(): KeyStatus[] {
         "requirement of its own. govinfo.gov and regulations.gov also accept it; neither is " +
         "wired up yet."
     ),
+    // BOTH HALVES OF THE SIGN-UP BOT TEST, and they were the reason to write
+    // this down. The panel drew its main list from this report and its "other"
+    // list from stored names that are NOT built-in. These two are built-in, so
+    // they were never "other" — and they were absent here, so they were nowhere.
+    // The panel said "None added yet." about a key sitting in the database
+    // guarding sign-up. Only the admin activity log knew.
+    //
+    // NO expectedPrefix ON EITHER. Live keys begin 0x, but Cloudflare's
+    // documented testing keys begin 1x, 2x and 3x — so a prefix check would
+    // report a documented test key as another service's key, which is the exact
+    // wrong answer this file exists to stop giving.
+    status(
+      "TURNSTILE_SITE_KEY",
+      env.TURNSTILE_SITE_KEY,
+      null,
+      "The public half of the sign-up bot test. Printed into the sign-up form so " +
+        "Cloudflare knows which widget is being solved.",
+      "No challenge is drawn, so nothing can be solved and nothing is checked. Sign-up " +
+        "still works and reports that it checked nothing."
+    ),
+    status(
+      "TURNSTILE_SECRET_KEY",
+      env.TURNSTILE_SECRET_KEY,
+      null,
+      "The private half. The server sends each solved challenge to Cloudflare with this " +
+        "and refuses the sign-up if Cloudflare rejects it.",
+      "Nothing is verified. Constitution Article I §3 — only verified humans may vote — " +
+        "rests on an email address alone, and inboxes are free and scriptable."
+    ),
     status(
       "TAVILY_API_KEY",
       env.TAVILY_API_KEY,
@@ -208,6 +237,27 @@ export function keyWarnings(report: KeyStatus[] = keyReport()): string[] {
       "No congress.gov key. Set CONGRESS_API_KEY, or DATA_GOV_API_KEY — congress.gov is " +
         "behind the api.data.gov gateway and accepts a key issued there. Without one there " +
         "is no bill text, so no brief for any bill."
+    );
+  }
+
+  // HALF A KEY PAIR IS THE DANGEROUS STATE, because it looks configured from
+  // every direction. humanCheckConfigured() is both-or-neither, so one key set
+  // and one missing enforces nothing — while the panel shows a key present, the
+  // operator remembers pasting one, and the gate is wide open.
+  const site = by("TURNSTILE_SITE_KEY").present;
+  const secret = by("TURNSTILE_SECRET_KEY").present;
+  if (site !== secret) {
+    warnings.push(
+      `Only half the sign-up bot test is set — ${site ? "TURNSTILE_SITE_KEY" : "TURNSTILE_SECRET_KEY"} ` +
+        `is present and ${site ? "TURNSTILE_SECRET_KEY" : "TURNSTILE_SITE_KEY"} is missing. It takes ` +
+        "both, so NOTHING is being checked: sign-up is open to bots while looking configured. " +
+        "Paste the other half, or clear this one so the state reads as unconfigured."
+    );
+  } else if (!site) {
+    warnings.push(
+      "No sign-up bot test (TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY). Only a confirmed " +
+        "email address stands between a script and a voting account, and the Pulse is only " +
+        "worth reading if it counts citizens rather than accounts."
     );
   }
 

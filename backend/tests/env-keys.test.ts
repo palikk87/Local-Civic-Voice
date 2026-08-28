@@ -208,6 +208,77 @@ describe("the server can say which keys it holds", () => {
     }
   });
 
+  test("the report covers every secret the admin panel can store", async () => {
+    // THE HOLE THIS CLOSES, and it is the reason the Turnstile keys were
+    // invisible for a day. declaredKeys() above matches names ending API_KEY —
+    // which is structural, and neither TURNSTILE_SITE_KEY nor
+    // TURNSTILE_SECRET_KEY ends that way. So the check above passed while two
+    // storable secrets were reported nowhere.
+    //
+    // The admin key panel draws its main list from keyReport() and its "other
+    // keys" list from stored names that are NOT built-in. A built-in name
+    // missing from the report therefore falls between the two lists: the panel
+    // said "None added yet." about a key sitting in the database guarding
+    // sign-up. Only the activity log knew it existed.
+    //
+    // STORABLE_SECRETS is the right list to check against, because it is
+    // exactly the set the panel will accept and store.
+    const { keyReport } = await import("../src/services/key-report");
+    const { STORABLE_SECRETS } = await import("../src/services/platform-secrets");
+    const reported = keyReport().map((key) => key.name);
+
+    const unreported = STORABLE_SECRETS.filter((name) => !reported.includes(name));
+    expect(unreported).toEqual([]);
+  });
+
+  test("a half-configured bot test is called out, because it looks configured", async () => {
+    // humanCheckConfigured() is both-or-neither. One key set and one missing
+    // enforces NOTHING while the panel shows a key present and the operator
+    // remembers pasting one — the most dangerous of the three states, and the
+    // only one nothing was saying out loud.
+    const { keyWarnings } = await import("../src/services/key-report");
+
+    const site = process.env.TURNSTILE_SITE_KEY;
+    const secret = process.env.TURNSTILE_SECRET_KEY;
+    try {
+      process.env.TURNSTILE_SITE_KEY = "1x00000000000000000000AA";
+      delete process.env.TURNSTILE_SECRET_KEY;
+      expect(keyWarnings().join(" ")).toContain("Only half the sign-up bot test is set");
+
+      delete process.env.TURNSTILE_SITE_KEY;
+      process.env.TURNSTILE_SECRET_KEY = "1x0000000000000000000000000000000AA";
+      expect(keyWarnings().join(" ")).toContain("Only half the sign-up bot test is set");
+
+      // Both present: no complaint about halves.
+      process.env.TURNSTILE_SITE_KEY = "1x00000000000000000000AA";
+      expect(keyWarnings().join(" ")).not.toContain("Only half the sign-up bot test is set");
+    } finally {
+      if (site === undefined) delete process.env.TURNSTILE_SITE_KEY;
+      else process.env.TURNSTILE_SITE_KEY = site;
+      if (secret === undefined) delete process.env.TURNSTILE_SECRET_KEY;
+      else process.env.TURNSTILE_SECRET_KEY = secret;
+    }
+  });
+
+  test("a documented Cloudflare testing key is not reported as another service's key", async () => {
+    // Live Turnstile keys begin 0x; Cloudflare's documented testing keys begin
+    // 1x, 2x and 3x. An expectedPrefix of "0x" would flag a documented test key
+    // as "a different service's key in the right box" — which is precisely the
+    // wrong answer this whole report exists to stop giving. So: no prefix.
+    const { keyReport } = await import("../src/services/key-report");
+
+    const site = process.env.TURNSTILE_SITE_KEY;
+    try {
+      process.env.TURNSTILE_SITE_KEY = "3x00000000000000000000FF";
+      const row = keyReport().find((key) => key.name === "TURNSTILE_SITE_KEY")!;
+      expect(row.present).toBe(true);
+      expect(row.looksRight).toBe(true);
+    } finally {
+      if (site === undefined) delete process.env.TURNSTILE_SITE_KEY;
+      else process.env.TURNSTILE_SITE_KEY = site;
+    }
+  });
+
   test("it never returns a key, only a fingerprint of one", async () => {
     const { keyReport } = await import("../src/services/key-report");
     const report = keyReport();
