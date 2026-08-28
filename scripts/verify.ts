@@ -217,6 +217,16 @@ const CHECKS: Check[] = [
       + "vote they do not have, and the reset tab says what a reset costs before one can be cast",
   },
   {
+    name: "web integrity-audit-check",
+    cwd: "apps/web",
+    cmd: ["bun", "run", "integrity-audit-check"],
+    guards:
+      "a citizen demands an Integrity Audit on the page and reads the findings off it, a "
+      + "tally that is not what the votes add up to is caught and shown, a figure covering "
+      + "too few people is withheld rather than published, and no audit panel anywhere "
+      + "carries a name",
+  },
+  {
     name: "web every-page-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "every-page-check"],

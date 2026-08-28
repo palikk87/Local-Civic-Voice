@@ -12,6 +12,7 @@
     "seed-test-population": "bun run scripts/seed-test-population.ts",
     "check-no-population": "bun run scripts/check-no-population.ts",
     "article-v-scenario": "bun run scripts/article-v-scenario.ts",
+    "integrity-audit-scenario": "bun run scripts/integrity-audit-scenario.ts",
     "system-check": "bun run scripts/system-check.ts",
     "sync-roll-calls": "bun run scripts/sync-roll-calls.ts",
     "adjudicate-merges": "bun run scripts/adjudicate-merges.ts",

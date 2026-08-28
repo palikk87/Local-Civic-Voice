@@ -35,6 +35,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/cn';
 import { usePermissions } from '@/lib/auth/use-civic-auth';
 import { ArticlesForm, FileAgainstDelegate } from '@/components/FileArticles';
+import { IntegrityAuditPanel } from '@/components/IntegrityAuditPanel';
 import {
   articleV,
   daysLeft,
@@ -306,6 +307,20 @@ function ProceedingCard({
           </View>
         )
       ) : null}
+
+      {/*
+        THE AUDIT, BESIDE THE ARTICLES — Article III §2 meeting Article V.
+        One ran the moment these articles were filed, so the accused and every
+        elector are looking at the same numbers before anybody votes.
+      */}
+      <View className="mt-4">
+        <IntegrityAuditPanel
+          subjectType="leader"
+          subjectId={proceeding.leader.id}
+          title="Integrity Audit of this support"
+          what="the votes lent to this person, as totals and timings"
+        />
+      </View>
     </Panel>
   );
 }
@@ -693,6 +708,20 @@ function ResetTab() {
               </View>
             )
           ) : null}
+
+          {/*
+            THE SAME REMEDY ON THE HEAVIER VOTE. A reset ends every delegation
+            and zeroes every tally, so the question worth asking before voting
+            is whether the electorate deciding it is real.
+          */}
+          <View className="mt-4">
+            <IntegrityAuditPanel
+              subjectType="reset"
+              subjectId={proceeding.id}
+              title="Integrity Audit of this vote"
+              what="the ballots in this reset, as totals and timings"
+            />
+          </View>
         </Panel>
       ) : (
         <Nothing title="No System-Wide Reset is before the platform">

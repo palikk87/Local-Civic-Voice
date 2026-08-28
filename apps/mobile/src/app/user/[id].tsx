@@ -34,6 +34,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { cn } from '@/lib/cn';
 import { CommonGroundPanel } from '@/components/CivicPanels';
 import { ImpeachmentRecord } from '@/components/ImpeachmentRecord';
+import { DelegateAuditPanel } from '@/components/IntegrityAuditPanel';
 import { FileAgainstDelegate } from '@/components/FileArticles';
 import type { MyDelegation } from '@/lib/article-v';
 import { useStartConversation } from '@/lib/api/messages';
@@ -337,6 +338,11 @@ export default function UserProfileScreen() {
                 before they read the rest. Renders nothing for almost every
                 profile. */}
             <ImpeachmentRecord userId={id} />
+
+            {/* ARTICLE III §2, where the support actually is. Somebody weighing
+                up whether to lend this person their vote can check the support
+                they already carry, in counts, without seeing a single name. */}
+            <DelegateAuditPanel userId={id} />
 
             {/* BRINGING PROCEEDINGS, WHERE THE PERSON IS.
                 Only for somebody who currently delegates to them — the same

@@ -33,6 +33,7 @@ import { createNotification, NotificationType } from "./notification-service";
 import { republishTalliesAfterDelegationChange } from "./delegation-service";
 import { sendNoticeEmail } from "./email";
 import { schedule, FIRST_RUN } from "./scheduled-work";
+import { runAudit } from "./integrity-audit";
 
 /**
  * How long a proceeding stands. Article V proceedings are not open-ended: one
@@ -216,6 +217,27 @@ export async function fileImpeachment(args: FileArgs): Promise<FileResult> {
 
   const leaderName = displayName(leader);
   const filerName = displayName(filer);
+
+  // THE AUDIT THAT RUNS BECAUSE ARTICLES WERE FILED — Article III §2 meeting
+  // Article V. The accused and every elector get the same numbers about the
+  // support in question before anybody casts a vote, so nobody defends
+  // themselves blind and nobody votes on an impression.
+  //
+  // It is caught and never rethrown. An audit failing must not stop a citizen
+  // filing: the right to bring a charge does not depend on a statistic
+  // computing. A proceeding with no audit attached says so on the page rather
+  // than showing an empty one.
+  await runAudit({
+    subjectType: "leader",
+    subjectId: leader.id,
+    requestedById: null,
+    impeachmentId: created.id,
+    // Past the cooldown on purpose. A proceeding must carry an audit taken at
+    // the moment it opened, not one somebody ran forty minutes earlier.
+    force: true,
+  }).catch((error) => {
+    console.error("[impeachment] could not audit the support at filing:", error);
+  });
 
   // SERVICE OF THE ARTICLES, before anybody is told to vote. The accused
   // hearing it from a delegator's post first would be the platform failing the

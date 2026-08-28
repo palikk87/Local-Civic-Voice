@@ -24,6 +24,7 @@ import { delegationsRouter } from "./routes/delegations";
 import { aiRouter } from "./routes/ai";
 import { verificationRouter } from "./routes/verification";
 import { bugReportsRouter } from "./routes/bug-reports";
+import { auditsRouter } from "./routes/audits";
 import { impeachmentsRouter } from "./routes/impeachments";
 import { systemResetRouter } from "./routes/system-reset";
 import { logger } from "hono/logger";
@@ -287,6 +288,7 @@ app.route("/api/ai", aiRouter);
 app.route("/api/verification", verificationRouter);
 app.route("/api/bug-reports", bugReportsRouter);
 app.route("/api/impeachments", impeachmentsRouter);
+app.route("/api/audits", auditsRouter);
 app.route("/api/system-reset", systemResetRouter);
 
 // Serve user uploads — only when storage is local disk.

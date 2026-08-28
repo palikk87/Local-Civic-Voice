@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { VotePanel } from "@/components/civic/VotePanel";
+import { IntegrityAuditPanel } from "@/components/audit/IntegrityAuditPanel";
 import { OtherSide } from "@/components/civic/OtherSide";
 import { PulseHistory } from "@/components/civic/PulseHistory";
 import { TurningPoints } from "@/components/civic/TurningPoints";
@@ -235,6 +236,17 @@ export default function ReferenceDetail() {
               <PulseHistory referenceId={reference.id} />
               <TurningPoints referenceId={reference.id} />
               <OtherSide referenceId={reference.id} />
+
+              {/* ARTICLE III §2. The tally above is the platform's claim; this
+                  is where anybody can make it prove itself. */}
+              <div className="mt-4">
+                <IntegrityAuditPanel
+                  subjectType="reference"
+                  subjectId={reference.id}
+                  title="Integrity Audit of this vote"
+                  what="the votes on this record, as totals and timings"
+                />
+              </div>
             </aside>
           </div>
         )}

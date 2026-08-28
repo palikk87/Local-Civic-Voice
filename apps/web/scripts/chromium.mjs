@@ -59,15 +59,29 @@ export async function routeApiToLocal(page, base) {
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (url.host === local.host) return route.continue();
 
-    const response = await page.request.fetch(`${base}${url.pathname}${url.search}`, {
-      method: request.method(),
-      headers: request.headers(),
-      data: request.postData() ?? undefined,
-      failOnStatusCode: false,
-    });
-    return route.fulfill({ response });
+    // EVERYTHING IN HERE IS BEST EFFORT. A check that closes its context while
+    // a request is still in flight makes this handler throw into an unhandled
+    // rejection, which takes the whole run down — a crash in the harness
+    // reported as a failure of the feature under test. There is nothing useful
+    // to do about a request whose page has gone away, so it is dropped.
+    try {
+      if (url.host === local.host) return await route.continue();
+
+      const response = await page.request.fetch(`${base}${url.pathname}${url.search}`, {
+        method: request.method(),
+        headers: request.headers(),
+        data: request.postData() ?? undefined,
+        failOnStatusCode: false,
+      });
+      return await route.fulfill({ response });
+    } catch {
+      try {
+        return await route.abort();
+      } catch {
+        return undefined;
+      }
+    }
   });
 }
 

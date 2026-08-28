@@ -54,6 +54,7 @@ import {
   yeaNayToPosition,
 } from '@/lib/reference-votes';
 import { cn } from '@/lib/cn';
+import { IntegrityAuditPanel } from '@/components/IntegrityAuditPanel';
 import {
   generateBillExplanation,
   askAboutBill,
@@ -788,6 +789,17 @@ export default function BillDetailScreen() {
               <TurningPointsPanel referenceId={billRefData?.reference?.id} />
               <OtherSidePanel referenceId={billRefData?.reference?.id} />
               <PulseHistoryPanel referenceId={billRefData?.reference?.id} />
+
+              {/* ARTICLE III §2. The tally above is the platform's claim; this
+                  is where anybody can make it prove itself. */}
+              {billRefData?.reference?.id ? (
+                <IntegrityAuditPanel
+                  subjectType="reference"
+                  subjectId={billRefData.reference.id}
+                  title="Integrity Audit of this vote"
+                  what="the votes on this record, as totals and timings"
+                />
+              ) : null}
             </Animated.View>
 
             {/* Vote Transparency - Article III Compliance */}

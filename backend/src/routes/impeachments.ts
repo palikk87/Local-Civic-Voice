@@ -16,6 +16,7 @@ import { prisma } from "../prisma";
 import type { auth } from "../auth";
 import { createRateLimiter } from "../middleware/rate-limit";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
+import { auditForImpeachment } from "../services/integrity-audit";
 import {
   castVote,
   evaluate,
@@ -143,6 +144,10 @@ impeachmentsRouter.get("/leader/:userId", async (c) => {
       viewerIsElector: viewer ? elector !== null : null,
       viewerHasVoted: elector?.votedAt ? true : false,
       viewerProposedDays: elector?.proposedDays ?? null,
+      // THE AUDIT TAKEN WHEN THE ARTICLES WERE FILED — Article III §2 beside
+      // Article V. Null when it could not be computed at the time, which the
+      // page says plainly rather than showing an empty panel.
+      audit: await auditForImpeachment(open.id),
     };
   }
 

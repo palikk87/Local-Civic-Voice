@@ -28,6 +28,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import { CivicRecord } from "@/components/record/CivicRecord";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
+import { DelegateAuditPanel } from "@/components/audit/IntegrityAuditPanel";
 import { recordApi } from "@/lib/civic";
 import { useAuthStore, authUserFromSession } from "@/lib/mobile/auth-store";
 import { api } from "@/lib/api";
@@ -752,6 +753,16 @@ export default function Profile() {
           {sessionUser?.id ? (
             <div className="px-4">
               <ImpeachmentRecord userId={sessionUser.id} />
+            </div>
+          ) : null}
+
+          {/* ARTICLE III §2, on yourself. A leader can audit their own support
+              whenever they want and the result is kept, so a clean history is
+              something they can point at — and a stacked one is something they
+              find out about before anybody else does. */}
+          {sessionUser?.id ? (
+            <div className="px-4">
+              <DelegateAuditPanel userId={sessionUser.id} />
             </div>
           ) : null}
 

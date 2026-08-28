@@ -26,6 +26,7 @@ import { failureMessage } from "@/lib/request-failure";
 import { safetyApi } from "@/lib/civic";
 import { CommonGround } from "@/components/civic/CommonGround";
 import { ImpeachmentRecord } from "@/components/profile/ImpeachmentRecord";
+import { DelegateAuditPanel } from "@/components/audit/IntegrityAuditPanel";
 import { FileAgainstDelegate } from "@/components/articlev/FileArticles";
 import type { MyDelegation } from "@/lib/article-v";
 import { CivicRecord } from "@/components/record/CivicRecord";
@@ -432,6 +433,13 @@ export default function UserProfile() {
             almost every profile. */}
         <div className="px-4">
           <ImpeachmentRecord userId={id!} />
+        </div>
+
+        {/* ARTICLE III §2, where the support actually is. Somebody weighing up
+            whether to lend this person their vote can check the support they
+            already carry, in counts, without seeing a single name. */}
+        <div className="px-4">
+          <DelegateAuditPanel userId={id!} />
         </div>
 
         {/* BRINGING PROCEEDINGS, WHERE THE PERSON IS.

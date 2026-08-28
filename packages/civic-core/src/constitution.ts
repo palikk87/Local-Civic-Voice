@@ -119,7 +119,7 @@ export const CONSTITUTION: Constitution = {
           id: 'art3-sec2',
           title: 'Right to Audit',
           content: `Any user or group of users may demand an "Integrity Audit" of a specific vote if there is evidence of bot interference or system malfunction.`,
-          enforcedInCode: false,
+          enforcedInCode: true,
         },
         {
           id: 'art3-sec3',

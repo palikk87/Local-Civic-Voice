@@ -54,10 +54,10 @@ model User {
   // ---------------------------------------------------------------------
 
   /// Two-letter state, e.g. "CA". Null until the person says.
-  stateCode  String?
+  stateCode         String?
   /// "CA-12", or "AK-AL" for an at-large seat. Null until the person says, and
   /// null for somebody who gave a state but not a district.
-  districtId String?
+  districtId        String?
   /// When they last set it. A district that has not been confirmed since the
   /// last redistricting is a district that may now be wrong.
   jurisdictionSetAt DateTime?
@@ -107,9 +107,13 @@ model User {
   positionEvents         PositionEvent[]
 
   // Article V. Impeachment does not touch the account — see the model below.
-  impeachmentsAgainst    Impeachment[]             @relation("ImpeachmentLeader")
-  impeachmentsFiled      Impeachment[]             @relation("ImpeachmentFiler")
-  impeachmentVotes       ImpeachmentElector[]
+  impeachmentsAgainst Impeachment[]        @relation("ImpeachmentLeader")
+  impeachmentsFiled   Impeachment[]        @relation("ImpeachmentFiler")
+  impeachmentVotes    ImpeachmentElector[]
+
+  // Article III §2. Kept only to rate-limit re-running the same audit; the
+  // audit itself never carries who asked for it.
+  auditsRequested IntegrityAudit[] @relation("IntegrityAuditRequester")
 
   // Aggregating the Pulse by geography is the whole purpose of the two
   // jurisdiction columns above, and it is a grouped count over the whole table.
@@ -148,9 +152,9 @@ model AdminSession {
 /// `username` is stored lowercased; login lowercases before matching, which
 /// preserves the case-insensitive behaviour the fixture array had.
 model B2BClient {
-  id           String    @id @default(cuid())
-  username     String    @unique
-  name         String
+  id       String @id @default(cuid())
+  username String @unique
+  name     String
 
   /// The citizen account this business account was created for, when it was
   /// created by converting one. Null for a client minted from nothing.
@@ -766,11 +770,11 @@ model GovernmentReference {
   // ---------------------------------------------------------------------
 
   /// The day it was introduced, per congress.gov. Null when unknown.
-  introducedDate      DateTime?
+  introducedDate DateTime?
   /// The day of the most recent action, per congress.gov.
-  lastActionDate      DateTime?
+  lastActionDate DateTime?
   /// What that action was, in the chamber's own words.
-  lastActionText      String?
+  lastActionText String?
 
   // ---------------------------------------------------------------------
   // WHO SPONSORED IT — a member, not a chamber.
@@ -781,20 +785,20 @@ model GovernmentReference {
   // ---------------------------------------------------------------------
 
   /// Bioguide id, so the sponsor joins the roster the Delegates screen uses.
-  sponsorBioguideId   String?
-  sponsorName         String?
+  sponsorBioguideId String?
+  sponsorName       String?
   /// "D", "R", "I" — the letter the roster uses.
-  sponsorParty        String?
+  sponsorParty      String?
   /// Two-letter state.
-  sponsorState        String?
-  aliases             String?
-  mergedIntoId        String?
-  supportVotes        Int       @default(0)
-  opposeVotes         Int       @default(0)
-  totalComments       Int       @default(0)
-  totalShares         Int       @default(0)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  sponsorState      String?
+  aliases           String?
+  mergedIntoId      String?
+  supportVotes      Int      @default(0)
+  opposeVotes       Int      @default(0)
+  totalComments     Int      @default(0)
+  totalShares       Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   // Relations
   mergedInto        GovernmentReference?      @relation("MergedReferences", fields: [mergedIntoId], references: [id])
@@ -1362,23 +1366,23 @@ model BugReport {
 /// login — that login is the owner and cannot be removed, because an account
 /// that can lock itself out is an account we get a support call about.
 model B2BMember {
-  id       String @id @default(cuid())
-  clientId String
+  id           String    @id @default(cuid())
+  clientId     String
   /// Unique across the whole table, not per client: it is typed into the same
   /// login box as a B2BClient username, so two companies cannot both have an
   /// "analyst".
-  username String @unique
-  name     String
-  email    String?
+  username     String    @unique
+  name         String
+  email        String?
   /// owner | admin | analyst. owner and admin can manage seats; analyst reads.
-  role     String @default("analyst")
+  role         String    @default("analyst")
   passwordHash String
   /// Kept rather than deleted when access is withdrawn, so the activity log
   /// still resolves the name of whoever did something last month.
-  disabled Boolean @default(false)
+  disabled     Boolean   @default(false)
   lastAccessAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([clientId])
 }
@@ -1508,7 +1512,7 @@ model Impeachment {
   grounds  String
   evidence String
 
-  openedAt  DateTime @default(now())
+  openedAt  DateTime  @default(now())
   /// openedAt + 7 days. A proceeding is not infinitely standing.
   expiresAt DateTime
   /// When the threshold was crossed, or the window closed without it.
@@ -1523,6 +1527,9 @@ model Impeachment {
   leader   User                 @relation("ImpeachmentLeader", fields: [leaderId], references: [id], onDelete: Cascade)
   filedBy  User                 @relation("ImpeachmentFiler", fields: [filedById], references: [id], onDelete: Cascade)
   electors ImpeachmentElector[]
+  /// The audit that ran when the articles were filed, so the accused and the
+  /// electorate see the same numbers before anybody votes.
+  audits   IntegrityAudit[]
 
   /// Every read is either "is there one open against this leader" or "is this
   /// leader suspended right now", and both are (leaderId, status).
@@ -1695,4 +1702,57 @@ model SystemResetJournalVote {
 
   @@unique([resetId, governmentReferenceId, userId])
   @@index([resetId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// THE RIGHT TO AUDIT.
+//
+// Constitution Article III §2: "Any user or group of users may demand an
+// Integrity Audit of a specific vote if there is evidence of bot interference
+// or system malfunction." Until this table there was nothing behind that
+// sentence at all.
+//
+// AN AUDIT COUNTS; IT NEVER NAMES. It may look at a record's vote, at a
+// leader's own support, or at the electorate of a proceeding, and it may report
+// votes, timing and distributions. It may never name a person, list accounts,
+// or publish a figure covering fewer than MIN_COHORT people — the same floor
+// the district maps use, in services/jurisdiction.ts.
+//
+// KEPT FOREVER, ON PURPOSE. An audit nobody can point at later is a
+// reassurance, not a remedy. A leader who audits their own support builds a
+// history they can show; a proceeding carries the audit that ran when it
+// opened.
+// ---------------------------------------------------------------------------
+model IntegrityAudit {
+  id String @id @default(cuid())
+
+  /// reference | leader | impeachment | reset
+  subjectType String
+  subjectId   String
+
+  /// Null when the platform ran it itself, which happens on an impeachment
+  /// filing. A citizen asked for every other one. Kept only so somebody cannot
+  /// re-run the same audit every second; it is never published.
+  requestedById String?
+
+  /// Set when this audit ran because articles were filed, so the proceeding can
+  /// show it beside them and nobody defends themselves blind.
+  impeachmentId String?
+
+  runAt DateTime @default(now())
+
+  /// One object per check: what it looked at, what it found, and the numbers.
+  /// Counts and sentences only — never an account, a username or an email.
+  findings Json
+
+  /// True when at least one check found something worth a person reading. An
+  /// audit never accuses; this only says "look here".
+  flagged Boolean @default(false)
+
+  requestedBy User?        @relation("IntegrityAuditRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  impeachment Impeachment? @relation(fields: [impeachmentId], references: [id], onDelete: Cascade)
+
+  @@index([subjectType, subjectId, runAt])
+  @@index([requestedById])
+  @@index([impeachmentId])
 }
