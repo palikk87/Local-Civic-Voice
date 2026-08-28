@@ -138,7 +138,7 @@ export default function PostOptionsModal({
 
   return (
     <Dialog open={visible} onOpenChange={(open) => (!open ? handleClose() : undefined)}>
-      <DialogContent className="bg-slate-900 border-slate-800 p-0 max-w-lg w-full self-end rounded-b-none rounded-t-3xl overflow-hidden [&>button]:hidden bg-gradient-to-b from-slate-800 to-slate-900">
+      <DialogContent className="bg-slate-900 border-slate-800 p-0 max-w-lg flex max-h-[calc(100dvh-2rem)] w-full flex-col self-end overflow-y-auto rounded-b-none rounded-t-3xl [&>button]:hidden bg-gradient-to-b from-slate-800 to-slate-900">
         {/* Handle bar */}
         <div className="flex justify-center pt-3 pb-2">
           <div className="w-10 h-1 rounded-full bg-slate-600" />

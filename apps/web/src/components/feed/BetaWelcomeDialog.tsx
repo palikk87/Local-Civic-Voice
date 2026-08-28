@@ -78,7 +78,20 @@ export function BetaWelcomeDialog() {
         aria-modal="true"
         aria-labelledby="beta-welcome-title"
         tabIndex={-1}
-        className="relative w-full max-w-md rounded-2xl border border-accent/30 bg-card p-6 shadow-2xl outline-none"
+        // CAPPED AND SCROLLABLE, and this one matters more than the rest.
+        //
+        // THE BUG THIS FIXES. Reported twice: "you cant scroll on the pop up
+        // windows making accessing the lower portion nearly impossible", then
+        // "I closed and reopened in a new tab and it still doesn't allow for
+        // scrolling." The first fix went through the design system's dialog —
+        // and this consent gate is hand-rolled, so it was never touched.
+        //
+        // It is centred with no ceiling, so on a short window it hung off BOTH
+        // ends. The thing below the fold is the agree checkbox and the button:
+        // a visitor on a laptop could not get past the front door, and the
+        // backdrop deliberately does not dismiss, so there was no way through
+        // at all.
+        className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-accent/30 bg-card p-6 shadow-2xl outline-none"
       >
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600">
           <Sparkles className="h-6 w-6 text-white" />

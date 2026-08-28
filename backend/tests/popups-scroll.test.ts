@@ -110,6 +110,103 @@ describe("[art3-sec3] a popup never hides what is inside it", () => {
     expect(unwatched).toEqual([]);
   });
 
+  test("a hand-rolled overlay is held to the same rule as a primitive", () => {
+    // THE HOLE THAT LET THE SECOND REPORT HAPPEN. The first fix went through
+    // components/ui, and the popup the owner actually met — the beta consent
+    // gate you get on a new tab — does not use the dialog primitive at all. It
+    // is a plain <div className="fixed inset-0"> with a centred card, so the
+    // whole category was invisible to this guard and the fix missed it.
+    //
+    // It was the worst possible one to miss: below the fold on that card are
+    // the agree checkbox and the button, and the backdrop deliberately does
+    // not dismiss — so a visitor on a short screen could not get past the
+    // front door by any means.
+    //
+    // Anything that covers the viewport is a popup, whoever wrote it.
+    const WEB = resolve(import.meta.dir, "..", "..", "apps", "web", "src");
+    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((entry) => {
+        const full = join(dir, entry);
+        return statSync(full).isDirectory() ? walk(full) : full.endsWith(".tsx") ? [full] : [];
+      });
+
+    const overlays = walk(WEB).filter((file) => {
+      if (file.includes(`${"components"}/ui/`)) return false; // covered above
+      return /fixed inset-0/.test(readFileSync(file, "utf8"));
+    });
+    expect(overlays.length).toBeGreaterThan(0);
+
+    // THREE SHAPES, THREE RULES. One blunt rule here flagged a loading
+    // spinner and a correctly-built side panel, and a guard that cries wolf is
+    // a guard somebody deletes.
+    const trapped = overlays.filter((file) => {
+      const source = readFileSync(file, "utf8");
+
+      // NOTHING TO REACH. An overlay with no control in it — a loading
+      // screen — cannot hide anything from anybody.
+      const hasControls = /<button|<input|<a\s|<Button|onClick=/.test(source);
+      if (!hasControls) return false;
+
+      const scrolls = CAN_BE_REACHED.test(source);
+
+      // PINNED TO THE FULL HEIGHT of the window already: its height is bounded
+      // by the viewport, so it needs a scroller and not a ceiling.
+      const pinnedFullHeight = /\bh-full\b|\binset-y-0\b/.test(source);
+      if (pinnedFullHeight) return !scrolls;
+
+      // A CENTRED CARD grows to fit its content and hangs off both ends. It
+      // needs both: a ceiling to stop growing, and a scroller to reach the
+      // rest. Either alone does nothing — overflow on a box with no maximum
+      // height never scrolls, because the box is never too small.
+      return !(VIEWPORT_CEILING.test(source) && scrolls);
+    });
+
+    // If this fails: that overlay's card can be taller than the window with no
+    // way to reach the bottom of it. Give the card
+    // max-h-[calc(100dvh-2rem)] and overflow-y-auto.
+    expect(trapped.map((f) => f.replace(WEB + "/", ""))).toEqual([]);
+  });
+
+  test("no screen switches a dialog's scrolling back off", () => {
+    // THE BUG THE OWNER ACTUALLY HIT, after two rounds of me fixing the wrong
+    // popups: "no its actually the sign up window I'm having issues with".
+    //
+    // The dialog primitive sets overflow-y-auto so a tall dialog scrolls. These
+    // classes go through tailwind-merge, where the LAST overflow wins — so a
+    // screen passing `overflow-hidden` to DialogContent silently turns the
+    // scrolling off again. The dialog is still capped to the window, and
+    // everything past that height is clipped and reachable by nothing.
+    //
+    // Sign-up was the worst case because it is the tallest form in the app.
+    //
+    // overflow-hidden is legitimate for rounded corners — but only alongside a
+    // scrolling region inside, which is how the sign-up dialog is built now.
+    const WEB = resolve(import.meta.dir, "..", "..", "apps", "web", "src");
+    const { readdirSync, statSync } = require("node:fs") as typeof import("node:fs");
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((entry) => {
+        const full = join(dir, entry);
+        return statSync(full).isDirectory() ? walk(full) : full.endsWith(".tsx") ? [full] : [];
+      });
+
+    const offenders = walk(WEB)
+      .filter((file) => !file.includes(`${"components"}/ui/`))
+      .filter((file) => {
+        const source = readFileSync(file, "utf8");
+        // Does this file hand overflow-hidden to a dialog-shaped container?
+        const smothers =
+          /<(?:Dialog|AlertDialog|Sheet|Drawer)Content[^>]*className="[^"]*overflow-hidden/s.test(source);
+        if (!smothers) return false;
+        // Fine if something inside it scrolls.
+        return !CAN_BE_REACHED.test(source);
+      });
+
+    expect(offenders.map((f) => f.replace(WEB + "/", ""))).toEqual([]);
+  });
+
   test("the phone's popups are capped and scrollable too", () => {
     // PARITY. The report did not name a platform, and the same mistake was on
     // both: a React Native <Modal> whose panel had no maxHeight and no

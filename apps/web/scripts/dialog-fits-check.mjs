@@ -43,6 +43,9 @@ const SIGNED_IN = {
   session: { id: "s1" },
 };
 
+/** Flipped for the sign-up case: the dialog only exists for a signed-out visitor. */
+let guestMode = false;
+
 const failures = [];
 function check(label, condition, detail) {
   const ok = !!condition;
@@ -57,8 +60,8 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(body));
   };
 
-  if (path.startsWith("/api/auth/get-session")) return json(SIGNED_IN);
-  if (path === "/api/me") return json(SIGNED_IN);
+  if (path.startsWith("/api/auth/get-session")) return guestMode ? json(null) : json(SIGNED_IN);
+  if (path === "/api/me") return guestMode ? json({ user: null }, 401) : json(SIGNED_IN);
   if (path.startsWith("/api/users/")) {
     return json({
       id: "them",
@@ -132,9 +135,11 @@ async function measure(page, selector) {
   }, selector);
 }
 
-async function open(viewport, path, openIt) {
+async function open(viewport, path, openIt, freshVisitor = false) {
   const context = await browser.newContext({ viewport });
-  await acceptTermsBeforeLoad(context);
+  // Every other case pre-accepts so the gate is out of the way. This one IS
+  // the gate, so it has to arrive as a first-time visitor does.
+  if (!freshVisitor) await acceptTermsBeforeLoad(context);
   const page = await context.newPage();
   await routeApiToLocal(page, base);
   await page.goto(`${base}${path}`, { waitUntil: "domcontentloaded" });
@@ -159,6 +164,20 @@ async function open(viewport, path, openIt) {
  */
 const CASES = [
   {
+    // THE ONE THAT WAS REPORTED TWICE. The consent gate on a new tab is
+    // hand-rolled rather than built on the dialog primitive, so the first fix
+    // sailed past it. Its agree checkbox and its button are at the bottom, and
+    // its backdrop deliberately does not dismiss — so when it did not fit, a
+    // visitor could not get into the site at all.
+    name: "Welcome gate",
+    path: "/",
+    selector: '[aria-labelledby="beta-welcome-title"]',
+    // No action: it opens by itself on a browser that has not accepted yet.
+    action: async () => undefined,
+    primary: null,
+    freshVisitor: true,
+  },
+  {
     name: "Report",
     path: "/user/them",
     selector: '[data-testid="report-dialog"]',
@@ -180,7 +199,8 @@ for (const viewport of [VIEWPORT, CRAMPED]) {
   for (const testCase of CASES) {
     let context;
     try {
-      const opened = await open(viewport, testCase.path, testCase.action);
+      guestMode = !!testCase.guest;
+      const opened = await open(viewport, testCase.path, testCase.action, testCase.freshVisitor);
       context = opened.context;
       const seen = await measure(opened.page, testCase.selector);
 
