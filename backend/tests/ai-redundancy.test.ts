@@ -181,6 +181,51 @@ describe("a dead model does not take the platform down", () => {
   });
 });
 
+describe("an answer arrives inside the time a person will wait", () => {
+  test("one model call cannot outlive the request that is waiting for it", async () => {
+    // THE BUG THIS PINS. One call was allowed 60 seconds while the brief
+    // request gave up at 45 — so the deadline meant to contain it could never
+    // be honoured, and the reader watched a spinner forever: "now it just
+    // loads indefinitely."
+    //
+    // A brief is a draft AND a check of that draft against the law, so ONE
+    // call has to fit in well under half the request's budget.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const dir = resolve(import.meta.dir, "..", "src");
+
+    const ai = readFileSync(resolve(dir, "services", "ai-generate.ts"), "utf8");
+    const route = readFileSync(resolve(dir, "routes", "government-references.ts"), "utf8");
+
+    const perCall = Number(ai.match(/DEFAULT_AI_TIMEOUT_MS = ([\d_]+)/)![1]!.replace(/_/g, ""));
+    const total = Number(ai.match(/DEFAULT_TOTAL_BUDGET_MS = ([\d_]+)/)![1]!.replace(/_/g, ""));
+    const request = Number(
+      route.match(/BRIEF_REQUEST_DEADLINE_MS = ([\d_]+)/)![1]!.replace(/_/g, ""),
+    );
+
+    // Every attempt, every retry, still inside what the request will wait for.
+    expect(total).toBeLessThan(request);
+    // And a single call leaves room for the second one a brief always makes.
+    expect(perCall * 2).toBeLessThan(request);
+  });
+
+  test("a chain of dead models still answers quickly", async () => {
+    // Falling back must never cost more than answering. Three models refusing
+    // in turn is the slowest honest path there is, and it has to stay short.
+    fakeProvider({
+      "gemini-3.6-flash": { status: 404, body: '{"error":{"message":"no"}}' },
+      "gemini-2.5-flash": { status: 404, body: '{"error":{"message":"no"}}' },
+    });
+
+    const startedAt = Date.now();
+    const result = await generate();
+    const elapsed = Date.now() - startedAt;
+
+    expect(result.ok).toBe(true);
+    expect(elapsed).toBeLessThan(10_000);
+  });
+});
+
 describe("an incident stays in front of somebody until they clear it", () => {
   test("the same failure updates one row rather than writing thousands", async () => {
     for (let i = 0; i < 5; i++) {

@@ -360,6 +360,9 @@ async function verify(
       "report only what the source does not support. Always return valid JSON.",
     prompt: verifyPrompt(brief, source, partial),
     model,
+    // Tighter than the draft: this reads a brief it already has and answers
+    // with a short list. It must not be what pushes the request over.
+    budgetMs: 15_000,
     maxCompletionTokens: 600,
     temperature: 0,
   });
@@ -447,6 +450,14 @@ export async function composeBrief(officialText: string | null): Promise<BriefOu
   // can see all of it, so each section is asked the one question it can answer
   // on its own: does this section CONTRADICT anything here. Asking a section
   // whether it supports a claim would flag everything the other sections said.
+  //
+  // AND IT HAS TO FIT IN THE TIME A PERSON WILL WAIT. Reported: "now it just
+  // loads indefinitely... I can copy and paste it into an ai in 3 seconds and
+  // another maybe 5 seconds to get the results." Fair. A draft plus a check is
+  // two model calls, and until now each was allowed longer than the whole
+  // request. The check is a real guarantee — Article III §3, nothing invented —
+  // so it is not dropped; it is given a budget, and if it cannot run in time
+  // the brief ships unrevised rather than the reader getting nothing.
   const objections: string[] = [];
   if (parts.length === 1) {
     const found = await verify(model, brief, text, false);

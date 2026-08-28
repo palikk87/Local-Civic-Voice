@@ -30,6 +30,16 @@ export interface AIGenerateParams {
    */
   provider?: AIProvider;
   /**
+   * A ceiling on the WHOLE attempt — every model in the chain, every retry.
+   * The caller knows how long its own request may take; this is how it says so.
+   */
+  budgetMs?: number;
+  /**
+   * Wait out a rate limit rather than moving on. Set only for the last model in
+   * a chain: when something else can be tried, trying it beats waiting.
+   */
+  retryRateLimit?: boolean;
+  /**
    * Give up on the provider after this long.
    *
    * THERE WAS NO TIMEOUT HERE AT ALL, and it took down live search. A model
@@ -215,8 +225,27 @@ function requestBudget(requested: number | undefined, headroom: number | undefin
   return (requested ?? 800) + (headroom ?? REASONING_HEADROOM_TOKENS);
 }
 
-/** No ceiling at all is what 502'd live search; this is the default one. */
-const DEFAULT_AI_TIMEOUT_MS = 60_000;
+/**
+ * How long ONE model call may take.
+ *
+ * THE BUG THIS FIXES. This was 60 seconds while the brief request gives up at
+ * 45 — so a single slow call outlived the deadline that was supposed to
+ * contain it, and the deadline could never be honoured. The reader watched a
+ * spinner forever: "now it just loads indefinitely."
+ *
+ * It has to be comfortably UNDER the caller's own budget, because a brief is
+ * two calls (draft, then check the draft against the law) and sometimes three.
+ */
+const DEFAULT_AI_TIMEOUT_MS = 22_000;
+
+/**
+ * How long the WHOLE attempt may take — every model, every retry.
+ *
+ * A ceiling on one call is not a ceiling on the work: three models with three
+ * rate-limit retries each is nine calls, and nine times a survivable timeout is
+ * an unsurvivable wait. Falling back must never cost more than answering.
+ */
+const DEFAULT_TOTAL_BUDGET_MS = 35_000;
 
 /**
  * A 200 with nothing in it is a failure, and has to be reported as one.
@@ -443,7 +472,8 @@ async function runProvider(
         ? await generateWithGemini(key, model, params)
         : await generateWithOpenAI(key, model, params);
     if (result.ok) return result;
-    if (result.status !== 429 || attempt === RATE_LIMIT_RETRIES) {
+    const mayWait = params.retryRateLimit !== false;
+    if (result.status !== 429 || !mayWait || attempt === RATE_LIMIT_RETRIES) {
       return { ok: false, error: result.error, status: result.status };
     }
     if (isExhaustedQuota(result.error)) {
@@ -477,6 +507,14 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
     return { ok: false, error: "No AI API key configured on server", status: 503 };
   }
 
+  // THE CLOCK ON THE WHOLE THING. Every attempt below checks it, so the answer
+  // arrives — success or honest failure — inside a time a person will wait.
+  const startedAt = Date.now();
+  const budgetMs = params.budgetMs ?? DEFAULT_TOTAL_BUDGET_MS;
+  const timeLeft = () => budgetMs - (Date.now() - startedAt);
+  /** Not worth starting a call that cannot finish. */
+  const ENOUGH_TO_TRY_MS = 6_000;
+
   let lastError: string | null = null;
   const target = params.provider ?? (params.model ? providerFor(params.model) : undefined);
   const order: AIProvider[] = target
@@ -509,7 +547,20 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
       if (chain.length === 0) continue;
 
       for (const model of chain) {
-        const result = await runProvider(provider, key, model, params);
+        if (timeLeft() < ENOUGH_TO_TRY_MS) {
+          lastError = lastError ?? "ran out of time before any model answered";
+          console.warn(`[AI] out of budget after ${Date.now() - startedAt}ms — not trying ${model}`);
+          break;
+        }
+
+        const result = await runProvider(provider, key, model, {
+          ...params,
+          // Never let one call eat the whole budget: it has to leave room for
+          // the next model in the chain to be worth trying.
+          timeoutMs: Math.min(params.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS, Math.max(timeLeft() - 2_000, 5_000)),
+          // A rate-limit wait is only worth it when nothing else can be tried.
+          retryRateLimit: chain.indexOf(model) === chain.length - 1,
+        });
 
         if (result.ok) {
           // IT WORKED — BUT SAY SO IF IT WAS NOT THE ONE WE WANTED.
