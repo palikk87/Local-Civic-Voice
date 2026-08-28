@@ -111,8 +111,19 @@ export function ReportDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-      <DialogContent className="sm:max-w-lg" data-testid="report-dialog">
-        <DialogHeader>
+      {/* PINNED HEAD AND FOOT, SCROLLING MIDDLE.
+
+          The base dialog now caps its height and scrolls, which is what makes
+          a tall dialog readable at all. This does the better version of it for
+          the two dialogs that are genuinely tall: the question stays at the
+          top and "File report" stays at the bottom, so on a short screen the
+          thing you are trying to reach is never the thing you have to hunt
+          for. `flex` beats the base `grid` through tailwind-merge. */}
+      <DialogContent
+        className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden sm:max-w-lg"
+        data-testid="report-dialog"
+      >
+        <DialogHeader className="shrink-0 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <Flag className="h-4 w-4" /> Report {target?.what ?? "this"}
           </DialogTitle>
@@ -122,7 +133,7 @@ export function ReportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto" data-testid="report-scroll">
           <div>
             <Label className="text-sm font-medium">What is wrong?</Label>
             <RadioGroup
@@ -174,7 +185,7 @@ export function ReportDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-2">
+        <DialogFooter className="shrink-0 gap-2 pt-4 sm:gap-2">
           <Button variant="ghost" onClick={close} disabled={sending}>
             Cancel
           </Button>

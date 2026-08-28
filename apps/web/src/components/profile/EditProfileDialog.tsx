@@ -115,15 +115,19 @@ export function EditProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      {/* Reported at 1476x661: "brings up a screen to large to see the entire
+          contents and unable to scroll to navigate". The base dialog now
+          scrolls; this keeps Save on screen while it does, because a form you
+          have to scroll to submit is only half fixed. */}
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden sm:max-w-md">
+        <DialogHeader className="shrink-0 pb-4">
           <DialogTitle>Edit profile</DialogTitle>
           <DialogDescription>
             Your positions and posts stay exactly as you made them.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1" data-testid="edit-profile-scroll">
           <div className="flex items-center gap-4">
             <button
               type="button"
@@ -222,7 +226,7 @@ export function EditProfileDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
