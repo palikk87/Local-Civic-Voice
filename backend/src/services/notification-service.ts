@@ -518,6 +518,7 @@ export async function updateNotificationPreferences(
     voiceUsed: boolean;
     showOtherSide: boolean;
     voteAnonymously: boolean;
+    voteAnonymityChosen: boolean;
   }>
 ): Promise<{
   id: string;
@@ -534,6 +535,7 @@ export async function updateNotificationPreferences(
   voiceUsed: boolean;
   showOtherSide: boolean;
   voteAnonymously: boolean;
+  voteAnonymityChosen: boolean;
 }> {
   const updated = await prisma.notificationPreference.upsert({
     where: { userId },

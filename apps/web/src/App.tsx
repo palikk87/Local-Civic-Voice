@@ -6,6 +6,7 @@ import { queryClient } from "@/lib/query-client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import { AuthUIProvider } from "@/hooks/use-civic-auth";
+import { VoteAnonymityDialog } from "@/components/civic/VoteAnonymityDialog";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { RouteGuard } from "@/components/auth/RouteGuard";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -85,6 +86,10 @@ const App = () => (
       <BrowserRouter>
         <AuthUIProvider>
           <SyncSignedInIdentity />
+          {/* Mounted once, above the routes, because the thing that raises the
+              question is the vote pipeline rather than any one screen — every
+              surface in the app votes through the same function. */}
+          <VoteAnonymityDialog />
           <Suspense fallback={<LoadingScreen />}>
             <Routes>
               {/* ---- Public: anyone can read the civic record ---- */}

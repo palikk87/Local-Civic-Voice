@@ -11,6 +11,7 @@ import { AuthUIProvider } from '@/lib/auth/use-civic-auth';
 import { AuthSheet } from '@/components/auth/AuthSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { BugReporter } from '@/components/support/BugReporter';
+import { VoteAnonymityDialog } from '@/components/VoteAnonymityDialog';
 import { JuryGate } from '@/components/JuryGate';
 
 export const unstable_settings = {
@@ -83,6 +84,11 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
         sign-up, and a gate would silence exactly them.
       */}
       <BugReporter />
+
+      {/* Mounted once, above every screen, because the thing that raises the
+          question is the vote pipeline rather than any one screen — every
+          surface in the app votes through the same function. */}
+      <VoteAnonymityDialog />
     </ThemeProvider>
   );
 }

@@ -8,19 +8,32 @@ import { castReferenceVote } from "@/lib/mobile/reference-votes";
  * Optimistically updates the cached detail (userVote toggle + counts) and
  * reconciles with the server response, which returns authoritative counts.
  */
+/**
+ * A vote, and whether the voter's name goes on this one.
+ *
+ * `anonymous` is per vote and optional: left undefined the server applies the
+ * account's standing choice, which is what every surface other than the detail
+ * page relies on. Passing it overrides that choice for this record only.
+ */
+export interface VoteInput {
+  position: VotePosition;
+  anonymous?: boolean;
+}
+
 export function useVote(id: string) {
   const queryClient = useQueryClient();
   const key = ["reference", id];
 
   return useMutation({
-    mutationFn: async (position: VotePosition) => {
+    mutationFn: async ({ position, anonymous }: VoteInput) => {
       // The ONE vote pipeline — updates the local vote mirror and timeline
-      // tallies too, so every card for this law moves together.
-      const result = await castReferenceVote(id, position);
+      // tallies too, so every card for this law moves together. It is also
+      // where the first-vote anonymity question is asked.
+      const result = await castReferenceVote(id, position, anonymous);
       if (!result) throw new Error("This item is not connected to a real law record");
       return result;
     },
-    onMutate: async (position) => {
+    onMutate: async ({ position }) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<{ reference: GovReferenceDetail }>(key);
 
@@ -50,7 +63,7 @@ export function useVote(id: string) {
 
       return { previous };
     },
-    onError: (_err, _position, context) => {
+    onError: (_err, _input, context) => {
       if (context?.previous) queryClient.setQueryData(key, context.previous);
       toast.error("Could not record your vote. Please try again.");
     },

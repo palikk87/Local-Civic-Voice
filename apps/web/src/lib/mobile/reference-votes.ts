@@ -22,6 +22,7 @@ import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query-client';
 import { useTimelineStore } from './timeline-store';
 import { useVotingStore } from './voting-store';
+import { chooseBeforeVoting } from './vote-anonymity';
 
 export type ReferencePosition = 'support' | 'oppose';
 
@@ -74,6 +75,13 @@ export async function castReferenceVote(
   /** Bill of Rights Article IV — withhold the name, never the voice. */
   anonymous = false
 ): Promise<ReferenceVoteResult | null> {
+  // ASKED ONCE, BEFORE THE FIRST VOTE EVER LANDS. Every surface votes through
+  // here, so the question is here rather than on eleven buttons — see
+  // ./vote-anonymity.ts. It resolves immediately for anybody who has already
+  // answered, and throws if they close it without answering, which cancels the
+  // vote rather than publishing a name they did not agree to.
+  await chooseBeforeVoting();
+
   const votingStore = useVotingStore.getState();
   const timelineStore = useTimelineStore.getState();
 

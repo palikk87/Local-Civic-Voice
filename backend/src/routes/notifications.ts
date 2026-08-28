@@ -44,6 +44,12 @@ const preferencesSchema = z.object({
   showOtherSide: z.boolean().optional(),
   /** Not a notification either — Bill of Rights Article IV. */
   voteAnonymously: z.boolean().optional(),
+  /**
+   * Set once, the first time somebody is asked whether their positions carry
+   * their name. It is what tells the apps to stop asking; it is not a thing a
+   * screen offers to toggle.
+   */
+  voteAnonymityChosen: z.boolean().optional(),
 });
 
 /**
@@ -155,6 +161,7 @@ notificationsRouter.get("/preferences", async (c) => {
         voiceUsed: preferences.voiceUsed,
         showOtherSide: preferences.showOtherSide,
         voteAnonymously: preferences.voteAnonymously,
+        voteAnonymityChosen: preferences.voteAnonymityChosen,
       },
     });
   } catch (error) {
@@ -181,7 +188,17 @@ notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), a
   }
 
   try {
-    const updated = await updateNotificationPreferences(user.id, preferences);
+    // SETTING IT IS ANSWERING IT. Somebody who reaches into Settings and moves
+    // the anonymity switch has made the choice, so the app must not stop them
+    // mid-vote later to ask a question they have already answered. Applied
+    // here rather than in each client, for the same reason the preference
+    // itself is applied on the server: so it holds from every surface.
+    const updated = await updateNotificationPreferences(
+      user.id,
+      preferences.voteAnonymously === undefined
+        ? preferences
+        : { ...preferences, voteAnonymityChosen: true },
+    );
 
     // showOtherSide changes how the feed is assembled, and the feed keeps a
     // per-reader cached response. Without this, turning it off left the
@@ -202,6 +219,7 @@ notificationsRouter.put("/preferences", zValidator("json", preferencesSchema), a
         voiceUsed: updated.voiceUsed,
         showOtherSide: updated.showOtherSide,
         voteAnonymously: updated.voteAnonymously,
+        voteAnonymityChosen: updated.voteAnonymityChosen,
       },
     });
   } catch (error) {

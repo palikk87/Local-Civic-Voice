@@ -695,7 +695,18 @@ model NotificationPreference {
   /// anonymised everybody would be making the choice for them just as surely
   /// as one that never offered it.
   voteAnonymously  Boolean @default(false)
-  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Whether this person has ever been ASKED the question above.
+  ///
+  /// Without this, "chose to be named" and "never knew there was a choice"
+  /// are the same row. The switch lived only in Settings, so anybody who
+  /// never opened Settings had been putting their name on public positions
+  /// without being told. False here means nobody has asked: the first time
+  /// they vote, the app asks, stores the answer in voteAnonymously, sets this,
+  /// and never asks again.
+  voteAnonymityChosen Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // Government Reference System - Canonical reference for bills, executive orders, and SCOTUS cases
