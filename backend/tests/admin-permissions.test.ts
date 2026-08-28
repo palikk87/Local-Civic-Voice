@@ -126,6 +126,7 @@ const GATED: { capability: string; method: string; path: () => string; body?: un
   { capability: "roles.manage", method: "POST", path: () => "/api/admin/roles", body: { slug: "perm-made-up", name: "Made Up", capabilities: [] } },
   { capability: "announcements.write", method: "POST", path: () => "/api/admin/announce", body: { title: "t", content: "c", type: "info" } },
   { capability: "content.repair", method: "POST", path: () => "/api/admin/maintenance/purge-blocked-text" },
+  { capability: "incidents.manage", method: "GET", path: () => "/api/admin/incidents" },
   { capability: "keys.manage", method: "PUT", path: () => "/api/admin/keys/TAVILY_API_KEY", body: { value: "tvly-should-never-be-stored" } },
   { capability: "email.test", method: "POST", path: () => "/api/admin/email-health/test", body: { to: "nobody@example.com" } },
   { capability: "b2b.manage", method: "POST", path: () => "/api/admin/b2b-clients", body: { username: "perm.test.client", name: "Perm", type: "research", tier: "basic" } },

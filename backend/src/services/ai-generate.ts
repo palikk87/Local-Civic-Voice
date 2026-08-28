@@ -13,6 +13,7 @@
  * Provider API keys never leave the server.
  */
 import { env } from "../env";
+import { INCIDENT_AI_ALL_FAILED, INCIDENT_AI_MODEL, reportIncident } from "./service-incidents";
 
 export type AIProvider = "gemini" | "openai";
 
@@ -82,7 +83,87 @@ const MODEL_SPECS: Record<string, ModelSpec> = {
   "gemini-3.6-flash": { provider: "gemini", tpmTokens: 250_000 },
   "gpt-5.4-mini": { provider: "openai", tpmTokens: 200_000 },
   "gpt-5.2": { provider: "openai", tpmTokens: 500_000 },
+
+  // THE SAFETY NET. Older, slower, cheaper, and — the only property that
+  // matters here — still served. A model name is not a constant: providers
+  // retire them, move them behind a tier, or rename them, and when that
+  // happens the name in the line above becomes a 404 on every single call.
+  // These exist so that being wrong about the newest name costs quality for a
+  // few days instead of taking the Citizen's Brief off the air.
+  "gemini-2.5-flash": { provider: "gemini", tpmTokens: 250_000 },
+  "gemini-2.0-flash": { provider: "gemini", tpmTokens: 200_000 },
+  "gpt-4o-mini": { provider: "openai", tpmTokens: 200_000 },
+  "gpt-4o": { provider: "openai", tpmTokens: 450_000 },
 };
+
+/**
+ * EVERY MODEL WORTH TRYING, BEST FIRST.
+ *
+ * WHY THIS EXISTS, in the owner's words: "whatever is happening keeps
+ * happening again and makes it fail. there needs to be redundancies in place."
+ *
+ * It kept happening because there was exactly ONE model per provider. Fall over
+ * from Gemini to OpenAI existed, but if both names were unusable — retired,
+ * renamed, or not on this account's tier — there was nothing left to try and
+ * every brief on the platform failed at once, wearing a message that said "try
+ * again shortly" about a problem that would never resolve on its own.
+ *
+ * Now a provider is a LIST. A model that answers "I do not exist" or "you have
+ * no access" is struck off and the next one is tried in the same request, so
+ * the reader gets their brief rather than an apology.
+ */
+const MODEL_CHAINS: Record<AIProvider, string[]> = {
+  gemini: ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"],
+  openai: ["gpt-5.4-mini", "gpt-4o-mini", "gpt-4o"],
+};
+
+/**
+ * Models this process has been told, by the provider itself, that it cannot
+ * use — a 404 on the name, or no access on this key.
+ *
+ * REMEMBERED SO THE TAX IS PAID ONCE. Without this, every brief re-discovers
+ * the same dead model and pays a round trip for it. Held for an hour rather
+ * than forever, because a model can come back — a tier is upgraded, an outage
+ * ends — and a permanent strike-off would need a redeploy to undo.
+ */
+const struckOff = new Map<string, number>();
+const STRIKE_OFF_MS = 60 * 60 * 1000;
+
+/**
+ * Is this the provider saying "that model is not something you can call"?
+ *
+ * Deliberately narrow. A rate limit, a timeout or a 500 says nothing about the
+ * NAME being wrong, and striking a good model off for a busy minute would make
+ * the platform permanently dumber every time a provider had a bad afternoon.
+ */
+function modelIsUnusable(status: number | undefined, error: string): boolean {
+  if (status === 404) return true;
+  if (status === 400 && /model|not found|does not exist|unsupported/i.test(error)) return true;
+  if (status === 403 && /model|access|permission/i.test(error)) return true;
+  return false;
+}
+
+function isStruckOff(model: string): boolean {
+  const when = struckOff.get(model);
+  if (when === undefined) return false;
+  if (Date.now() - when > STRIKE_OFF_MS) {
+    struckOff.delete(model);
+    return false;
+  }
+  return true;
+}
+
+/** What this process currently knows about model availability. For the admin panel. */
+export function modelAvailability(): { model: string; provider: AIProvider; struckOff: boolean }[] {
+  return (Object.keys(MODEL_CHAINS) as AIProvider[]).flatMap((provider) =>
+    MODEL_CHAINS[provider].map((model) => ({ model, provider, struckOff: isStruckOff(model) })),
+  );
+}
+
+/** For tests, so one does not inherit another's strike-offs. */
+export function forgetStruckOffModels(): void {
+  struckOff.clear();
+}
 
 /**
  * gemini-2.0-flash was the previous default and now returns a hard
@@ -352,7 +433,10 @@ async function runProvider(
   key: string,
   model: string,
   params: AIGenerateParams
-): Promise<{ ok: true; content: string } | { ok: false; error: string }> {
+  // THE STATUS COMES OUT WITH THE ERROR. Without it the caller cannot tell
+  // "this model does not exist" from "this model is busy" — and those need
+  // opposite responses: strike the first off, wait out the second.
+): Promise<{ ok: true; content: string } | { ok: false; error: string; status?: number }> {
   for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
     const result =
       provider === "gemini"
@@ -360,7 +444,7 @@ async function runProvider(
         : await generateWithOpenAI(key, model, params);
     if (result.ok) return result;
     if (result.status !== 429 || attempt === RATE_LIMIT_RETRIES) {
-      return { ok: false, error: result.error };
+      return { ok: false, error: result.error, status: result.status };
     }
     if (isExhaustedQuota(result.error)) {
       console.warn(`[AI] ${model} quota exhausted (not a per-minute limit) — handing off immediately`);
@@ -399,25 +483,87 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
     ? [target, target === "gemini" ? "openai" : "gemini"]
     : ["gemini", "openai"];
 
+  /**
+   * The models to try for this provider, best first.
+   *
+   * An explicitly requested model goes first ON ITS OWN PROVIDER, then the rest
+   * of that provider's chain. Anything the provider has already told us it will
+   * not serve is skipped without paying for the round trip.
+   */
+  const chainFor = (provider: AIProvider): string[] => {
+    const chain = MODEL_CHAINS[provider];
+    const preferred =
+      params.model && providerFor(params.model) === provider ? [params.model] : [];
+    return [...new Set([...preferred, ...chain])].filter((model) => !isStruckOff(model));
+  };
+
+  /** The first model in this provider's chain — what SHOULD have answered. */
+  const primaryOf = (provider: AIProvider): string => MODEL_CHAINS[provider][0]!;
+
   try {
     for (const provider of order) {
       const key = keys[provider];
       if (!key) continue;
 
-      // Honour an explicit model only on its own provider; the safety-net
-      // provider uses its default.
-      const model =
-        params.model && providerFor(params.model) === provider
-          ? params.model
-          : provider === "gemini"
-            ? DEFAULT_GEMINI_MODEL
-            : DEFAULT_OPENAI_MODEL;
+      const chain = chainFor(provider);
+      if (chain.length === 0) continue;
 
-      const result = await runProvider(provider, key, model, params);
-      if (result.ok) return { ok: true, content: result.content, provider, model };
-      lastError = `${model}: ${result.error.slice(0, 300)}`;
-      console.warn(`[AI] ${model} failed on ${provider}: ${result.error.slice(0, 300)}`);
+      for (const model of chain) {
+        const result = await runProvider(provider, key, model, params);
+
+        if (result.ok) {
+          // IT WORKED — BUT SAY SO IF IT WAS NOT THE ONE WE WANTED.
+          //
+          // "the initial method fails, its reported to the admin and falls back
+          // on the redundancy til I've had time to address the initial
+          // failure." Serving from the safety net silently is how this went
+          // unnoticed three times; the reader gets their brief AND the failure
+          // is on the record.
+          const primary = primaryOf(provider);
+          if (model !== primary && lastError) {
+            void reportIncident({
+              kind: INCIDENT_AI_MODEL,
+              subject: primary,
+              fallback: model,
+              detail: lastError,
+            });
+          }
+          return { ok: true, content: result.content, provider, model };
+        }
+
+        lastError = `${model}: ${result.error.slice(0, 300)}`;
+        console.warn(`[AI] ${model} failed on ${provider}: ${result.error.slice(0, 300)}`);
+
+        // A NAME THE PROVIDER WILL NOT SERVE is struck off, so the next brief
+        // does not re-learn it. A rate limit or a 500 is NOT that: those say
+        // nothing about the name, and striking a good model off for a busy
+        // minute would make the platform permanently worse after any bad hour.
+        if (modelIsUnusable(result.status, result.error)) {
+          struckOff.set(model, Date.now());
+          console.warn(`[AI] ${model} struck off for an hour — the provider will not serve it`);
+          void reportIncident({
+            kind: INCIDENT_AI_MODEL,
+            subject: model,
+            fallback: null,
+            detail: result.error.slice(0, 500),
+          });
+          continue;
+        }
+
+        // Anything else: try the next model in the chain anyway. A model that
+        // is rate limited or having a bad minute is not a reason to give the
+        // reader nothing when another one is sitting there.
+      }
     }
+
+    // NOTHING ANSWERED. This is the state the owner met three times, and it is
+    // now recorded rather than only logged.
+    void reportIncident({
+      kind: INCIDENT_AI_ALL_FAILED,
+      subject: "every configured model",
+      fallback: null,
+      detail: lastError ?? "no provider key is configured",
+    });
 
     // Carry the provider's own words out of here. "Failed to generate content"
     // is the sentence that hid an empty-completion bug behind a message about

@@ -170,6 +170,15 @@ export const CAPABILITIES = [
     group: "Platform",
   },
   {
+    key: "incidents.manage",
+    label: "See and clear service incidents",
+    grants:
+      "See what has failed and what is carrying it instead — a retired model, " +
+      "an unreachable source — and mark one as seen. Clearing it does not fix " +
+      "it: the row re-opens by itself if the failure happens again.",
+    group: "Platform",
+  },
+  {
     key: "keys.manage",
     label: "Manage API keys",
     grants:

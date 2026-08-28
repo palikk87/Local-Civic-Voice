@@ -1867,3 +1867,51 @@ model JurySeat {
   @@index([state, summonedAt])
   @@index([state, acceptedAt])
 }
+
+/// A thing that broke, is still broken, and is being worked around.
+///
+/// WHY THIS EXISTS, in the owner's words: "whatever is happening keeps
+/// happening again and makes it fail. there needs to be redundancies in
+/// place", and "when the initial method fails its reported to the admin and
+/// falls back on the redundancy til I've had time to address the initial
+/// failure."
+///
+/// The Citizen's Brief went down three times because the model name it called
+/// stopped being served. Each time it failed silently to a message that said
+/// "try again shortly" — advice that could never come true — and the only
+/// record was a log line on a host nobody was watching.
+///
+/// A fallback that nobody is told about is a slow secret. The platform keeps
+/// running on the safety net, and this row is the thing that says so, until a
+/// person acknowledges it.
+model ServiceIncident {
+  id String @id @default(cuid())
+
+  /// What kind of failure. "ai_model_unusable" today; the shape is deliberately
+  /// general so the next thing that needs a safety net does not need a table.
+  kind String
+
+  /// What specifically failed — a model name, a provider, a host. With `kind`
+  /// this is the identity: the same failure recurring updates one row rather
+  /// than writing thousands.
+  subject String
+
+  /// What is carrying the load instead. Null when nothing could.
+  fallback String?
+
+  /// The provider's own words, trimmed. Never a key, never a prompt.
+  detail String
+
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  /// How many times since it was first seen, or since it was last acknowledged.
+  occurrences Int      @default(1)
+
+  /// Set when a person has seen it. An acknowledged incident that happens again
+  /// re-opens, because "I have seen this" is not "this has stopped".
+  acknowledgedAt DateTime?
+  acknowledgedBy String?
+
+  @@unique([kind, subject])
+  @@index([acknowledgedAt, lastSeenAt])
+}

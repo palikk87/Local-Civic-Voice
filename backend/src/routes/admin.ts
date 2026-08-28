@@ -8,6 +8,8 @@ import { applyWeightedTally } from "../services/delegation-service";
 import { checkStorage } from "../services/storage";
 import { emailConfiguration, trySendingEmail } from "../services/email";
 import { fullKeyReport, keyWarnings } from "../services/key-report";
+import { acknowledgeIncident, listIncidents } from "../services/service-incidents";
+import { modelAvailability } from "../services/ai-generate";
 import { createNotification, NotificationType } from "../services/notification-service";
 import {
   capabilitiesFor,
@@ -2157,6 +2159,65 @@ adminRouter.get("/content-health", async (c) => {
  * not work", which was true more than once here, with three different keys, and
  * could only be resolved by reading source code.
  */
+/**
+ * GET /api/admin/incidents
+ *
+ * WHAT IS BROKEN, WHAT IS CARRYING IT, AND HAS ANYBODY SEEN IT.
+ *
+ * WHY THIS EXISTS. The Citizen's Brief went down three times, each time because
+ * the model it called stopped being served under that name. Each time the only
+ * record was a log line on a host nobody reads, and what reached a person was a
+ * screen saying "try again shortly" about a failure that would never resolve on
+ * its own.
+ *
+ * The platform now falls back to another model and keeps working. That is the
+ * right behaviour and it is also how a problem hides for a month — so falling
+ * back opens a row here, and the row stays open until a person clears it.
+ */
+adminRouter.get("/incidents", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "incidents.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const incidents = await listIncidents();
+  return c.json({
+    data: {
+      incidents,
+      open: incidents.filter((incident) => !incident.acknowledgedAt).length,
+      // What this process currently believes about each model, so "why is it
+      // using the old one" has an answer on the same screen.
+      models: modelAvailability(),
+      note:
+        "A fallback is not a fix. These stay here until somebody marks them seen, " +
+        "and a marked one re-opens by itself if it happens again.",
+    },
+  });
+});
+
+/**
+ * POST /api/admin/incidents/:id/acknowledge
+ *
+ * "I have seen this." Deliberately NOT "this is fixed" — the platform has no
+ * way to know that, and an incident that recurs re-opens itself.
+ */
+adminRouter.post("/incidents/:id/acknowledge", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  const session = await getAdminFromToken(authHeader);
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "incidents.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const ok = await acknowledgeIncident(c.req.param("id"), session.username);
+  if (!ok) return c.json({ error: "No such incident." }, { status: 404 });
+  return c.json({ data: { acknowledged: true } });
+});
+
 adminRouter.get("/keys", async (c) => {
   const authHeader = c.req.header("Authorization");
   const session = await getAdminFromToken(authHeader);

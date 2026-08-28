@@ -5,6 +5,7 @@ import { useAdminStore } from "@/lib/mobile/admin-store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { KeysAndEmailCard } from "./KeysAndEmailCard";
+import { IncidentsCard } from "./IncidentsCard";
 
 export function SettingsTab() {
   const navigate = useNavigate();
@@ -45,6 +46,11 @@ export function SettingsTab() {
           </div>
         </div>
       </div>
+
+      {/* ABOVE THE KEYS ON PURPOSE. When something is running on a fallback,
+          that is the first thing an operator needs to know — and the cause is
+          usually one screen down. */}
+      <IncidentsCard />
 
       <KeysAndEmailCard />
 
