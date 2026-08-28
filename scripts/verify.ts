@@ -73,6 +73,9 @@ const CHECKS: Check[] = [
       "the migrations build exactly what schema.prisma describes, on an empty database",
   },
   {
+    // Includes constitution-enforced.test.ts, which is the reason the
+    // "Enforced in code" badge on the Constitution screen can be believed: no
+    // clause may carry it without a test named for that clause.
     name: "backend tests",
     cwd: "backend",
     // `bun run test`, not `bun test`: the script carries the timeout. Booting

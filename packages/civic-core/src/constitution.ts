@@ -14,8 +14,21 @@ export interface ConstitutionalSection {
   id: string;
   title: string;
   content: string;
+  /**
+   * TRUE MEANS A TEST PROVES IT.
+   *
+   * This used to sit beside a `codeReference` file path — and three of those
+   * paths pointed at files that had since been deleted. A clause claiming
+   * enforcement while citing a file that does not exist is worse than a clause
+   * claiming nothing.
+   *
+   * The rule is mechanical now: a clause may set this true only if a test
+   * somewhere under backend/tests carries its id in the test name, like
+   * `[art2-sec2]`. backend/tests/constitution-enforced.test.ts reads this file
+   * and fails the build otherwise. The badge on the screen cannot outrun the
+   * suite, and the counter beside it is counted rather than typed.
+   */
   enforcedInCode: boolean;
-  codeReference?: string; // File path where this is enforced
 }
 
 export interface Constitution {
@@ -49,21 +62,18 @@ export const CONSTITUTION: Constitution = {
           title: 'The Pulse as Law',
           content: `The "Public Pulse" (the aggregated, weighted sentiment of verified citizens) shall be the only official output of this platform.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/feed-algorithm.ts',
         },
         {
           id: 'art1-sec2',
           title: 'Anti-Manipulation',
           content: `No external entity—corporate, governmental, or algorithmic—shall have the power to alter, suppress, or prioritize any segment of the Pulse.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/feed-algorithm.ts',
         },
         {
           id: 'art1-sec3',
           title: 'The Human Requirement',
           content: `Only verified human beings may contribute to the Pulse. Artificial Intelligence may summarize or facilitate, but it shall have no vote, no weight, and no "voice" in the final tally.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/voting-store.ts',
         },
       ],
     },
@@ -78,21 +88,18 @@ export const CONSTITUTION: Constitution = {
           title: 'The Reclaimable Voice',
           content: `Political power on this platform is never "won"; it is only "borrowed."`,
           enforcedInCode: true,
-          codeReference: 'src/lib/delegation-store.ts',
         },
         {
           id: 'art2-sec2',
           title: 'Instant Recall',
           content: `Every user retains the absolute, non-negotiable right to instantly revoke their delegation from any Civil Leader.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/delegation-store.ts',
         },
         {
           id: 'art2-sec3',
           title: 'The Floor, Not the Ceiling',
           content: `Users may always choose to vote directly on any "Master Reference ID," overriding their chosen Leader's stance for that specific instance without losing their long-term delegation.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/bill-of-rights.ts',
         },
       ],
     },
@@ -107,21 +114,18 @@ export const CONSTITUTION: Constitution = {
           title: 'The Open Ledger',
           content: `The logic used to calculate the Pulse, the Trust Scores, and the Magnification of Leaders must be publicly auditable.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/trust-verification.ts',
         },
         {
           id: 'art3-sec2',
           title: 'Right to Audit',
           content: `Any user or group of users may demand an "Integrity Audit" of a specific vote if there is evidence of bot interference or system malfunction.`,
-          enforcedInCode: true,
-          codeReference: 'src/lib/trust-verification.ts',
+          enforcedInCode: false,
         },
         {
           id: 'art3-sec3',
           title: 'Master Reference Integrity',
           content: `Every data point must link back to an official Executive, Legislative, or Judicial source ID to prevent the "Digital Government" from drifting into fiction.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/government-api.ts',
         },
       ],
     },
@@ -136,14 +140,12 @@ export const CONSTITUTION: Constitution = {
           title: 'The Electorate (The Users)',
           content: `The sole source of all power. They vote, delegate, and impeach.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/voting-store.ts',
         },
         {
           id: 'art4-sec2',
           title: 'The Vanguard (The Civil Leaders)',
           content: `Those who earn magnification through merit and expertise. They have no power other than that which is lent to them by the Electorate.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/trust-verification.ts',
         },
         {
           id: 'art4-sec3',
@@ -164,13 +166,12 @@ export const CONSTITUTION: Constitution = {
           title: 'Leader Accountability',
           content: `Any Civil Leader who misrepresents the facts of a Federal ID or violates the Code of Conduct shall be subject to immediate demotion by a Jury of their peers.`,
           enforcedInCode: true,
-          codeReference: 'src/lib/trust-verification.ts',
         },
         {
           id: 'art5-sec2',
           title: 'Platform Neutrality',
           content: `If the platform's administrators or developers are found to be biasing the Pulse, the Electorate may trigger a "System-Wide Reset" via a super-majority vote, forcing a roll-back to a neutral state.`,
-          enforcedInCode: false,
+          enforcedInCode: true,
         },
       ],
     },
@@ -419,88 +420,38 @@ export function canTriggerSystemReset(vote: SystemResetVote): boolean {
 }
 
 /**
- * Get constitutional compliance status
+ * How many clauses are genuinely enforced, counted rather than typed.
+ *
+ * WHAT THIS REPLACED. `getConstitutionalCompliance()` returned eleven
+ * hardcoded entries, every one `isCompliant: true` with a sentence of prose
+ * beside it. The phone rendered it as "11 of 11 provisions are enforced in
+ * code" over a full green bar. It could not report a failure even in
+ * principle, and three of its eleven claims were false — including "Integrity
+ * audit system is available", for a feature that did not exist in any form.
+ *
+ * A self-audit that always passes is not an audit. This counts the flags, and
+ * backend/tests/constitution-enforced.test.ts is what makes each flag mean
+ * something: no clause may claim enforcement without a test named for it.
  */
-export interface ConstitutionalCompliance {
-  article: string;
-  section: string;
-  isCompliant: boolean;
-  details: string;
+export interface ConstitutionalEnforcement {
+  enforced: number;
+  total: number;
+  /** The clauses that are not yet enforced, so a screen can name them. */
+  outstanding: { article: string; section: string }[];
 }
 
-export function getConstitutionalCompliance(): ConstitutionalCompliance[] {
-  return [
-    {
-      article: 'I',
-      section: 'The Pulse as Law',
-      isCompliant: true,
-      details: 'Public Pulse is calculated from verified citizen votes only',
-    },
-    {
-      article: 'I',
-      section: 'Anti-Manipulation',
-      isCompliant: true,
-      details: 'No external entity can alter the Pulse calculation',
-    },
-    {
-      article: 'I',
-      section: 'Human Requirement',
-      isCompliant: true,
-      details: 'AI facilitates but cannot vote',
-    },
-    {
-      article: 'II',
-      section: 'Reclaimable Voice',
-      isCompliant: true,
-      details: 'Delegations are loans, not transfers of power',
-    },
-    {
-      article: 'II',
-      section: 'Instant Recall',
-      isCompliant: true,
-      details: 'Delegation revocation is instant with no penalty',
-    },
-    {
-      article: 'II',
-      section: 'Floor Not Ceiling',
-      isCompliant: true,
-      details: 'Direct votes override delegations',
-    },
-    {
-      article: 'III',
-      section: 'Open Ledger',
-      isCompliant: true,
-      details: 'Algorithm weights are documented and transparent',
-    },
-    {
-      article: 'III',
-      section: 'Right to Audit',
-      isCompliant: true,
-      details: 'Integrity audit system is available',
-    },
-    {
-      article: 'III',
-      section: 'Master Reference Integrity',
-      isCompliant: true,
-      details: 'All data links to official government sources',
-    },
-    {
-      article: 'IV',
-      section: 'Separation of Powers',
-      isCompliant: true,
-      details: 'Electorate, Vanguard, and Judiciary roles are distinct',
-    },
-    {
-      article: 'V',
-      section: 'Leader Accountability',
-      isCompliant: true,
-      details: 'Impeachment and demotion mechanisms exist',
-    },
-    {
-      article: 'V',
-      section: 'Platform Neutrality',
-      isCompliant: true,
-      details: 'System-Wide Reset mechanism available to super-majority',
-    },
-  ];
+export function getConstitutionalEnforcement(): ConstitutionalEnforcement {
+  const outstanding: { article: string; section: string }[] = [];
+  let enforced = 0;
+  let total = 0;
+
+  for (const article of CONSTITUTION.articles) {
+    for (const section of article.sections) {
+      total += 1;
+      if (section.enforcedInCode) enforced += 1;
+      else outstanding.push({ article: article.number, section: section.title });
+    }
+  }
+
+  return { enforced, total, outstanding };
 }

@@ -33,7 +33,7 @@ import {
   CONSTITUTION,
   type ConstitutionalArticle,
   type ConstitutionalSection,
-  getConstitutionalCompliance,
+  getConstitutionalEnforcement,
 } from '@/lib/constitution';
 import { cn } from '@/lib/cn';
 
@@ -154,9 +154,20 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
   );
 }
 
+/**
+ * How much of the Constitution is actually enforced — counted, not typed.
+ *
+ * This bar used to read "11 of 11 provisions are enforced in code" over a full
+ * green fill, from a hardcoded list where every entry said compliant. Three of
+ * its claims were untrue. It could not have shown anything else.
+ *
+ * Now it counts the flags, and no clause may carry that flag without a test
+ * named for it (backend/tests/constitution-enforced.test.ts). When it is not
+ * all of them, it says which — an honest gap is worth more than a green bar.
+ */
 function ComplianceStatus() {
-  const compliance = getConstitutionalCompliance();
-  const compliantCount = compliance.filter(c => c.isCompliant).length;
+  const { enforced, total, outstanding } = getConstitutionalEnforcement();
+  const complete = enforced === total;
 
   return (
     <Animated.View
@@ -164,26 +175,45 @@ function ComplianceStatus() {
       className="mt-4 rounded-2xl overflow-hidden border border-emerald-700/30"
     >
       <LinearGradient
-        colors={['#064e3b', '#022c22']}
+        colors={complete ? ['#064e3b', '#022c22'] : ['#3f2d12', '#221a08']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={{ padding: 16 }}
       >
         <View className="flex-row items-center mb-3">
-          <CheckCircle2 size={20} color="#22C55E" />
-          <Text className="text-emerald-100 font-semibold text-lg ml-2">
+          <CheckCircle2 size={20} color={complete ? '#22C55E' : '#F59E0B'} />
+          <Text
+            className="font-semibold text-lg ml-2"
+            style={{ color: complete ? '#D1FAE5' : '#FDE68A' }}
+          >
             Constitutional Compliance
           </Text>
         </View>
-        <Text className="text-emerald-300/80 text-sm mb-3">
-          {compliantCount} of {compliance.length} provisions are enforced in code
+        <Text className="text-sm mb-3" style={{ color: complete ? '#6EE7B7' : '#FCD34D' }}>
+          {enforced} of {total} provisions are enforced in code
         </Text>
-        <View className="h-2 bg-emerald-900/50 rounded-full overflow-hidden">
+        <View className="h-2 rounded-full overflow-hidden" style={{ backgroundColor: '#00000040' }}>
           <View
-            className="h-full bg-emerald-500 rounded-full"
-            style={{ width: `${(compliantCount / compliance.length) * 100}%` }}
+            className="h-full rounded-full"
+            style={{
+              width: `${(enforced / total) * 100}%`,
+              backgroundColor: complete ? '#22C55E' : '#F59E0B',
+            }}
           />
         </View>
+
+        {outstanding.length > 0 ? (
+          <View className="mt-3">
+            <Text className="text-xs" style={{ color: '#FCD34D' }}>
+              Not yet enforced:
+            </Text>
+            {outstanding.map((item) => (
+              <Text key={`${item.article}-${item.section}`} className="text-xs mt-1 text-slate-300">
+                • Article {item.article} — {item.section}
+              </Text>
+            ))}
+          </View>
+        ) : null}
       </LinearGradient>
     </Animated.View>
   );

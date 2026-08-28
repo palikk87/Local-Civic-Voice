@@ -67,7 +67,7 @@ function withCookie(cookie: string, extra: Record<string, string> = {}) {
 }
 
 describe("an unverified account cannot contribute to the Pulse", () => {
-  test("it cannot vote, and the tally does not move", async () => {
+  test("[art1-sec3] it cannot vote, and the tally does not move", async () => {
     const unverified = await citizen("unverified", false);
     const bill = await law();
 

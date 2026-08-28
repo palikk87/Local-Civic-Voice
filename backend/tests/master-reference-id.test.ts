@@ -63,7 +63,7 @@ function oldNormalizer(type: "bill" | "executive_order" | "scotus_case", id: str
 }
 
 describe("bill ids round-trip", () => {
-  test("every bill type survives build → canonicalize → parse unchanged", () => {
+  test("[art3-sec3] every bill type survives build → canonicalize → parse unchanged", () => {
     const broken: string[] = [];
 
     for (const billType of BILL_TYPES) {

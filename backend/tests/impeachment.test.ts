@@ -305,7 +305,7 @@ describe("impeachment: the threshold", () => {
     ).toBe(6);
   });
 
-  test("at two thirds it passes, and the delegations go back", async () => {
+  test("[art4-sec1][art5-sec1] at two thirds it passes, and the delegations go back", async () => {
     const { leader, delegators } = await leaderWithDelegators(6);
     const filed = await body(await file(delegators[0]!.cookie, leader.userId));
 

@@ -307,7 +307,7 @@ describe("system reset: full disclosure", () => {
 });
 
 describe("system reset: the 48 hours", () => {
-  test("IT DOES NOT RUN WHEN THE VOTE CLOSES", async () => {
+  test("[art5-sec2] IT DOES NOT RUN WHEN THE VOTE CLOSES", async () => {
     // Nobody loses their delegations to a vote that closed while they slept.
     const filer = await citizen("filer");
     const yes = await citizen("yes");

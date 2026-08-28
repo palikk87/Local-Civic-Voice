@@ -94,7 +94,7 @@ async function feed(cookie: string) {
 }
 
 describe("Bill of Rights II — prominence comes from the Pulse, not from reactions", () => {
-  test("a heavily-voted law outranks a heavily-liked post about a law nobody voted on", async () => {
+  test("[art1-sec2] a heavily-voted law outranks a heavily-liked post about a law nobody voted on", async () => {
     const reader = await citizen("reader");
     const author = await citizen("author");
 
@@ -130,7 +130,7 @@ describe("Bill of Rights II — prominence comes from the Pulse, not from reacti
     expect(contestedAt).toBeLessThan(ignoredAt);
   });
 
-  test("the ranking factors are published, and the forbidden ones are named", async () => {
+  test("[art3-sec1] the ranking factors are published, and the forbidden ones are named", async () => {
     // Constitution Article III, Section 1: the logic must be publicly
     // auditable. Signed out, because an audit you need an account to run is
     // not a public audit.
@@ -170,7 +170,7 @@ describe("Bill of Rights II — prominence comes from the Pulse, not from reacti
 });
 
 describe("Bill of Rights IV — the anonymous voting option exists", () => {
-  test("an anonymous vote still counts in the Pulse", async () => {
+  test("[art1-sec1] an anonymous vote still counts in the Pulse", async () => {
     const person = await citizen("anon");
     const bill = await law("A bill about insulin");
 

@@ -147,7 +147,7 @@ async function publishedTally(referenceId: string) {
 }
 
 describe("liquid democracy", () => {
-  test("a delegate's vote carries the weight lent to them", async () => {
+  test("[art2-sec1][art4-sec2] a delegate's vote carries the weight lent to them", async () => {
     const leader = await citizen("leader");
     const follower = await citizen("follower");
     await makeEligible(leader.userId);
@@ -161,7 +161,7 @@ describe("liquid democracy", () => {
     expect(await publishedTally(bill.id)).toEqual({ support: 2, oppose: 0 });
   });
 
-  test("your own vote overrides your delegate, and keeps the delegation", async () => {
+  test("[art2-sec3] your own vote overrides your delegate, and keeps the delegation", async () => {
     const leader = await citizen("leader");
     const follower = await citizen("follower");
     await makeEligible(leader.userId);
@@ -185,7 +185,7 @@ describe("liquid democracy", () => {
     expect(mine.activeCount).toBe(1);
   });
 
-  test("revoking a delegation takes the weight back immediately", async () => {
+  test("[art2-sec2] revoking a delegation takes the weight back immediately", async () => {
     const leader = await citizen("leader");
     const follower = await citizen("follower");
     await makeEligible(leader.userId);
