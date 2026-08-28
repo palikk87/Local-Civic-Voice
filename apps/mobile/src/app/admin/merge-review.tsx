@@ -332,7 +332,7 @@ export default function MergeReviewScreen() {
 
       <Modal visible={Boolean(rejecting)} transparent animationType="slide">
         <View className="flex-1 justify-end bg-black/60">
-          <View className="bg-slate-900 rounded-t-2xl p-5">
+          <View className="bg-slate-900 max-h-[85%] rounded-t-2xl p-5">
             <Text className="text-white text-lg font-bold">These are two different laws</Text>
             <Text className="text-slate-400 text-sm mt-1">
               This pair will not be raised again. A note here is what stops somebody

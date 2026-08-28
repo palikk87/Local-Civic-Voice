@@ -107,7 +107,11 @@ export function Header() {
               <NotificationBell />
               <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 rounded-full outline-none ring-ring focus-visible:ring-2">
+                <button
+                  data-testid="account-menu"
+                  aria-label="Account menu"
+                  className="flex items-center gap-2 rounded-full outline-none ring-ring focus-visible:ring-2"
+                >
                   <Avatar className="h-9 w-9 border border-border">
                     <AvatarFallback className="bg-primary text-sm font-semibold text-primary-foreground">
                       {initials(user?.name, user?.email)}

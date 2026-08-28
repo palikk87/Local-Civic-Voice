@@ -5,6 +5,7 @@ import {
   Text,
   Pressable,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -168,6 +169,10 @@ export default function PostOptionsModal({
         <Animated.View
           entering={SlideInDown.springify().damping(20)}
           className="bg-slate-900 rounded-t-3xl overflow-hidden"
+          // NEVER TALLER THAN THE PHONE. Reported on the web as "you cant
+          // scroll on the pop up windows"; the same sheet here had the same
+          // ceiling — none — so the top of a long one was simply gone.
+          style={{ maxHeight: '85%' }}
         >
           <LinearGradient
             colors={['#1E293B', '#0F172A']}
@@ -193,8 +198,8 @@ export default function PostOptionsModal({
               </Pressable>
             </View>
 
-            {/* Options list */}
-            <View className="px-4 py-2">
+            {/* Options list — scrolls, so a long one is never cut off. */}
+            <ScrollView className="px-4 py-2" showsVerticalScrollIndicator={false}>
               {visibleOptions.map((option, index) => (
                 <Animated.View
                   key={option.label}
@@ -219,7 +224,7 @@ export default function PostOptionsModal({
                   </Pressable>
                 </Animated.View>
               ))}
-            </View>
+            </ScrollView>
 
             {/* Cancel button */}
             <View className="px-4 py-4">

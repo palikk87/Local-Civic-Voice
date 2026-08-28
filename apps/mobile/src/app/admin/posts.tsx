@@ -326,7 +326,7 @@ export default function AdminPostsScreen() {
         onRequestClose={() => setFlagModalPost(null)}
       >
         <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-slate-800 rounded-t-3xl p-6">
+          <View className="bg-slate-800 max-h-[85%] rounded-t-3xl p-6">
             <View className="w-10 h-1 bg-slate-600 rounded-full self-center mb-4" />
             <Text className="text-white text-xl font-bold mb-4">Flag Post</Text>
 

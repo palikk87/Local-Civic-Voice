@@ -277,7 +277,7 @@ export default function B2BClientsScreen() {
 
       <Modal visible={createOpen} animationType="slide" transparent onRequestClose={() => setCreateOpen(false)}>
         <View className="flex-1 bg-black/60 justify-end">
-          <View className="bg-slate-900 rounded-t-3xl p-5 border-t border-slate-800">
+          <View className="bg-slate-900 max-h-[85%] rounded-t-3xl p-5 border-t border-slate-800">
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-white text-lg font-semibold">New B2B client</Text>
               <TouchableOpacity onPress={() => setCreateOpen(false)} className="p-1">

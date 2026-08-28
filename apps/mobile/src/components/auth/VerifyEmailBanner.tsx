@@ -14,7 +14,7 @@
 //
 // Renders nothing for a verified account and nothing for a signed-out visitor.
 import React, { useState } from 'react';
-import { View, Text, Pressable, Modal } from 'react-native';
+import { View, Text, Pressable, Modal, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MailWarning, X } from 'lucide-react-native';
 
@@ -72,11 +72,14 @@ export function VerifyEmailBanner() {
               <X size={22} color="#94A3B8" />
             </Pressable>
           </View>
-          <View className="px-5">
+          {/* SCROLLS. The code box, the resend link and the explanation are
+              taller than a short phone with the keyboard up, and without this
+              the bottom of it could not be reached at all. */}
+          <ScrollView className="px-5" keyboardShouldPersistTaps="handled">
             {/* No "Look around first" here: they already are. Closing the sheet
                 costs nothing and the banner stays until they finish. */}
             <VerifyEmailStep email={email} onVerified={() => setOpen(false)} />
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </Modal>
     </>

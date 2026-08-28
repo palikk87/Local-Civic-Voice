@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, Modal } from 'react-native';
+import { View, Text, Pressable, Modal, ScrollView } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { listenForTheQuestion } from '@/lib/vote-anonymity';
@@ -58,8 +58,12 @@ export function VoteAnonymityDialog() {
         <Pressable
           onPress={(event) => event.stopPropagation()}
           testID="vote-anonymity-dialog"
-          className="w-full rounded-2xl border border-slate-700 bg-slate-900 p-5"
+          // Capped and scrollable: on a short screen this used to hang off
+          // both ends of the display with no way to reach either.
+          style={{ maxHeight: '85%' }}
+          className="w-full rounded-2xl border border-slate-700 bg-slate-900"
         >
+          <ScrollView className="p-5" showsVerticalScrollIndicator={false}>
           <Text className="text-white text-lg font-bold mb-3">
             Does your name go on this?
           </Text>
@@ -102,6 +106,7 @@ export function VoteAnonymityDialog() {
               Only you can see them
             </Text>
           </Pressable>
+          </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>

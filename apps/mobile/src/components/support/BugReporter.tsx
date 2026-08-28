@@ -27,6 +27,7 @@ import {
   TouchableWithoutFeedback,
   TextInput,
   Modal,
+  ScrollView,
   ActivityIndicator,
   Dimensions,
   Platform,
@@ -191,7 +192,14 @@ export function BugReporter() {
   return (
     <Modal transparent animationType="slide" onRequestClose={reset}>
       <View style={{ flex: 1 }} className="justify-end bg-black/50">
-        <View className="bg-slate-900 border-t border-slate-700 rounded-t-2xl px-4 pt-4 pb-8">
+        {/* CAPPED AND SCROLLABLE. Reported on the web as "you cant scroll on
+            the pop up windows"; this sheet had the same defect — a long report
+            form grew past the top of the phone with nothing to scroll. */}
+        <ScrollView
+          style={{ maxHeight: '85%' }}
+          className="bg-slate-900 border-t border-slate-700 rounded-t-2xl px-4 pt-4 pb-8"
+          keyboardShouldPersistTaps="handled"
+        >
           <View className="flex-row items-center justify-between mb-4">
             <View className="flex-row items-center">
               <Bug size={16} color="#F59E0B" />
@@ -265,7 +273,7 @@ export function BugReporter() {
             Sends the screen you are on, where you tapped, your screen size and the app version.
             Nothing else.
           </Text>
-        </View>
+        </ScrollView>
       </View>
     </Modal>
   );

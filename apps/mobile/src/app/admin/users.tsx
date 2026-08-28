@@ -163,7 +163,7 @@ function UserCard({
           activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View className="bg-slate-800 rounded-t-3xl p-4">
+          <View className="bg-slate-800 max-h-[85%] rounded-t-3xl p-4">
             <View className="w-10 h-1 bg-slate-600 rounded-full self-center mb-4" />
             <Text className="text-white text-lg font-bold mb-4">Actions for @{user.username}</Text>
 

@@ -145,6 +145,18 @@ async function open(viewport, path, openIt) {
   return { context, page };
 }
 
+/**
+ * EVERY FLOATING THING, not only the two that were reported.
+ *
+ * The first report was two dialogs. The second was "you cannot scroll on the
+ * pop up windows making accessing the lower portion nearly impossible" — which
+ * is the same defect in the primitives NOBODY had reported yet. Menus, sheets
+ * and popovers were all `overflow-hidden` with no ceiling, so anything past the
+ * bottom of the window was clipped and unreachable, not merely off screen.
+ *
+ * So this measures them the same way it measures a dialog: is the whole box on
+ * screen, and if the content is taller than the box, does the box scroll.
+ */
 const CASES = [
   {
     name: "Report",
