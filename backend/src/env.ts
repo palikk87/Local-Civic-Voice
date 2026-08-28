@@ -141,6 +141,25 @@ const envSchema = z.object({
   TAVILY_API_KEY: secret(),
 
   // ---------------------------------------------------------------------------
+  // Cloudflare Turnstile — the bot test on sign-up. Article I §3: only verified
+  // humans may vote, and a confirmed email address proves an inbox, not a
+  // person.
+  // ---------------------------------------------------------------------------
+  //
+  // TWO VALUES, AND ONLY ONE IS A SECRET. The site key is printed into the page
+  // by design and is not sensitive; the secret key never leaves the server and
+  // is what the challenge is actually verified against. Both are optional: with
+  // neither set the platform still runs and says out loud that sign-up is
+  // unprotected, rather than silently accepting anybody and calling it
+  // verification.
+  // Declared with the same helper as the rest, not because it is secret — it
+  // is printed into the page — but because that is what makes a value readable
+  // live from the database, and both halves of the pair have to arrive by the
+  // same route or an operator can paste one and not the other.
+  TURNSTILE_SITE_KEY: secret(),
+  TURNSTILE_SECRET_KEY: secret(),
+
+  // ---------------------------------------------------------------------------
   // Model keys. At least one, or no Citizen's Brief can be written for any law.
   // ---------------------------------------------------------------------------
   //
@@ -223,6 +242,8 @@ const SECRET_KEYS = [
   "CONGRESS_API_KEY",
   "COURTLISTENER_API_KEY",
   "TAVILY_API_KEY",
+  "TURNSTILE_SITE_KEY",
+  "TURNSTILE_SECRET_KEY",
   "DATA_GOV_API_KEY",
   "GEMINI_API_KEY",
   "OPENAI_API_KEY",

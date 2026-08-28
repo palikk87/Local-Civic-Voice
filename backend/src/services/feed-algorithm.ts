@@ -1219,8 +1219,22 @@ export async function getSimilarUsers(userId: string, limit: number = 10): Promi
   // /api/government-references/:id/vote, which writes GovernmentReferenceVote.
   // So "people like you" was empty for every account created since, and the
   // feature quietly did nothing at all.
+  // ANONYMOUS VOTES ARE NOT MATERIAL FOR THIS, ON EITHER SIDE.
+  //
+  // This is the one read of GovernmentReferenceVote that did not exclude them.
+  // Every other one does — common-ground.ts, position-history.ts, onboarding.ts
+  // and the reference routes all filter `isAnonymous: false`, because a person
+  // who votes anonymously has said they do not want that position attached to
+  // them in public.
+  //
+  // Here it mattered more than anywhere else, because the endpoint that calls
+  // this — GET /api/feed/similar-users — returns NAMES. Somebody who voted
+  // anonymously on five records could be handed back to a stranger as
+  // "similar", which discloses both that they voted and, over a few records,
+  // how. Excluding them from the caller's own side too, so an anonymous vote
+  // cannot be used to find people even by the person who cast it.
   const userVotes = await prisma.governmentReferenceVote.findMany({
-    where: { userId, position: { in: ["support", "oppose"] } },
+    where: { userId, position: { in: ["support", "oppose"] }, isAnonymous: false },
     select: { governmentReferenceId: true, position: true },
   });
 
@@ -1234,6 +1248,7 @@ export async function getSimilarUsers(userId: string, limit: number = 10): Promi
       governmentReferenceId: { in: Array.from(voteMap.keys()) },
       userId: { not: userId },
       position: { in: ["support", "oppose"] },
+      isAnonymous: false,
     },
     select: { userId: true, governmentReferenceId: true, position: true },
   });

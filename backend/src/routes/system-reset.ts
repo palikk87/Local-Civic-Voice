@@ -169,6 +169,10 @@ systemResetRouter.post(
   async (c) => {
     const viewer = c.get("user");
     if (!viewer) return c.json({ error: "Authentication required" }, 401);
+    // A vote to wipe every tally on the platform, cast by an account nobody
+    // had confirmed was a person. Opening a reset already required
+    // verification; deciding one did not.
+    if (!(await isVerified(viewer))) return c.json(VERIFICATION_REQUIRED, 403);
 
     const result = await castBallot(
       c.req.param("id"),

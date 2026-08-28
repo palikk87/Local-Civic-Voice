@@ -64,6 +64,12 @@ import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archiv
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { startImpeachmentSweep } from "./services/impeachment";
 import { scheduleJurySweeps } from "./services/jury";
+import {
+  checkHuman,
+  humanCheckConfigured,
+  humanCheckSiteKey,
+  HUMAN_CHECK_REQUIRED,
+} from "./services/human-check";
 import { startSystemResetSweep } from "./services/system-reset";
 import { syncRollCalls } from "./services/roll-call-sync";
 import { adjudicatePending } from "./services/reference-lineage";
@@ -170,8 +176,60 @@ app.use("*", sequestration);
 // Apply auth rate limiting to auth routes
 app.use("/api/auth/*", authRateLimit);
 
+// THE BOT TEST, IN FRONT OF SIGN-UP ONLY — Constitution Article I §3.
+//
+// Ahead of the auth handler rather than inside it, because Better Auth owns
+// that handler and a check bolted into a library's internals is one a version
+// bump silently removes. Here it is a middleware on one path, and a test asserts
+// that path is still guarded.
+//
+// SIGN-UP ONLY. Signing in, signing out, resetting a password and verifying an
+// email are all deliberately untouched: the point is to stop a thousand
+// accounts being created, not to make an existing citizen solve a puzzle to
+// read their own feed.
+//
+// THE TOKEN TRAVELS AS A HEADER, not in the body. Better Auth owns the sign-up
+// body and drops fields its schema does not know about, so a token smuggled in
+// there would arrive as undefined and every sign-up would be refused — or,
+// worse, quietly waved through if this were written the other way round. A
+// header passes untouched and this middleware never has to read, cache or
+// re-serialise a request body the handler behind it also needs.
+app.post("/api/auth/sign-up/email", async (c, next) => {
+  if (!humanCheckConfigured()) {
+    // Nothing is checked, and nothing claims otherwise. /health reports this
+    // state by name and the admin key panel shows the keys as missing.
+    return next();
+  }
+
+  const forwardedFor = c.req.header("x-forwarded-for");
+  const ip = forwardedFor ? (forwardedFor.split(",")[0]?.trim() ?? null) : null;
+
+  const outcome = await checkHuman(c.req.header("cf-turnstile-response"), ip);
+  if (!outcome.ok) {
+    return c.json({ ...HUMAN_CHECK_REQUIRED, detail: outcome.detail }, 403);
+  }
+
+  return next();
+});
+
 // Mount auth handler
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+/**
+ * GET /api/auth-challenge — what the sign-up form needs to draw the check.
+ *
+ * PUBLIC, and it has to be: a site key is printed into the page by design. The
+ * `configured` flag is what lets the form tell "no challenge is required here"
+ * apart from "the challenge failed to load", which are different things and
+ * used to look identical.
+ */
+app.get("/api/auth-challenge", (c) =>
+  c.json({
+    provider: "turnstile",
+    configured: humanCheckConfigured(),
+    siteKey: humanCheckSiteKey(),
+  })
+);
 
 // Health check endpoint with cache and queue stats
 app.get("/health", async (c) => {
@@ -217,6 +275,15 @@ app.get("/health", async (c) => {
     // pointed somewhere else. Nobody clicks a migration, so without this the
     // first symptom is a 500 from whichever endpoint touches the missing
     // column.
+    // THE BOT TEST — Article I §3, reported by name so it can never be off in
+    // silence. `unconfigured` means nobody has pasted a Turnstile key: sign-up
+    // still works and nothing is checked, which is a fact this endpoint states
+    // rather than a state the platform hides behind a claim of verification.
+    humanCheck: {
+      provider: "turnstile",
+      state: humanCheckConfigured() ? "enforced" : "unconfigured",
+      guards: "sign-up",
+    },
     schema: {
       applied: schema.applied,
       expected: schema.expected,

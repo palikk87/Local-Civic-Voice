@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { HumanCheck, useHumanCheck } from "@/components/auth/HumanCheck";
 import { VerifyEmailStep } from "./VerifyEmailStep";
 import { api } from "@/lib/api";
 import { isUnreachable } from "@/lib/request-failure";
@@ -48,6 +49,14 @@ export function AuthForm({
   const queryClient = useQueryClient();
 
   const [mode, setMode] = useState<Mode>(initialMode);
+  /**
+   * CONSTITUTION ARTICLE I §3. Null until the visitor has passed the bot test,
+   * or forever if no check is configured on this deployment — `challenge`
+   * tells the button which of those it is, so a missing key never looks like
+   * an unsolved puzzle.
+   */
+  const [humanToken, setHumanToken] = useState<string | null>(null);
+  const { data: challenge } = useHumanCheck();
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
@@ -103,11 +112,19 @@ export function AuthForm({
   }
 
   async function handleSignUp() {
-    const { error: err } = await authClient.signUp.email({
-      email: email.trim().toLowerCase(),
-      password,
-      name: displayName.trim(),
-    });
+    // THE TOKEN GOES IN A HEADER, not the body. Better Auth owns the sign-up
+    // body and drops fields its schema does not know, so a token put there
+    // arrives as nothing at all.
+    const { error: err } = await authClient.signUp.email(
+      {
+        email: email.trim().toLowerCase(),
+        password,
+        name: displayName.trim(),
+      },
+      humanToken
+        ? { headers: { "cf-turnstile-response": humanToken } }
+        : undefined,
+    );
     if (err) throw new Error(err.message || "Could not create your account.");
 
     // autoSignIn is enabled, so a session now exists. Persist the chosen
@@ -324,6 +341,11 @@ export function AuthForm({
           </div>
         ) : null}
 
+        {/* CONSTITUTION ARTICLE I §3. Renders nothing when no key is
+            configured, so a deployment without one still works and simply does
+            not claim to have checked. */}
+        {isSignup ? <HumanCheck onToken={setHumanToken} /> : null}
+
         {error ? (
           <p className="text-sm font-medium text-destructive">{error}</p>
         ) : null}
@@ -331,7 +353,7 @@ export function AuthForm({
         <Button
           type="submit"
           className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-          disabled={loading}
+          disabled={loading || (isSignup && challenge?.configured === true && !humanToken)}
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />

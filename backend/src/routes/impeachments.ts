@@ -349,6 +349,9 @@ impeachmentsRouter.post(
   async (c) => {
     const viewer = c.get("user");
     if (!viewer) return c.json({ error: "Authentication required" }, 401);
+    // "Only verified humans may vote." This is a vote — the heaviest kind
+    // there is — and it was the one Article V route that never asked.
+    if (!(await isVerified(viewer))) return c.json(VERIFICATION_REQUIRED, 403);
 
     const result = await castVote(
       c.req.param("id"),
@@ -374,6 +377,8 @@ impeachmentsRouter.post(
 impeachmentsRouter.delete("/:id/vote", async (c) => {
   const viewer = c.get("user");
   if (!viewer) return c.json({ error: "Authentication required" }, 401);
+  // Withdrawing is voting too — it moves the same tally the other way.
+  if (!(await isVerified(viewer))) return c.json(VERIFICATION_REQUIRED, 403);
 
   const result = await withdrawVote(c.req.param("id"), viewer.id);
   if (!result.ok) {

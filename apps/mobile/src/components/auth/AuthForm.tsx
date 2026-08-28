@@ -15,6 +15,7 @@ import {
 import * as Haptics from 'expo-haptics';
 
 import { authClient } from '@/lib/auth/auth-client';
+import { HumanCheck, useHumanCheck } from '@/components/auth/HumanCheck';
 import { VerifyEmailStep } from './VerifyEmailStep';
 import { SESSION_QUERY_KEY } from '@/lib/auth/use-session';
 import { api } from '@/lib/api/api';
@@ -65,6 +66,13 @@ export function AuthForm({
   const [error, setError] = useState<string | null>(null);
 
   const isSignup = mode === 'signup';
+  /**
+   * CONSTITUTION ARTICLE I §3. Null until the bot test is passed, or forever
+   * on a deployment with no key — `challenge` tells the button which, so a
+   * missing key never looks like an unsolved puzzle.
+   */
+  const [humanToken, setHumanToken] = useState<string | null>(null);
+  const { data: challenge } = useHumanCheck();
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -119,11 +127,17 @@ export function AuthForm({
   }
 
   async function handleSignUp() {
-    const { error: err } = await authClient.signUp.email({
-      email: email.trim().toLowerCase(),
-      password,
-      name: displayName.trim(),
-    });
+    // THE TOKEN GOES IN A HEADER, not the body. Better Auth owns the sign-up
+    // body and drops fields its schema does not know, so a token put there
+    // arrives as nothing at all.
+    const { error: err } = await authClient.signUp.email(
+      {
+        email: email.trim().toLowerCase(),
+        password,
+        name: displayName.trim(),
+      },
+      humanToken ? { headers: { 'cf-turnstile-response': humanToken } } : undefined,
+    );
     if (err) throw new Error(err.message || 'Could not create your account.');
 
     // autoSignIn is enabled, so a session now exists. Persist the chosen username.
@@ -295,13 +309,21 @@ export function AuthForm({
         </View>
       ) : null}
 
+      {/* CONSTITUTION ARTICLE I §3. Renders nothing when no key is configured,
+          so a deployment without one still works and simply does not claim to
+          have checked. */}
+      {isSignup ? <HumanCheck onToken={setHumanToken} /> : null}
+
       {error ? <Text className="text-red-400 mb-4 text-center">{error}</Text> : null}
 
       <Pressable
         onPress={handleSubmit}
-        disabled={loading}
+        disabled={loading || (isSignup && challenge?.configured === true && !humanToken)}
         className="bg-amber-500 rounded-xl py-4 flex-row items-center justify-center mb-5"
-        style={{ opacity: loading ? 0.7 : 1 }}
+        style={{
+          opacity:
+            loading || (isSignup && challenge?.configured === true && !humanToken) ? 0.7 : 1,
+        }}
       >
         {loading ? (
           <ActivityIndicator color="#0F172A" />

@@ -527,11 +527,20 @@ describe("what the console reports", () => {
   test("the storable list matches the secrets the schema declares", async () => {
     // A key added to env.ts and forgotten here would be un-storable with no
     // error anywhere — it would simply never appear in the console.
-    const { STORABLE_SECRETS } = await import("../src/services/platform-secrets");
-    const schema = readFileSync(join(import.meta.dir, "../src/env.ts"), "utf8");
-    const declared = [...schema.matchAll(/^\s*([A-Z0-9_]*API_KEY)\s*:\s*secret\(\)/gm)].map(
-      (match) => match[1]!,
+    //
+    // THIS USED TO MATCH ONLY NAMES ENDING IN API_KEY, which held for exactly
+    // as long as every stored value was somebody's API key. Turnstile arrives
+    // as a SITE_KEY and a SECRET_KEY, and the narrow pattern silently found
+    // neither — so the guard reported agreement between two lists it had not
+    // actually compared. It now reads every value the schema declares with
+    // `secret()`, minus the ones the panel is forbidden to write.
+    const { STORABLE_SECRETS, PROTECTED_SECRET_NAMES } = await import(
+      "../src/services/platform-secrets"
     );
+    const schema = readFileSync(join(import.meta.dir, "../src/env.ts"), "utf8");
+    const declared = [...schema.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*:\s*secret\(\)/gm)]
+      .map((match) => match[1]!)
+      .filter((name) => !PROTECTED_SECRET_NAMES.has(name));
     expect(([...STORABLE_SECRETS] as string[]).sort()).toEqual(declared.sort());
   });
 });

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import type { auth } from "../auth";
 import { publicHandle } from "../services/public-identity";
 
@@ -172,6 +173,12 @@ billsRouter.post("/:id/vote", zValidator("json", voteSchema), async (c) => {
   const user = c.get("user");
   if (!user) {
     return c.json({ error: "Authentication required" }, 401);
+  }
+  // The older bill-vote path. Every other vote on the platform asks whether
+  // the account belongs to a confirmed person; this one never did, which made
+  // it the way around all of them.
+  if (!(await isVerified(user))) {
+    return c.json(VERIFICATION_REQUIRED, 403);
   }
 
   const billId = c.req.param("id");

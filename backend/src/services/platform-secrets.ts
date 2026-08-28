@@ -61,6 +61,11 @@ export const STORABLE_SECRETS = [
   "CONGRESS_API_KEY",
   "COURTLISTENER_API_KEY",
   "TAVILY_API_KEY",
+  // Both halves of the sign-up bot test. The site key is public by design —
+  // it is printed into the page — but it belongs in the panel beside its
+  // secret, so an operator pastes one pair in one place.
+  "TURNSTILE_SITE_KEY",
+  "TURNSTILE_SECRET_KEY",
   "DATA_GOV_API_KEY",
   "GEMINI_API_KEY",
   "OPENAI_API_KEY",
@@ -110,7 +115,7 @@ const CUSTOM_SECRET_SUFFIXES = ["_API_KEY", "_ACCESS_KEY", "_KEY", "_TOKEN", "_S
  * verify before anyone is an admin; a key kept beside what it encrypts is not
  * encryption), plus their obvious variants.
  */
-const PROTECTED_SECRET_NAMES = new Set([
+export const PROTECTED_SECRET_NAMES = new Set([
   "SECRETS_ENCRYPTION_KEY",
   "BETTER_AUTH_SECRET",
   "AUTH_SECRET",
