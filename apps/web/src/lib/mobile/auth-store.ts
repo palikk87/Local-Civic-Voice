@@ -6,6 +6,7 @@
 // populate the store identically.
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { publicHandle } from '@/lib/public-identity';
 
 export interface AuthUser {
   id: string;
@@ -57,7 +58,7 @@ export function authUserFromSession(sessionUser: {
   location?: string | null;
 }): AuthUser {
   const handle =
-    sessionUser.displayUsername || sessionUser.username || sessionUser.email.split('@')[0];
+    publicHandle(sessionUser);
 
   return {
     id: sessionUser.id,

@@ -12,6 +12,7 @@ import { can, isStaffAccount, resolveRole, type Capability, type Role } from '@/
 import { useAdminStore } from '@/lib/admin-store';
 import { useAuthStore, type AuthUser } from '@/lib/auth-store';
 import { api } from '@/lib/api/api';
+import { publicHandle } from '@/lib/public-identity';
 
 /**
  * Mobile twin of the web app's hooks/use-civic-auth.tsx.
@@ -160,7 +161,7 @@ function SessionBridge() {
       return;
     }
 
-    const fallbackUsername = sessionUser.email.split('@')[0];
+    const fallbackUsername = publicHandle(sessionUser);
     const base: AuthUser = {
       id: sessionUser.id,
       email: sessionUser.email,

@@ -22,6 +22,7 @@ import { useCurrentUser, useAuthUI, usePermissions } from "@/hooks/use-civic-aut
 import type { Capability } from "@/lib/permissions";
 import { signOut } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
+import { publicHandle } from "@/lib/public-identity";
 
 interface NavItem {
   to: string;
@@ -80,7 +81,9 @@ export function AppShell({
   const visibleNav = NAV.filter((item) => !item.capability || can(item.capability));
 
   const displayName = user?.name || "Citizen";
-  const handle = user?.email ? `@${user.email.split("@")[0]}` : "";
+  // Their chosen name, never the email. This line used to greet people with
+  // the distinctive half of their own address, in the sidebar, on every page.
+  const handle = publicHandle(user) ? `@${publicHandle(user)}` : "";
   const initials = initialsOf(user?.name, user?.email);
 
   async function handleSignOut() {

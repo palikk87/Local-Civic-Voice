@@ -30,6 +30,7 @@ import {
 } from "../services/post-reference-view";
 import { JobPriority, JobType, jobQueue } from "../services/job-queue";
 import { invalidatePostCache } from "../services/cache";
+import { publicHandle } from "../services/public-identity";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -107,7 +108,8 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
+          displayUsername: true,
           image: true,
         },
       },
@@ -138,7 +140,7 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
           id: true,
           content: true,
           createdAt: true,
-          author: { select: { id: true, name: true, email: true, image: true } },
+          author: { select: { id: true, name: true, username: true, displayUsername: true, image: true } },
         },
       },
       _count: {
@@ -204,7 +206,7 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
       author: {
         id: post.author.id,
         displayName: post.author.name,
-        username: post.author.email.split("@")[0],
+        username: publicHandle(post.author),
         avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
       },
       bill: post.bill,
@@ -249,7 +251,7 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
             author: {
               id: post.repostOf.author.id,
               displayName: post.repostOf.author.name,
-              username: post.repostOf.author.email.split("@")[0],
+              username: publicHandle(post.repostOf.author),
               avatar:
                 post.repostOf.author.image ||
                 `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.repostOf.author.id}`,
@@ -347,7 +349,8 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
+          displayUsername: true,
           image: true,
         },
       },
@@ -412,7 +415,7 @@ postsRouter.post("/", zValidator("json", createPostSchema), async (c) => {
       author: {
         id: post.author.id,
         displayName: post.author.name,
-        username: post.author.email.split("@")[0],
+        username: publicHandle(post.author),
         avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
       },
       bill: post.bill,
@@ -491,7 +494,7 @@ postsRouter.get(
       take: limit,
       orderBy: { createdAt: "desc" },
       include: {
-        author: { select: { id: true, name: true, email: true, image: true } },
+        author: { select: { id: true, name: true, username: true, displayUsername: true, image: true } },
         governmentReference: { select: { id: true, title: true, masterReferenceId: true } },
         _count: { select: { comments: true, likes: true } },
       },
@@ -504,7 +507,7 @@ postsRouter.get(
         author: {
           id: post.author.id,
           displayName: post.author.name,
-          username: post.author.email.split("@")[0],
+          username: publicHandle(post.author),
           avatar:
             post.author.image ||
             `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
@@ -558,7 +561,7 @@ postsRouter.get(
       },
       orderBy: { createdAt: "desc" },
       include: {
-        author: { select: { id: true, name: true, email: true, image: true } },
+        author: { select: { id: true, name: true, username: true, displayUsername: true, image: true } },
         governmentReference: { select: { id: true, title: true } },
         _count: { select: { comments: true, likes: true } },
       },
@@ -573,7 +576,7 @@ postsRouter.get(
         author: {
           id: post.author.id,
           displayName: post.author.name,
-          username: post.author.email.split("@")[0],
+          username: publicHandle(post.author),
           avatar:
             post.author.image ||
             `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
@@ -603,7 +606,8 @@ postsRouter.get("/:id", async (c) => {
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
+          displayUsername: true,
           image: true,
         },
       },
@@ -655,7 +659,7 @@ postsRouter.get("/:id", async (c) => {
       author: {
         id: post.author.id,
         displayName: post.author.name,
-        username: post.author.email.split("@")[0],
+        username: publicHandle(post.author),
         avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
       },
       bill: post.bill,
@@ -819,7 +823,8 @@ postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
+          displayUsername: true,
           image: true,
         },
       },
@@ -856,7 +861,7 @@ postsRouter.get("/:id/comments", zValidator("query", paginationSchema), async (c
       author: {
         id: comment.author.id,
         displayName: comment.author.name,
-        username: comment.author.email.split("@")[0],
+        username: publicHandle(comment.author),
         avatar: comment.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.id}`,
       },
       repliesCount: comment._count.replies,
@@ -941,7 +946,7 @@ postsRouter.get(
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       orderBy: { createdAt: "asc" },
       include: {
-        author: { select: { id: true, name: true, email: true, image: true } },
+        author: { select: { id: true, name: true, username: true, displayUsername: true, image: true } },
         _count: { select: { replies: true } },
       },
     });
@@ -957,7 +962,7 @@ postsRouter.get(
         author: {
           id: comment.author.id,
           displayName: comment.author.name,
-          username: comment.author.email.split("@")[0],
+          username: publicHandle(comment.author),
           avatar: comment.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.id}`,
         },
         repliesCount: comment._count.replies,
@@ -1080,7 +1085,8 @@ postsRouter.post(
           select: {
             id: true,
             name: true,
-            email: true,
+            username: true,
+            displayUsername: true,
             image: true,
           },
         },
@@ -1139,7 +1145,7 @@ postsRouter.post(
         author: {
           id: comment.author.id,
           displayName: comment.author.name,
-          username: comment.author.email.split("@")[0],
+          username: publicHandle(comment.author),
           avatar: comment.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${comment.author.id}`,
         },
         repliesCount: 0,

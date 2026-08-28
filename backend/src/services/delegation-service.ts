@@ -15,6 +15,7 @@
  */
 
 import { prisma } from "../prisma";
+import { publicHandle } from "./public-identity";
 
 // Tunable "routinely active" thresholds
 export const DELEGATE_REQUIREMENTS = {
@@ -166,7 +167,7 @@ export async function listEligibleDelegates(limit = 50): Promise<DelegateListing
       id: true,
       name: true,
       username: true,
-      email: true,
+      displayUsername: true,
       image: true,
       bio: true,
       createdAt: true,
@@ -244,7 +245,7 @@ export async function listEligibleDelegates(limit = 50): Promise<DelegateListing
     .map((u) => ({
       id: u.id,
       name: u.name,
-      username: u.username ?? u.email.split("@")[0] ?? "user",
+      username: publicHandle(u),
       image: u.image,
       bio: u.bio,
       delegatorCount: delegatorsByUser.get(u.id) ?? 0,

@@ -14,6 +14,7 @@
 
 import { prisma } from "../prisma";
 import { hiddenFrom } from "./relationships";
+import { publicHandle } from "./public-identity";
 
 export type Position = "support" | "oppose" | "withdrawn";
 
@@ -539,11 +540,14 @@ export async function turningPoints(
     }),
     prisma.user.findMany({
       where: { id: { in: pageUserIds } },
-      select: { id: true, name: true, email: true, image: true },
+      select: { id: true, name: true, username: true, displayUsername: true, image: true },
     }),
   ]);
 
-  const byUser = new Map<string, { id: string; name: string; email: string; image: string | null }>(
+  const byUser = new Map<
+    string,
+    { id: string; name: string; username: string | null; displayUsername: string | null; image: string | null }
+  >(
     users.map((u) => [u.id, u]),
   );
 
@@ -570,7 +574,7 @@ export async function turningPoints(
       user: {
         id: user.id,
         displayName: user.name,
-        username: user.email.split("@")[0] ?? user.id,
+        username: publicHandle(user),
         avatar: user.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
       },
       // A crossing is binary and isChange is only ever set on one, so the side

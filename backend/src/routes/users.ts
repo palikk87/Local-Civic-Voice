@@ -15,6 +15,7 @@ import type { auth } from "../auth";
 import { verifyPasswordOrDummy } from "../password-check";
 import { setUserPassword } from "../services/credentials";
 import { MIN_COHORT, listDistricts } from "../services/jurisdiction";
+import { publicHandle } from "../services/public-identity";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -49,7 +50,7 @@ function formatUser(user: {
 }, isFollowing: boolean = false) {
   return {
     id: user.id,
-    username: user.username || user.email.split("@")[0],
+    username: publicHandle(user),
     displayName: user.name,
     avatar: user.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
     bio: user.bio || "",

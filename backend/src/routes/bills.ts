@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import type { auth } from "../auth";
+import { publicHandle } from "../services/public-identity";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -284,7 +285,8 @@ billsRouter.get("/:id/posts", zValidator("query", z.object({
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
+          displayUsername: true,
           image: true,
         },
       },
@@ -308,7 +310,7 @@ billsRouter.get("/:id/posts", zValidator("query", z.object({
       author: {
         id: post.author.id,
         displayName: post.author.name,
-        username: post.author.email.split("@")[0],
+        username: publicHandle(post.author),
         avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
       },
       commentsCount: post._count.comments,

@@ -29,6 +29,7 @@ import { libraryResolveRequestSchema } from "../types";
 import { requireCapability } from "../services/admin-permissions";
 import { JobPriority, JobType, enqueueBriefGeneration, jobQueue } from "../services/job-queue";
 import { briefState, isAbandoned, isWorking, markSettled, markWorking } from "../services/brief-state";
+import { publicHandle } from "../services/public-identity";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -1085,7 +1086,8 @@ governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchem
         select: {
           id: true,
           name: true,
-          email: true,
+          username: true,
+          displayUsername: true,
           image: true,
         },
       },
@@ -1119,7 +1121,7 @@ governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchem
       author: {
         id: post.author.id,
         displayName: post.author.name,
-        username: post.author.email.split("@")[0],
+        username: publicHandle(post.author),
         avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
       },
       media: post.media.map((m) => ({
@@ -1654,7 +1656,7 @@ governmentReferencesRouter.get("/:id/other-side", async (c) => {
     orderBy: [{ comments: { _count: "desc" } }, { createdAt: "desc" }],
     take: limit,
     include: {
-      author: { select: { id: true, name: true, email: true, image: true } },
+      author: { select: { id: true, name: true, username: true, displayUsername: true, image: true } },
       _count: { select: { comments: true, likes: true } },
     },
   });
@@ -1668,7 +1670,7 @@ governmentReferencesRouter.get("/:id/other-side", async (c) => {
       author: {
         id: post.author.id,
         displayName: post.author.name,
-        username: post.author.email.split("@")[0],
+        username: publicHandle(post.author),
         avatar:
           post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
       },

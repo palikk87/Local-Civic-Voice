@@ -13,6 +13,7 @@ import {
   getRankingFactors,
 } from "../services/feed-algorithm";
 import { lawMovedSincePost, loadPostReferenceViews } from "../services/post-reference-view";
+import { publicHandle } from "../services/public-identity";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -73,7 +74,7 @@ feedRouter.get("/", zValidator("query", feedQuerySchema), async (c) => {
         author: {
           id: post.author.id,
           displayName: post.author.name,
-          username: post.author.email.split("@")[0],
+          username: publicHandle(post.author),
           avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
           followerCount: post.author.followerCount,
           isFollowed: post.author.isFollowed,
@@ -154,7 +155,7 @@ feedRouter.get("/discover", zValidator("query", z.object({
         author: {
           id: post.author.id,
           displayName: post.author.name,
-          username: post.author.email.split("@")[0],
+          username: publicHandle(post.author),
           avatar: post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${post.author.id}`,
           followerCount: post.author.followerCount,
           isFollowed: post.author.isFollowed,
@@ -262,7 +263,8 @@ feedRouter.get("/similar-users", async (c) => {
       select: {
         id: true,
         name: true,
-        email: true,
+        username: true,
+        displayUsername: true,
         image: true,
         bio: true,
         _count: {
@@ -288,7 +290,7 @@ feedRouter.get("/similar-users", async (c) => {
       users: users.map((u) => ({
         id: u.id,
         displayName: u.name,
-        username: u.email.split("@")[0],
+        username: publicHandle(u),
         avatar: u.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`,
         bio: u.bio,
         followerCount: u._count.followers,
@@ -346,7 +348,8 @@ feedRouter.get("/trending-creators", async (c) => {
       select: {
         id: true,
         name: true,
-        email: true,
+        username: true,
+        displayUsername: true,
         image: true,
         bio: true,
       },
@@ -374,7 +377,7 @@ feedRouter.get("/trending-creators", async (c) => {
           return {
             id: userData.id,
             displayName: userData.name,
-            username: userData.email.split("@")[0],
+            username: publicHandle(userData),
             avatar: userData.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.id}`,
             bio: userData.bio,
             followerCount: c.totalFollowers,
@@ -516,7 +519,8 @@ feedRouter.get("/saved", zValidator("query", z.object({
               select: {
                 id: true,
                 name: true,
-                email: true,
+                username: true,
+                displayUsername: true,
                 image: true,
               },
             },
@@ -558,7 +562,7 @@ feedRouter.get("/saved", zValidator("query", z.object({
         author: {
           id: save.post.author.id,
           displayName: save.post.author.name,
-          username: save.post.author.email.split("@")[0],
+          username: publicHandle(save.post.author),
           avatar: save.post.author.image || `https://api.dicebear.com/7.x/avataaars/svg?seed=${save.post.author.id}`,
         },
         bill: save.post.bill,
