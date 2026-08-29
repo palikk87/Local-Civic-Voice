@@ -8,6 +8,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useCurrentUser } from "@/hooks/use-civic-auth";
 import { useConversations, otherParticipant } from "@/lib/api/messages";
+import { findSharedLink, textWithoutLink } from "@/components/messages/SharedLink";
+
+/** What a message looks like in one line of an inbox. */
+function previewOf(content: string): string {
+  const shared = findSharedLink(content);
+  if (!shared) return content;
+  const said = textWithoutLink(content);
+  const what = shared.kind === "post" ? "Shared a post" : "Shared a law";
+  return said ? `${what} — ${said}` : what;
+}
 import { ComposeDialog } from "@/components/messages/ComposeDialog";
 
 /**
@@ -99,8 +109,14 @@ export default function Messages() {
                         </span>
                       )}
                     </div>
+                    {/*
+                      A shared post's message is mostly a URL, and a line of
+                      "https://ayeandnay.com/post/cmt..." tells you nothing
+                      about who sent what. The link is described rather than
+                      printed; anything they actually wrote still shows.
+                    */}
                     <p className="truncate text-sm text-muted-foreground">
-                      {preview?.content ?? "No messages yet"}
+                      {preview ? previewOf(preview.content) : "No messages yet"}
                     </p>
                   </div>
 

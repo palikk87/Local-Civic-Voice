@@ -47,6 +47,7 @@ const POST = {
 
 let likeCalls = 0;
 let commentPosts = 0;
+let sentMessage = null;
 
 const server = createServer(async (req, res) => {
   const [path] = req.url.split("?");
@@ -58,6 +59,33 @@ const server = createServer(async (req, res) => {
   if (path.startsWith("/api/auth/get-session")) return json(SIGNED_IN);
   if (path === "/api/me") return json(SIGNED_IN);
   if (path === "/api/feed") return json({ posts: [POST], hasMore: false, nextCursor: null });
+
+  // Somebody to share with, the send itself, and the thread it lands in.
+  if (path === "/api/users/discover") {
+    return json({ results: [{ id: "u2", username: "friend", displayName: "A Friend", avatar: null }] });
+  }
+  if (path === "/api/messages/conversations" && req.method === "POST") {
+    let body = "";
+    await new Promise((r) => { req.on("data", (c) => (body += c)); req.on("end", r); });
+    try { sentMessage = JSON.parse(body).message ?? null; } catch { sentMessage = null; }
+    return json({ conversation: { id: "conv1", participants: [] }, message: null, isNew: true });
+  }
+  if (path === "/api/messages/conversations/conv1") {
+    return json({
+      conversation: { id: "conv1", participants: [
+        { id: "u1", username: "t", name: "Test Reader", image: null },
+        { id: "u2", username: "friend", name: "A Friend", image: null },
+      ] },
+      messages: sentMessage
+        ? [{ id: "m1", senderId: "u1", content: sentMessage, createdAt: new Date().toISOString() }]
+        : [],
+      hasMore: false,
+    });
+  }
+  if (path === `/api/posts/${POST.id}`) return json({ post: { ...POST, commentsCount: 0, likesCount: 3 } });
+  if (path.startsWith("/api/government-references/")) {
+    return json({ reference: { id: "ref1", title: "Kids Off Social Media Act", displayId: "S. 278" } });
+  }
   if (path === `/api/posts/${POST.id}/like` && req.method === "POST") {
     likeCalls += 1;
     return json({ liked: true });
@@ -273,6 +301,67 @@ try {
   await p.close();
 } catch (e) {
   failures.push(`draggable bug button: ${String(e).slice(0, 110)}`);
+}
+
+// --- "so does that mean you can send someone a message via sharing a post.
+//      and that post lands in their inbox where they can click on it and be
+//      guided to the post?" -----------------------------------------------
+//
+// It sent, and it arrived as a bare URL in a chat bubble that could not be
+// tapped. The answer to that question was "half". This shares a post to a
+// person, opens the thread, and requires that what arrived is something you
+// can click that leads to the post.
+try {
+  const p = await page("/feed");
+
+  await p.getByRole("button", { name: /^share$/i }).first().click();
+  await p.waitForTimeout(700);
+  await p.getByRole("button", { name: /message/i }).first().click();
+  await p.waitForTimeout(500);
+
+  const person = p.getByText("A Friend").first();
+  if (!(await person.count())) {
+    failures.push("nobody to share with, so sending could not be exercised");
+  } else {
+    await person.click();
+    await p.getByRole("button", { name: /send message/i }).first().click();
+    await p.waitForTimeout(900);
+
+    if (!sentMessage) {
+      failures.push("sharing to a person never reached the server");
+    } else if (!/\/(post|reference)\//.test(sentMessage)) {
+      failures.push(`the message sent carries no link to what was shared: ${sentMessage}`);
+    }
+  }
+  await p.close();
+
+  // And what it looks like when it arrives.
+  const thread = await page("/conversation/conv1");
+  // Something tappable, carrying the REAL title read from the server rather
+  // than a copy pasted in when it was sent.
+  const card = thread.locator('a[href^="/post/"], a[href^="/reference/"]');
+  if (!(await card.count())) {
+    failures.push("the shared post arrived with nothing to click");
+  } else {
+    const shown = await thread.evaluate(() => document.body.innerText);
+    if (!/Kids Off Social Media Act/.test(shown)) {
+      failures.push("the card does not show what it points at");
+    }
+    const href = await card.first().getAttribute("href");
+    await card.first().click();
+    await thread.waitForTimeout(900);
+    if (!thread.url().includes(href)) {
+      failures.push(`tapping the shared card went to ${thread.url()} rather than ${href}`);
+    }
+  }
+  // A bare URL is not a summary of a message.
+  const raw = await thread.evaluate(() => document.body.innerText);
+  if (/https?:\/\/[^\s]*\/post\//.test(raw)) {
+    failures.push("the raw URL is still printed in the thread");
+  }
+  await thread.close();
+} catch (e) {
+  failures.push(`share to a message: ${String(e).slice(0, 110)}`);
 }
 
 await browser.close();

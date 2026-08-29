@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { SharedLinkCard, findSharedLink, textWithoutLink } from "@/components/messages/SharedLink";
 import { ArrowLeft, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -117,7 +118,28 @@ export default function Conversation() {
                       : "bg-muted text-foreground"
                   }`}
                 >
-                  <p className="whitespace-pre-wrap break-words text-sm">{message.content}</p>
+                  {/*
+                    A SHARED POST ARRIVES AS SOMETHING YOU CAN OPEN.
+
+                    Sharing a post sends a message with the post's address in
+                    it, and this rendered that address as plain text. So the
+                    whole point of sharing — "here, look at this" — ended with
+                    the reader copying a string out of a chat bubble. The link
+                    becomes a card with the real title on it; the words around
+                    it stay as they were written.
+                  */}
+                  {(() => {
+                    const shared = findSharedLink(message.content);
+                    const said = shared ? textWithoutLink(message.content) : message.content;
+                    return (
+                      <>
+                        {said ? (
+                          <p className="whitespace-pre-wrap break-words text-sm">{said}</p>
+                        ) : null}
+                        {shared ? <SharedLinkCard kind={shared.kind} id={shared.id} /> : null}
+                      </>
+                    );
+                  })()}
                   <p
                     className={`mt-1 text-[10px] ${
                       isMine ? "text-primary-foreground/70" : "text-muted-foreground"

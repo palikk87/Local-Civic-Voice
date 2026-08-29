@@ -93,10 +93,11 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
       : content
         ? `${origin}/reference/${content.id}`
         : origin;
-    const subject = post ? "a post" : content ? content.title : "this";
-
-    // Their words first when they wrote any, then what they are pointing at.
-    const body = [opinion.trim(), `${subject}\n${link}`].filter(Boolean).join("\n\n");
+    // Their words, then the link. The title is NOT repeated here: the thread
+    // renders the link as a card carrying the real title, read live, so a copy
+    // pasted in at send time would only be a second version of it — and the
+    // wrong one the moment the record is renamed.
+    const body = [opinion.trim(), link].filter(Boolean).join("\n\n");
 
     startConversation.mutate(
       { participantId: selectedUser.id, message: body },
