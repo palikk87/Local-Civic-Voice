@@ -56,7 +56,7 @@ interface StoredBrief extends CitizenBrief {
  * Under the request wall that contains it. The background queue passes its own,
  * far larger, because nothing is waiting on it.
  */
-const DEFAULT_BRIEF_BUDGET_MS = 15_000;
+const DEFAULT_BRIEF_BUDGET_MS = 30_000;
 
 export type BriefOutcome =
   | { state: "ready"; brief: CitizenBrief; model: string }

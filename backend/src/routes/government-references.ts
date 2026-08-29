@@ -50,7 +50,7 @@ const governmentReferencesRouter = new Hono<{ Variables: AuthVariables }>();
 /**
  * How long a brief request may hold the page.
  *
- * TWENTY SECONDS, and the number is not arbitrary. The browser talks to
+ * FORTY-FIVE SECONDS, and the number is not arbitrary. The browser talks to
  * ayeandnay.com and Vercel proxies /api/* through to Railway; that proxy kills
  * a request at about 120 seconds with a 502 at the edge. Measured live: a
  * forced regeneration ran 120,191ms and died there. Anything that approaches
@@ -59,8 +59,19 @@ const governmentReferencesRouter = new Hono<{ Variables: AuthVariables }>();
  *
  * It also has to leave the server free. Requests were observed serialising, so
  * a handler that sits for a minute is a handler blocking everybody behind it.
+ *
+ * IT WAS TWENTY, AND THAT WAS TUNED TO A BROKEN STATE. Every model was
+ * answering "no credit" in milliseconds at the time, so twenty seconds looked
+ * generous. Once the accounts were funded and the models actually started
+ * writing, a real draft plus its fact-check needs more than that, and the wall
+ * cut off work that was going to succeed. Numbers tuned while everything is
+ * failing describe the failure, not the job.
+ *
+ * A brief is two model calls, sometimes three. Fifteen seconds each, thirty in
+ * total, inside forty-five here — with room left over, and still a long way
+ * under the edge's two minutes.
  */
-const BRIEF_REQUEST_DEADLINE_MS = 20_000;
+const BRIEF_REQUEST_DEADLINE_MS = 45_000;
 
 /**
  * The caller's standing vote per reference, in one query — every list of law
@@ -1523,6 +1534,16 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
   const chars = rows[0]?.chars ?? 0;
 
   if (chars > 0) {
+    // A GENERATION THAT FAILED GETS ANOTHER GO, WITHOUT A PERSON ASKING.
+    //
+    // The request is on a short clock because a browser is waiting behind a
+    // proxy that hangs up at two minutes. The queue is not: nothing is watching
+    // it, so it gets five minutes and can finish a law this request could not.
+    // Without this, a brief that merely ran out of time was recorded as
+    // "unavailable" and stayed that way until somebody pressed the button
+    // again — which is the reader doing the retrying by hand.
+    enqueueBriefGeneration(referenceId);
+
     // WHY IT FAILED, ON THE ANSWER ITSELF.
     //
     // This feature has now gone down three times, and every round began with

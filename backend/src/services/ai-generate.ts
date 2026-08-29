@@ -268,7 +268,7 @@ function requestBudget(requested: number | undefined, headroom: number | undefin
  * It has to be comfortably UNDER the caller's own budget, because a brief is
  * two calls (draft, then check the draft against the law) and sometimes three.
  */
-const DEFAULT_AI_TIMEOUT_MS = 8_000;
+const DEFAULT_AI_TIMEOUT_MS = 15_000;
 
 /**
  * How long the WHOLE attempt may take — every model, every retry.
@@ -277,7 +277,7 @@ const DEFAULT_AI_TIMEOUT_MS = 8_000;
  * rate-limit retries each is nine calls, and nine times a survivable timeout is
  * an unsurvivable wait. Falling back must never cost more than answering.
  */
-const DEFAULT_TOTAL_BUDGET_MS = 16_000;
+const DEFAULT_TOTAL_BUDGET_MS = 30_000;
 
 /**
  * What the background queue gets instead.
