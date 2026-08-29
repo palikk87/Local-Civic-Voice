@@ -137,7 +137,6 @@ jobs:
         working-directory: apps/web
       - run: bun run layout-check
         working-directory: apps/web
-        working-directory: apps/web
       - run: bun run brief-button-check
         working-directory: apps/web
       - run: bun run library-search-check
