@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bug, Check, ChevronDown, ChevronRight, ExternalLink, X } from "lucide-react";
+import { Bug, Check, ChevronDown, ChevronRight, ClipboardCopy, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { adminAuthHeader } from "@/lib/mobile/admin-store";
@@ -152,9 +152,73 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * EVERY REPORT IN THE CURRENT FILTER, AS PLAIN TEXT.
+ *
+ * WHY THIS EXISTS. The queue was readable one card at a time and nowhere else.
+ * Handing the whole list to somebody who can act on it — a developer, a issue
+ * tracker, a colleague — meant retyping it, so in practice it did not happen
+ * and reports sat in a tab nobody could get out of.
+ *
+ * Text rather than JSON because the destination is usually a person. Every
+ * field that makes a report actionable without a round trip is here: where they
+ * were, what they pointed at and what it really was, both of their answers, the
+ * viewport, and the commit that was being served. The identity of the element
+ * is the part that is hardest to reconstruct later and the part most often
+ * needed, so it is included in full rather than summarised.
+ */
+function asPlainText(reports: BugReport[], filter: string): string {
+  const lines: string[] = [
+    `AYE & NAY — bug reports (${filter})`,
+    `${reports.length} report${reports.length === 1 ? "" : "s"}, exported ${new Date().toISOString()}`,
+    "",
+  ];
+
+  reports.forEach((report, index) => {
+    lines.push(`--- ${index + 1} of ${reports.length} — ${report.id} ---`);
+    lines.push(`status:    ${report.status}`);
+    lines.push(`filed:     ${new Date(report.createdAt).toISOString()} by ${report.username ? `@${report.username}` : "a signed-out visitor"}`);
+    lines.push(`page:      ${report.pagePath}  (${report.pageUrl})`);
+    if (report.elementLabel) lines.push(`pointed at: ${report.elementLabel}`);
+    if (report.elementPath) lines.push(`selector:  ${report.elementPath}`);
+
+    if (report.elementDetail) {
+      // The identity of the thing, not the word printed on it.
+      const detail = report.elementDetail;
+      const pairs: Array<[string, unknown]> = [
+        ["component", detail.component],
+        ["control", detail.control],
+        ["action", detail.action],
+        ["screen", detail.screen],
+        ["tag", detail.tag],
+        ["selector", detail.selector],
+        ["data", detail.data && Object.keys(detail.data).length ? detail.data : undefined],
+        ["params", detail.params && Object.keys(detail.params).length ? detail.params : undefined],
+      ];
+      for (const [key, value] of pairs) {
+        if (value === undefined || value === null || value === "") continue;
+        lines.push(`  ${key}: ${typeof value === "string" ? value : JSON.stringify(value)}`);
+      }
+    }
+
+    lines.push(`problem:   ${report.problem}`);
+    // The second answer is the useful one and is often empty; say so rather
+    // than leaving a blank line somebody has to interpret.
+    lines.push(`wanted:    ${report.wanted || "(not answered)"}`);
+    lines.push(`viewport:  ${report.viewport ?? "unknown"}   commit: ${report.appCommit?.slice(0, 7) ?? "unknown"}`);
+    if (report.userAgent) lines.push(`browser:   ${report.userAgent}`);
+    if (report.adminNote) lines.push(`note:      ${report.adminNote}`);
+    if (report.resolvedBy) lines.push(`resolved by: ${report.resolvedBy}`);
+    lines.push("");
+  });
+
+  return lines.join("\n");
+}
+
 export function BugReportsTab() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("open");
+  const [copied, setCopied] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "bug-reports", filter],
@@ -173,6 +237,41 @@ export function BugReportsTab() {
     },
     onError: (e: Error) => toast.error(e.message || "Could not update that report"),
   });
+
+  /**
+   * navigator.clipboard is unavailable on an insecure origin and can be refused
+   * by the browser even on a secure one. Falling back to a selected textarea
+   * keeps the button working rather than failing silently, and if BOTH fail the
+   * text goes to the console so it is still recoverable.
+   */
+  async function copyAll() {
+    const reports = data?.reports ?? [];
+    if (!reports.length) return;
+    const text = asPlainText(reports, filter);
+
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(area);
+      if (!ok) {
+        console.log(text);
+        toast.error("Could not reach the clipboard — the reports are in the browser console");
+        return;
+      }
+    }
+
+    setCopied(true);
+    toast.success(`${reports.length} report${reports.length === 1 ? "" : "s"} copied`);
+    window.setTimeout(() => setCopied(false), 2000);
+  }
 
   return (
     <div className="space-y-4">
@@ -194,6 +293,16 @@ export function BugReportsTab() {
               {value}
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void copyAll()}
+            disabled={!data?.reports.length}
+            title="Copy every report in this filter as plain text"
+          >
+            <ClipboardCopy className="mr-1 h-3.5 w-3.5" />
+            {copied ? "Copied" : "Copy all"}
+          </Button>
         </div>
       </div>
 
