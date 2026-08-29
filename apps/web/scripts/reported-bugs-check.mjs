@@ -46,6 +46,7 @@ const POST = {
 };
 
 let likeCalls = 0;
+let commentPosts = 0;
 
 const server = createServer(async (req, res) => {
   const [path] = req.url.split("?");
@@ -60,6 +61,10 @@ const server = createServer(async (req, res) => {
   if (path === `/api/posts/${POST.id}/like` && req.method === "POST") {
     likeCalls += 1;
     return json({ liked: true });
+  }
+  if (path === `/api/posts/${POST.id}/comments` && req.method === "POST") {
+    commentPosts += 1;
+    return json({ comment: { id: "c1" } });
   }
   if (path.startsWith("/api/")) {
     return json({ results: [], posts: [], data: [], items: [], comments: [], votes: [],
@@ -122,20 +127,38 @@ try {
   failures.push(`notifications: ${String(e).slice(0, 110)}`);
 }
 
-// --- "it takes me to my own timeline" ---------------------------------------
+// --- "it takes me to my own timeline" and "there should be a comment section
+//      to every post" -------------------------------------------------------
+//
+// Reply first went to the reader's own timeline, which contained neither the
+// post nor anything to reply to. Sending it to the post's page fixed that and
+// was still wrong: you had to leave whatever you were reading to write one
+// sentence, then find your way back. The conversation opens in the card now,
+// so this asserts the thread appears AND that the page did not change.
 try {
   const p = await page("/feed");
+  const before = p.url();
   const reply = p.getByRole("button", { name: /^reply$/i });
   if (!(await reply.count())) {
     failures.push("no Reply button on the feed, so it could not be exercised");
   } else {
     await reply.first().click();
     await p.waitForTimeout(900);
-    const url = p.url();
-    if (url.includes("/timeline")) {
-      failures.push("Reply still goes to the reader's own timeline");
-    } else if (!url.includes(`/post/${POST.id}`)) {
-      failures.push(`Reply went to ${url} rather than the post it was pressed on`);
+
+    if (p.url() !== before) {
+      failures.push(`Reply navigated to ${p.url()} instead of opening the conversation in place`);
+    }
+    const box = p.getByPlaceholder(/write a comment/i);
+    if (!(await box.count())) {
+      failures.push("Reply did not open a comment box on the card");
+    } else {
+      // And it has to be the real one: writing here must reach the server.
+      await box.first().fill("a comment written from the feed");
+      await p.getByRole("button", { name: /post comment/i }).first().click();
+      await p.waitForTimeout(900);
+      if (commentPosts === 0) {
+        failures.push("a comment written in the feed never reached the server");
+      }
     }
   }
   await p.close();

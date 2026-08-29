@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { postsApi } from "@/lib/civic";
 import { useTimelineStore } from "@/lib/mobile/timeline-store";
+import { PostComments } from "@/components/feed/PostComments";
 import {
   categoryColors,
   categoryLabels,
@@ -699,11 +700,10 @@ interface FeedCardProps {
   item: ScoredFeedItem;
   index: number;
   userId?: string;
-  onReply?: (item: ScoredFeedItem) => void;
   onShare?: (item: ScoredFeedItem) => void;
 }
 
-function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
+function FeedCard({ item, index, onShare }: FeedCardProps) {
   // A LIKE GOES TO THE SERVER, AND THE SERVER IS WHAT THIS SHOWS.
   //
   // This used to flip a key in a localStorage map and nothing else, so a like
@@ -718,6 +718,8 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
   const queryClient = useQueryClient();
   const requireAuth = useRequireAuth();
   const [optimisticLike, setOptimisticLike] = useState<boolean | null>(null);
+  // COMMENT WHERE YOU ARE. Reply used to leave the page — see PostComments.
+  const [showComments, setShowComments] = useState(false);
   const isLiked = optimisticLike ?? item.isLiked;
 
   const like = useMutation({
@@ -868,7 +870,11 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
             </span>
           </button>
 
-          <button onClick={() => onReply?.(item)} className="flex items-center mr-6">
+          <button
+            onClick={() => setShowComments((open) => !open)}
+            aria-expanded={showComments}
+            className="flex items-center mr-6"
+          >
             <MessageCircle size={18} color="#64748B" />
             <span className="ml-1.5 text-slate-400 text-sm">Reply</span>
           </button>
@@ -878,6 +884,9 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
             <span className="ml-1.5 text-slate-400 text-sm">Share</span>
           </button>
         </div>
+
+        {/* The conversation, in the card, on the page you were already on. */}
+        {showComments ? <PostComments postId={item.id} autoFocus /> : null}
       </div>
     </MotionDiv>
   );
@@ -1109,23 +1118,6 @@ export default function HomeScreen() {
     setTimeout(() => setRefreshing(false), 500);
   }, [refetchAlgorithmicFeed, feedType, clearSeenBills]);
 
-  const handleReply = useCallback(
-    (item: ScoredFeedItem) => {
-      if (!requireAuth("Sign in to join the conversation.")) return;
-      // REPLY OPENS THE POST YOU PRESSED IT ON.
-      //
-      // It used to navigate("/timeline") — the reader's OWN timeline — under a
-      // comment claiming it carried reply context. There was no context to
-      // carry. Pressing Reply on somebody's post took you to a page that did
-      // not contain that post, with nothing to reply to.
-      //
-      // /post/:id is the permalink, and it already has the comment box, the
-      // thread and the replies.
-      navigate(`/post/${item.id}`);
-    },
-    [navigate, requireAuth]
-  );
-
   const handleShare = useCallback(
     (item: ScoredFeedItem) => {
       if (!requireAuth("Sign in to share this.")) return;
@@ -1262,7 +1254,6 @@ export default function HomeScreen() {
                 item={item}
                 index={index}
                 userId={user?.id}
-                onReply={handleReply}
                 onShare={handleShare}
               />
             ))

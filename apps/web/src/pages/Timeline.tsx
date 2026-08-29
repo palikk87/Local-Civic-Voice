@@ -45,7 +45,8 @@ import CreatePostModal from "@/components/mobile/CreatePostModal";
 import { ComposeCard } from "@/components/feed/ComposeCard";
 import ShareModal from "@/components/mobile/ShareModal";
 import PostOptionsModal from "@/components/mobile/PostOptionsModal";
-import CommentSection, { parseContentWithMentions } from "@/components/mobile/CommentSection";
+import { parseContentWithMentions } from "@/components/mobile/CommentSection";
+import { PostComments } from "@/components/feed/PostComments";
 import { castReferenceVote } from "@/lib/mobile/reference-votes";
 import { safetyApi } from "@/lib/civic";
 import { useCurrentUser, useRequireAuth } from "@/hooks/use-civic-auth";
@@ -674,7 +675,21 @@ function PostDetailModal({
             <PostCard post={post} index={0} onComment={() => undefined} onShare={() => undefined} onMore={() => undefined} />
           </div>
           <div className="border-t border-slate-800">
-            <CommentSection postId={post.id} comments={post.comments} />
+            {/*
+              ONE COMMENT SECTION, AND IT IS THE ONE THAT REACHES THE SERVER.
+
+              This used CommentSection, which wrote through the timeline store —
+              and that store's addComment only ever appended to its own state.
+              The box looked and behaved exactly like a real one: you typed, you
+              pressed send, your comment appeared. It reached no server, no other
+              reader ever saw it, and it was gone on refresh.
+
+              The post page has always used the real endpoints. Rather than fix
+              a second implementation to match, both surfaces now use the same
+              component, so a comment written in either place is the same
+              comment. Adding a third for the feed is what started this.
+            */}
+            <PostComments postId={post.id} />
           </div>
         </div>
       </DialogContent>
