@@ -30,6 +30,9 @@ import { MotionDiv } from "@/components/civic/Motion";
 import { useVotingStore, selectIsLiked, selectUserVote } from "@/lib/mobile/voting-store";
 import { castReferenceVote, yeaNayToPosition } from "@/lib/mobile/reference-votes";
 import { toast } from "sonner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { postsApi } from "@/lib/civic";
+import { useTimelineStore } from "@/lib/mobile/timeline-store";
 import {
   categoryColors,
   categoryLabels,
@@ -701,16 +704,40 @@ interface FeedCardProps {
 }
 
 function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
-  // Likes live in the local store. The other half of this used to call a
-  // Supabase mutation behind an `isSupabaseConfigured()` gate that has returned
-  // a hardcoded false since the client was removed, so it was unreachable.
-  const toggleLike = useVotingStore((s) => s.toggleLike);
-  const isLiked = useVotingStore(selectIsLiked(item.id));
+  // A LIKE GOES TO THE SERVER, AND THE SERVER IS WHAT THIS SHOWS.
+  //
+  // This used to flip a key in a localStorage map and nothing else, so a like
+  // given here appeared nowhere else and vanished when the cache cleared —
+  // "when you click the heart it doesn't show up on the post in the timeline".
+  // The endpoint has existed the whole time; only the post detail page called
+  // it.
+  //
+  // `item.isLiked` and `item.likes` come from /api/posts, so the count shown is
+  // the real one rather than a local number added to a server number. The
+  // optimistic value is held only until the refetch lands.
+  const queryClient = useQueryClient();
   const requireAuth = useRequireAuth();
+  const [optimisticLike, setOptimisticLike] = useState<boolean | null>(null);
+  const isLiked = optimisticLike ?? item.isLiked;
+
+  const like = useMutation({
+    mutationFn: () => postsApi.like(item.id),
+    onSuccess: () => {
+      // Every view of this post agrees, which is the whole point of the fix.
+      void queryClient.invalidateQueries({ queryKey: ["algorithmic-feed"] });
+      void queryClient.invalidateQueries({ queryKey: ["post", item.id] });
+      void useTimelineStore.getState().loadFeed();
+    },
+    onError: () => {
+      setOptimisticLike(null);
+      toast.error("Couldn't record that like");
+    },
+  });
 
   const handleLike = () => {
     if (!requireAuth("Sign in to like posts.")) return;
-    toggleLike(item.id);
+    setOptimisticLike(!isLiked);
+    like.mutate();
   };
 
   const categoryColor = categoryColors[item.bill.category] ?? "#64748B";
@@ -837,7 +864,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
               fill={isLiked ? "#EF4444" : "transparent"}
             />
             <span className={cn("ml-1.5 text-sm", isLiked ? "text-red-500" : "text-slate-400")}>
-              {item.likes + (isLiked ? 1 : 0)}
+              {item.likes + (optimisticLike === null ? 0 : optimisticLike === item.isLiked ? 0 : optimisticLike ? 1 : -1)}
             </span>
           </button>
 
@@ -1083,10 +1110,18 @@ export default function HomeScreen() {
   }, [refetchAlgorithmicFeed, feedType, clearSeenBills]);
 
   const handleReply = useCallback(
-    (_item: ScoredFeedItem) => {
+    (item: ScoredFeedItem) => {
       if (!requireAuth("Sign in to join the conversation.")) return;
-      // Navigate to timeline with reply context
-      navigate("/timeline");
+      // REPLY OPENS THE POST YOU PRESSED IT ON.
+      //
+      // It used to navigate("/timeline") — the reader's OWN timeline — under a
+      // comment claiming it carried reply context. There was no context to
+      // carry. Pressing Reply on somebody's post took you to a page that did
+      // not contain that post, with nothing to reply to.
+      //
+      // /post/:id is the permalink, and it already has the comment box, the
+      // thread and the replies.
+      navigate(`/post/${item.id}`);
     },
     [navigate, requireAuth]
   );

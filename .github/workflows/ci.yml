@@ -197,6 +197,12 @@ jobs:
       - run: bun run vote-placement-check
         working-directory: apps/web
 
+      # Reported bugs, in the reporter's own words, turned into questions a
+      # browser can answer. Every one was a control that looked right and did
+      # the wrong thing — the kind of defect no type check ever catches.
+      - run: bun run reported-bugs-check
+        working-directory: apps/web
+
       # The built site must be able to say which commit it is. Without the
       # stamp, deploy-check cannot tell a deploy that happened from one that
       # did not, and that is precisely how a finished fix sat unshipped.

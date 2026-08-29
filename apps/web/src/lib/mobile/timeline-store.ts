@@ -364,17 +364,32 @@ export const useTimelineStore = create<TimelineState>()(
       },
 
       likePost: (postId) => {
-        set((state) => ({
-          posts: state.posts.map((p) =>
-            p.id === postId
-              ? {
-                  ...p,
-                  isLiked: !p.isLiked,
-                  likes: p.isLiked ? p.likes - 1 : p.likes + 1,
-                }
-              : p
-          ),
-        }));
+        // A LIKE THAT NEVER LEFT THE BROWSER.
+        //
+        // This flipped a field on a post held in this store and stopped. The
+        // feed had a second, separate implementation that flipped a key in
+        // localStorage instead. POST /api/posts/:id/like has existed the whole
+        // time and only the post detail page ever called it. So a like showed
+        // on the page you gave it, on nothing else, and was gone on refresh —
+        // reported as "when you click the heart it doesn't show up on the post
+        // in the timeline", which was the visible half of a bigger problem.
+        //
+        // Optimistic first, because a heart has to answer instantly. Then the
+        // server, and if the server refuses, the optimism is taken back rather
+        // than left standing as a lie.
+        const wasLiked = get().posts.find((p) => p.id === postId)?.isLiked ?? false;
+
+        const apply = (liked: boolean) =>
+          set((state) => ({
+            posts: state.posts.map((p) =>
+              p.id === postId
+                ? { ...p, isLiked: liked, likes: p.likes + (liked ? 1 : -1) }
+                : p
+            ),
+          }));
+
+        apply(!wasLiked);
+        void api.post(`/api/posts/${postId}/like`).catch(() => apply(wasLiked));
       },
 
       addComment: (postId, content, taggedUsers = []) => {

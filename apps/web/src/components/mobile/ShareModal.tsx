@@ -70,7 +70,23 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href).catch(() => undefined);
+    // THE LINK IS TO THE THING BEING SHARED, NOT TO WHERE YOU WERE STANDING.
+    //
+    // This copied window.location.href, so sharing anything from the feed or a
+    // timeline handed somebody "https://ayeandnay.com/timeline" — a link to
+    // THEIR timeline, showing none of what was being shared.
+    //
+    // This sheet is opened two ways and both have a real destination: with a
+    // post, whose permalink is /post/:id, and with a law, whose page is
+    // /reference/:id. The feed opens it the second way, which is why fixing
+    // only the post case left it still copying the page.
+    const origin = window.location.origin;
+    const url = post
+      ? `${origin}/post/${post.id}`
+      : content
+        ? `${origin}/reference/${content.id}`
+        : window.location.href;
+    navigator.clipboard.writeText(url).catch(() => undefined);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

@@ -21,6 +21,7 @@
     "every-page-check": "node scripts/every-page-check.mjs",
     "phone-fit-check": "node scripts/phone-fit-check.mjs dist",
     "vote-placement-check": "node scripts/vote-placement-check.mjs dist",
+    "reported-bugs-check": "node scripts/reported-bugs-check.mjs dist",
     "verify-email-check": "node scripts/verify-email-check.mjs dist",
     "route-target-check": "node scripts/route-target-check.mjs",
     "admin-permissions-check": "node scripts/admin-permissions-check.mjs dist",

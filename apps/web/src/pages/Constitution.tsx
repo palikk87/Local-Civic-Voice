@@ -34,10 +34,6 @@ export default function Constitution() {
             <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
               The Constitution
             </h1>
-            <p className="font-mono text-xs text-muted-foreground">
-              v{CONSTITUTION.version} · Effective{" "}
-              {new Date(CONSTITUTION.effectiveDate).toLocaleDateString()}
-            </p>
           </div>
         </div>
 

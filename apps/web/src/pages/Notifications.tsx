@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, CheckCircle2, MessageCircle, Heart, UserPlus, Share2, Mail, Scale, Users } from "lucide-react";
+import { ArrowLeft, Bell, CheckCircle2, MessageCircle, Heart, UserPlus, Share2, Mail, Scale, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -169,6 +169,7 @@ function NotificationItem({ notification }: { notification: Notification }) {
 
 export default function Notifications() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data, isLoading, hasNextPage, fetchNextPage, isFetchingNextPage } =
     useInfiniteQuery({
@@ -201,6 +202,16 @@ export default function Notifications() {
   return (
     <AppShell>
       <div className="space-y-5">
+        {/* BACK, BECAUSE THERE WAS NO WAY OUT.
+            Notifications is reached from a bell in a header, and once here the
+            only exits were the bottom tabs — which go somewhere else entirely,
+            not back to what you were reading. Reported as "there is no back
+            button once your in the notifications". navigate(-1) returns to
+            wherever they actually came from, the same as the law page. */}
+        <Button variant="ghost" size="sm" onClick={() => navigate(-1)} className="-ml-2">
+          <ArrowLeft className="mr-1 h-4 w-4" /> Back
+        </Button>
+
         <div className="flex items-center justify-between">
           <div>
             <h1 className="flex items-center gap-2 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
