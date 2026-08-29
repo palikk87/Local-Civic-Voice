@@ -52,7 +52,22 @@ interface StoredBrief extends CitizenBrief {
 
 export type BriefOutcome =
   | { state: "ready"; brief: CitizenBrief; model: string }
-  | { state: "unavailable"; reason: string };
+  | {
+      state: "unavailable";
+      reason: string;
+      /**
+       * WHAT ACTUALLY WENT WRONG, in the provider's own words, trimmed.
+       *
+       * WHY IT IS EXPOSED. This feature has now failed three times, and every
+       * time the reason lived in a log on a host nobody could read — so each
+       * round started with guessing. A model name that is no longer served, or
+       * a key with no access, is not a secret: it is a fact about this
+       * deployment's configuration, and hiding it has cost more than saying it.
+       *
+       * Never a key, never a prompt, never a citizen's words.
+       */
+      diagnostic?: string;
+    };
 
 /**
  * The brief was written, and the check that it matches the law did not run.
@@ -318,6 +333,9 @@ function planFor(textChars: number): { model: string; chunkChars: number } {
  * differ — and the stored `citizenBriefModel` has to name what wrote the brief.
  * Recording the request instead of the result makes that column a guess.
  */
+/** The most recent reason a write failed, for the diagnostic on the outcome. */
+let lastWriteError: string | null = null;
+
 async function ask(
   model: string,
   prompt: string
@@ -329,7 +347,13 @@ async function ask(
     maxCompletionTokens: 1200,
     temperature: 0.3,
   });
-  if (!result.ok) return null;
+  if (!result.ok) {
+    // THE PROVIDER'S OWN WORDS, kept rather than dropped. "The brief could not
+    // be written" was the only thing that ever left this function, which is why
+    // three outages in a row began with guessing.
+    lastWriteError = result.error.slice(0, 300);
+    return null;
+  }
   const draft = parseJsonObject<Partial<CitizenBrief>>(result.content);
   return draft ? { draft, served: result.model } : null;
 }
@@ -426,6 +450,7 @@ async function draftFromText(
   text: string,
   objections?: string[]
 ): Promise<{ brief: CitizenBrief; model: string; parts: string[] } | null> {
+  lastWriteError = null;
   const { model, chunkChars } = planFor(text.length);
   const parts = split(text, chunkChars);
 
@@ -474,7 +499,13 @@ export async function composeBrief(officialText: string | null): Promise<BriefOu
   if (!text) return { state: "unavailable", reason: NO_TEXT_REASON };
 
   const first = await draftFromText(text);
-  if (!first) return { state: "unavailable", reason: WRITE_FAILED_REASON };
+  if (!first) {
+    return {
+      state: "unavailable",
+      reason: WRITE_FAILED_REASON,
+      diagnostic: lastWriteError ?? "the model returned nothing usable",
+    };
+  }
 
   const { model, parts } = first;
   let brief = first.brief;

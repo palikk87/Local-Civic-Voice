@@ -24,6 +24,7 @@ import { namesFor } from "../services/reference-names";
 import { formatReferenceDisplayId, referenceIdSearchVariants } from "../services/reference-id";
 import { ensureReferenceContent } from "../services/reference-content";
 import { parseBrief } from "../services/citizen-brief";
+import { listIncidents } from "../services/service-incidents";
 import { resolveLibraryDocument } from "../services/library-resolve";
 import { libraryResolveRequestSchema } from "../types";
 import { requireCapability } from "../services/admin-permissions";
@@ -1509,6 +1510,15 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
   const chars = rows[0]?.chars ?? 0;
 
   if (chars > 0) {
+    // WHY IT FAILED, ON THE ANSWER ITSELF.
+    //
+    // This feature has now gone down three times, and every round began with
+    // guessing because the cause lived in a log on a host nobody could read.
+    // A model name that is no longer served, or a key with no access to it, is
+    // not a secret — it is a fact about this deployment's configuration, and
+    // hiding it has cost far more than saying it. Never a key, never a prompt.
+    const [incident] = await listIncidents(1);
+
     return c.json({
       state: "unavailable",
       reason:
@@ -1517,6 +1527,9 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
       step: "brief" as const,
       textChars: chars,
       sourceUrl: after.fullTextUrl ?? after.sourceUrl,
+      diagnostic: incident
+        ? { subject: incident.subject, detail: incident.detail, since: incident.firstSeenAt }
+        : null,
     });
   }
 
