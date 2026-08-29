@@ -161,6 +161,7 @@ afterAll(async () => {
 beforeEach(async () => {
   await resetData();
   modelCalls = [];
+  sentPrompts = [];
   stubNetwork({ text: OFFICIAL_TEXT });
 });
 
@@ -208,6 +209,8 @@ describe("writing a brief", () => {
 
     const before = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
     modelCalls = [];
+    sentPrompts = [];
+  sentPrompts = [];
 
     await ensureReferenceContent(law.id, { generateBriefInline: true });
 
@@ -241,6 +244,8 @@ describe("writing a brief", () => {
     // Congress amends it. Force a re-check, since the source is not due yet.
     stubNetwork({ text: AMENDED_TEXT });
     modelCalls = [];
+    sentPrompts = [];
+  sentPrompts = [];
     await processReferenceBrief(law.id, true);
 
     const second = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
@@ -253,6 +258,8 @@ describe("writing a brief", () => {
 
     // Everybody after that reads the stored copy.
     modelCalls = [];
+    sentPrompts = [];
+  sentPrompts = [];
     await ensureReferenceContent(law.id, { generateBriefInline: true });
     expect(modelCalls).toEqual([]);
   });
@@ -406,6 +413,9 @@ describe("the standing rules are sent as rules, not rebuilt per law", () => {
     // instruction. Appending them to each law's prompt puts a constant where a
     // variable goes and leaves two places to keep in step for one fact.
     const law = await record();
+    // Only this test's calls, so an earlier test's long-law "notes" prompt
+    // cannot be mistaken for the one carrying a law.
+    sentPrompts = [];
     await processReferenceBrief(law.id, false);
 
     const write = sentPrompts.find((p) => !/unsupported/i.test(p.user));
