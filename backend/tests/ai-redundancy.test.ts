@@ -32,7 +32,7 @@ process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5432/civi
 process.env.DIRECT_URL ??= process.env.DATABASE_URL;
 process.env.BETTER_AUTH_SECRET ??= "test-only-secret-value-not-used-anywhere-else";
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 // IMPORTED LAZILY, NOT AT THE TOP. src/env.ts validates the moment it is
 // imported, and a static import is hoisted ABOVE the assignments just made —
@@ -83,6 +83,19 @@ beforeEach(async () => {
   (await ai()).forgetStruckOffModels();
   await (await db()).serviceIncident.deleteMany().catch(() => undefined);
   process.env.GEMINI_API_KEY = "a-throwaway-value-for-this-test";
+  delete process.env.OPENAI_API_KEY;
+});
+
+afterAll(async () => {
+  // STOP LEAKING INTO OTHER FILES. struckOff and outOfCredit live for the life
+  // of the process on purpose — a model the provider refuses should not be
+  // re-tried by the next reader. In a test run that same process runs every
+  // other suite afterwards, so a strike-off recorded here silently changed the
+  // provider chain for judicial-search and made three of its tests fail in the
+  // full run while passing on their own. State that outlives a test is state
+  // that fails somebody else's.
+  (await ai()).forgetStruckOffModels();
+  delete process.env.GEMINI_API_KEY;
   delete process.env.OPENAI_API_KEY;
 });
 
@@ -255,6 +268,10 @@ describe("a provider with no credit is not asked again and again", () => {
     // provider gives the same answer.
     process.env.OPENAI_API_KEY = "a-throwaway-value-for-this-test";
     delete process.env.GEMINI_API_KEY;
+    // Start from a clean slate: an earlier test's strike-off would change which
+    // models this one even reaches, which is how it passed alone and failed in
+    // the full run.
+    (await ai()).forgetStruckOffModels();
 
     fakeProvider({
       "gpt-5.4-mini": {
@@ -269,8 +286,15 @@ describe("a provider with no credit is not asked again and again", () => {
 
     await generate();
 
-    // It learned the account cannot pay from the FIRST model and stopped.
-    expect(calls).toEqual(["gpt-5.4-mini"]);
+    // It learned the account cannot pay from the FIRST model it tried and did
+    // not go on to ask the others.
+    //
+    // Asserted as "exactly one call" rather than "exactly this model": which
+    // model is first depends on what an earlier test struck off, and a test
+    // that encodes that is a test that fails for reasons having nothing to do
+    // with what it measures.
+    expect(calls).toHaveLength(1);
+    expect(new Set(calls).size).toBe(1);
     delete process.env.OPENAI_API_KEY;
   }, 60_000);
 });
