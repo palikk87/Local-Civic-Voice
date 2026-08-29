@@ -181,6 +181,100 @@ describe("a dead model does not take the platform down", () => {
   });
 });
 
+describe("no failure is invisible, whatever shape it takes", () => {
+  test("a model that THROWS is still named in the record", async () => {
+    // THE BUG THIS PINS, and it is why three rounds went by blind. Only a
+    // failure that RETURNED was recorded. A thrown one — an aborted fetch, a
+    // timeout, a DNS failure — escaped the per-model loop and landed in a catch
+    // that knows nothing about which model was being tried. So two models that
+    // answered a clean 404 were named in the panel, while the model at the head
+    // of the chain failed on every single call and produced no record at all.
+    globalThis.fetch = (async () => {
+      throw new TypeError("The socket connection was closed unexpectedly");
+    }) as unknown as typeof fetch;
+
+    const result = await generate();
+    expect(result.ok).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const named = (await listIncidents()).map((i) => i.subject);
+    // The FIRST model in the chain is named, not just the roll-up.
+    expect(named).toContain("gemini-3.6-flash");
+  });
+
+  test("a 400 is recorded with what was sent", async () => {
+    // A 400 names a field the provider did not like. Knowing which fields were
+    // in the request turns "it 400s" into "it 400s because of this one".
+    fakeProvider({
+      "gemini-3.6-flash": {
+        status: 400,
+        body: JSON.stringify({ error: { message: "Unknown name \"temperature\"" } }),
+      },
+    });
+
+    await generate();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    const row = (await listIncidents()).find((i) => i.subject === "gemini-3.6-flash");
+    expect(row).toBeDefined();
+    expect(row?.detail).toContain("400");
+    expect(row?.detail).toContain("sent generationConfig");
+  });
+
+  test("the sampling knobs Gemini 3.x rejects are not sent", async () => {
+    // Gemini 3.x deprecated temperature, top_p and top_k: ignored where
+    // tolerated, a 400 where not. This adapter was written for 2.x and sent
+    // temperature on every call.
+    let sent: Record<string, unknown> = {};
+    globalThis.fetch = (async (input: any, init?: any) => {
+      sent = JSON.parse(String(init?.body ?? "{}"));
+      return new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: "IT WORKED" }] } }] }),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    await generate();
+
+    const config = (sent.generationConfig ?? {}) as Record<string, unknown>;
+    for (const banned of ["temperature", "topP", "topK", "candidateCount", "thinkingBudget"]) {
+      expect(config[banned]).toBeUndefined();
+    }
+    // And it still asks for what it actually needs.
+    expect(config.maxOutputTokens).toBeGreaterThan(0);
+  });
+});
+
+describe("a provider with no credit is not asked again and again", () => {
+  test("one empty-balance answer stops the rest of that provider's chain", async () => {
+    // MEASURED LIVE: one failed brief made about 34 provider calls, most of
+    // them against an account answering "credit_balance_exhausted" every time.
+    // A per-minute limit clears by itself and is worth waiting out; an empty
+    // balance does not clear because we asked again, and every model on that
+    // provider gives the same answer.
+    process.env.OPENAI_API_KEY = "a-throwaway-value-for-this-test";
+    delete process.env.GEMINI_API_KEY;
+
+    fakeProvider({
+      "gpt-5.4-mini": {
+        status: 429,
+        body: JSON.stringify({
+          error: { message: "You have no credits remaining.", code: "credit_balance_exhausted" },
+        }),
+      },
+      "gpt-4o-mini": { status: 429, body: '{"error":{"code":"credit_balance_exhausted"}}' },
+      "gpt-4o": { status: 429, body: '{"error":{"code":"credit_balance_exhausted"}}' },
+    });
+
+    await generate();
+
+    // It learned the account cannot pay from the FIRST model and stopped.
+    expect(calls).toEqual(["gpt-5.4-mini"]);
+    delete process.env.OPENAI_API_KEY;
+  }, 60_000);
+});
+
 describe("an answer arrives inside the time a person will wait", () => {
   test("one model call cannot outlive the request that is waiting for it", async () => {
     // THE BUG THIS PINS. One call was allowed 60 seconds while the brief

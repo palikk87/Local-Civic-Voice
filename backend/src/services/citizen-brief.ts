@@ -50,6 +50,14 @@ interface StoredBrief extends CitizenBrief {
   format: number;
 }
 
+/**
+ * The default ceiling on a whole brief when a caller does not say.
+ *
+ * Under the request wall that contains it. The background queue passes its own,
+ * far larger, because nothing is waiting on it.
+ */
+const DEFAULT_BRIEF_BUDGET_MS = 15_000;
+
 export type BriefOutcome =
   | { state: "ready"; brief: CitizenBrief; model: string }
   | {
@@ -335,8 +343,26 @@ function planFor(textChars: number): { model: string; chunkChars: number } {
  */
 /** The most recent reason a write failed, for the diagnostic on the outcome. */
 let lastWriteError: string | null = null;
-/** Set by composeBrief for the duration of one brief. Null means "use the default". */
-let briefBudgetMs: number | null = null;
+/**
+ * When the WHOLE brief must be finished by.
+ *
+ * THE BUG THIS FIXES, measured live: three forced runs on documents of 1,424,
+ * 4,320 and 113,624 characters all took 46-47 seconds, within 600ms of each
+ * other. An eighty-fold spread in input with identical wall-clock is not work
+ * proportional to the document — it is a fixed retry ladder running to
+ * completion, three times over, because the budget was per MODEL CALL and a
+ * brief makes several: a draft, a check, sometimes a rewrite. Three sixteen-
+ * second ladders is forty-eight seconds no matter what the law says.
+ *
+ * One deadline for the brief, and every call draws from what is left of it.
+ */
+let briefDeadlineAt: number | null = null;
+
+/** What is left of the brief's budget, or null when there is no deadline. */
+function remainingBudget(): number | null {
+  if (briefDeadlineAt === null) return null;
+  return Math.max(0, briefDeadlineAt - Date.now());
+}
 
 async function ask(
   model: string,
@@ -346,7 +372,9 @@ async function ask(
     system: SYSTEM,
     prompt,
     model,
-    ...(briefBudgetMs ? { budgetMs: briefBudgetMs } : {}),
+    // Draws from the brief's own clock, so the draft cannot spend what the
+    // check still needs.
+    budgetMs: Math.max(remainingBudget() ?? DEFAULT_BRIEF_BUDGET_MS, 4_000),
     maxCompletionTokens: 1200,
     temperature: 0.3,
   });
@@ -417,7 +445,7 @@ async function verify(
     model,
     // Tighter than the draft: this reads a brief it already has and answers
     // with a short list. It must not be what pushes the request over.
-    budgetMs: briefBudgetMs ? Math.round(briefBudgetMs / 2) : 8_000,
+    budgetMs: Math.max(remainingBudget() ?? 8_000, 4_000),
     maxCompletionTokens: 600,
     temperature: 0,
   });
@@ -501,7 +529,7 @@ export async function composeBrief(
    */
   budgetMs?: number,
 ): Promise<BriefOutcome> {
-  briefBudgetMs = budgetMs ?? null;
+  briefDeadlineAt = Date.now() + (budgetMs ?? DEFAULT_BRIEF_BUDGET_MS);
   const text = officialText?.trim();
 
   // NO TEXT, NO BRIEF. The single most important line in this file: everything

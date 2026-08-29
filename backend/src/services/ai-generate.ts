@@ -140,6 +140,37 @@ const struckOff = new Map<string, number>();
 const STRIKE_OFF_MS = 60 * 60 * 1000;
 
 /**
+ * Providers that have told us the account cannot pay, and when.
+ *
+ * WHY THIS EXISTS. Measured live: one failed brief made about 34 provider
+ * calls, most of them against an account answering "credit_balance_exhausted"
+ * every time. A per-minute rate limit clears on its own and is worth waiting
+ * out; an empty balance does not clear because we asked again. Every model on
+ * that provider will give the same answer, so trying each one in turn is 
+ * round trips spent to learn the same fact repeatedly.
+ *
+ * Held briefly — five minutes — because somebody topping the account up should
+ * see it work again without a redeploy.
+ */
+const outOfCredit = new Map<AIProvider, number>();
+const OUT_OF_CREDIT_MS = 5 * 60 * 1000;
+
+function cannotPay(provider: AIProvider): boolean {
+  const when = outOfCredit.get(provider);
+  if (when === undefined) return false;
+  if (Date.now() - when > OUT_OF_CREDIT_MS) {
+    outOfCredit.delete(provider);
+    return false;
+  }
+  return true;
+}
+
+/** An empty balance, as opposed to a per-minute limit that clears by itself. */
+function isOutOfCredit(error: string): boolean {
+  return /insufficient_quota|credit_balance_exhausted|no credits remaining|billing/i.test(error);
+}
+
+/**
  * Is this the provider saying "that model is not something you can call"?
  *
  * Deliberately narrow. A rate limit, a timeout or a 500 says nothing about the
@@ -173,6 +204,7 @@ export function modelAvailability(): { model: string; provider: AIProvider; stru
 /** For tests, so one does not inherit another's strike-offs. */
 export function forgetStruckOffModels(): void {
   struckOff.clear();
+  outOfCredit.clear();
 }
 
 /**
@@ -347,8 +379,14 @@ export function classifyBriefJob(input: { referenceType: string; textChars: numb
 async function generateWithGemini(
   apiKey: string,
   model: string,
-  { system, prompt, maxCompletionTokens, temperature, jsonMode, timeoutMs, reasoningHeadroom }: AIGenerateParams
+  // `temperature` is deliberately not destructured: see generationConfig below.
+  { system, prompt, maxCompletionTokens, jsonMode, timeoutMs, reasoningHeadroom }: AIGenerateParams
 ): Promise<{ ok: true; content: string } | { ok: false; error: string; status?: number }> {
+  const generationConfig = {
+    maxOutputTokens: requestBudget(maxCompletionTokens, reasoningHeadroom),
+    ...(jsonMode ? { responseMimeType: "application/json" } : {}),
+  };
+
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
     {
@@ -361,19 +399,37 @@ async function generateWithGemini(
       body: JSON.stringify({
         ...(system ? { system_instruction: { parts: [{ text: system }] } } : {}),
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: temperature ?? 0.7,
-          maxOutputTokens: requestBudget(maxCompletionTokens, reasoningHeadroom),
-          ...(jsonMode ? { responseMimeType: "application/json" } : {}),
-        },
+        // NO temperature, top_p, top_k, candidate_count OR thinking_budget.
+        //
+        // THE PRIME SUSPECT FOR A SILENT 400. Gemini 3.x deprecated the
+        // sampling knobs: they are ignored where tolerated and rejected with a
+        // 400 where they are not. This adapter was written for 2.0-flash and
+        // 2.5-flash and still sent `temperature` on every call — so the two
+        // older models answered a clean 404 (retired) and were named in the
+        // incident panel, while the current model failed some other way on
+        // every single call and produced no record.
+        //
+        // Sending fewer fields cannot break a model that accepted them; the
+        // default sampling is what these models are tuned for anyway. So this
+        // is the safe direction to be wrong in.
+        generationConfig,
       }),
     }
   );
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error("Gemini API error:", errorText);
-    return { ok: false, error: errorText, status: response.status };
+    // THE SHAPE OF WHAT WE SENT, alongside what came back. A 400 from Gemini
+    // names a field it did not like; knowing which fields were in the request
+    // turns "it 400s" into "it 400s because we sent this one". Keys only — no
+    // prompt, no law text, no key.
+    const sentKeys = Object.keys(generationConfig).sort().join(",");
+    console.error(`Gemini API error (${response.status}) [sent generationConfig: ${sentKeys}]:`, errorText);
+    return {
+      ok: false,
+      error: `${errorText} [sent generationConfig: ${sentKeys}]`,
+      status: response.status,
+    };
   }
 
   const data = (await response.json()) as {
@@ -553,6 +609,12 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
       const key = keys[provider];
       if (!key) continue;
 
+      if (cannotPay(provider)) {
+        lastError = lastError ?? `${provider}: the account has no credit`;
+        console.warn(`[AI] skipping ${provider} — it reported an empty balance moments ago`);
+        continue;
+      }
+
       const chain = chainFor(provider);
       if (chain.length === 0) continue;
 
@@ -563,14 +625,42 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
           break;
         }
 
-        const result = await runProvider(provider, key, model, {
-          ...params,
-          // Never let one call eat the whole budget: it has to leave room for
-          // the next model in the chain to be worth trying.
-          timeoutMs: Math.min(params.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS, Math.max(timeLeft() - 2_000, 5_000)),
-          // A rate-limit wait is only worth it when nothing else can be tried.
-          retryRateLimit: chain.indexOf(model) === chain.length - 1,
-        });
+        // A THROWN FAILURE IS STILL A FAILURE OF THIS MODEL.
+        //
+        // THE BUG THIS FIXES, and it is why three rounds went by blind. An
+        // aborted fetch, a DNS failure, a timeout — anything that THROWS rather
+        // than returning — escaped this loop entirely and landed in the outer
+        // catch, which records nothing about which model was being tried. So
+        // the two models that answered a clean 404 were named in the incident
+        // panel, and the model at the head of the chain, which was failing some
+        // other way on every single call, produced no record at all.
+        //
+        // Every attempt is now accounted for, whichever way it ends.
+        let result: Awaited<ReturnType<typeof runProvider>>;
+        try {
+          result = await runProvider(provider, key, model, {
+            ...params,
+            // Never let one call eat the whole budget: it has to leave room for
+            // the next model in the chain to be worth trying.
+            timeoutMs: Math.min(
+              params.timeoutMs ?? DEFAULT_AI_TIMEOUT_MS,
+              Math.max(timeLeft() - 2_000, 5_000),
+            ),
+            // A rate-limit wait is only worth it when nothing else can be tried.
+            retryRateLimit: chain.indexOf(model) === chain.length - 1,
+          });
+        } catch (thrown) {
+          const detail = thrown instanceof Error ? `${thrown.name}: ${thrown.message}` : String(thrown);
+          lastError = `${model}: ${detail}`;
+          console.error(`[AI] ${model} THREW on ${provider}: ${detail}`);
+          void reportIncident({
+            kind: INCIDENT_AI_MODEL,
+            subject: model,
+            fallback: null,
+            detail: `threw before answering — ${detail}`,
+          });
+          continue;
+        }
 
         if (result.ok) {
           // IT WORKED — BUT SAY SO IF IT WAS NOT THE ONE WE WANTED.
@@ -592,8 +682,12 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
           return { ok: true, content: result.content, provider, model };
         }
 
-        lastError = `${model}: ${result.error.slice(0, 300)}`;
-        console.warn(`[AI] ${model} failed on ${provider}: ${result.error.slice(0, 300)}`);
+        // THE STATUS TRAVELS WITH THE MESSAGE. Both the per-model incident and
+        // the one filed when a fallback succeeds write to the same row, so the
+        // less informative of the two would otherwise overwrite the better one
+        // and lose the very number that says WHICH kind of failure this is.
+        lastError = `${model}: HTTP ${result.status ?? "?"} — ${result.error.slice(0, 300)}`;
+        console.warn(`[AI] ${model} failed on ${provider}: HTTP ${result.status ?? "?"} ${result.error.slice(0, 300)}`);
 
         // EVERY FAILURE IS ITEMISED, whatever kind it is.
         //
@@ -609,6 +703,14 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
           fallback: null,
           detail: `HTTP ${result.status ?? "?"} — ${result.error.slice(0, 400)}`,
         });
+
+        // AN EMPTY BALANCE IS THE WHOLE PROVIDER'S ANSWER, not this model's.
+        // Every other model on it will say the same thing, so stop asking.
+        if (isOutOfCredit(result.error)) {
+          outOfCredit.set(provider, Date.now());
+          console.warn(`[AI] ${provider} reports no credit — skipping its remaining models`);
+          break;
+        }
 
         // A NAME THE PROVIDER WILL NOT SERVE is also struck off, so the next
         // brief does not re-learn it. A rate limit or a 500 is NOT that: those
