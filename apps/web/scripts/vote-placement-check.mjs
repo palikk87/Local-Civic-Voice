@@ -20,7 +20,7 @@
  * as exactly one at every width, not merely "present".
  */
 import { devices } from "playwright";
-import { launchChromium, acceptTermsBeforeLoad } from "./chromium.mjs";
+import { launchChromium, acceptTermsBeforeLoad, routeApiToLocal } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname, dirname } from "node:path";
@@ -96,6 +96,14 @@ async function placement(page) {
 async function open(context) {
   const page = await context.newPage();
   await acceptTermsBeforeLoad(page);
+  // THE BACKEND URL IS BAKED IN AT BUILD TIME. CI builds with
+  // VITE_BACKEND_URL: https://ci.invalid, so without this every API call
+  // leaves for a host that does not exist, the law page renders "we couldn't
+  // load this reference", and there is no vote panel to find. This check
+  // passed locally and failed in CI for exactly that reason — a
+  // build-configuration difference wearing a layout bug's clothes, which is
+  // the thing routeApiToLocal was written for.
+  await routeApiToLocal(page, base);
   await page.goto(`${base}/reference/${BILL.reference.id}`, { waitUntil: "load", timeout: 30000 });
   await page.waitForTimeout(1500);
   // A blank page satisfies "there is exactly one of nothing". Guard it.

@@ -44,7 +44,7 @@
  * but they are all measured because a media query can break exactly one.
  */
 import { devices } from "playwright";
-import { launchChromium, acceptTermsBeforeLoad } from "./chromium.mjs";
+import { launchChromium, acceptTermsBeforeLoad, routeApiToLocal } from "./chromium.mjs";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname, dirname } from "node:path";
@@ -110,6 +110,12 @@ const EO = JSON.parse(
 
 const BILL_ID = FIXTURES.reference.id;
 const EO_ID = EO.reference.id;
+
+/** Routes whose whole point is that they carry a real record, and the words that prove it. */
+const POPULATED = new Map([
+  [`/reference/${BILL_ID}`, FIXTURES.reference.title],
+  [`/reference/${EO_ID}`, EO.reference.title],
+]);
 
 const server = createServer(async (req, res) => {
   const [path] = req.url.split("?");
@@ -222,6 +228,12 @@ for (const phone of PHONES) {
   const page = await context.newPage();
   await serveRealFonts(page);
   await acceptTermsBeforeLoad(page);
+  // Same reason as the fonts above, and the same trap the vote placement check
+  // fell into: CI bakes VITE_BACKEND_URL: https://ci.invalid into the bundle,
+  // so without this the two populated law pages below quietly render their
+  // error state and this check goes back to measuring empty boxes — the exact
+  // hole it was written to close.
+  await routeApiToLocal(page, base);
 
   for (const path of paths) {
     checks += 1;
@@ -251,6 +263,22 @@ for (const phone of PHONES) {
     if (painted < 40) {
       failures.push(`${phone} ${path}: painted nothing (${painted} chars of text) — the width reading below it would be meaningless`);
       continue;
+    }
+
+    // A POPULATED PAGE HAS TO BE POPULATED.
+    //
+    // The two law pages are the entire reason this check exists: an empty
+    // "couldn't load this reference" box fits any screen, so if they silently
+    // degrade to the error state this check is back to proving nothing. It
+    // already happened once, when the baked-in backend URL sent their API calls
+    // to a host that does not exist.
+    if (POPULATED.has(path)) {
+      const title = POPULATED.get(path);
+      const showsTheLaw = await page.evaluate((needle) => document.body.innerText.includes(needle), title);
+      if (!showsTheLaw) {
+        failures.push(`${phone} ${path}: rendered without the law on it — expected the title ${JSON.stringify(title)}. An empty page fits any screen, so the measurement below would prove nothing.`);
+        continue;
+      }
     }
 
     const result = await measure(page);
