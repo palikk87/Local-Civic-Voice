@@ -407,21 +407,23 @@ async function processGenerateReferenceBrief(data: GenerateReferenceBriefData): 
 /**
  * Re-pull one record's official text after a retrieval fix.
  *
- * The text is replaced and the brief is rewritten from it, but lawVersion is
- * left where it was: fixing our own extraction is not the government amending
- * anything, and saying otherwise badges every post that shared the record and
- * notifies everyone who did.
+ * The text is replaced but lawVersion is left where it was: fixing our own
+ * extraction is not the government amending anything, and saying otherwise
+ * badges every post that shared the record and notifies everyone who did.
  *
- * The brief is written inline here rather than queued behind another job,
- * because the queue is already the thing running this — and with the whole
- * pull budgeted generously, CourtListener's five-a-minute ceiling has room to
- * be waited out.
+ * The brief is only rewritten when data.writeBrief says somebody asked. When
+ * it is, it is written inline rather than queued behind another job, because
+ * the queue is already the thing running this — and with the whole pull
+ * budgeted generously, CourtListener's five-a-minute ceiling has room to be
+ * waited out.
  */
 async function processReextractReferenceText(data: ReextractReferenceTextData): Promise<void> {
   await ensureReferenceContent(data.referenceId, {
     reextract: true,
     deadlineMs: 120_000,
-    generateBriefInline: true,
+    // Off unless somebody asked for it. See ReextractReferenceTextData.
+    generateBriefInline: data.writeBrief === true,
+    attended: false,
   });
 }
 

@@ -102,6 +102,14 @@ export interface SyncGovernmentDataData {
  */
 export interface ReextractReferenceTextData {
   referenceId: string;
+  /**
+   * Write a Citizen's Brief once the text is in? Defaults to no, on purpose.
+   * Pulling the text is free; the brief costs model calls. The six-hourly
+   * self-heal sweep queues up to twenty-five of these, so writing a brief here
+   * spent money on laws nobody had opened. A brief is written when a reader
+   * opens the law, or when an admin asks for one and sets this.
+   */
+  writeBrief?: boolean;
 }
 
 export interface GenerateReferenceBriefData {

@@ -1860,7 +1860,9 @@ adminRouter.post("/reextract-content", async (c) => {
   for (const record of records) {
     jobQueue.enqueue(
       JobType.REEXTRACT_REFERENCE_TEXT,
-      { referenceId: record.id },
+      // An admin pressed a button, so the brief is wanted. The scheduled sweep
+      // leaves this off and repairs the text only.
+      { referenceId: record.id, writeBrief: true },
       JobPriority.LOW
     );
   }
