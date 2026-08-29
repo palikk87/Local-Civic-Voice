@@ -140,37 +140,6 @@ const struckOff = new Map<string, number>();
 const STRIKE_OFF_MS = 60 * 60 * 1000;
 
 /**
- * Providers that have told us the account cannot pay, and when.
- *
- * WHY THIS EXISTS. Measured live: one failed brief made about 34 provider
- * calls, most of them against an account answering "credit_balance_exhausted"
- * every time. A per-minute rate limit clears on its own and is worth waiting
- * out; an empty balance does not clear because we asked again. Every model on
- * that provider will give the same answer, so trying each one in turn is 
- * round trips spent to learn the same fact repeatedly.
- *
- * Held briefly — five minutes — because somebody topping the account up should
- * see it work again without a redeploy.
- */
-const outOfCredit = new Map<AIProvider, number>();
-const OUT_OF_CREDIT_MS = 5 * 60 * 1000;
-
-function cannotPay(provider: AIProvider): boolean {
-  const when = outOfCredit.get(provider);
-  if (when === undefined) return false;
-  if (Date.now() - when > OUT_OF_CREDIT_MS) {
-    outOfCredit.delete(provider);
-    return false;
-  }
-  return true;
-}
-
-/** An empty balance, as opposed to a per-minute limit that clears by itself. */
-function isOutOfCredit(error: string): boolean {
-  return /insufficient_quota|credit_balance_exhausted|no credits remaining|billing/i.test(error);
-}
-
-/**
  * Is this the provider saying "that model is not something you can call"?
  *
  * Deliberately narrow. A rate limit, a timeout or a 500 says nothing about the
@@ -204,7 +173,6 @@ export function modelAvailability(): { model: string; provider: AIProvider; stru
 /** For tests, so one does not inherit another's strike-offs. */
 export function forgetStruckOffModels(): void {
   struckOff.clear();
-  outOfCredit.clear();
 }
 
 /**
@@ -609,12 +577,6 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
       const key = keys[provider];
       if (!key) continue;
 
-      if (cannotPay(provider)) {
-        lastError = lastError ?? `${provider}: the account has no credit`;
-        console.warn(`[AI] skipping ${provider} — it reported an empty balance moments ago`);
-        continue;
-      }
-
       const chain = chainFor(provider);
       if (chain.length === 0) continue;
 
@@ -703,14 +665,6 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
           fallback: null,
           detail: `HTTP ${result.status ?? "?"} — ${result.error.slice(0, 400)}`,
         });
-
-        // AN EMPTY BALANCE IS THE WHOLE PROVIDER'S ANSWER, not this model's.
-        // Every other model on it will say the same thing, so stop asking.
-        if (isOutOfCredit(result.error)) {
-          outOfCredit.set(provider, Date.now());
-          console.warn(`[AI] ${provider} reports no credit — skipping its remaining models`);
-          break;
-        }
 
         // A NAME THE PROVIDER WILL NOT SERVE is also struck off, so the next
         // brief does not re-learn it. A rate limit or a 500 is NOT that: those

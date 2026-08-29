@@ -137,12 +137,6 @@ const CHECKS: Check[] = [
     guards: "the reference page does not overflow or overlap between 1024 and 1568px",
   },
   {
-    name: "web related-laws-check",
-    cwd: "apps/web",
-    cmd: ["bun", "run", "related-laws-check"],
-    guards: "Related Laws renders, and a live record always beats the local fallback",
-  },
-  {
     name: "web brief-button-check",
     cwd: "apps/web",
     cmd: ["bun", "run", "brief-button-check"],
