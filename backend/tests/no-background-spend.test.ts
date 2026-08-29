@@ -18,6 +18,15 @@
  * That is also the model the platform already runs on — a brief is written once
  * and then reused by everyone forever — so spend follows real readers rather
  * than the size of the database.
+ *
+ * THERE WAS A SECOND ONE. The Merge sweep asks a model to decide pairs of
+ * possibly-duplicate laws. When it answers "I cannot tell" the pair stays in
+ * the queue, so the next sweep asked the same unanswerable question about the
+ * same two bills six hours later, and again, forever — and because the queue is
+ * oldest-first, those pairs also stopped anything newer from being reached.
+ * That one stays unwatched by design: a duplicate law splits a public vote
+ * count in half and nobody is watching for that either. It is bounded rather
+ * than switched off — a pair is put to a model once.
  */
 
 process.env.DATABASE_URL ??= "postgresql://postgres:postgres@127.0.0.1:5432/civicvoice_test";
@@ -69,10 +78,14 @@ describe("no paid work happens without somebody asking", () => {
       .map((file) => file.replace(SRC + "/", ""))
       .sort();
 
-    // citizen-brief   — a reader opened a law, or an admin asked for a rebuild
-    // search-intent   — a person typed a search
-    // merge-adjudicator — an admin reviews duplicate laws
-    // routes/ai.ts    — the app's own AI endpoint, behind a session
+    // citizen-brief     — a reader opened a law, or an admin asked for a rebuild
+    // search-intent     — a person typed a search
+    // merge-adjudicator — the six-hourly Merge sweep, and an admin review.
+    //                     THIS ONE DOES RUN UNWATCHED, on purpose: a duplicate
+    //                     law splits the public vote count in half and nobody
+    //                     is watching for that either. It is bounded instead —
+    //                     see the sweep test below.
+    // routes/ai.ts      — the app's own AI endpoint, behind a session
     //
     // If this list grows, the new caller needs the same question asked of it:
     // can it run when nobody is watching?
@@ -86,10 +99,29 @@ describe("no paid work happens without somebody asking", () => {
 
   test("no scheduled job calls a paid provider directly", () => {
     // The scheduled work itself — sync, lineage, roll calls, archives,
-    // provenance, merges — talks to government sources, which are free.
+    // provenance, merges — talks to government sources, which are free. The one
+    // model call it reaches is behind adjudicatePending, and the test below is
+    // what keeps that bounded.
     const scheduled = read("index.ts");
     const jobs = scheduled.slice(scheduled.indexOf("schedule({"));
     expect(jobs).not.toContain("generateAI");
     expect(jobs).not.toContain("composeBrief");
+  });
+
+  test("the merge sweep never pays twice for the same answer", () => {
+    // The Merge job hands the oldest twenty-five pending candidates to the
+    // adjudicator with a model allowed. A pair the model reads and cannot
+    // decide stays pending, so without this filter the same two bills were put
+    // to a model every six hours forever — and, being oldest-first, they also
+    // blocked every newer candidate from ever being looked at.
+    //
+    // decidedAt on a still-pending row means "already read, still undecided".
+    const lineage = read("services", "reference-lineage.ts");
+    const sweep = lineage.slice(lineage.indexOf("export async function adjudicatePending"));
+
+    expect(sweep).toContain("status: CandidateStatus.PENDING, decidedAt: null");
+    // And the stamp that fills that column, so the filter has something to bite
+    // on. Behaviour for both halves is proven in merge-adjudicator.test.ts.
+    expect(sweep).toContain('verdict.basis === "ai_adjudicated"');
   });
 });

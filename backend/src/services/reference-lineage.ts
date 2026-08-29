@@ -678,7 +678,12 @@ export async function adjudicatePending(
   options: { allowAI?: boolean } = {},
 ): Promise<AdjudicationSweep> {
   const pending = await prisma.referenceMergeCandidate.findMany({
-    where: { status: CandidateStatus.PENDING },
+    // decidedAt is set on a still-pending row when a model has already read
+    // this pair and could not tell. Without that filter the sweep pays to ask
+    // the same unanswerable question about the same two bills every six hours
+    // for as long as the platform runs, and the oldest-first ordering means
+    // those pairs also block every newer candidate from ever being looked at.
+    where: { status: CandidateStatus.PENDING, decidedAt: null },
     orderBy: { createdAt: "asc" },
     take: limit,
   });
@@ -704,6 +709,17 @@ export async function adjudicatePending(
     if (verdict.verdict === "same" && verdict.confidence >= AI_MERGE_CONFIDENCE) {
       const roles = await pickSurvivor(left.id, right.id);
       if (!roles) {
+        // Nothing about the pair will change on the next sweep, so stamping it
+        // stops the model being paid to re-confirm a merge that cannot happen.
+        await prisma.referenceMergeCandidate.update({
+          where: { id: candidate.id },
+          data: {
+            decidedAt: new Date(),
+            note:
+              `Ruled the same measure (${verdict.basis}) but neither record could be ` +
+              `chosen to survive. Needs a person.`,
+          },
+        });
         sweep.leftPending += 1;
         continue;
       }
@@ -750,6 +766,20 @@ export async function adjudicatePending(
     // "Unsure", or a confident-enough model that was not confident enough.
     // Left where it is: an honest maybe is the one case a person is still
     // better at than this.
+    //
+    // If a model actually answered, that is written down and the pair is not
+    // put to a model again — the answer will not change, and asking again
+    // every six hours is money spent on a question already asked. A model that
+    // could not be REACHED is left unstamped, because that is worth retrying.
+    if (verdict.basis === "ai_adjudicated" || verdict.basis === "ai_unreadable") {
+      await prisma.referenceMergeCandidate.update({
+        where: { id: candidate.id },
+        data: {
+          decidedAt: new Date(),
+          note: `A model read both and could not decide (${verdict.basis}): ${verdict.reason}`,
+        },
+      });
+    }
     sweep.leftPending += 1;
   }
 

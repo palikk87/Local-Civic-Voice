@@ -31,6 +31,7 @@ import {
   AI_MERGE_CONFIDENCE,
 } from "../src/services/merge-adjudicator";
 import { mergeReferences, unmergeReferences } from "../src/services/deduplication-service";
+import { adjudicatePending, CandidateStatus } from "../src/services/reference-lineage";
 
 beforeAll(async () => {
   await startServer();
@@ -380,5 +381,82 @@ describe("undo: what makes deciding automatically defensible", () => {
 
     const report = await mergeReferences(source.id, target.id);
     expect(report.decidedBy).toBe("admin");
+  });
+});
+
+/**
+ * THE SWEEP DOES NOT PAY TWICE FOR THE SAME ANSWER.
+ *
+ * The Merge job runs every six hours and hands the oldest twenty-five pending
+ * candidates to the adjudicator with a model allowed. A pair the model reads
+ * and cannot decide stays pending — so before this, the next sweep asked the
+ * same unanswerable question about the same two bills, and the one after that,
+ * forever. Worse, oldest-first means those pairs sat at the head of the queue
+ * and newer candidates were never reached at all.
+ *
+ * A model that could not be REACHED is a different thing and is left alone to
+ * be retried, because an outage is not an answer.
+ */
+describe("a pair a model already read is not put to a model again", () => {
+  async function pair(fields: Record<string, unknown> = {}) {
+    const a = await law();
+    const b = await law();
+    const [leftId, rightId] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+    return prisma.referenceMergeCandidate.create({
+      data: {
+        leftId,
+        rightId,
+        relationship: "Companion measure",
+        identifiedBy: "CRS",
+        ...fields,
+      },
+    });
+  }
+
+  test("the sweep skips a still-pending pair that has already been read", async () => {
+    await pair();
+    const alreadyRead = await pair({
+      decidedAt: new Date(),
+      note: "A model read both and could not decide (ai_adjudicated): too little text.",
+    });
+
+    const sweep = await adjudicatePending(25, { allowAI: false });
+
+    // Two pending rows, one already read. Only the unread one is considered.
+    expect(sweep.considered).toBe(1);
+
+    const untouched = await prisma.referenceMergeCandidate.findUniqueOrThrow({
+      where: { id: alreadyRead.id },
+    });
+    expect(untouched.status).toBe(CandidateStatus.PENDING);
+    expect(untouched.note).toContain("could not decide");
+  });
+
+  test("a model that could not be reached leaves the pair open for another try", async () => {
+    // No provider key in this process, so generateAI fails without a network
+    // call and the basis is ai_unavailable rather than an answer.
+    const keys = ["GEMINI_API_KEY", "GOOGLE_AI_API_KEY", "OPENAI_API_KEY"];
+    const saved = keys.map((name) => [name, process.env[name]] as const);
+    for (const name of keys) delete process.env[name];
+
+    try {
+      const open = await pair();
+      const sweep = await adjudicatePending(25, { allowAI: true });
+
+      expect(sweep.considered).toBe(1);
+      expect(sweep.leftPending).toBe(1);
+
+      const row = await prisma.referenceMergeCandidate.findUniqueOrThrow({
+        where: { id: open.id },
+      });
+      expect(row.status).toBe(CandidateStatus.PENDING);
+      // Unstamped: an outage is not an answer, so the next sweep tries again.
+      expect(row.decidedAt).toBeNull();
+    } finally {
+      for (const [name, value] of saved) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });
