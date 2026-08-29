@@ -100,7 +100,16 @@ async function acceptWelcome(page) {
 
 async function firstVisit(path = "/feed", { accept = true } = {}) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-  await acceptTermsBeforeLoad(context);
+  // A GENUINELY FIRST VISIT WHEN THAT IS WHAT IS BEING MEASURED.
+  //
+  // THE BUG THIS FIXES. This pre-accepted the Terms for every case, including
+  // the one asserting that a first visit SHOWS the welcome — so the check
+  // dismissed the thing it was about to look for and then failed to find it.
+  // It has been red ever since the shared helper started pre-accepting, and a
+  // red check nobody can satisfy is how CI stopped meaning anything.
+  //
+  // Every other case wants the welcome out of the way, so it still pre-accepts.
+  if (accept) await acceptTermsBeforeLoad(context);
   const page = await context.newPage();
   await routeApiToLocal(page, base);
   await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
