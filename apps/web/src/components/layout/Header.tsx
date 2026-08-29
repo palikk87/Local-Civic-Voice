@@ -80,7 +80,7 @@ export function Header() {
         <Link to="/feed" className="flex items-center gap-2.5">
           <Seal className="h-8 w-8 text-primary" />
           <span className="font-display text-xl font-semibold tracking-tight text-foreground">
-            AYE & NAY
+            AYE <span className="text-accent">&amp;</span> NAY
           </span>
         </Link>
 

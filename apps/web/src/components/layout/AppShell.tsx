@@ -94,7 +94,7 @@ export function AppShell({
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       {/* A gate with no sign on it is indistinguishable from a broken app.
           Renders nothing unless the reader is signed in and unverified. */}
       <VerifyEmailBanner />
@@ -104,11 +104,11 @@ export function AppShell({
       <JuryGate />
 
       {/* ---------- Desktop left sidebar ---------- */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border bg-background/95 px-3 py-5 backdrop-blur lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border bg-background/80 px-3 py-5 backdrop-blur lg:flex">
         <Link to="/feed" className="flex items-center gap-2.5 px-2">
           <Seal className="h-8 w-8 text-accent" />
           <span className="font-display text-lg font-semibold tracking-tight text-foreground">
-            AYE & NAY
+            AYE <span className="text-accent">&amp;</span> NAY
           </span>
         </Link>
 
@@ -170,11 +170,11 @@ export function AppShell({
       </aside>
 
       {/* ---------- Mobile top bar ---------- */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background/95 px-4 py-3 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur lg:hidden">
         <Link to="/feed" className="flex items-center gap-2">
           <Seal className="h-7 w-7 text-accent" />
           <span className="font-display text-base font-semibold tracking-tight text-foreground">
-            AYE & NAY
+            AYE <span className="text-accent">&amp;</span> NAY
           </span>
         </Link>
         {isAuthenticated && user ? (
@@ -218,7 +218,7 @@ export function AppShell({
       <BugReporter />
 
       {/* ---------- Mobile bottom tab bar ---------- */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-background/95 backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-background/80 backdrop-blur lg:hidden">
         {visibleNav.map((item) => {
           const active = isActive(location.pathname, item.to);
           const Icon = item.icon;

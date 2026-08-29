@@ -15,6 +15,15 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        /* A physical token: a hard edge underneath, and pressing it moves the
+           face down onto the base. Used for Aye and Nay.
+
+           Aye is the LIGHT chip and Nay the DARK one, so the pair survives
+           red-green colour blindness. Nay carries a border because a deep
+           crimson on deep felt is only 1.6:1 against the card — the edge is
+           what makes it a button rather than a shape. */
+        aye: "chip-press border-2 border-support bg-support font-bold tracking-widest text-support-foreground shadow-[0_4px_0_hsl(150_62%_18%)] hover:bg-support/90 active:shadow-[0_1px_0_hsl(150_62%_18%)]",
+        nay: "chip-press border-2 border-oppose/80 bg-oppose font-bold tracking-widest text-oppose-foreground shadow-[0_4px_0_hsl(344_79%_18%)] hover:bg-oppose/90 active:shadow-[0_1px_0_hsl(344_79%_18%)]",
       },
       size: {
         default: "h-10 px-4 py-2",

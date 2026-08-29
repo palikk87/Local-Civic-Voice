@@ -168,52 +168,59 @@ function CivicScoreHeader() {
       transition={{ duration: 0.5 }}
       className="mx-4 mb-3"
     >
+      {/*
+        THE PLAQUE. A brass-rimmed panel that fades green into gold, with the
+        score set large in the display face and the day's gain on a lit pill.
+        This is the piece the whole reward layer hangs off, so it is the one
+        thing on the feed allowed to glow.
+      */}
       <button
         onClick={() => navigate("/profile")}
-        className="w-full bg-slate-800/60 rounded-2xl p-3 border border-slate-700/50 text-left"
+        className="relative w-full overflow-hidden rounded-2xl border border-accent/40 p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_26px_-8px_rgba(245,158,11,0.5)]"
+        style={{
+          backgroundImage:
+            "linear-gradient(118deg,#20573C 0%,#173F2C 34%,#4E3A12 68%,#7A5A15 100%)",
+        }}
       >
-        <div className="flex items-center justify-between">
-          {/* Civic Score */}
-          <div className="flex items-center flex-1">
-            <span
-              className="w-12 h-12 rounded-full flex items-center justify-center mr-3 shrink-0"
-              style={{ backgroundColor: `${levelInfo.color}20` }}
-            >
-              <span className="text-xl font-bold" style={{ color: levelInfo.color }}>
-                {civicScore.total}
-              </span>
-            </span>
-            <div className="flex-1">
-              {/* What the number is, said out loud. It is a count of what you
-                  have done on this platform, kept in this browser — not a
-                  standing, a rank, or anything congress.gov knows about. */}
-              <p className="text-white font-semibold text-sm">{levelInfo.title}</p>
-              <p className="text-slate-400 text-[11px]">Your activity here</p>
-              <div className="flex items-center mt-1">
-                <span className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden mr-2">
-                  <span
-                    className="block h-full rounded-full"
-                    style={{ width: `${progressPct}%`, backgroundColor: levelInfo.color }}
-                  />
-                </span>
-                <span className="text-slate-400 text-xs">{civicScore.xpToNextLevel} to next</span>
-              </div>
+        {/* a slow sweep across the brass, the way light moves over metal */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 animate-shimmer-sweep"
+          style={{
+            backgroundImage:
+              "linear-gradient(105deg,transparent 30%,rgba(255,194,77,0.3) 48%,transparent 66%)",
+            backgroundSize: "260% 100%",
+          }}
+        />
+        <div className="relative flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="plaque-label text-amber-200">Civic score</p>
+            <p className="font-display text-3xl font-extrabold leading-none text-white tabular-nums drop-shadow-[0_0_18px_rgba(255,216,107,0.6)]">
+              {civicScore.total}
+            </p>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/40 ring-1 ring-amber-300/25">
+              <span
+                className="block h-full rounded-full bg-gradient-to-r from-orange-400 to-amber-300 shadow-[0_0_12px_rgba(255,216,107,0.8)]"
+                style={{ width: `${Math.max(0, Math.min(100, progressPct))}%` }}
+              />
             </div>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-amber-100/70">
+              {levelInfo.title} · {civicScore.xpToNextLevel} to next
+            </p>
           </div>
 
-          {/* Streak & Notifications */}
-          <div className="flex items-center ml-2">
+          <div className="flex shrink-0 items-center gap-2">
             {streak.current > 0 ? (
-              <span className="flex items-center bg-amber-500/20 px-2 py-1 rounded-full mr-2">
-                <Flame size={14} color="#F59E0B" />
-                <span className="text-amber-500 text-xs font-bold ml-1">{streak.current}</span>
+              <span className="flex items-center gap-1 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-2.5 py-1 font-mono text-xs font-bold text-emerald-950 shadow-[0_0_16px_-2px_rgba(255,216,107,0.8)]">
+                <Flame size={12} />
+                {streak.current}
               </span>
             ) : null}
-            <span className="relative p-2">
-              <Bell size={20} color="#94A3B8" />
+            <span className="relative p-1.5">
+              <Bell size={20} color="#F5F0E6" />
               {unreadCount > 0 ? (
-                <span className="absolute -top-0.5 -right-0.5 bg-red-500 rounded-full w-4 h-4 flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-orange-500">
+                  <span className="text-[10px] font-bold text-emerald-950">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 </span>
@@ -223,6 +230,50 @@ function CivicScoreHeader() {
         </div>
       </button>
     </MotionDiv>
+  );
+}
+
+// ==========================================
+// STREAK ROW
+// ==========================================
+
+/**
+ * Seven days, lit or not.
+ *
+ * The small flame chip beside the score said "6" and meant nothing to look at.
+ * A row you can SEE gaps in is the thing that makes a streak feel like a
+ * streak — and it is honest, because it shows the days you missed rather than
+ * only the run you are on.
+ *
+ * Today is dashed rather than dark: not missed, not yet earned.
+ */
+function StreakRow() {
+  const streak = useGamificationStore(selectStreak) ?? { current: 0, lastActivityDate: '', freezeDeadline: null };
+  const letters = ["M", "T", "W", "T", "F", "S", "S"];
+  const today = (new Date().getDay() + 6) % 7; // Monday-first
+
+  return (
+    <div className="mx-4 mb-3 flex items-center gap-1.5">
+      {letters.map((letter, index) => {
+        const lit = index < today && today - index <= streak.current;
+        const isToday = index === today;
+        return (
+          <span
+            key={`${letter}-${index}`}
+            className={cn(
+              "grid h-6 flex-1 place-items-center rounded-md border font-mono text-[9px] font-semibold",
+              lit
+                ? "border-amber-300/60 bg-gradient-to-b from-orange-300 to-amber-500 text-emerald-950 shadow-[0_0_12px_-2px_rgba(255,138,61,0.8)]"
+                : isToday
+                  ? "border-dashed border-amber-300/40 bg-transparent text-amber-200/60"
+                  : "border-white/10 bg-white/5 text-white/25",
+            )}
+          >
+            {letter}
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -671,7 +722,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
       transition={{ delay: Math.min(index, 6) * 0.08, duration: 0.35 }}
       className="mx-4 mb-4"
     >
-      <div className="bg-slate-800/80 rounded-2xl p-4 border border-slate-700/50">
+      <div className="felt-card rounded-2xl p-4">
         {/* Feed Reason Badge */}
         <FeedReasonBadge item={item} />
 
@@ -721,7 +772,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
         ) : null}
 
         {/* Bill Card */}
-        <div className="bg-slate-900/60 rounded-xl p-3 border border-slate-700/30">
+        <div className="rounded-xl bg-background/70 p-3 ring-1 ring-accent/15">
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center flex-wrap flex-1">
               {/* Branch Badge */}
@@ -756,7 +807,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
             <TrustBadge bill={item.bill} />
           </div>
 
-          <p className="text-white font-semibold text-base mb-1">{item.bill.shortTitle}</p>
+          <p className="mb-1 font-display text-lg font-extrabold text-foreground">{item.bill.shortTitle}</p>
           <p className="text-slate-400 text-sm line-clamp-2">{item.bill.title}</p>
 
           <VoteButtons bill={item.bill} />
@@ -1092,6 +1143,8 @@ export default function HomeScreen() {
         <div className="mt-3">
           <CivicScoreHeader />
         </div>
+
+        <StreakRow />
 
         {/* Feed Type Tabs */}
         <FeedTypeTabs activeType={feedType} onChangeType={setFeedType} />

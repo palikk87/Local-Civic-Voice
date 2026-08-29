@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,900&display=optional');
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:opsz,wght@6..96,400;6..96,500;6..96,600;6..96,700;6..96,800;6..96,900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=optional');
 
 @tailwind base;
@@ -91,9 +91,13 @@
     --muted: 158 26% 23%;
     --muted-foreground: 152 13% 61%; /* #8FA79A */
 
-    /* Amber-500, unchanged. It was always the gold. */
+    /* Amber-500 is the base gold. --accent-lit is the same metal catching the
+       light — used for captions, card headings and anything engraved. The
+       mockup used it heavily, and leaving it out is most of why the first
+       attempt read flat. */
     --accent: 38 92% 50%;           /* #F59E0B */
     --accent-foreground: 158 33% 8%;
+    --accent-lit: 45 100% 71%;      /* #FFD86B */
 
     /* AYE and NAY are split by lightness as well as hue, so the pair survives
        red-green colour blindness. See VotePanel for the reasoning. */
@@ -131,6 +135,21 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "ss01", "cv01";
+    /* THE ROOM. Three layers, and the values are lifted verbatim from the
+       approved mockup rather than approximated — an approximation is how the
+       first attempt came out darker and flatter than the thing that was signed
+       off.
+
+         1. a warm ember wash at the very top: the lamp over the table
+         2. a bright green pool under it: the felt catching that light
+         3. the weave itself
+
+       Fixed, so the light stays with the room instead of scrolling away. */
+    background-image:
+      radial-gradient(90% 42% at 50% 0%, #FF8A3D26 0%, transparent 62%),
+      radial-gradient(120% 68% at 50% 6%, #1E5A3C 0%, transparent 64%),
+      repeating-linear-gradient(45deg, hsl(0 0% 100% / 0.02) 0 2px, transparent 2px 4px);
+    background-attachment: fixed;
   }
 
   h1, h2, h3, h4 {
@@ -140,9 +159,63 @@
   }
 }
 
+/*
+  THE ROOM, AS COMPONENTS.
+  ------------------------------------------------------------------
+  The palette alone is not the design. What makes a felt table read as a
+  felt table is the weight of the things sitting on it: a brass hairline
+  catching the light, a lifted top edge, a shadow with somewhere to fall.
+  These are the four pieces that carry it, defined once so every screen
+  gets them instead of the ten screens somebody remembers to edit.
+*/
+@layer components {
+  /* A card with stock. Gradient rather than a flat fill so the top edge is
+     lit, a brass hairline instead of a grey one, an inset highlight along
+     the top, and a shadow deep enough to sit ON the felt. */
+  .felt-card {
+    background-image: linear-gradient(#17392C, #102921);
+    border: 1px solid #FFD86B33;
+    box-shadow:
+      inset 0 1px 0 #ffffff12,
+      0 18px 34px -22px #000;
+  }
+
+  /* The one that carries the decision. Same stock, brass turned up, and a
+     glow, so on a page of cards the eye lands on this one. */
+  .felt-card-lit {
+    border-color: #FFD86B66;
+    box-shadow:
+      inset 0 1px 0 #ffffff1a,
+      0 0 26px -8px #FF8A3D80,
+      0 18px 34px -22px #000;
+  }
+
+  /* An engraved brass caption. Small, wide, gold — the label on a plaque
+     rather than a heading in a document. */
+  .plaque-label {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.6rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #FFD86B;
+  }
+
+  /* A chip you press. The 4px hard shadow underneath is the edge of a
+     physical token; pressing it moves the face down onto the base rather
+     than fading its colour. */
+  .chip-press {
+    position: relative;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .chip-press:active:not(:disabled) {
+    transform: translateY(3px);
+  }
+}
+
 @layer utilities {
   .font-display {
-    font-family: "Fraunces", Georgia, serif;
+    font-family: "Bodoni Moda", Didot, Georgia, serif;
   }
   .font-sans {
     font-family: "Public Sans", system-ui, sans-serif;
@@ -151,11 +224,12 @@
     font-family: "IBM Plex Mono", ui-monospace, monospace;
   }
 
-  /* Fine engraved-paper texture for hero / document surfaces */
-  .bg-grain {
+  /* Felt weave. A fine diagonal at very low contrast, so the ground has a
+     surface without becoming a pattern anybody notices. */
+  .bg-grain,
+  .bg-felt {
     background-image:
-      radial-gradient(hsl(var(--foreground) / 0.03) 1px, transparent 1px);
-    background-size: 4px 4px;
+      repeating-linear-gradient(45deg, hsl(0 0% 100% / 0.018) 0 2px, transparent 2px 4px);
   }
 
   .text-balance {

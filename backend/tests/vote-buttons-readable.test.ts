@@ -52,9 +52,10 @@ function token(name: string): [number, number, number] {
   const x = c * (1 - Math.abs(((h * 6) % 2) - 1));
   const m0 = l - c / 2;
   const sextant = Math.floor(h * 6) % 6;
-  const [r, g, b] = [
+  const wheel: Array<[number, number, number]> = [
     [c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x],
-  ][sextant];
+  ];
+  const [r, g, b] = wheel[sextant] ?? wheel[0]!;
   return [(r + m0) * 255, (g + m0) * 255, (b + m0) * 255];
 }
 
@@ -67,12 +68,15 @@ const relativeLuminance = ([r, g, b]: [number, number, number]) =>
   0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
 
 const contrast = (a: [number, number, number], b: [number, number, number]) => {
-  const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
   return (hi + 0.05) / (lo + 0.05);
 };
 
 const multiply = (m: number[][], v: number[]) =>
-  m.map((row) => row.reduce((sum, cell, i) => sum + cell * v[i], 0));
+  m.map((row) => row.reduce((sum, cell, i) => sum + cell * (v[i] ?? 0), 0));
 
 /**
  * Deuteranopia, the common form of red-green colour blindness.
@@ -126,11 +130,12 @@ describe("a person who cannot see red or green can still tell Aye from Nay", () 
 
   test("each button is legible against the card it sits on", () => {
     const card = token("card");
-    // The light one carries its own contrast. The dark one is given a border in
-    // VotePanel, because a dark fill on a dark card needs an edge instead.
+    // The light one carries its own contrast against the card. The dark one
+    // cannot — a deep crimson on deep felt is 1.6:1 — so it is given an edge
+    // instead, in the button variant where the chip treatment lives.
     expect(contrast(token("support"), card)).toBeGreaterThanOrEqual(3);
-    expect(read("apps", "web", "src", "components", "civic", "VotePanel.tsx"))
-      .toContain("border-oppose");
+    const button = read("apps", "web", "src", "components", "ui", "button.tsx");
+    expect(button).toMatch(/nay:[^"]*"[^"]*border-oppose/);
   });
 
   test("colour is never the only channel", () => {

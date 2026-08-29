@@ -58,9 +58,9 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
   const userVote = reference.userVote;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-institutional text-accent">
-        <ScrollText className="h-4 w-4" />
+    <div className="felt-card felt-card-lit rounded-2xl p-6">
+      <div className="plaque-label flex items-center gap-2">
+        <ScrollText className="h-3.5 w-3.5" />
         Public Pulse
       </div>
 
@@ -74,22 +74,22 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-4">
-        <div className="rounded-xl bg-support/10 p-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-support">
+        <div className="rounded-xl bg-background/60 p-4 ring-1 ring-accent/15">
+          <div className="plaque-label !text-[#6FE0B0]">
             Aye
           </div>
-          <div className="mt-1 font-display text-3xl font-semibold tabular-nums text-foreground">
+          <div className="mt-1 font-display text-4xl font-extrabold tabular-nums text-foreground">
             {pct}%
           </div>
           <div className="font-mono text-xs text-muted-foreground">
             {reference.votes.support.toLocaleString()} votes
           </div>
         </div>
-        <div className="rounded-xl bg-oppose/10 p-4 text-right">
-          <div className="text-xs font-semibold uppercase tracking-wide text-oppose">
+        <div className="rounded-xl bg-background/60 p-4 text-right ring-1 ring-accent/15">
+          <div className="plaque-label !text-[#FF9BAA]">
             Nay
           </div>
-          <div className="mt-1 font-display text-3xl font-semibold tabular-nums text-foreground">
+          <div className="mt-1 font-display text-4xl font-extrabold tabular-nums text-foreground">
             {opposePct}%
           </div>
           <div className="font-mono text-xs text-muted-foreground">
@@ -119,9 +119,9 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
         */}
         <Button
           size="lg"
+          variant="aye"
           className={cn(
-            "h-12 border-2 border-support bg-support font-bold tracking-wide",
-            "text-support-foreground hover:bg-support/90",
+            "h-12 rounded-xl",
             userVote === "support" && "ring-2 ring-accent ring-offset-2 ring-offset-card",
           )}
           disabled={vote.isPending}
@@ -138,9 +138,9 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
         </Button>
         <Button
           size="lg"
+          variant="nay"
           className={cn(
-            "h-12 border-2 border-oppose/70 bg-oppose font-bold tracking-wide",
-            "text-oppose-foreground hover:bg-oppose/90",
+            "h-12 rounded-xl",
             userVote === "oppose" && "ring-2 ring-accent ring-offset-2 ring-offset-card",
           )}
           disabled={vote.isPending}

@@ -77,6 +77,8 @@ export default {
         accent: {
           DEFAULT: "hsl(var(--accent))",
           foreground: "hsl(var(--accent-foreground))",
+          /* The same gold with the light on it. */
+          lit: "hsl(var(--accent-lit))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",
