@@ -227,12 +227,21 @@ export function AppShell({
               key={item.to}
               to={item.to}
               className={cn(
-                "flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-2 text-[10px] font-medium leading-none transition-colors",
+                // min-w-0 IS THE FIX, NOT A TIDY-UP. A flex item defaults to
+                // min-width:auto, which means it refuses to shrink below the
+                // width of its own text. With eight tabs on a phone, "Government"
+                // and "Messages" would not give ground, the row grew wider than
+                // the screen, and Safari zoomed the WHOLE PAGE out to fit it —
+                // which is why the app arrived shrunken with the layout no
+                // longer lining up with what was painted behind it.
+                "flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center",
+                "gap-0.5 px-0.5 py-2 text-[10px] font-medium leading-none transition-colors",
                 active ? "text-accent" : "text-muted-foreground",
               )}
             >
-              <Icon className="h-[18px] w-[18px]" />
-              {item.label}
+              <Icon className="h-[18px] w-[18px] shrink-0" />
+              {/* The label gives way before the layout does. */}
+              <span className="w-full truncate text-center">{item.label}</span>
             </Link>
           );
         })}

@@ -132,6 +132,32 @@
     @apply border-border;
   }
 
+  /* IOS INFLATES TEXT AND THEN THE LAYOUT DOES NOT FIT.
+     Mobile Safari applies its own text-size adjustment to a page it decides is
+     not mobile-friendly. Small text — the 10px labels in the bottom tab bar,
+     for one — comes back bigger than it was designed to be, the row it lives in
+     grows past the screen, and the reader gets a page that no longer fits and
+     will not line up once they zoom out to see it. Turning the adjustment off
+     is standard for a layout that is already responsive: the sizes here are
+     already chosen for a phone. */
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* NO overflow-x: hidden HERE, AND THAT IS DELIBERATE.
+     It was tried. It does two bad things at once: it CLIPS the content that is
+     sticking out — so the reader loses it rather than seeing a scrollbar — and
+     it makes documentElement.scrollWidth equal clientWidth, which blinds the
+     every-page check to the exact defect it exists to catch. A page that does
+     not fit gets fixed at the source, not papered over. */
+
+  /* A long unbroken string — a URL, a reference id, a title with no spaces —
+     is the other way a layout gets pushed wide. */
+  h1, h2, h3, h4, p, li, td, dd, dt {
+    overflow-wrap: anywhere;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "ss01", "cv01";
@@ -149,7 +175,14 @@
       radial-gradient(90% 42% at 50% 0%, #FF8A3D26 0%, transparent 62%),
       radial-gradient(120% 68% at 50% 6%, #1E5A3C 0%, transparent 64%),
       repeating-linear-gradient(45deg, hsl(0 0% 100% / 0.02) 0 2px, transparent 2px 4px);
-    background-attachment: fixed;
+    /* NOT background-attachment: fixed. It is broken on iOS Safari — the
+       background is painted against the VISUAL viewport rather than the layout
+       one, so the moment the page is zoomed or the address bar moves, the felt
+       covers part of the screen and the rest is bare black. Reported with a
+       screenshot showing exactly that: the green stopping halfway across.
+       Scrolling with the page costs nothing and is correct everywhere. */
+    background-repeat: no-repeat;
+    background-size: 100% 100vh, 100% 100vh, auto;
   }
 
   h1, h2, h3, h4 {

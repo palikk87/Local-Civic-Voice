@@ -180,6 +180,50 @@ async function visit(page, state, path) {
     .catch(() => 0);
   if (crashed > 0) return "crashed into the error boundary";
 
+  /*
+   * NOTHING MAY BE WIDER THAN THE SCREEN.
+   *
+   * A single element that will not shrink makes a phone browser scale the
+   * entire document down to fit it. The page is then not merely a bit wide —
+   * it is the wrong size, and every fixed element sits in the wrong place
+   * relative to what is painted behind it.
+   *
+   * A one-pixel tolerance because sub-pixel rounding on a scrollbar is not a
+   * finding. Anything past that is a real element sticking out, and the
+   * measurement names it so the fix does not start with a hunt.
+   */
+  const wide = await page.evaluate(() => {
+    const doc = document.documentElement;
+    const over = doc.scrollWidth - doc.clientWidth;
+    if (over <= 1) return null;
+
+    let worst = null;
+    for (const el of document.querySelectorAll("body *")) {
+      const box = el.getBoundingClientRect();
+      if (box.width === 0) continue;
+      // Skip what is deliberately out of the way: a closed drawer, a hidden
+      // menu, a panel translated off-screen. They are not why the page is wide,
+      // and naming one sends the fix hunting in the wrong place.
+      const style = getComputedStyle(el);
+      if (style.visibility === "hidden" || style.display === "none") continue;
+      if (style.position === "fixed" && style.transform !== "none") continue;
+      if (el.closest("[aria-hidden='true'],[hidden],[data-state='closed']")) continue;
+      const spill = Math.round(box.right - doc.clientWidth);
+      if (spill > 1 && (!worst || spill > worst.spill)) {
+        worst = {
+          spill,
+          what: `${el.tagName.toLowerCase()}.${String(el.className || "").split(" ").filter(Boolean).slice(0, 3).join(".")}`,
+        };
+      }
+    }
+    return { over, worst };
+  }).catch(() => null);
+
+  if (wide) {
+    const blame = wide.worst ? ` — widest is ${wide.worst.what} sticking out ${wide.worst.spill}px` : "";
+    return `${wide.over}px wider than the screen${blame}`;
+  }
+
   return null;
 }
 
@@ -191,8 +235,23 @@ async function visit(page, state, path) {
  * find, so it has to be recorded and stepped over rather than allowed to hide
  * every route behind it.
  */
+/**
+ * PHONE FIRST, BECAUSE THAT IS WHERE IT BREAKS.
+ *
+ * 390x844 is an iPhone 14/15. The bug that produced this measurement was
+ * invisible at 1440: a bottom tab bar whose eight labels refused to shrink,
+ * which made the document wider than a phone screen. Safari's answer to a page
+ * wider than the screen is to zoom the WHOLE DOCUMENT out until it fits, and
+ * from that moment nothing lines up — the reader arrives at a shrunken page
+ * with the background painted somewhere other than the content.
+ */
+const VIEWPORTS = [
+  ["phone", { width: 390, height: 844 }],
+  ["desktop", { width: 1440, height: 1000 }],
+];
+
 async function freshPage(state) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const page = await browser.newPage({ viewport: state.viewport ?? { width: 1440, height: 1000 } });
   await acceptTermsBeforeLoad(page);
   page.on("pageerror", (e) => {
     if (state.path) state.errors.push(String(e).slice(0, 160));
@@ -218,6 +277,8 @@ async function freshPage(state) {
  */
 const CONCURRENCY = 6;
 
+let currentViewport = { width: 1440, height: 1000 };
+
 async function pass(label) {
   const verdicts = new Array(paths.length);
   let next = 0;
@@ -227,7 +288,7 @@ async function pass(label) {
       const index = next++;
       if (index >= paths.length) return;
       const path = paths[index];
-      const state = { path: null, errors: [] };
+      const state = { path: null, errors: [], viewport: currentViewport };
       let page;
       try {
         page = await freshPage(state);
@@ -255,12 +316,15 @@ async function pass(label) {
 
 console.log(`Opening ${paths.length} pages, signed out then signed in.\n`);
 
-signedIn = false;
-await pass("signed-out");
-
-console.log("");
-signedIn = true;
-await pass("signed-in");
+for (const [size, viewport] of VIEWPORTS) {
+  currentViewport = viewport;
+  signedIn = false;
+  await pass(`${size} out`);
+  console.log("");
+  signedIn = true;
+  await pass(`${size} in`);
+  console.log("");
+}
 
 await browser.close();
 server.close();
@@ -271,4 +335,6 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`\nAll ${paths.length} pages render, signed out and signed in.`);
+console.log(
+  `\nAll ${paths.length} pages render and fit the screen — phone and desktop, signed out and signed in.`,
+);

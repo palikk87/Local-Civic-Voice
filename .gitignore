@@ -60,3 +60,8 @@ ios/
 # Fonts fetched by scripts/make-brand-assets.py. Open-licensed, but there is no
 # reason to carry 460KB of them in the repository to redraw four images.
 .brand-fonts/
+
+# Stamped by the deploy workflow with the real commit sha. A local test run
+# writes a placeholder into it; committing that would tell the live site it is
+# running a build that does not exist.
+backend/BUILD_COMMIT

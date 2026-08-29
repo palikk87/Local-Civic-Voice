@@ -87,15 +87,55 @@ export function useCitizenBrief(
 
   useEffect(() => clearPoll, [clearPoll]);
 
-  // A different reference means a different brief. Without this the previous
-  // law's brief stays on screen under the new law's title.
+  /**
+   * A DIFFERENT REFERENCE MEANS A DIFFERENT BRIEF. THE SAME ONE DOES NOT.
+   *
+   * Without a reset, the previous law's brief stays on screen under the new
+   * law's title. That is what this effect is for, and it still does it.
+   *
+   * WHAT IT ALSO USED TO DO, AND WHY THE PAGE JUMPED. `initialBrief` is
+   * `reference?.citizenBriefSections`, read out of a React Query cache. Every
+   * refetch of that query produces a NEW OBJECT with the same contents — and a
+   * vote invalidates exactly that query, on purpose, so every surface agrees on
+   * the tally. So a vote changed initialBrief's identity, this effect fired,
+   * and the brief was reset to `idle`: a tall panel of text collapsed to a
+   * short button. The document lost several hundred pixels, the browser clamped
+   * the scroll position to the shorter page, and the reader — who had just
+   * pressed Aye halfway down — was thrown to the top.
+   *
+   * It read like a full refresh. Nothing navigated and nothing reloaded; the
+   * page fell out from under them.
+   *
+   * The reset now keys on the LAW, not on an object identity that changes for
+   * reasons having nothing to do with the law.
+   */
+  const settledFor = useRef<string | null | undefined>(undefined);
   useEffect(() => {
+    if (settledFor.current === referenceId) return;
+    settledFor.current = referenceId;
+
     clearPoll();
     setBrief(initialBrief);
     setState(initialState ?? (initialBrief ? "ready" : "idle"));
     setReason(null);
     setIsRequesting(false);
-  }, [referenceId, initialBrief, initialState, clearPoll]);
+    // initialBrief and initialState are read on purpose but deliberately not
+    // depended on: a refetch of the same law must not reset what the reader is
+    // looking at.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [referenceId, clearPoll]);
+
+  /**
+   * A brief that ARRIVES for the law already on screen is welcome — that is the
+   * generation finishing, or another reader's copy landing in the cache. It is
+   * adopted without touching anything else, so the panel grows into place
+   * instead of being rebuilt.
+   */
+  useEffect(() => {
+    if (!initialBrief) return;
+    setBrief((current) => (current ? current : initialBrief));
+    setState((current) => (current === "ready" ? current : "ready"));
+  }, [initialBrief]);
 
   const apply = useCallback(
     (response: BriefResponse, id: string) => {

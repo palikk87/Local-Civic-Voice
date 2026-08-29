@@ -57,7 +57,7 @@ export default function Library() {
     setSubmitted(next);
   }, [query]);
 
-  const { data, isLoading, isError, isFetching } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["library", branch, submitted],
     queryFn: async (): Promise<LibraryRow[]> => {
       const q = submitted.trim();
@@ -124,7 +124,12 @@ export default function Library() {
   });
 
   const rows = data ?? [];
-  const loading = enabled && (isLoading || isFetching);
+  // FIRST LOAD ONLY. This was (isLoading || isFetching), which swapped the
+  // whole result list for a skeleton every time a background refetch ran —
+  // including the one a vote triggers. The page lost its height and the reader
+  // lost their place. With keepPreviousData set on the client, the old rows
+  // stay put while the new ones arrive.
+  const loading = enabled && isLoading;
 
   // Citizen's Brief preview — same flow as the mobile library screen.
   const [selectedResult, setSelectedResult] = useState<GovernmentSearchResult | null>(null);
