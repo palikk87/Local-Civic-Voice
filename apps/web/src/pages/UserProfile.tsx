@@ -35,6 +35,7 @@ import type { MyDelegation } from "@/lib/article-v";
 import { CivicRecord } from "@/components/record/CivicRecord";
 import { ReportDialog } from "@/components/safety/ReportDialog";
 import { useStartConversation } from "@/lib/api/messages";
+import { PostComments } from "@/components/feed/PostComments";
 
 interface PublicUser {
   id: string;
@@ -83,6 +84,8 @@ export default function UserProfile() {
   const isSelf = me?.id === id;
   const startConversation = useStartConversation();
   const [reporting, setReporting] = useState(false);
+  /** One thread open at a time on a profile — a wall of open boxes is noise. */
+  const [openComments, setOpenComments] = useState<string | null>(null);
 
   const { data: profile, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["public-user", id],
@@ -548,10 +551,29 @@ export default function UserProfile() {
                     </Badge>
                   </button>
                 ) : null}
+                {/*
+                  THE COMMENT COUNT IS A DOOR NOW.
+
+                  It was a sentence. Somebody reading a profile could see that a
+                  post had eleven comments and had no way to read one, let alone
+                  add one, without hunting for the post somewhere else. Asked
+                  for as "keep people on the feed or profile pages or where ever
+                  they are that they see the post and still comment".
+                */}
                 <p className="mt-2 text-xs text-slate-500">
                   {new Date(post.createdAt).toLocaleString()} · {post.likesCount} likes ·{" "}
-                  {post.commentsCount} comments
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setOpenComments((open) => (open === post.id ? null : post.id))
+                    }
+                    aria-expanded={openComments === post.id}
+                    className="underline underline-offset-2 hover:text-slate-300"
+                  >
+                    {post.commentsCount} comments
+                  </button>
                 </p>
+                {openComments === post.id ? <PostComments postId={post.id} autoFocus /> : null}
               </div>
             ))
           )}

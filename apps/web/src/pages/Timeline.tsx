@@ -45,7 +45,6 @@ import CreatePostModal from "@/components/mobile/CreatePostModal";
 import { ComposeCard } from "@/components/feed/ComposeCard";
 import ShareModal from "@/components/mobile/ShareModal";
 import PostOptionsModal from "@/components/mobile/PostOptionsModal";
-import { parseContentWithMentions } from "@/components/mobile/CommentSection";
 import { PostComments } from "@/components/feed/PostComments";
 import { castReferenceVote } from "@/lib/mobile/reference-votes";
 import { safetyApi } from "@/lib/civic";
@@ -162,16 +161,16 @@ function BranchBadge({ branch }: { branch?: string }) {
 function PostCard({
   post,
   index,
-  onComment,
   onShare,
   onMore,
 }: {
   post: TimelinePost;
   index: number;
-  onComment: (post: TimelinePost) => void;
   onShare: (post: TimelinePost) => void;
   onMore: (post: TimelinePost) => void;
 }) {
+  // COMMENT WHERE YOU ARE. See the block near the bottom of this card.
+  const [showComments, setShowComments] = useState(false);
   const navigate = useNavigate();
   const [briefExpanded, setBriefExpanded] = useState(false);
   const likePost = useTimelineStore((s) => s.likePost);
@@ -601,8 +600,12 @@ function PostCard({
           </span>
         </button>
 
-        {/* Reply */}
-        <button onClick={() => onComment(post)} className="flex items-center mr-6">
+        {/* Reply — opens the conversation here, not somewhere else. */}
+        <button
+          onClick={() => setShowComments((open) => !open)}
+          aria-expanded={showComments}
+          className="flex items-center mr-6"
+        >
           <MessageCircle size={18} color="#64748B" />
           <span className="ml-1.5 text-slate-400 text-sm">Reply</span>
         </button>
@@ -614,31 +617,20 @@ function PostCard({
         </button>
       </div>
 
-      {/* Comments preview */}
-      {post.comments.length > 0 ? (
-        <div className="px-4 pb-3 border-t border-slate-700/30 pt-3">
-          {post.comments.slice(0, 2).map((comment) => (
-            <div key={comment.id} className="flex mb-2">
-              {/* The post's author above is a link; the commenter here was not.
-                  Same person, same platform, half a rule. */}
-              <PersonAvatar
-                person={comment.author}
-                className="w-8 h-8 rounded-full"
-                fallbackClassName="bg-slate-700 text-white text-xs"
-              />
-              <div className="flex-1 ml-2 bg-slate-700/40 rounded-xl rounded-tl-sm px-3 py-2">
-                <p className="text-white text-sm font-medium">
-                  <PersonName person={comment.author} />
-                </p>
-                {parseContentWithMentions(comment.content, comment.taggedUsers)}
-              </div>
-            </div>
-          ))}
-          {post.comments.length > 2 ? (
-            <Link to={`/post/${post.id}`} className="text-amber-500 text-sm font-medium">
-              View all {post.comments.length} comments
-            </Link>
-          ) : null}
+      {/*
+        THE CONVERSATION, NOT A COPY OF IT.
+
+        This showed the first two comments out of the timeline store — the same
+        store whose addComment never reached a server — and then linked to
+        /post/:id to see the rest. So the preview could show comments nobody
+        else had, and reading the real ones meant leaving the page.
+
+        One component, the same one the feed and the post page use, reading the
+        real endpoint.
+      */}
+      {showComments ? (
+        <div className="px-4 pb-3">
+          <PostComments postId={post.id} autoFocus />
         </div>
       ) : null}
     </MotionDiv>
@@ -672,7 +664,7 @@ function PostDetailModal({
         {/* Post content */}
         <div className="flex-1 overflow-y-auto">
           <div className="px-0 pt-4">
-            <PostCard post={post} index={0} onComment={() => undefined} onShare={() => undefined} onMore={() => undefined} />
+            <PostCard post={post} index={0} onShare={() => undefined} onMore={() => undefined} />
           </div>
           <div className="border-t border-slate-800">
             {/*
@@ -733,15 +725,6 @@ export default function TimelineScreen() {
   useEffect(() => {
     recalculateTrending();
   }, [recalculateTrending]);
-
-  const handleComment = useCallback(
-    (post: TimelinePost) => {
-      if (!requireAuth("Sign in to join the conversation.")) return;
-      setSelectedPost(post);
-      setShowPostDetail(true);
-    },
-    [requireAuth]
-  );
 
   const handleShare = useCallback(
     (post: TimelinePost) => {
@@ -911,7 +894,6 @@ export default function TimelineScreen() {
                 key={post.id}
                 post={post}
                 index={index}
-                onComment={handleComment}
                 onShare={handleShare}
                 onMore={handleMore}
               />

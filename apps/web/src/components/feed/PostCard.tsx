@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { Bookmark, Heart, MessageCircle, Repeat2, Share2 } from "lucide-react";
+import { PostComments } from "@/components/feed/PostComments";
 import { toast } from "sonner";
 import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
@@ -57,6 +58,7 @@ export function PostCard({ post }: { post: Post }) {
   const [saved, setSaved] = useState(false);
   const [reposted, setReposted] = useState(post.isRepostedByMe ?? false);
   const [reposts, setReposts] = useState(post.repostsCount ?? 0);
+  const [showComments, setShowComments] = useState(false);
 
   const likeMutation = useMutation({
     mutationFn: () => postsApi.like(post.id),
@@ -229,14 +231,26 @@ export function PostCard({ post }: { post: Post }) {
           <span className={cn("tabular-nums", liked ? "text-accent" : "")}>{likes}</span>
         </button>
 
-        <Link
-          to={post.referenceId ? `/reference/${post.referenceId}` : "#"}
+        {/*
+          THE COMMENT BUTTON OPENS THE COMMENTS.
+
+          It was a Link to /reference/:id — the LAW behind the post. Pressing
+          the speech bubble on somebody's post took you to a bill page, which
+          has no comments on it and is not what the icon says. The count beside
+          it was right; the destination had nothing to do with it.
+
+          It opens the conversation in the card now, on the page you are on.
+        */}
+        <button
+          type="button"
+          onClick={() => setShowComments((open) => !open)}
+          aria-expanded={showComments}
           className="flex items-center gap-1.5 text-sm transition-colors hover:text-foreground"
           aria-label="Comment"
         >
           <MessageCircle className="h-[18px] w-[18px]" />
           <span className="tabular-nums">{post.commentsCount}</span>
-        </Link>
+        </button>
 
         <button
           type="button"
@@ -279,6 +293,10 @@ export function PostCard({ post }: { post: Post }) {
         </button>
         {branch ? <span className="sr-only">{branch.label}</span> : null}
       </div>
+
+      {/* The conversation, in the card. Same component and same query key as
+          the feed and the post page, so it is one conversation everywhere. */}
+      {showComments ? <PostComments postId={post.id} autoFocus /> : null}
     </article>
   );
 }
