@@ -132,6 +132,66 @@ do the work yourself. Never idle in a poll loop and report it as progress.
     Noticed:        (optional) things not acted on
     Needs you:      (optional, max 2, plain language)
 
+### 10. There is a second Claude with live access — ask for it
+
+Khalid can start a Claude in his browser, signed in to the live site. It
+can do the things this session cannot: read the admin console, click
+through as a real user, watch a panel, check a dashboard.
+
+**Ask for it by name when a fact is only visible from there.** "Can you
+start Claude in the browser and have it read X" is a one-line request
+and it is always cheaper than guessing.
+
+**But never spend it on something checkable from here.** A whole evening
+went by with the backend not deploying while the live Claude was asked
+to re-read a panel six times. The answer was in GitHub Actions the whole
+time and this session had access to it. When the reply finally came —
+"don't wait on the panel, check the build" — it cracked in minutes.
+
+The split is simple:
+
+    only it can see    the admin console, a real browser session,
+                       a phone, a provider dashboard, a paid account
+    only I can see     CI status, build logs, the repository, the code,
+                       what actually deployed
+
+Doing its half for it is slow. Making it do mine is worse.
+
+### 11. Before debugging a live system, prove it is running your code
+
+Hours went into fixing a brief generator that was working correctly,
+because the fix had never deployed. The frontend HAD deployed — through
+a different provider — and that was taken as evidence the backend had
+too. It had not; CI was red and had been since before the session began.
+
+So: when something is still broken after a fix, the FIRST question is
+not "what else is wrong with the code". It is "is my code even running".
+Check the build, check the deploy, check a marker in the live bundle.
+One check, before writing a second fix.
+
+### 12. Stop over-engineering
+
+Asked for directly, and earned. The specifics from the evening it was
+asked:
+
+- A brief is a summary of one document. It was making three sequential
+  model calls, each with its own retry ladder, none of them bounded by
+  the request that was waiting — 47 seconds regardless of whether the
+  law was 1,400 characters or 113,000.
+- A one-line CSS fix got a bespoke browser harness that then had to be
+  debugged itself, twice, and thrown away.
+- A test was written that could not work — it stubbed a server running
+  in another process — and only that was discovered after writing it.
+
+The rule: **do the smallest thing that makes it work, then stop.** A
+guard is worth writing when it would have caught a real defect that
+actually happened. A second mechanism to check the first one is usually
+not. If the fix is one line, the proof can be one command.
+
+When something takes far longer than the change deserves, that is the
+signal to stop and ask whether the approach is wrong — not to keep
+building.
+
 ### 10. Say how long, every time
 
 Whenever something is going to take more than a few seconds — a test
