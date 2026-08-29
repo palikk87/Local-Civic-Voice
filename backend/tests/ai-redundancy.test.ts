@@ -259,6 +259,43 @@ describe("no failure is invisible, whatever shape it takes", () => {
   });
 });
 
+describe("a fallback never quietly upgrades the bill", () => {
+  test("no flagship model is reachable by falling back", async () => {
+    // THE COST DECISION IS TAKEN BEFORE ANY CALL. classifyBriefJob puts a short
+    // document on Gemini Flash, an ordinary bill on mini, and reserves a
+    // flagship for a SCOTUS opinion or a million-character bill — the one final
+    // write-up that earns it.
+    //
+    // A FALLBACK MUST NOT OVERRULE THAT. gpt-4o sat on the end of the chain, so
+    // a brief costed as pennies could walk down it and pay flagship prices on
+    // every job, silently, with nothing on any screen saying the bill had
+    // changed. Redundancy is worth paying for in availability, never in an
+    // invisible upgrade of every job to the most expensive model there is.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const source = readFileSync(
+      resolve(import.meta.dir, "..", "src", "services", "ai-generate.ts"),
+      "utf8",
+    );
+
+    const chains = source.slice(
+      source.indexOf("const MODEL_CHAINS"),
+      source.indexOf("const NEVER_A_FALLBACK"),
+    );
+
+    for (const flagship of ["gpt-5.2", "gpt-4o\""]) {
+      expect(chains).not.toContain(flagship);
+    }
+
+    // And there is still real redundancy: more than one model per provider.
+    const reachable = (await ai()).modelAvailability();
+    for (const provider of ["gemini", "openai"]) {
+      const count = reachable.filter((m) => m.provider === provider).length;
+      expect(count).toBeGreaterThan(1);
+    }
+  });
+});
+
 describe("a provider with no credit is not asked again and again", () => {
   test("one empty-balance answer stops the rest of that provider's chain", async () => {
     // MEASURED LIVE: one failed brief made about 34 provider calls, most of

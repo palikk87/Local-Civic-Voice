@@ -124,8 +124,32 @@ const MODEL_SPECS: Record<string, ModelSpec> = {
  */
 const MODEL_CHAINS: Record<AIProvider, string[]> = {
   gemini: ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"],
-  openai: ["gpt-5.4-mini", "gpt-4o-mini", "gpt-4o"],
+  openai: ["gpt-5.4-mini", "gpt-4o-mini"],
 };
+
+/**
+ * THE FLAGSHIPS ARE NOT IN THE CHAIN, AND THAT IS DELIBERATE.
+ *
+ * classifyBriefJob already decides what a job is worth before any call is
+ * made: a short document rides Gemini Flash, an ordinary bill gets mini, and
+ * only a SCOTUS opinion or a million-character bill earns a flagship for the
+ * single final write-up. That is a cost decision, taken deliberately.
+ *
+ * A FALLBACK MUST NOT QUIETLY OVERRULE IT. gpt-4o was on the end of this list,
+ * so a brief that had been costed as pennies could walk down the chain and pay
+ * flagship prices — on every brief, silently, with nothing on any screen
+ * saying the bill had changed. Redundancy is worth paying for in availability,
+ * not in an invisible upgrade of every job to the most expensive model there
+ * is.
+ *
+ * Five models remain, which is redundancy enough. If all five are down, the
+ * honest answer is "not right now, retrying" — not a surprise invoice.
+ *
+ * A flagship is still used where it was chosen on purpose: classifyBriefJob
+ * asks for it by name, and an explicitly requested model is always tried first
+ * on its own provider.
+ */
+const NEVER_A_FALLBACK = ["gpt-5.2", "gpt-4o"] as const;
 
 /**
  * Models this process has been told, by the provider itself, that it cannot
