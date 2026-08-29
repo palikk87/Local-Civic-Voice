@@ -187,6 +187,71 @@ try {
   failures.push(`share and like: ${String(e).slice(0, 110)}`);
 }
 
+// --- "when you have a pop up come up the bug report doesn't allow you to type
+//      in anything" ---------------------------------------------------------
+//
+// A modal dialog installs a focus trap that yanks focus back inside the moment
+// anything outside it is focused, so the reporter's textarea took focus for one
+// frame and lost it, forever. Nothing to do with z-index, which is why it
+// survived. This types into it while a dialog is open and reads the value back.
+try {
+  const p = await page("/feed");
+
+  await p.getByRole("button", { name: /^share$/i }).first().click();
+  await p.waitForTimeout(700);
+  const dialogOpen = await p.locator('[role="dialog"][data-state="open"]').count();
+  if (!dialogOpen) {
+    failures.push("could not open a dialog, so the focus trap case was not exercised");
+  } else {
+    await p.locator("[data-bug-reporter]").first().click();
+    await p.waitForTimeout(500);
+
+    const box = p.locator("[data-bug-reporter] textarea").first();
+    if (!(await box.count())) {
+      failures.push("the bug reporter did not open over the dialog");
+    } else {
+      await box.click();
+      await box.type("typed while a dialog was open", { delay: 12 });
+      await p.waitForTimeout(300);
+      const value = await box.inputValue();
+      if (value !== "typed while a dialog was open") {
+        failures.push(`the bug reporter still cannot be typed into over a dialog (got ${JSON.stringify(value)})`);
+      }
+    }
+  }
+  await p.close();
+} catch (e) {
+  failures.push(`bug reporter over a dialog: ${String(e).slice(0, 110)}`);
+}
+
+// --- "bug reporter sometimes gets in the way" -------------------------------
+//
+// Dragged out of the way rather than hidden, and a drag must not count as a
+// press — opening the panel every time you nudged it would be worse than not
+// being able to move it.
+try {
+  const p = await page("/feed");
+  const button = p.locator("[data-bug-reporter]").first();
+  const before = await button.boundingBox();
+
+  await p.mouse.move(before.x + before.width / 2, before.y + before.height / 2);
+  await p.mouse.down();
+  await p.mouse.move(before.x - 200, before.y - 150, { steps: 12 });
+  await p.mouse.up();
+  await p.waitForTimeout(400);
+
+  const after = await button.boundingBox();
+  if (!after || Math.abs(after.x - before.x) < 50) {
+    failures.push("the bug button cannot be dragged out of the way");
+  }
+  if (await p.locator("[data-bug-reporter] textarea").count()) {
+    failures.push("dragging the bug button opened the report panel, so it cannot be moved without filing one");
+  }
+  await p.close();
+} catch (e) {
+  failures.push(`draggable bug button: ${String(e).slice(0, 110)}`);
+}
+
 await browser.close();
 server.close();
 

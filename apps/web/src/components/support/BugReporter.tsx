@@ -327,10 +327,68 @@ export function BugReporter() {
    */
   const host = useRef<HTMLDivElement | null>(null);
   const [ready, setReady] = useState(false);
+  /** Whatever inside the reporter was focused last, so it can be given back. */
+  const lastInside = useRef<HTMLElement | null>(null);
+  /** Read by the document-level pointer handler, which outlives any render. */
+  const openPanel = useRef<() => void>(() => undefined);
+
+  /**
+   * THE BUTTON MOVES OUT OF THE WAY.
+   *
+   * Reported as "bug reporter sometimes gets in the way". It is fixed to the
+   * bottom-right corner, which is also where a good deal of this app puts
+   * things worth pressing, and a button that covers the thing you are trying
+   * to report is its own joke.
+   *
+   * Dragged, not hidden: hiding it means finding it again, and the whole point
+   * is that it is always to hand. The position is kept per browser so it stays
+   * where it was put.
+   *
+   * `null` means "wherever the stylesheet says", which is the bottom-right
+   * default. Only once somebody moves it does an explicit position exist.
+   */
+  const [spot, setSpot] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const saved = localStorage.getItem("ayenay.bugbutton.spot");
+      return saved ? (JSON.parse(saved) as { x: number; y: number }) : null;
+    } catch {
+      return null;
+    }
+  });
+  // The latest position, for the pointerup handler to persist. Reading `spot`
+  // there would read the value captured when this render's handler was made,
+  // which is where the button was BEFORE the drag.
+  const latestSpot = useRef<{ x: number; y: number } | null>(null);
+
+  /** Never let it be dragged off the screen it is meant to be reachable on. */
+  const clampRef = useRef<(x: number, y: number) => { x: number; y: number }>(
+    () => ({ x: 0, y: 0 }),
+  );
+  const clamp = (x: number, y: number) => ({
+    x: Math.min(Math.max(x, 8), Math.max(8, window.innerWidth - 52)),
+    y: Math.min(Math.max(y, 8), Math.max(8, window.innerHeight - 52)),
+  });
+
+  clampRef.current = clamp;
+  openPanel.current = () => setStage("writing");
+
+  // A window that got smaller can leave a saved spot off-screen.
+  useEffect(() => {
+    if (!spot) return;
+    const onResize = () => setSpot((at) => (at ? clamp(at.x, at.y) : at));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spot !== null]);
 
   useEffect(() => {
     const node = document.createElement("div");
     node.setAttribute("data-bug-reporter-host", "");
+    // A modal dialog sets `pointer-events: none` on the body while it is open.
+    // This node is a child of the body and inherits it, so everything inside —
+    // the button, the panel, the textarea — becomes untouchable the moment
+    // anything opens. Taken back explicitly here rather than on each element.
+    node.style.pointerEvents = "auto";
     document.body.appendChild(node);
     host.current = node;
     setReady(true);
@@ -345,15 +403,117 @@ export function BugReporter() {
      * this node whenever it is put on. Deliberate: the way to report a broken
      * dialog must not disappear because a dialog is open.
      */
+    /**
+     * AND `inert`, WHICH IS THE ONE THAT ACTUALLY STOPPED THE TYPING.
+     *
+     * aria-hidden only hides this from assistive technology. `inert` takes the
+     * whole subtree out of the document's interaction model: nothing in it can
+     * be focused, and element.focus() becomes a silent no-op. A modal dialog
+     * marks everything outside itself inert, this node included.
+     *
+     * That is why "the bug report doesn't allow you to type in anything" looked
+     * like a stacking or a focus-trap problem and was neither. The textarea was
+     * visible, enabled, not read-only, accepting pointer events, and simply
+     * could not hold a caret. Raising the z-index could never have fixed it.
+     *
+     * Taken back off the same way, and for the same reason: the way to report a
+     * broken dialog must keep working while that dialog is open.
+     */
     const watcher = new MutationObserver(() => {
       if (node.getAttribute("aria-hidden") === "true") node.removeAttribute("aria-hidden");
+      if (node.hasAttribute("inert")) node.removeAttribute("inert");
     });
-    watcher.observe(node, { attributes: true, attributeFilter: ["aria-hidden"] });
+    watcher.observe(node, { attributes: true, attributeFilter: ["aria-hidden", "inert"] });
 
     return () => {
       watcher.disconnect();
       node.remove();
       host.current = null;
+    };
+  }, []);
+
+  /**
+   * AND YOU MUST BE ABLE TO TYPE IN IT.
+   *
+   * Reported as "when you have a pop up come up the bug report doesn't allow
+   * you to type in anything". Nothing to do with z-index — this node already
+   * sits above everything. A modal dialog installs a FOCUS TRAP: a focusin
+   * listener that yanks focus back inside the moment anything outside it is
+   * focused. So the textarea took focus for one frame and lost it, forever,
+   * and the field simply would not accept a character.
+   *
+   * Same shape of fix as the dismissal guard below, and for the same reason.
+   * Registered once at mount in the CAPTURE phase on the document: capture on
+   * an ancestor runs before the event ever reaches the target, and therefore
+   * before any listener the dialog added later. stopImmediatePropagation on
+   * focus events raised inside the reporter means the trap never learns focus
+   * moved, and leaves it alone.
+   *
+   * Scoped to this node only. Focus anywhere else in the page is still pulled
+   * back into the dialog, which is what a modal is for.
+   */
+  useEffect(() => {
+    const insideReporter = (target: EventTarget | null) =>
+      target instanceof Element &&
+      !!target.closest("[data-bug-reporter],[data-bug-reporter-host]");
+
+    // Stopping the event is not enough on its own: the trap also restores focus
+    // from its own bookkeeping. So this keeps hold of whatever inside the
+    // reporter was last focused and puts focus back when the trap pulls it out.
+    // Only while the reporter is actually open, and only when focus was in the
+    // reporter a moment ago — a deliberate click into the dialog still works.
+    const keepFocus = (event: FocusEvent) => {
+      if (insideReporter(event.target)) {
+        lastInside.current = event.target as HTMLElement;
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      // Focus LEFT the reporter: it was ours a moment ago (relatedTarget) and
+      // has landed somewhere else (target). That is the trap pulling, not a
+      // person choosing — a deliberate click away clears lastInside first, in
+      // the pointerdown handler below.
+      const stolenFromUs =
+        !!lastInside.current &&
+        document.contains(lastInside.current) &&
+        insideReporter(event.relatedTarget) &&
+        !insideReporter(event.target);
+
+      if (stolenFromUs && lastInside.current) {
+        const target = lastInside.current;
+        event.stopImmediatePropagation();
+        // After the trap has finished its own refocusing for this turn.
+        queueMicrotask(() => target.focus({ preventScroll: true }));
+      }
+    };
+
+    const forgetOnClose = (event: MouseEvent) => {
+      if (!insideReporter(event.target)) lastInside.current = null;
+    };
+
+    /**
+     * focusout MATTERS AS MUCH AS focusin, AND IS THE ONE THAT WAS WINNING.
+     *
+     * The trap does not only watch focus arriving somewhere it dislikes; it
+     * watches focus LEAVING the dialog and pulls it straight back, in the same
+     * task. So `textarea.focus()` was running and being undone before the next
+     * line of script — which is why the probe saw focus fail to take even
+     * synchronously, with nothing inert or hidden anywhere in the tree.
+     *
+     * When focus is moving INTO the reporter, the departure is not the trap's
+     * business.
+     */
+    const releaseFocus = (event: FocusEvent) => {
+      if (insideReporter(event.relatedTarget)) event.stopImmediatePropagation();
+    };
+
+    document.addEventListener("focusin", keepFocus, true);
+    document.addEventListener("focusout", releaseFocus, true);
+    document.addEventListener("pointerdown", forgetOnClose, true);
+    return () => {
+      document.removeEventListener("focusin", keepFocus, true);
+      document.removeEventListener("focusout", releaseFocus, true);
+      document.removeEventListener("pointerdown", forgetOnClose, true);
     };
   }, []);
 
@@ -375,15 +535,89 @@ export function BugReporter() {
   useEffect(() => {
     const swallow = (event: Event) => {
       const target = event.target as Element | null;
-      if (target?.closest?.("[data-bug-reporter],[data-bug-reporter-host]")) {
-        event.stopImmediatePropagation();
+      if (!target?.closest?.("[data-bug-reporter],[data-bug-reporter-host]")) return;
+
+      event.stopImmediatePropagation();
+
+      /**
+       * AND IT HAS TO DO THE FOCUSING ITSELF.
+       *
+       * Reported as "when you have a pop up come up the bug report doesn't
+       * allow you to type in anything". Stopping the press above is what keeps
+       * an open dialog from dismissing itself when you reach for the reporter —
+       * but a press that is stopped before it reaches its target never performs
+       * the target's default action either, and focusing the thing you clicked
+       * is a default action. So the textarea was clicked and never focused, the
+       * caret stayed in the dialog, and every keystroke went somewhere else.
+       *
+       * Nothing to do with z-index, which is why raising it never helped.
+       */
+      if (event.type === "pointerdown" && target instanceof HTMLElement) {
+        const focusable = target.closest<HTMLElement>(
+          "input, textarea, select, button, [tabindex]:not([tabindex='-1'])",
+        );
+        if (focusable) queueMicrotask(() => focusable.focus({ preventScroll: true }));
       }
+
+      /**
+       * THE BUTTON'S OWN POINTER HANDLING LIVES HERE, AND IT HAS TO.
+       *
+       * stopImmediatePropagation above is what keeps a dialog from dismissing
+       * itself the moment you reach for the reporter. It is also total: React
+       * listens at the root container, so an onPointerDown on the button never
+       * fires either. Putting the drag on the element was tried and the button
+       * simply stopped working — it opened nothing, because the press never
+       * reached React at all.
+       *
+       * So the press is handled at the only level that still sees it. Moving
+       * the button and opening the panel are the same gesture resolved on
+       * release: a drag if the pointer travelled, a press if it did not.
+       */
+      if (event.type !== "pointerdown") return;
+      const handle = target.closest("[data-bug-drag-handle]") as HTMLElement | null;
+      if (!handle) return;
+
+      const press = event as PointerEvent;
+      const box = handle.getBoundingClientRect();
+      const start = { x: press.clientX, y: press.clientY };
+      const offset = { dx: press.clientX - box.left, dy: press.clientY - box.top };
+      let moved = false;
+
+      const onMove = (move: PointerEvent) => {
+        // Four pixels of travel is a press with a shaky hand, not a drag.
+        if (Math.hypot(move.clientX - start.x, move.clientY - start.y) > 4) moved = true;
+        const next = clampRef.current(move.clientX - offset.dx, move.clientY - offset.dy);
+        latestSpot.current = next;
+        setSpot(next);
+      };
+
+      const onUp = () => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        if (moved) {
+          // Moved: remember where, and do NOT treat the release as a press.
+          // Opening the panel every time you nudged it out of the way would be
+          // worse than not being able to move it at all.
+          try {
+            localStorage.setItem("ayenay.bugbutton.spot", JSON.stringify(latestSpot.current));
+          } catch {
+            /* a browser refusing storage still gets a draggable button */
+          }
+          return;
+        }
+        openPanel.current();
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
     };
+
     const events = ["pointerdown", "mousedown", "touchstart", "focusin"] as const;
     for (const name of events) document.addEventListener(name, swallow, true);
     return () => {
       for (const name of events) document.removeEventListener(name, swallow, true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stopPicking = useCallback(() => {
@@ -521,9 +755,14 @@ export function BugReporter() {
       <button
         type="button"
         data-bug-reporter
-        onClick={() => setStage("writing")}
+        data-bug-drag-handle
+        // The accessible name is the button's identity and other code finds it
+        // by that name; the drag is a convenience, so it goes in the tooltip
+        // and the description rather than renaming the control.
         aria-label="Report a problem with this page"
-        className={`fixed bottom-20 right-4 ${ABOVE_EVERYTHING} flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground lg:bottom-6`}
+        title="Report a problem — drag to move it out of the way"
+        style={spot ? { left: spot.x, top: spot.y, right: "auto", bottom: "auto" } : undefined}
+        className={`fixed ${spot ? "" : "bottom-20 right-4 lg:bottom-6"} ${ABOVE_EVERYTHING} flex h-11 w-11 cursor-grab touch-none items-center justify-center rounded-full border border-border bg-card/95 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground active:cursor-grabbing`}
       >
         <Bug className="h-5 w-5" />
       </button>,

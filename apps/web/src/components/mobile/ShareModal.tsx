@@ -1,6 +1,8 @@
 // Web port of mobile/src/components/ShareModal.tsx
 import { useState } from "react";
 import { X, Share2, MessageCircle, Send, Copy, FileText, Check } from "lucide-react";
+import { toast } from "sonner";
+import { useStartConversation } from "@/lib/api/messages";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useTimelineStore, type TimelinePost } from "@/lib/mobile/timeline-store";
 import { useSignedInIdentity } from "@/lib/mobile/signed-in-identity";
@@ -37,7 +39,6 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
 
   const sharePost = useTimelineStore((s) => s.sharePost);
   const shareContent = useTimelineStore((s) => s.shareContent);
-  const shareToMessage = useTimelineStore((s) => s.shareToMessage);
   const requireAuth = useRequireAuth();
 
   const shareTitle = post
@@ -58,15 +59,57 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
     onClose();
   };
 
+  /**
+   * SENDING THIS IN A MESSAGE ACTUALLY SENDS IT.
+   *
+   * Reported twice: "when you click message in share it doesn't give you any
+   * ability to actually share it in a message". Two separate faults sat on top
+   * of each other.
+   *
+   * The first: this returned early unless it had a `post`. The feed opens this
+   * sheet about the LAW behind a card and passes `content`, never `post`, so
+   * picking a person and pressing Send ran three lines and stopped. No error,
+   * no message, nothing.
+   *
+   * The second, and the reason fixing the first alone would have been worse
+   * than useless: the store's sendMessage never spoke to the server. It
+   * appended to a zustand map and returned. Every screen in Messages reads the
+   * real /api/messages endpoints, so a "sent" message was written somewhere
+   * nobody — including the sender — would ever see it, and the recipient was
+   * never involved at all.
+   *
+   * POST /api/messages/conversations takes a participant and a first message
+   * and does both. It is what Messages already reads back.
+   */
+  const startConversation = useStartConversation();
+
   const handleShareToMessage = () => {
     if (!requireAuth("Sign in to send this in a message.")) return;
-    if (!selectedUser || !post) return;
+    if (!selectedUser) return;
 
-    shareToMessage(selectedUser.id, post);
+    const origin = window.location.origin;
+    const link = post
+      ? `${origin}/post/${post.id}`
+      : content
+        ? `${origin}/reference/${content.id}`
+        : origin;
+    const subject = post ? "a post" : content ? content.title : "this";
 
-    setSelectedUser(null);
-    setOpinion("");
-    onClose();
+    // Their words first when they wrote any, then what they are pointing at.
+    const body = [opinion.trim(), `${subject}\n${link}`].filter(Boolean).join("\n\n");
+
+    startConversation.mutate(
+      { participantId: selectedUser.id, message: body },
+      {
+        onSuccess: () => {
+          toast.success(`Sent to ${selectedUser.displayName ?? selectedUser.username}`);
+          setSelectedUser(null);
+          setOpinion("");
+          onClose();
+        },
+        onError: () => toast.error("Couldn't send that message"),
+      },
+    );
   };
 
   const handleCopyLink = () => {
@@ -255,7 +298,7 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
 
               <button
                 onClick={handleShareToMessage}
-                disabled={!selectedUser}
+                disabled={!selectedUser || startConversation.isPending}
                 className={cn(
                   "mt-4 w-full py-4 rounded-xl flex items-center justify-center",
                   selectedUser ? "bg-amber-500 hover:bg-amber-400 transition-colors" : "bg-slate-700"

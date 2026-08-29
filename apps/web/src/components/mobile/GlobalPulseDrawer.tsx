@@ -17,6 +17,8 @@ import {
   UserPlus,
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { useQuery } from "@tanstack/react-query";
+import { civicApi } from "@/lib/civic";
 import {
   useGlobalEngagementStore,
   type GlobalEngagementRecord,
@@ -214,17 +216,56 @@ export default function GlobalPulseDrawer({
   visible: boolean;
   onClose: () => void;
 }) {
-  // Select raw data from store (stable references)
-  const engagementRecords = useGlobalEngagementStore((s) => s.engagementRecords);
+  /**
+   * THE PULSE IS THE PLATFORM'S, NOT THIS BROWSER'S.
+   *
+   * Reported as "there is nothing really inside of it not sure if that's
+   * because a lack of content so far on the platform". It was not a content
+   * shortage. This panel read a zustand store filled in as YOU used the app, so
+   * it could only ever show what this one browser had done — empty in a fresh
+   * session, empty on a second device, and never anybody else's activity. A
+   * "global pulse" that is local is the one thing it must not be.
+   *
+   * /api/government-references/trending is the real ranking, across everybody.
+   */
+  const { data: trending } = useQuery({
+    queryKey: ["global-pulse-trending"],
+    queryFn: () => civicApi.trending(5),
+    enabled: visible,
+  });
+
+  const trendingReferences = useMemo(
+    () =>
+      (trending?.references ?? []).map((reference) => ({
+        referenceId: reference.id,
+        referenceType: reference.referenceType,
+        title: reference.title,
+        supportVotes: reference.votes?.support ?? 0,
+        opposeVotes: reference.votes?.oppose ?? 0,
+        commentCount: reference.engagement?.comments ?? 0,
+        shareCount: reference.engagement?.shares ?? 0,
+        trendingScore: reference.votes?.total ?? 0,
+        // NOT SYNTHESISED. The server ranks records, not people, and naming
+        // who voted on what is precisely what this platform promises never to
+        // publish. An empty list renders nothing, which is the honest answer.
+        topContributors: [],
+      })) as unknown as GlobalEngagementRecord[],
+    [trending],
+  );
+
+  /**
+   * THE LEADERBOARD IS DELIBERATELY EMPTY, AND NEEDS A DECISION.
+   *
+   * This ranked PEOPLE by how much they engage. The platform's own Constitution
+   * says the Trust Score informs a delegation and never ranks anybody, and a
+   * public league table of citizens is the same thing under a different name.
+   * The store behind it was local anyway, so it has never shown a real number.
+   *
+   * Left rendering nothing rather than quietly built or quietly deleted: this
+   * is a product decision about what the platform is, not a bug to fix.
+   */
   const engagementLeadersData = useGlobalEngagementStore((s) => s.engagementLeaders);
-
-  // Compute derived data outside selector to prevent infinite loops
-  const trendingReferences = useMemo(() => {
-    const records = Object.values(engagementRecords);
-    return records.sort((a, b) => b.trendingScore - a.trendingScore).slice(0, 5);
-  }, [engagementRecords]);
-
-  const engagementLeaders = useMemo(() => engagementLeadersData.slice(0, 10), [engagementLeadersData]);
+  const engagementLeaders: typeof engagementLeadersData = [];
 
   return (
     <Sheet open={visible} onOpenChange={(open) => (!open ? onClose() : undefined)}>
