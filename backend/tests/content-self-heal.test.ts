@@ -67,7 +67,20 @@ async function plant(
 }
 
 beforeAll(async () => {
-  await prisma.governmentReference.deleteMany({ where: { masterReferenceId: { in: ALL } } });
+  // THE SWEEP IS GLOBAL, SO THIS TEST HAS TO OWN THE TABLE.
+  //
+  // healReferenceContent() looks at every reference there is, and this test
+  // asserts what it did and did NOT ask for. Run on its own that is exact: four
+  // records, four outcomes. Run after sixty-five other files it is not — they
+  // leave hundreds of rows with no text behind, the sweep quite correctly picks
+  // those up too, and the assertion that a FRESH record was left alone is being
+  // judged against a list it never controlled.
+  //
+  // It passed alone and failed in company, which is the signature of a test
+  // reading state it does not own. Clearing first is what makes the answer the
+  // same either way. Files that run after this seed their own data in
+  // beforeEach, so nothing downstream depends on what is removed here.
+  await prisma.governmentReference.deleteMany({});
 
   // The defect, exactly as it reached production: a captcha notice stored as a
   // law, with a Citizen's Brief written from it.
