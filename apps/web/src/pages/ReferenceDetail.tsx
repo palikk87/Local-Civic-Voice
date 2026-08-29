@@ -131,7 +131,22 @@ export default function ReferenceDetail() {
           // the same thing it already did below lg.
           <div className="grid gap-8 xl:grid-cols-[1.6fr_1fr] xl:items-start">
             {/* Main column */}
-            <article>
+            {/*
+              min-w-0 IS LOAD-BEARING, exactly as it is on the bottom nav.
+
+              A grid item defaults to `min-width: auto`, which means it will not
+              shrink below the min-content width of what is inside it. The full
+              text panel below holds raw congressional text, and that text's
+              min-content width is around 640px. So on a phone this article
+              refused to be narrower than 640px inside a 326px column, the
+              document became 672px wide, and iOS offered the reader a page
+              wider than their screen. The header bar and the page background
+              are `width: 100%` — they resolve against the VIEWPORT — so they
+              stopped at 390px while the article ran on past them. That is the
+              misalignment in the report: chrome painted to one width, content
+              laid out to another.
+            */}
+            <article className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <ReferenceTypeBadge type={reference.referenceType} />
                 <CategoryBadge category={reference.category} />
@@ -271,7 +286,15 @@ export default function ReferenceDetail() {
                   <h2 className="font-display text-xl font-semibold text-foreground">
                     Full text
                   </h2>
-                  <div className="mt-3 max-h-[28rem] overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-secondary/40 p-5 font-mono text-sm leading-relaxed text-foreground/80">
+                  {/*
+                    break-words alongside pre-wrap: keep the bill's own line
+                    breaks and indentation, which carry meaning in a statute,
+                    but let a line too long for the screen wrap instead of
+                    setting the width of the whole page. overflow-auto so a
+                    line that still cannot wrap — a long unbroken citation —
+                    scrolls inside this box and nowhere else.
+                  */}
+                  <div className="mt-3 max-h-[28rem] overflow-auto overscroll-contain whitespace-pre-wrap break-words rounded-xl border border-border bg-secondary/40 p-5 font-mono text-sm leading-relaxed text-foreground/80">
                     {reference.fullText}
                   </div>
                 </div>
@@ -328,7 +351,7 @@ export default function ReferenceDetail() {
             </article>
 
             {/* Vote sidebar */}
-            <aside className="xl:sticky xl:top-20">
+            <aside className="min-w-0 xl:sticky xl:top-20">
               <VotePanel reference={reference} />
 
               {/* THE GAP — the people here against the chamber that voted.

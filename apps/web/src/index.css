@@ -158,6 +158,21 @@
     overflow-wrap: anywhere;
   }
 
+  /* AND THE ONE THAT GOT THROUGH THE RULE ABOVE.
+     The law page shows a bill's official text in a `whitespace-pre-wrap` DIV,
+     which the element list above does not cover. pre-wrap keeps the source's
+     own line breaks — which a statute needs — but it also gives the block a
+     min-content width as wide as its longest line, around 640px for
+     congressional text. That block sat in a CSS grid, grid items default to
+     `min-width: auto`, and so a 326px column was forced to 640px: the document
+     went to 672px on a 390px phone while the header bar and the page
+     background stayed at 390px, because those are width:100% of the VIEWPORT.
+     Content laid out to one width, chrome painted to another.
+     Wrapping is the fix; the line breaks are still preserved. */
+  [class*="whitespace-pre-wrap"] {
+    overflow-wrap: anywhere;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "ss01", "cv01";

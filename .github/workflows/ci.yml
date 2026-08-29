@@ -165,6 +165,23 @@ jobs:
       - run: bun run every-page-check
         working-directory: apps/web
 
+      # THE SAME ROUTES, ON A PHONE, WITH SOMETHING ON THE PAGE.
+      #
+      # every-page-check above opens each route in a narrow desktop window and
+      # asks only whether it painted. That is not the same question. Chromium
+      # applies <meta name="viewport"> only under mobile emulation, and the
+      # routes above are built with an id that is in no database, so every
+      # detail page renders an empty "couldn't load this" box that fits any
+      # screen. A law page 282px too wide for an iPhone passed both of those.
+      #
+      # This one uses real device descriptors from iPhone SE to 15 Pro Max,
+      # serves two law pages from API responses captured verbatim from
+      # production, fetches the real fonts because a fallback typeface measures
+      # differently, and fails if a page painted nothing — a white screen is
+      # 0px too wide on every screen ever made.
+      - run: bun run phone-fit-check
+        working-directory: apps/web
+
       # The built site must be able to say which commit it is. Without the
       # stamp, deploy-check cannot tell a deploy that happened from one that
       # did not, and that is precisely how a finished fix sat unshipped.
