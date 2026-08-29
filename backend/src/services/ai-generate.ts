@@ -236,7 +236,7 @@ function requestBudget(requested: number | undefined, headroom: number | undefin
  * It has to be comfortably UNDER the caller's own budget, because a brief is
  * two calls (draft, then check the draft against the law) and sometimes three.
  */
-const DEFAULT_AI_TIMEOUT_MS = 22_000;
+const DEFAULT_AI_TIMEOUT_MS = 8_000;
 
 /**
  * How long the WHOLE attempt may take — every model, every retry.
@@ -245,7 +245,17 @@ const DEFAULT_AI_TIMEOUT_MS = 22_000;
  * rate-limit retries each is nine calls, and nine times a survivable timeout is
  * an unsurvivable wait. Falling back must never cost more than answering.
  */
-const DEFAULT_TOTAL_BUDGET_MS = 35_000;
+const DEFAULT_TOTAL_BUDGET_MS = 16_000;
+
+/**
+ * What the background queue gets instead.
+ *
+ * Nothing is waiting on it — no browser, no proxy, no edge timeout — so it can
+ * take the time a long law actually needs. The tight defaults above exist to
+ * protect a REQUEST; applying them to work nobody is watching would fail long
+ * bills for no reason.
+ */
+export const UNATTENDED_BUDGET_MS = 5 * 60 * 1000;
 
 /**
  * A 200 with nothing in it is a failure, and has to be reported as one.
@@ -585,19 +595,28 @@ export async function generateAI(params: AIGenerateParams): Promise<AIGenerateRe
         lastError = `${model}: ${result.error.slice(0, 300)}`;
         console.warn(`[AI] ${model} failed on ${provider}: ${result.error.slice(0, 300)}`);
 
-        // A NAME THE PROVIDER WILL NOT SERVE is struck off, so the next brief
-        // does not re-learn it. A rate limit or a 500 is NOT that: those say
-        // nothing about the name, and striking a good model off for a busy
+        // EVERY FAILURE IS ITEMISED, whatever kind it is.
+        //
+        // THE GAP THIS CLOSES. Only a refused NAME used to open an incident, so
+        // the two retired Gemini models were named while the model at the head
+        // of the chain — the one that matters most, because it is tried first —
+        // failed invisibly. The roll-up said "every model refused" and could not
+        // say what the first one had actually answered. That was the last
+        // unknown in a three-round outage.
+        void reportIncident({
+          kind: INCIDENT_AI_MODEL,
+          subject: model,
+          fallback: null,
+          detail: `HTTP ${result.status ?? "?"} — ${result.error.slice(0, 400)}`,
+        });
+
+        // A NAME THE PROVIDER WILL NOT SERVE is also struck off, so the next
+        // brief does not re-learn it. A rate limit or a 500 is NOT that: those
+        // say nothing about the name, and striking a good model off for a busy
         // minute would make the platform permanently worse after any bad hour.
         if (modelIsUnusable(result.status, result.error)) {
           struckOff.set(model, Date.now());
           console.warn(`[AI] ${model} struck off for an hour — the provider will not serve it`);
-          void reportIncident({
-            kind: INCIDENT_AI_MODEL,
-            subject: model,
-            fallback: null,
-            detail: result.error.slice(0, 500),
-          });
           continue;
         }
 

@@ -335,6 +335,8 @@ function planFor(textChars: number): { model: string; chunkChars: number } {
  */
 /** The most recent reason a write failed, for the diagnostic on the outcome. */
 let lastWriteError: string | null = null;
+/** Set by composeBrief for the duration of one brief. Null means "use the default". */
+let briefBudgetMs: number | null = null;
 
 async function ask(
   model: string,
@@ -344,6 +346,7 @@ async function ask(
     system: SYSTEM,
     prompt,
     model,
+    ...(briefBudgetMs ? { budgetMs: briefBudgetMs } : {}),
     maxCompletionTokens: 1200,
     temperature: 0.3,
   });
@@ -414,7 +417,7 @@ async function verify(
     model,
     // Tighter than the draft: this reads a brief it already has and answers
     // with a short list. It must not be what pushes the request over.
-    budgetMs: 15_000,
+    budgetMs: briefBudgetMs ? Math.round(briefBudgetMs / 2) : 8_000,
     maxCompletionTokens: 600,
     temperature: 0,
   });
@@ -490,7 +493,15 @@ async function draftFromText(
  * and status live with the caller, so this can be read, tested, and reasoned
  * about as the one thing it is.
  */
-export async function composeBrief(officialText: string | null): Promise<BriefOutcome> {
+export async function composeBrief(
+  officialText: string | null,
+  /**
+   * How long the model calls may take in total. Small when a person is waiting
+   * on a request; generous when the background queue is doing it and nobody is.
+   */
+  budgetMs?: number,
+): Promise<BriefOutcome> {
+  briefBudgetMs = budgetMs ?? null;
   const text = officialText?.trim();
 
   // NO TEXT, NO BRIEF. The single most important line in this file: everything

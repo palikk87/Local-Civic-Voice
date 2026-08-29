@@ -47,7 +47,20 @@ const governmentReferencesRouter = new Hono<{ Variables: AuthVariables }>();
  * button they pressed. Past it the work carries on server-side and the client
  * asks again; nothing is lost, and no request hangs indefinitely.
  */
-const BRIEF_REQUEST_DEADLINE_MS = 45_000;
+/**
+ * How long a brief request may hold the page.
+ *
+ * TWENTY SECONDS, and the number is not arbitrary. The browser talks to
+ * ayeandnay.com and Vercel proxies /api/* through to Railway; that proxy kills
+ * a request at about 120 seconds with a 502 at the edge. Measured live: a
+ * forced regeneration ran 120,191ms and died there. Anything that approaches
+ * that ceiling is the hang users see, and the edge's error is not ours to
+ * shape — so the wall has to be far below it, not near it.
+ *
+ * It also has to leave the server free. Requests were observed serialising, so
+ * a handler that sits for a minute is a handler blocking everybody behind it.
+ */
+const BRIEF_REQUEST_DEADLINE_MS = 20_000;
 
 /**
  * The caller's standing vote per reference, in one query — every list of law

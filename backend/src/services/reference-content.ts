@@ -19,6 +19,7 @@
 
 import { createHash } from "node:crypto";
 import { prisma } from "../prisma";
+import { UNATTENDED_BUDGET_MS } from "./ai-generate";
 import { composeBrief, flattenBrief, parseBrief, serializeBrief } from "./citizen-brief";
 import { aiAvailability } from "./ai-generate";
 import { webSearchAvailable } from "./web-search";
@@ -77,6 +78,15 @@ export interface EnsureContentOptions {
    * false → hand the brief to the job queue so the reader isn't kept waiting.
    */
   generateBriefInline?: boolean;
+  /**
+   * Is a request waiting on this?
+   *
+   * True by default, which keeps the tight budget that stops a browser hanging.
+   * The job queue passes false: nothing is watching it, so a long law gets the
+   * time it actually needs instead of failing to protect a request that does
+   * not exist.
+   */
+  attended?: boolean;
   /**
    * This run is fixing OUR extraction, not following the law.
    *
@@ -874,8 +884,15 @@ async function fetchOfficialText(ref: ReferenceRow, deadlineAt: number): Promise
  * prompt: a summary written from a title and a status is a guess, and a guess
  * rendered in the brief card is indistinguishable from a real one.
  */
-async function generateAndStoreBrief(ref: ReferenceRow): Promise<void> {
-  const outcome = await composeBrief(ref.fullText);
+async function generateAndStoreBrief(
+  ref: ReferenceRow,
+  /** True when a request is waiting; false when the background queue is doing it. */
+  attended = true,
+): Promise<void> {
+  // NOBODY IS WATCHING THE QUEUE, so it gets the time a long law needs. The
+  // tight budget exists to protect a REQUEST from Vercel's 120-second edge
+  // kill; applying it to unattended work would fail long bills for no reason.
+  const outcome = await composeBrief(ref.fullText, attended ? undefined : UNATTENDED_BUDGET_MS);
 
   if (outcome.state === "unavailable") {
     await markSettled(ref.id, "unavailable");
@@ -961,6 +978,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
     force = false,
     deadlineMs = 8_000,
     generateBriefInline = false,
+    attended = true,
     reextract = false,
   } = options;
   const deadlineAt = Date.now() + deadlineMs;
@@ -1121,7 +1139,8 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
   }
 
   if (generateBriefInline) {
-    await generateAndStoreBrief(current);
+    // A request is waiting on this one, so it runs on the tight budget.
+    await generateAndStoreBrief(current, attended);
     return;
   }
 
@@ -1164,11 +1183,19 @@ export async function repairStoredExtractions(): Promise<number> {
   return stale.length;
 }
 
-/** Job-queue entry point: finish the pull and build the brief inline. */
+/**
+ * Job-queue entry point: finish the pull and build the brief.
+ *
+ * UNATTENDED. No browser, no proxy, no edge timeout is waiting on this, so it
+ * runs on the generous budget. The tight one exists to keep a REQUEST under
+ * Vercel's 120-second kill; imposing it here would fail long laws to protect
+ * nobody.
+ */
 export async function processReferenceBrief(referenceId: string, force: boolean): Promise<void> {
   await ensureReferenceContent(referenceId, {
     force,
     deadlineMs: FETCH_TIMEOUT_MS * 2,
     generateBriefInline: true,
+    attended: false,
   });
 }
