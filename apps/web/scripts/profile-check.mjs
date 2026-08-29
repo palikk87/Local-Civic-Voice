@@ -178,8 +178,43 @@ await page.waitForTimeout(1200);
 const recordHeading = await page.getByText("Their record", { exact: false }).count();
 check("a public profile shows their record", recordHeading > 0, `matches=${recordHeading}`);
 
-const position = await page.getByText("Veterans Healthcare Improvement Act").count();
-check("with the positions they have taken on it", position > 0, `matches=${position}`);
+// THE LIST IS BEHIND A CLICK NOW, AND THAT IS THE POINT.
+//
+// This used to assert that a stranger's profile shows the itemised list — every
+// law, which way they went, the date. That was changed deliberately: "the
+// record should be page to click on not a section right out in the open. if
+// people want to know more about someones vote history they should atleast
+// have to click a button to get it."
+//
+// So the check follows the decision instead of the old screen: the profile
+// carries the summary and a way in, the list is NOT sitting open on it, and the
+// way in actually goes somewhere.
+const inlineList = await page.getByText("Veterans Healthcare Improvement Act").count();
+check(
+  "their positions are NOT itemised on the profile itself",
+  inlineList === 0,
+  `inline=${inlineList}`,
+);
+
+const wayIn = page.locator('[data-testid="see-full-record"]');
+check("but there is a way in to the full record", (await wayIn.count()) > 0);
+
+let recordPath = "(not clicked)";
+try {
+  await wayIn.first().click({ timeout: 5000 });
+  await page.waitForTimeout(800);
+  recordPath = new URL(page.url()).pathname;
+} catch (error) {
+  recordPath = `(${String(error).split("\n")[0].slice(0, 70)})`;
+}
+check(
+  "and it leads to their record",
+  recordPath === `/user/${OTHER.id}/record`,
+  `-> ${recordPath}`,
+);
+
+await page.goto(`${base}/user/${OTHER.id}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(800);
 
 // The two private sections must NOT be on somebody else's profile.
 const alone = await page.getByText("Where you stand alone").count();
