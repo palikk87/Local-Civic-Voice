@@ -1362,11 +1362,48 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
     // Inline: this request IS the wait. The reader pressed a button and is
     // watching, so handing the work to a background queue and asking them to
     // poll adds a failure mode without adding speed.
-    await ensureReferenceContent(referenceId, {
-      force,
-      deadlineMs: BRIEF_REQUEST_DEADLINE_MS,
-      generateBriefInline: true,
+    // A REAL WALL, not a number passed downstream and hoped about.
+    //
+    // THE BUG THIS FIXES. BRIEF_REQUEST_DEADLINE_MS was handed to the content
+    // fetcher, which honoured it for DOWNLOADS — and the model calls that
+    // follow ran outside it entirely. Nothing ever stopped the work, so the
+    // deadline was only consulted after the work came back, which is no
+    // deadline at all. A slow generation held the request open until the
+    // browser gave up: "now it just loads indefinitely."
+    //
+    // Racing it against a timer is the difference between a budget and a wish.
+    // When the timer wins, the work is handed to the background queue — which
+    // has no request attached and can take as long as it needs — and the reader
+    // is told it is being written, which is true.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ranLong = Symbol("ran-long");
+    const outcome = await Promise.race([
+      ensureReferenceContent(referenceId, {
+        force,
+        deadlineMs: BRIEF_REQUEST_DEADLINE_MS,
+        generateBriefInline: true,
+      }).then(() => "done" as const),
+      new Promise<typeof ranLong>((resolve) => {
+        timer = setTimeout(() => resolve(ranLong), BRIEF_REQUEST_DEADLINE_MS);
+      }),
+    ]).finally(() => {
+      if (timer) clearTimeout(timer);
     });
+
+    if (outcome === ranLong) {
+      // The generation keeps running; it is not cancelled, because the work is
+      // worth finishing and the next reader gets it for nothing.
+      enqueueBriefGeneration(referenceId);
+      await markWorking(referenceId, "brief_pending").catch(() => undefined);
+      console.warn(
+        `[Brief] ${referenceId} passed ${BRIEF_REQUEST_DEADLINE_MS}ms — handed to the queue`,
+      );
+      return c.json({
+        state: "working",
+        startedAt: new Date(startedAt).toISOString(),
+        note: "This one is taking longer than a page should wait. It is still being written — come back in a moment.",
+      });
+    }
   } catch (error) {
     // A thrown job must not leave the row claiming to be busy — that is the
     // exact shape of the bug this endpoint replaces.
