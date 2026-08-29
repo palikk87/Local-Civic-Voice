@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bug, Check, ChevronDown, ChevronRight, ClipboardCopy, ExternalLink, X } from "lucide-react";
+import { Bug, Check, ChevronDown, ChevronRight, ClipboardCopy, ExternalLink, Link2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { adminAuthHeader } from "@/lib/mobile/admin-store";
@@ -215,6 +215,193 @@ function asPlainText(reports: BugReport[], filter: string): string {
   return lines.join("\n");
 }
 
+interface ReadLink {
+  id: string;
+  label: string;
+  fingerprint: string;
+  createdBy: string;
+  createdAt: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  lastUsedAt: string | null;
+  useCount: number;
+  state: "live" | "revoked" | "expired";
+}
+
+/**
+ * A LINK THAT READS THIS QUEUE, AND NOTHING ELSE.
+ *
+ * WHY THIS IS HERE. The reports get written down here and fixed somewhere else,
+ * and that handoff was signing in and copying the list out by hand every time.
+ * The shortcut everybody reaches for is sharing the admin login — everything,
+ * forever, to solve "read one table", and it cannot be taken back without
+ * changing the password for everybody.
+ *
+ * This grants one read. It expires, it can be revoked on its own, and every use
+ * is counted so an unexpected one is visible.
+ *
+ * The token is shown ONCE, in the response that creates it. It is stored as a
+ * digest, so nobody — including this panel — can produce it again.
+ */
+function ReadLinksPanel() {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [issued, setIssued] = useState<{ url: string; expiresAt: string } | null>(null);
+
+  const { data } = useQuery({
+    queryKey: ["admin", "bug-read-links"],
+    queryFn: () =>
+      api.get<{ links: ReadLink[] }>("/api/admin/bug-reports/read-links", {
+        headers: adminAuthHeader(),
+      }),
+    enabled: open,
+  });
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.post<{ data: { token: string; expiresAt: string } }>(
+        "/api/admin/bug-reports/read-links",
+        { label: `Read link — ${new Date().toLocaleDateString()}` },
+        { headers: adminAuthHeader() },
+      ),
+    onSuccess: (response) => {
+      // Built here rather than on the server, so the link carries whatever
+      // origin this panel is actually being used from.
+      const url = `${window.location.origin}/api/bug-reports/export?token=${response.data.token}`;
+      setIssued({ url, expiresAt: response.data.expiresAt });
+
+      // Copied without being asked. The token cannot be shown again, so the
+      // step most costly to forget is the one not left to the person.
+      void navigator.clipboard
+        .writeText(url)
+        .then(() => toast.success("Link copied — paste it to whoever is fixing things"))
+        .catch(() => toast.message("Link created — copy it from the box below"));
+
+      void queryClient.invalidateQueries({ queryKey: ["admin", "bug-read-links"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Could not create that link"),
+  });
+
+  const revoke = useMutation({
+    mutationFn: (id: string) =>
+      api.delete(`/api/admin/bug-reports/read-links/${id}`, { headers: adminAuthHeader() }),
+    onSuccess: () => {
+      toast.success("That link no longer works");
+      void queryClient.invalidateQueries({ queryKey: ["admin", "bug-read-links"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Could not revoke that link"),
+  });
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((was) => !was)}
+        className="flex w-full items-center gap-2 text-left text-sm font-semibold text-foreground"
+      >
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <Link2 className="h-4 w-4 text-amber-500" />
+        Read links
+        <span className="ml-auto text-xs font-normal text-muted-foreground">
+          Let someone read this queue without an admin login
+        </span>
+      </button>
+
+      {open ? (
+        <div className="mt-4 space-y-4">
+          {/*
+            ONE BUTTON. The label is dated rather than typed, because being made
+            to name a thing before you can have it is a form standing between a
+            person and a two-second job. A link created today is "Read link —
+            29 Aug 2026", which is enough to tell two apart and revoke the right
+            one; renaming is not a thing anybody needed.
+          */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={create.isPending} onClick={() => create.mutate()}>
+              <ClipboardCopy className="mr-1 h-3.5 w-3.5" />
+              {create.isPending ? "Creating…" : "Create link and copy"}
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Reads bug reports only. Expires in 30 days. Revoke any time.
+            </span>
+          </div>
+
+          {issued ? (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3">
+              <p className="text-xs font-semibold text-amber-500">
+                Copy this now — it is not stored and cannot be shown again.
+              </p>
+              <p className="mt-2 break-all rounded bg-background/60 p-2 font-mono text-[11px] text-foreground">
+                {issued.url}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(issued.url)
+                      .then(() => toast.success("Link copied"))
+                      .catch(() => toast.error("Could not reach the clipboard — select and copy it above"));
+                  }}
+                >
+                  <ClipboardCopy className="mr-1 h-3.5 w-3.5" />
+                  Copy link
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  Reads bug reports only · expires {new Date(issued.expiresAt).toLocaleDateString()}
+                </span>
+                <Button size="sm" variant="ghost" onClick={() => setIssued(null)}>
+                  Done
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {data?.links.length ? (
+            <ul className="space-y-2">
+              {data.links.map((link) => (
+                <li
+                  key={link.id}
+                  className="flex flex-wrap items-center gap-2 rounded-md border border-border px-3 py-2 text-xs"
+                >
+                  <Badge variant={link.state === "live" ? "default" : "secondary"}>{link.state}</Badge>
+                  <span className="font-medium text-foreground">{link.label}</span>
+                  <span className="font-mono text-muted-foreground">{link.fingerprint}</span>
+                  <span className="text-muted-foreground">
+                    {link.useCount === 0
+                      ? "never used"
+                      : `read ${link.useCount}×, last ${new Date(link.lastUsedAt ?? link.createdAt).toLocaleString()}`}
+                  </span>
+                  {link.state === "live" ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="ml-auto"
+                      onClick={() => revoke.mutate(link.id)}
+                      disabled={revoke.isPending}
+                    >
+                      <Trash2 className="mr-1 h-3.5 w-3.5" />
+                      Revoke
+                    </Button>
+                  ) : (
+                    <span className="ml-auto text-muted-foreground">
+                      {link.revokedAt ? `revoked by ${link.revokedBy}` : "expired"}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">No links yet.</p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function BugReportsTab() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("open");
@@ -305,6 +492,8 @@ export function BugReportsTab() {
           </Button>
         </div>
       </div>
+
+      <ReadLinksPanel />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>

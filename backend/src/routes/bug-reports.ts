@@ -22,6 +22,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { Prisma } from "@prisma/client";
 import { createRateLimiter } from "../middleware/rate-limit";
+import { verifyReadLink, recordUse } from "../services/bug-report-read-link";
 import type { auth } from "../auth";
 
 type AuthVariables = {
@@ -35,6 +36,17 @@ const bugReportsRouter = new Hono<{ Variables: AuthVariables }>();
  * Ten an hour. Generous for somebody having a genuinely bad session, and low
  * enough that the inbox cannot be filled from one browser.
  */
+/**
+ * Sixty an hour on the read link. A person reading the queue makes a handful of
+ * requests; this is high enough never to be felt and low enough that a leaked
+ * link cannot be used to hammer the database.
+ */
+const exportLimit = createRateLimiter({
+  maxRequests: 60,
+  windowMs: 60 * 60 * 1000,
+  message: "Too many reads of the bug queue from this address. Try again shortly.",
+});
+
 const submitLimit = createRateLimiter({
   maxRequests: 10,
   windowMs: 60 * 60 * 1000,
@@ -113,6 +125,67 @@ bugReportsRouter.post("/", submitLimit, zValidator("json", submitSchema), async 
   );
 
   return c.json({ success: true, id: report.id, createdAt: report.createdAt }, 201);
+});
+
+/**
+ * GET /api/bug-reports/export
+ *
+ * THE QUEUE, READ BY WHOEVER IS FIXING IT.
+ *
+ * The owner writes bugs down here and somebody else fixes them. Until now that
+ * handoff was a person signing into the admin panel and copying the list out by
+ * hand, every time, which is why reports sat.
+ *
+ * Authenticated by a read link — a capability minted in the admin panel, held
+ * as a digest, scoped to this one endpoint, expiring and revocable. Explicitly
+ * NOT an admin session: handing over an admin password to solve "read one
+ * table" grants everything forever and cannot be taken back without changing it
+ * for everybody.
+ *
+ * READ ONLY, and structurally so. This handler has no write path and reaches no
+ * other model. The only mutation anywhere near it is the use counter, which
+ * exists so the owner can audit the link they issued.
+ *
+ * The token goes in the Authorization header rather than the query string,
+ * because a query string is written to every access log it passes through.
+ * `?token=` is accepted as well, since a link somebody pastes into a browser
+ * has nowhere else to put it — that is a deliberate convenience with a real
+ * cost, and it is why these expire.
+ */
+bugReportsRouter.get("/export", exportLimit, async (c) => {
+  const header = c.req.header("Authorization");
+  const bearer = header?.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  const token = bearer || c.req.query("token") || null;
+
+  const linkId = await verifyReadLink(token);
+  if (!linkId) {
+    // One answer for every rejection. No such link, revoked and expired are
+    // the same 401, because the difference only helps somebody guessing.
+    return c.json(
+      { error: "This link is not valid. It may have expired or been revoked; the admin panel can issue another." },
+      { status: 401 },
+    );
+  }
+
+  // Awaited, not fired and forgotten. A capability whose use is not recorded is
+  // one nobody can audit, and shaving a few milliseconds is not worth that.
+  await recordUse(linkId);
+
+  const status = c.req.query("status") ?? "open";
+  const where = status === "all" ? {} : { status };
+
+  const reports = await prisma.bugReport.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+
+  return c.json({
+    status,
+    count: reports.length,
+    openCount: await prisma.bugReport.count({ where: { status: "open" } }),
+    reports,
+  });
 });
 
 export { bugReportsRouter };

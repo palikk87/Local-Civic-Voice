@@ -88,6 +88,9 @@ const ADMIN = {
   isAdminAuthenticated: true,
 };
 
+let minted = false;
+let revoked = false;
+
 const server = createServer(async (req, res) => {
   const [path] = req.url.split("?");
   const json = (body, code = 200) => {
@@ -98,6 +101,44 @@ const server = createServer(async (req, res) => {
   if (path.startsWith("/api/auth/get-session")) return json(null);
   if (path === "/api/admin/bug-reports") {
     return json({ reports: REPORTS, total: REPORTS.length, openCount: REPORTS.length });
+  }
+
+  // The read link panel. The token below is a fixture, not a credential: this
+  // server exists for the length of this check and answers only this process.
+  if (path === "/api/admin/bug-reports/read-links" && req.method === "POST") {
+    minted = true;
+    return json({
+      data: {
+        id: "link_one",
+        label: "Claude, for the phone work",
+        fingerprint: "a1b2c3d4e5f6",
+        expiresAt: "2026-09-28T00:00:00.000Z",
+        token: "fixture-token-not-a-real-one",
+      },
+    });
+  }
+  if (path === "/api/admin/bug-reports/read-links") {
+    return json({
+      links: minted
+        ? [{
+            id: "link_one",
+            label: "Claude, for the phone work",
+            fingerprint: "a1b2c3d4e5f6",
+            createdBy: "tester",
+            createdAt: "2026-08-29T00:00:00.000Z",
+            expiresAt: "2026-09-28T00:00:00.000Z",
+            revokedAt: revoked ? "2026-08-29T01:00:00.000Z" : null,
+            revokedBy: revoked ? "tester" : null,
+            lastUsedAt: null,
+            useCount: 0,
+            state: revoked ? "revoked" : "live",
+          }]
+        : [],
+    });
+  }
+  if (path.startsWith("/api/admin/bug-reports/read-links/") && req.method === "DELETE") {
+    revoked = true;
+    return json({ data: { revoked: true } });
   }
   if (path.startsWith("/api/")) {
     return json({ results: [], reports: [], data: [], items: [], count: 0, hasMore: false, nextCursor: null });
@@ -190,6 +231,69 @@ if (!(await button.count())) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The read link panel
+// ---------------------------------------------------------------------------
+//
+// A link that reads this queue and nothing else, so the reports can reach
+// whoever is fixing them without handing over an admin login. The panel is what
+// makes that usable; a mint endpoint nobody can reach is not a feature.
+
+const openPanel = page.getByRole("button", { name: /read links/i });
+if (!(await openPanel.count())) {
+  failures.push("no Read links section on the bug reports tab");
+} else {
+  await openPanel.first().click();
+  await page.waitForTimeout(400);
+
+  // One button, no form. Being made to name a thing before you can have it is
+  // a form standing between a person and a two-second job.
+  const createButton = page.getByRole("button", { name: /create link and copy/i });
+  if (!(await createButton.count())) {
+    failures.push("the read link panel did not open, or has no one-click create");
+  } else {
+    await createButton.first().click();
+    await page.waitForTimeout(800);
+
+    const shown = await page.locator("body").innerText();
+
+    // The whole point: a usable URL, shown once, that a person can copy.
+    if (!shown.includes("/api/bug-reports/export?token=")) {
+      failures.push("creating a link did not show a usable URL");
+    }
+    if (!shown.includes("fixture-token-not-a-real-one")) {
+      failures.push("the link shown does not carry the token the server issued");
+    }
+    // A token shown a second time would be a lie — the server stores a digest
+    // and cannot reproduce it. The panel has to say so.
+    if (!/cannot be shown again/i.test(shown)) {
+      failures.push("the panel does not warn that the token is shown only once");
+    }
+    if (!/reads bug reports only/i.test(shown)) {
+      failures.push("the panel does not say what the link can actually do");
+    }
+
+    // The token cannot be shown again, so the step most costly to forget is the
+    // one that must not be left to the person.
+    const clipboard = await page.evaluate(async () => {
+      try { return await navigator.clipboard.readText(); } catch { return ""; }
+    });
+    if (!clipboard.includes("/api/bug-reports/export?token=")) {
+      failures.push("creating a link did not put it on the clipboard");
+    }
+
+    // And it has to be revocable from here, or issuing one is a one-way door.
+    const revokeButton = page.getByRole("button", { name: /revoke/i });
+    if (!(await revokeButton.count())) {
+      failures.push("an issued link cannot be revoked from the panel");
+    } else {
+      await revokeButton.first().click();
+      await page.waitForTimeout(600);
+      if (!revoked) failures.push("clicking Revoke did not reach the server");
+    }
+  }
+}
+
 await browser.close();
 server.close();
 
@@ -199,4 +303,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Copy all exports every report in the filter, with the fields that make one actionable.");
+console.log("Copy all exports every report in the filter, and a read link can be issued, shown once, and revoked.");

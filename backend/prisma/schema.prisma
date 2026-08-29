@@ -1915,3 +1915,46 @@ model ServiceIncident {
   @@unique([kind, subject])
   @@index([acknowledgedAt, lastSeenAt])
 }
+
+
+/// A link that reads the bug queue, and nothing else.
+///
+/// The bug reporter is where the owner writes down what needs fixing, and
+/// getting that list to whoever does the fixing meant signing into the admin
+/// panel and copying it out by hand every time. The obvious shortcut — handing
+/// over an admin password — grants everything, forever, to solve a problem that
+/// is reading one table.
+///
+/// This is a capability, not an account. It carries no identity, it cannot
+/// write anything, and it cannot see any other part of the platform. It
+/// expires, and it can be revoked the moment it is not wanted.
+///
+/// The token is never stored, only its digest — the same treatment a B2B
+/// client's API key gets — so this table leaking does not hand anybody a
+/// working link. The plaintext is shown once, at creation.
+model BugReportReadLink {
+  id          String @id @default(cuid())
+  /// SHA-256 of the token. Unique, so verifying one is a single indexed read.
+  tokenHash   String @unique
+  /// What it is for, in the owner's words. A link nobody can identify is a
+  /// link nobody dares revoke.
+  label       String
+  /// Enough to recognise a token without being enough to use one.
+  fingerprint String
+
+  createdById String
+  createdBy   String
+  createdAt   DateTime @default(now())
+  /// Every link ends. A link with no expiry is a password with extra steps.
+  expiresAt   DateTime
+
+  revokedAt DateTime?
+  revokedBy String?
+
+  /// So the owner can see it being used, and notice if it is used when it
+  /// should not be. A capability nobody can audit is one nobody should issue.
+  lastUsedAt DateTime?
+  useCount   Int       @default(0)
+
+  @@index([createdAt])
+}

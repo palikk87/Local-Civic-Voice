@@ -2,6 +2,13 @@ import { Hono, type Context, type Next } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import {
+  issueReadLink,
+  listReadLinks,
+  revokeReadLink,
+  DEFAULT_TTL_DAYS,
+  MAX_TTL_DAYS,
+} from "../services/bug-report-read-link";
 import { verifyPasswordOrDummy } from "../password-check";
 import { generateAdminToken } from "../session-token";
 import { applyWeightedTally } from "../services/delegation-service";
@@ -2434,6 +2441,121 @@ adminRouter.get("/bug-reports", zValidator("query", bugReportQuerySchema), async
   ]);
 
   return c.json({ reports, total, openCount, limit, offset });
+});
+
+// ---------------------------------------------------------------------------
+// Read links for the bug queue
+// ---------------------------------------------------------------------------
+
+const readLinkSchema = z.object({
+  /// So a link can be recognised in a list and revoked with confidence.
+  label: z.string().min(1, "Give the link a label so you can recognise it later").max(120),
+  ttlDays: z.number().int().min(1).max(MAX_TTL_DAYS).optional(),
+});
+
+/**
+ * POST /api/admin/bug-reports/read-links
+ *
+ * Mint a link that reads the bug queue and nothing else.
+ *
+ * WHY THIS EXISTS RATHER THAN SHARING A PASSWORD. The owner writes bugs down
+ * and somebody else fixes them, and that handoff was a person signing in and
+ * copying the list out by hand. The shortcut everybody reaches for is to share
+ * the admin login, which grants everything forever and cannot be withdrawn
+ * without changing it for everybody. This grants one read, expires on its own,
+ * and can be revoked by itself.
+ *
+ * THE TOKEN COMES BACK EXACTLY ONCE, here, in this response. It is stored as a
+ * digest, so nobody — including this API — can produce it again.
+ */
+adminRouter.post("/bug-reports/read-links", zValidator("json", readLinkSchema), async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "bugReports.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const body = c.req.valid("json");
+  const issued = await issueReadLink({
+    label: body.label,
+    ttlDays: body.ttlDays ?? DEFAULT_TTL_DAYS,
+    createdById: session.adminId,
+    createdBy: session.username,
+  });
+
+  // The label and the fingerprint, never the token. An activity log is read by
+  // more people than the response is.
+  createActivityLog(
+    "issue_bug_read_link",
+    session.adminId,
+    session.username,
+    "system",
+    issued.id,
+    `Issued a bug-queue read link "${issued.label}" (${issued.fingerprint}), expires ${issued.expiresAt.toISOString()}`,
+  );
+
+  return c.json({
+    data: {
+      id: issued.id,
+      label: issued.label,
+      fingerprint: issued.fingerprint,
+      expiresAt: issued.expiresAt,
+      token: issued.token,
+      message:
+        "Copy this now — it is not stored and cannot be shown again. It reads bug reports only, " +
+        "expires on the date above, and can be revoked here at any time.",
+    },
+  });
+});
+
+/**
+ * GET /api/admin/bug-reports/read-links
+ *
+ * Every link ever issued, newest first, with whether it is live and when it was
+ * last used. Revoked and expired links stay listed: a link that vanishes takes
+ * its usage history with it, and "was this ever used" is asked precisely when
+ * something has gone wrong.
+ */
+adminRouter.get("/bug-reports/read-links", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "bugReports.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  return c.json({ links: await listReadLinks() });
+});
+
+/**
+ * DELETE /api/admin/bug-reports/read-links/:id
+ *
+ * Stop a link working, now. Idempotent, and it keeps the first revocation's
+ * time rather than overwriting it — that is when it stopped working.
+ */
+adminRouter.delete("/bug-reports/read-links/:id", async (c) => {
+  const session = await getAdminFromToken(c.req.header("Authorization"));
+  if (!session) {
+    return c.json({ error: "Unauthorized. Valid admin token required." }, { status: 401 });
+  }
+  const denied = await requireCapability(session.role, "bugReports.manage");
+  if (denied) return c.json(denied, { status: 403 });
+
+  const id = c.req.param("id");
+  const found = await revokeReadLink(id, session.username);
+  if (!found) return c.json({ error: "No such link" }, { status: 404 });
+
+  createActivityLog(
+    "revoke_bug_read_link",
+    session.adminId,
+    session.username,
+    "system",
+    id,
+    "Revoked a bug-queue read link",
+  );
+
+  return c.json({ data: { revoked: true } });
 });
 
 const triageSchema = z.object({

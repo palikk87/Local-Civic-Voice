@@ -30,6 +30,7 @@ import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
 import { RepresentationGapPanel } from "@/components/civic/RepresentationGapPanel";
 import { ShareToTimeline, type ShareBranch } from "@/components/civic/ShareToTimeline";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
+import { useIsWide } from "@/hooks/use-is-wide";
 
 function MetaRow({
   icon: Icon,
@@ -62,6 +63,8 @@ const BRANCH_OF: Record<ReferenceType, ShareBranch> = {
 export default function ReferenceDetail() {
   const navigate = useNavigate();
   const { id = "" } = useParams();
+  // Where the vote panel belongs. See the comment at its mobile position.
+  const isWide = useIsWide();
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["reference", id],
@@ -257,6 +260,31 @@ export default function ReferenceDetail() {
 
               <Separator className="my-6" />
 
+              {/*
+                THE VOTE PANEL, WHEN THE PAGE IS ONE COLUMN.
+
+                Above xl the panel sits in the column beside this one, where it
+                is visible the whole way down the page. Below xl that column
+                stacks UNDERNEATH the article — after the brief, the full
+                official text of a bill, and everything else — so on a phone the
+                thing the page exists for was 1,574px below the brief, past the
+                entire statute. Somebody who had just read the brief and decided
+                how they felt had to scroll through the whole bill to say so.
+
+                It sits BELOW the divider deliberately. Above it, it reads as
+                the last item of the record's metadata; below it, it opens the
+                part of the page that is about deciding — vote, then the brief
+                explaining what you are deciding on.
+
+                Rendered ONCE either way. The same card in one of two places,
+                never two cards that can disagree about the tally.
+              */}
+              {!isWide ? (
+                <div className="mb-6">
+                  <VotePanel reference={reference} />
+                </div>
+              ) : null}
+
               <CitizensBriefCard
                 state={citizenBrief.state}
                 brief={citizenBrief.brief}
@@ -352,7 +380,7 @@ export default function ReferenceDetail() {
 
             {/* Vote sidebar */}
             <aside className="min-w-0 xl:sticky xl:top-20">
-              <VotePanel reference={reference} />
+              {isWide ? <VotePanel reference={reference} /> : null}
 
               {/* THE GAP — the people here against the chamber that voted.
                   It sat only on /bill/:id, which is to say on the screen this

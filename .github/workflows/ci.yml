@@ -188,6 +188,15 @@ jobs:
       - run: bun run bug-report-export-check
         working-directory: apps/web
 
+      # One vote panel, in the right place at both widths. Below xl the right
+      # rail stacks under the article, which used to leave the Aye and Nay
+      # buttons 1,574px below the brief on a phone — past the entire official
+      # text of the bill. The lazy fix is to render the panel twice and hide
+      # one; two panels is two tallies that can disagree, so the count is
+      # asserted as exactly one.
+      - run: bun run vote-placement-check
+        working-directory: apps/web
+
       # The built site must be able to say which commit it is. Without the
       # stamp, deploy-check cannot tell a deploy that happened from one that
       # did not, and that is precisely how a finished fix sat unshipped.
