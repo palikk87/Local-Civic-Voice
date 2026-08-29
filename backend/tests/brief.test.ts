@@ -109,10 +109,32 @@ function stubNetwork(options: { text: string }): void {
       };
       const prompt = body.messages?.map((m) => m.content ?? "").join("\n") ?? "";
       const isFactCheck = /unsupported/i.test(prompt);
-      sentPrompts.push({
-        system: body.messages?.[0]?.content ?? "",
-        user: body.messages?.slice(1).map((m) => m.content ?? "").join("\n") ?? "",
-      });
+      // RECORD WHAT WAS SENT, WHICHEVER PROVIDER IT WENT TO.
+      //
+      // This read `body.messages`, which is OpenAI's shape. Gemini sends
+      // `system_instruction` and `contents` instead — so when an earlier test
+      // file left GEMINI_API_KEY set and the chain tried Gemini first, this
+      // recorded an entry with two empty strings, and the assertion below
+      // picked that empty one and failed on a call it was never about. It
+      // passed alone and failed in the full run, which is the signature of a
+      // test reading state it does not control.
+      const gemini = body as {
+        system_instruction?: { parts?: Array<{ text?: string }> };
+        contents?: Array<{ parts?: Array<{ text?: string }> }>;
+      };
+      const systemSent =
+        body.messages?.[0]?.content ??
+        (gemini.system_instruction?.parts ?? []).map((part) => part.text ?? "").join("");
+      const userSent =
+        body.messages?.slice(1).map((m) => m.content ?? "").join("\n") ??
+        (gemini.contents ?? [])
+          .flatMap((turn) => (turn.parts ?? []).map((part) => part.text ?? ""))
+          .join("\n");
+
+      // An empty record is not an observation. Never store one.
+      if (systemSent || userSent) {
+        sentPrompts.push({ system: systemSent ?? "", user: userSent ?? "" });
+      }
       modelCalls.push({
         model: body.model ?? "unknown",
         kind: isFactCheck ? "factcheck" : "write",
