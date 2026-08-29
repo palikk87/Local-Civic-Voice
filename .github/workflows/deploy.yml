@@ -72,13 +72,32 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Wait for CI on this commit
+      - name: Wait for the checks that guard THIS service
         if: steps.token.outputs.configured == 'true'
         uses: actions/github-script@v7
         with:
           script: |
-            // A deploy that races CI can ship a commit the tests were about to
-            // reject. Poll the CI workflow for this exact sha.
+            // WAIT ON WHAT PROTECTS THE BACKEND, NOT ON EVERYTHING.
+            //
+            // THE FAILURE THIS EXISTS FOR. This used to wait for the whole CI
+            // run to conclude success. CI also runs the web browser checks and
+            // the mobile bundle — so a stale check about profile pages, or a
+            // Playwright timeout on a page this service does not serve, blocked
+            // the API from deploying. Four such checks stacked up and the
+            // backend went a full day without shipping a single fix, while the
+            // frontend deployed normally through Vercel the entire time. Two
+            // separate services on one shared fuse.
+            //
+            // Independence is the point: the API deploys when the API's own
+            // gates pass. The web app has its own pipeline and its own gates,
+            // and a failure in one no longer silently freezes the other.
+            //
+            // These two are genuinely the API's:
+            //   backend     — typecheck, schema drift, and the whole test suite
+            //   no db push  — nothing may reshape a database shared with
+            //                 another project. Not optional, ever.
+            const GUARDS = ['backend', 'no db push'];
+
             const deadline = Date.now() + 15 * 60 * 1000;
             while (Date.now() < deadline) {
               const runs = await github.rest.actions.listWorkflowRuns({
@@ -89,15 +108,35 @@ jobs:
                 per_page: 1,
               });
               const run = runs.data.workflow_runs[0];
-              if (run && run.status === 'completed') {
-                if (run.conclusion !== 'success') {
-                  core.setFailed(`CI concluded "${run.conclusion}" for ${context.sha}. Not deploying.`);
+
+              if (run) {
+                const { data } = await github.rest.actions.listJobsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: run.id,
+                  per_page: 100,
+                });
+                const mine = data.jobs.filter((job) => GUARDS.includes(job.name));
+
+                // A guard that is missing is not a guard that passed. If the
+                // workflow did not even start these jobs, refuse rather than
+                // read "no failures" as "all clear".
+                if (mine.length === GUARDS.length && mine.every((job) => job.status === 'completed')) {
+                  const failed = mine.filter((job) => job.conclusion !== 'success');
+                  if (failed.length) {
+                    core.setFailed(
+                      `Not deploying: ${failed.map((j) => `${j.name} (${j.conclusion})`).join(', ')}.`,
+                    );
+                    return;
+                  }
+                  core.info(`Backend guards passed: ${mine.map((j) => j.name).join(', ')}.`);
+                  return;
                 }
-                return;
               }
+
               await new Promise((r) => setTimeout(r, 20000));
             }
-            core.setFailed('CI did not finish within 15 minutes. Not deploying.');
+            core.setFailed('The backend guards did not finish within 15 minutes. Not deploying.');
 
       - uses: oven-sh/setup-bun@v2
         if: steps.token.outputs.configured == 'true'
