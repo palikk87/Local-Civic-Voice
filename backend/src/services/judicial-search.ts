@@ -248,9 +248,27 @@ function score(
   const cites = cluster.citeCount ?? 0;
   const standing = Math.min(40, Math.round(Math.log10(cites + 1) * 20));
 
+  // CURRENCY HOLDS, THEN FADES. It used to decay from the day of the ruling, so
+  // a decision handed down THIS TERM began losing its edge within weeks: two
+  // months after Chatrie was decided it had already shed enough to fall behind
+  // a 2014 landmark, and the guard that pins this behaviour started failing on
+  // nothing but the passage of time.
+  //
+  // That was the wrong shape. "Decided this term" is not a quantity that
+  // shrinks a little each morning — it is true for a year and then it is not.
+  // So a ruling keeps full credit for its first year, then decays over the two
+  // after that, and is worth nothing extra at three. The ceiling still sits
+  // just above the citation ceiling on purpose: when a court has decided the
+  // exact question somebody is asking, that ruling IS the answer and a heavily
+  // cited predecessor is context.
   const filed = Date.parse(result.date_filed || "");
   const ageYears = Number.isFinite(filed) ? (Date.now() - filed) / (365.25 * 86_400_000) : 99;
-  const currency = ageYears <= 3 ? Math.round(45 * (1 - ageYears / 3)) : 0;
+  const currency =
+    ageYears <= 1
+      ? 45
+      : ageYears <= 3
+        ? Math.round(45 * (1 - (ageYears - 1) / 2))
+        : 0;
 
   const prominence = (cluster.court_id === "scotus" ? 30 : 0) + standing + currency;
 
