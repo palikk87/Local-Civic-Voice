@@ -131,3 +131,24 @@ do the work yourself. Never idle in a poll loop and report it as progress.
     Proof:          the command or URL you actually ran
     Noticed:        (optional) things not acted on
     Needs you:      (optional, max 2, plain language)
+
+### 10. Say how long, every time
+
+Whenever something is going to take more than a few seconds — a test
+suite, a build, a browser check, a deploy, waiting on CI — say roughly
+how long BEFORE starting it, and say what is left when reporting back.
+
+"The suite takes about twelve minutes" costs one line. Silence for
+twelve minutes reads as nothing happening, and there is no way from the
+outside to tell a long job from a stuck one. Asked for directly:
+"from now on give me updates about time left. That'll cut back on my
+frustration."
+
+Give a real number from what these actually take here, not a guess:
+
+    backend suite (bun run test)   ~12 min, 1015 tests
+    one browser check              5-30 s
+    every-page-check               ~4 min
+    web build                      ~10 s
+    CI, push to verdict            ~8 min
+    Railway deploy after CI        a few min
