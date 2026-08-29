@@ -20,6 +20,39 @@ export default {
     },
     extend: {
       colors: {
+        /**
+         * SLATE IS GREEN NOW, AND THAT IS THE WHOLE THEME CHANGE.
+         *
+         * About a thousand class names in this app are written as bg-slate-800,
+         * text-slate-400, border-slate-700 and so on. Rewriting every one of
+         * them to a new colour name would be a thousand chances to miss one and
+         * leave a single grey card sitting in a green room.
+         *
+         * So the scale itself moves instead. Same lightness ladder as
+         * Tailwind's slate — a 400 is still a muted label, an 800 is still a
+         * card, a 900 is still the ground — with the hue turned to deep felt
+         * green. Every existing class keeps the role it was written for and
+         * arrives in the new palette without being touched.
+         *
+         * Contrast was measured, not eyeballed. The six pairs this app actually
+         * uses all clear WCAG AA on the new scale; the tightest is
+         * text-slate-500 on bg-slate-900 at 4.64:1.
+         *
+         * Amber is left exactly as Tailwind ships it. It was already the gold.
+         */
+        slate: {
+          50: "#F5F0E6",
+          100: "#E7EFE9",
+          200: "#D0E0D6",
+          300: "#B4C7BC",
+          400: "#8FA79A",
+          500: "#6E8A7C",
+          600: "#4C6659",
+          700: "#2C4A3C",
+          800: "#17362A",
+          900: "#0C1D18",
+          950: "#071410",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

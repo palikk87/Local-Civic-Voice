@@ -39,7 +39,7 @@ function AnnouncementCard({ announcement }: AnnouncementCardProps) {
       case 'alert':
         return { bg: 'bg-red-500/20', border: 'border-red-500/50', icon: <AlertCircle size={20} color="#EF4444" /> };
       default:
-        return { bg: 'bg-slate-700/50', border: 'border-slate-600', icon: <Bell size={20} color="#64748B" /> };
+        return { bg: 'bg-slate-700/50', border: 'border-slate-600', icon: <Bell size={20} color="#6E8A7C" /> };
     }
   };
 
@@ -64,11 +64,11 @@ function AnnouncementCard({ announcement }: AnnouncementCardProps) {
 
           <View className="flex-row items-center mt-3 gap-4">
             <View className="flex-row items-center">
-              <User size={12} color="#64748B" />
+              <User size={12} color="#6E8A7C" />
               <Text className="text-slate-500 text-xs ml-1">{announcement.createdBy}</Text>
             </View>
             <View className="flex-row items-center">
-              <Calendar size={12} color="#64748B" />
+              <Calendar size={12} color="#6E8A7C" />
               <Text className="text-slate-500 text-xs ml-1">
                 {new Date(announcement.createdAt).toLocaleDateString()}
               </Text>
@@ -132,7 +132,7 @@ export default function AdminAnnouncementsScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">Announcements</Text>
         <View className="flex-1" />
@@ -140,7 +140,7 @@ export default function AdminAnnouncementsScreen() {
           onPress={() => setShowCreateModal(true)}
           className="bg-amber-500 p-2 rounded-xl"
         >
-          <Plus size={20} color="#0F172A" />
+          <Plus size={20} color="#0C1D18" />
         </TouchableOpacity>
       </View>
 
@@ -153,7 +153,7 @@ export default function AdminAnnouncementsScreen() {
       >
         {announcements.length === 0 ? (
           <View className="flex-1 items-center justify-center py-20">
-            <Bell size={48} color="#475569" />
+            <Bell size={48} color="#4C6659" />
             <Text className="text-slate-400 text-lg mt-4">No announcements</Text>
             <Text className="text-slate-500 text-sm mt-1">Create one to notify all users</Text>
           </View>
@@ -178,7 +178,7 @@ export default function AdminAnnouncementsScreen() {
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-white text-xl font-bold">New Announcement</Text>
               <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <X size={24} color="#94A3B8" />
+                <X size={24} color="#8FA79A" />
               </TouchableOpacity>
             </View>
 
@@ -202,7 +202,7 @@ export default function AdminAnnouncementsScreen() {
             <TextInput
               className="bg-slate-700 text-white rounded-xl p-4 mb-4"
               placeholder="Announcement title..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={title}
               onChangeText={setTitle}
             />
@@ -211,7 +211,7 @@ export default function AdminAnnouncementsScreen() {
             <TextInput
               className="bg-slate-700 text-white rounded-xl p-4 mb-4"
               placeholder="Write your announcement..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={content}
               onChangeText={setContent}
               multiline

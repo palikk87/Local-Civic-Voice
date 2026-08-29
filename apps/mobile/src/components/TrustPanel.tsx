@@ -68,7 +68,7 @@ export function TrustPanel({ userId, compact = false }: { userId: string; compac
     return (
       <View testID="trust-panel" className="mb-4 rounded-2xl border border-slate-700/50 bg-slate-800/40 p-4">
         <View className="mb-1 flex-row items-center">
-          <ShieldCheck size={16} color="#94A3B8" />
+          <ShieldCheck size={16} color="#8FA79A" />
           <Text className="ml-2 text-sm font-semibold text-white">Trust Score</Text>
         </View>
         <NotEnough result={result} />
@@ -95,7 +95,7 @@ export function TrustPanel({ userId, compact = false }: { userId: string; compac
       <View className="flex-row items-start justify-between">
         <View className="flex-1">
           <View className="flex-row items-center">
-            <ShieldCheck size={16} color="#94A3B8" />
+            <ShieldCheck size={16} color="#8FA79A" />
             <Text className="ml-2 text-sm font-semibold text-white">Trust Score</Text>
           </View>
           <Text className="mt-1 text-xs text-slate-400">{trustBand(result.score)}</Text>
@@ -131,7 +131,7 @@ export function TrustPanel({ userId, compact = false }: { userId: string; compac
       </View>
 
       <View className="mt-3 flex-row items-start border-t border-slate-700/50 pt-3">
-        <Info size={12} color="#64748B" />
+        <Info size={12} color="#6E8A7C" />
         <Text className="ml-1.5 flex-1 text-[11px] leading-4 text-slate-500">
           This is here to help you decide whether to lend somebody your vote. It ranks nobody, it
           changes nothing about what anybody sees on this platform, and it is not a judgement of a

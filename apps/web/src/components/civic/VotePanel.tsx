@@ -76,7 +76,7 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
       <div className="mt-5 grid grid-cols-2 gap-4">
         <div className="rounded-xl bg-support/10 p-4">
           <div className="text-xs font-semibold uppercase tracking-wide text-support">
-            Support
+            Aye
           </div>
           <div className="mt-1 font-display text-3xl font-semibold tabular-nums text-foreground">
             {pct}%
@@ -87,7 +87,7 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
         </div>
         <div className="rounded-xl bg-oppose/10 p-4 text-right">
           <div className="text-xs font-semibold uppercase tracking-wide text-oppose">
-            Oppose
+            Nay
           </div>
           <div className="mt-1 font-display text-3xl font-semibold tabular-nums text-foreground">
             {opposePct}%
@@ -108,12 +108,21 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
 
       {/* Vote actions */}
       <div className="mt-6 grid grid-cols-2 gap-3">
+        {/*
+          AYE IS THE LIGHT ONE, NAY IS THE DARK ONE, AND THAT IS NOT DECORATION.
+          Around one man in twelve has red-green colour blindness. Simulated
+          through the Brettel-Vienot model, the green and red these buttons used
+          to be collapsed into two near-identical olives — 1.32:1 apart, on the
+          most important control in the app. Splitting them by LIGHTNESS as well
+          as hue takes the pair to 3.8:1. The icons and the words carry it the
+          rest of the way; colour is never the only channel.
+        */}
         <Button
           size="lg"
-          variant={userVote === "support" ? "default" : "outline"}
           className={cn(
-            "h-12",
-            userVote === "support" && "bg-support text-support-foreground hover:bg-support/90",
+            "h-12 border-2 border-support bg-support font-bold tracking-wide",
+            "text-support-foreground hover:bg-support/90",
+            userVote === "support" && "ring-2 ring-accent ring-offset-2 ring-offset-card",
           )}
           disabled={vote.isPending}
           onClick={() => handleVote("support")}
@@ -123,16 +132,16 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
           ) : (
             <>
               <ThumbsUp className="mr-2 h-4 w-4" />
-              {userVote === "support" ? "Supported" : "Support"}
+              {userVote === "support" ? "Aye \u2713" : "Aye"}
             </>
           )}
         </Button>
         <Button
           size="lg"
-          variant={userVote === "oppose" ? "default" : "outline"}
           className={cn(
-            "h-12",
-            userVote === "oppose" && "bg-oppose text-oppose-foreground hover:bg-oppose/90",
+            "h-12 border-2 border-oppose/70 bg-oppose font-bold tracking-wide",
+            "text-oppose-foreground hover:bg-oppose/90",
+            userVote === "oppose" && "ring-2 ring-accent ring-offset-2 ring-offset-card",
           )}
           disabled={vote.isPending}
           onClick={() => handleVote("oppose")}
@@ -142,7 +151,7 @@ export function VotePanel({ reference }: { reference: GovReferenceDetail }) {
           ) : (
             <>
               <ThumbsDown className="mr-2 h-4 w-4" />
-              {userVote === "oppose" ? "Opposed" : "Oppose"}
+              {userVote === "oppose" ? "Nay \u2713" : "Nay"}
             </>
           )}
         </Button>

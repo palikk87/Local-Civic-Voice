@@ -607,7 +607,7 @@ function VoteButtons({ bill }: VoteButtonsProps) {
                 userVote === "yea" ? "text-white" : "text-emerald-500"
               )}
             >
-              Yea {yeaPercentage}%
+              Aye {yeaPercentage}%
             </span>
           </button>
 

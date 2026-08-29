@@ -138,7 +138,7 @@ export function VerifyEmailStep({
         value={code}
         onChangeText={setCode}
         placeholder="6-digit code"
-        placeholderTextColor="#475569"
+        placeholderTextColor="#4C6659"
         keyboardType="number-pad"
         textContentType="oneTimeCode"
         autoComplete="one-time-code"
@@ -174,7 +174,7 @@ export function VerifyEmailStep({
         style={{ opacity: loading ? 0.6 : 1 }}
       >
         {loading ? (
-          <ActivityIndicator color="#0F172A" />
+          <ActivityIndicator color="#0C1D18" />
         ) : (
           <Text className="text-slate-900 font-semibold">Verify</Text>
         )}

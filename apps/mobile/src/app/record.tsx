@@ -140,7 +140,7 @@ function ReviewRow({ entry }: { entry: NeedingReview }) {
           onPress={() => reaffirm.mutate()}
           className="flex-row items-center bg-amber-500 rounded-lg px-3 py-2 mr-2"
         >
-          <Check size={14} color="#0F172A" />
+          <Check size={14} color="#0C1D18" />
           <Text className="text-slate-900 text-xs font-semibold ml-1.5">Still with it</Text>
         </Pressable>
 
@@ -149,7 +149,7 @@ function ReviewRow({ entry }: { entry: NeedingReview }) {
           onPress={() => withdraw.mutate()}
           className="flex-row items-center border border-slate-600 rounded-lg px-3 py-2"
         >
-          <Undo2 size={14} color="#CBD5E1" />
+          <Undo2 size={14} color="#B4C7BC" />
           <Text className="text-slate-300 text-xs font-semibold ml-1.5">Withdraw</Text>
         </Pressable>
       </View>
@@ -194,7 +194,7 @@ function PositionRow({ entry }: { entry: PositionRecord }) {
               other people, not from yourself. */}
           {entry.isAnonymous ? (
             <View className="flex-row items-center bg-slate-700/60 rounded-full px-2 py-0.5 ml-2">
-              <EyeOff size={10} color="#94A3B8" />
+              <EyeOff size={10} color="#8FA79A" />
               <Text className="text-slate-400 text-[10px] font-medium ml-1">Anonymous</Text>
             </View>
           ) : null}
@@ -287,7 +287,7 @@ function RecordContent() {
 
       <View className="flex-row items-center px-4 py-3">
         <Pressable onPress={() => router.back()} className="mr-3">
-          <ArrowLeft size={22} color="#F8FAFC" />
+          <ArrowLeft size={22} color="#F5F0E6" />
         </Pressable>
         <View>
           <Text className="text-white text-xl font-semibold">

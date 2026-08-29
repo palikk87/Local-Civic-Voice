@@ -90,7 +90,7 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
       <AnimatedPressable onPress={handlePress} style={animStyle}>
         <View className="mb-4 overflow-hidden rounded-2xl border border-slate-700/50">
           <LinearGradient
-            colors={['#1E293B', '#0F172A']}
+            colors={['#17362A', '#0C1D18']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={{ padding: 16 }}
@@ -214,7 +214,7 @@ export default function BillOfRightsScreen() {
               }}
               className="w-10 h-10 items-center justify-center rounded-full bg-slate-800/60"
             >
-              <BookOpen size={20} color="#94A3B8" />
+              <BookOpen size={20} color="#8FA79A" />
             </Pressable>
           </View>
         </View>
@@ -306,14 +306,14 @@ export default function BillOfRightsScreen() {
               className="rounded-2xl overflow-hidden border border-slate-600/30"
             >
               <LinearGradient
-                colors={['#334155', '#1e293b']}
+                colors={['#2C4A3C', '#17362A']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ padding: 16 }}
               >
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center">
-                    <BookOpen size={24} color="#94A3B8" />
+                    <BookOpen size={24} color="#8FA79A" />
                     <View className="ml-3">
                       <Text className="text-slate-100 font-semibold">
                         Constitution
@@ -323,7 +323,7 @@ export default function BillOfRightsScreen() {
                       </Text>
                     </View>
                   </View>
-                  <ChevronDown size={20} color="#94A3B8" style={{ transform: [{ rotate: '-90deg' }] }} />
+                  <ChevronDown size={20} color="#8FA79A" style={{ transform: [{ rotate: '-90deg' }] }} />
                 </View>
               </LinearGradient>
             </Pressable>

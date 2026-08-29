@@ -115,7 +115,7 @@ export default function ForgotPasswordScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E3A5F', '#0F172A']}
+        colors={['#0C1D18', '#1E3A5F', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -149,11 +149,11 @@ export default function ForgotPasswordScreen() {
                 <View className="mb-6">
                   <Text className="text-slate-300 font-medium mb-2">Email</Text>
                   <View className="flex-row items-center bg-slate-800/60 border border-slate-700 rounded-xl px-4">
-                    <Mail size={20} color="#64748B" />
+                    <Mail size={20} color="#6E8A7C" />
                     <TextInput
                       className="flex-1 py-4 px-3 text-white text-base"
                       placeholder="you@example.com"
-                      placeholderTextColor="#64748B"
+                      placeholderTextColor="#6E8A7C"
                       value={email}
                       onChangeText={setEmail}
                       keyboardType="email-address"
@@ -181,16 +181,16 @@ export default function ForgotPasswordScreen() {
                         className="mr-2"
                         hitSlop={8}
                       >
-                        <ChevronLeft size={20} color="#64748B" />
+                        <ChevronLeft size={20} color="#6E8A7C" />
                       </Pressable>
                       <Text className="text-slate-300 font-medium">Verification Code</Text>
                     </View>
                     <View className="flex-row items-center bg-slate-800/60 border border-slate-700 rounded-xl px-4">
-                      <KeyRound size={20} color="#64748B" />
+                      <KeyRound size={20} color="#6E8A7C" />
                       <TextInput
                         className="flex-1 py-4 px-3 text-white text-base tracking-widest"
                         placeholder="Enter code"
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor="#6E8A7C"
                         value={otp}
                         onChangeText={setOtp}
                         keyboardType="number-pad"
@@ -203,11 +203,11 @@ export default function ForgotPasswordScreen() {
                   <View className="mb-6">
                     <Text className="text-slate-300 font-medium mb-2">New Password</Text>
                     <View className="flex-row items-center bg-slate-800/60 border border-slate-700 rounded-xl px-4">
-                      <Lock size={20} color="#64748B" />
+                      <Lock size={20} color="#6E8A7C" />
                       <TextInput
                         className="flex-1 py-4 px-3 text-white text-base"
                         placeholder="At least 8 characters"
-                        placeholderTextColor="#64748B"
+                        placeholderTextColor="#6E8A7C"
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry={!showPassword}
@@ -220,9 +220,9 @@ export default function ForgotPasswordScreen() {
                       />
                       <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={10}>
                         {showPassword ? (
-                          <EyeOff size={20} color="#64748B" />
+                          <EyeOff size={20} color="#6E8A7C" />
                         ) : (
-                          <Eye size={20} color="#64748B" />
+                          <Eye size={20} color="#6E8A7C" />
                         )}
                       </Pressable>
                     </View>
@@ -246,13 +246,13 @@ export default function ForgotPasswordScreen() {
                 style={{ opacity: isLoading ? 0.7 : 1 }}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#0F172A" />
+                  <ActivityIndicator color="#0C1D18" />
                 ) : (
                   <>
                     <Text className="text-slate-900 font-bold text-lg mr-2">
                       {step === 'email' ? 'Send Code' : 'Save New Password'}
                     </Text>
-                    <ArrowRight size={20} color="#0F172A" />
+                    <ArrowRight size={20} color="#0C1D18" />
                   </>
                 )}
               </Pressable>

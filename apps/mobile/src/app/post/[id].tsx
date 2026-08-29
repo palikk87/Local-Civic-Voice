@@ -212,7 +212,7 @@ export default function PostDetailScreen() {
 
       <View className="flex-row items-center px-4 py-3">
         <Pressable onPress={() => router.back()} className="mr-3">
-          <ArrowLeft size={22} color="#F8FAFC" />
+          <ArrowLeft size={22} color="#F5F0E6" />
         </Pressable>
         <Text className="text-white text-lg font-semibold">Post</Text>
       </View>
@@ -277,7 +277,7 @@ export default function PostDetailScreen() {
               >
                 <Heart
                   size={18}
-                  color={post.isLiked ? '#EF4444' : '#64748B'}
+                  color={post.isLiked ? '#EF4444' : '#6E8A7C'}
                   fill={post.isLiked ? '#EF4444' : 'transparent'}
                 />
                 <Text className={`ml-1.5 text-sm ${post.isLiked ? 'text-red-500' : 'text-slate-400'}`}>
@@ -286,14 +286,14 @@ export default function PostDetailScreen() {
               </Pressable>
 
               <View className="flex-row items-center mr-6">
-                <MessageCircle size={18} color="#64748B" />
+                <MessageCircle size={18} color="#6E8A7C" />
                 <Text className="text-slate-400 text-sm ml-1.5">
                   {post.commentsCount > 0 ? post.commentsCount : ''}
                 </Text>
               </View>
 
               <Pressable onPress={() => repost.mutate()} className="flex-row items-center">
-                <Repeat2 size={18} color="#64748B" />
+                <Repeat2 size={18} color="#6E8A7C" />
               </Pressable>
             </View>
           </View>
@@ -316,7 +316,7 @@ export default function PostDetailScreen() {
                   value={draft}
                   onChangeText={setDraft}
                   placeholder={replyTo ? 'Write a reply' : 'Write a comment'}
-                  placeholderTextColor="#475569"
+                  placeholderTextColor="#4C6659"
                   multiline
                   maxLength={2000}
                   className="flex-1 bg-slate-800/60 border border-slate-700/50 rounded-xl px-3 py-2 text-white text-sm mr-2"
@@ -328,7 +328,7 @@ export default function PostDetailScreen() {
                   className="bg-amber-500 rounded-full p-3"
                   style={{ opacity: !draft.trim() || reply.isPending ? 0.4 : 1 }}
                 >
-                  <Send size={16} color="#0F172A" />
+                  <Send size={16} color="#0C1D18" />
                 </Pressable>
               </View>
             </View>

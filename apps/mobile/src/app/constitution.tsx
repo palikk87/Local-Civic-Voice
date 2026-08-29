@@ -60,7 +60,7 @@ const ARTICLE_COLORS: Record<string, string> = {
   IV: '#8B5CF6', // Purple - Separation of Powers
   V: '#F59E0B', // Amber - Self-Correction
   VI: '#14B8A6', // Teal - How This Constitution Is Kept
-  VII: '#94A3B8', // Slate - Definitions
+  VII: '#8FA79A', // Slate - Definitions
 };
 
 interface SectionCardProps {
@@ -103,7 +103,7 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
     <Animated.View entering={FadeInDown.delay(index * 100 + 300).springify()}>
       <View className="mb-4 overflow-hidden rounded-2xl border border-slate-700/50">
         <LinearGradient
-          colors={['#1E293B', '#0F172A']}
+          colors={['#17362A', '#0C1D18']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ padding: 16 }}
@@ -134,9 +134,9 @@ function ArticleCard({ article, index, isExpanded, onToggle }: ArticleCardProps)
               </Text>
             </View>
             {isExpanded ? (
-              <ChevronUp size={20} color="#64748B" />
+              <ChevronUp size={20} color="#6E8A7C" />
             ) : (
-              <ChevronDown size={20} color="#64748B" />
+              <ChevronDown size={20} color="#6E8A7C" />
             )}
           </Pressable>
 
@@ -231,14 +231,14 @@ function ComplianceStatus() {
  * two centuries of argument followed.
  */
 function DefinitionsCard() {
-  const color = ARTICLE_COLORS['VII'] ?? '#94A3B8';
+  const color = ARTICLE_COLORS['VII'] ?? '#8FA79A';
   const { number, title, note, terms } = CONSTITUTION.definitions;
 
   return (
     <Animated.View entering={FadeInDown.delay(700).springify()}>
       <View className="mb-4 overflow-hidden rounded-2xl border border-slate-700/50">
         <LinearGradient
-          colors={['#1E293B', '#0F172A']}
+          colors={['#17362A', '#0C1D18']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{ padding: 16 }}
@@ -343,7 +343,7 @@ export default function ConstitutionScreen() {
             className="items-center mb-6"
           >
             <View className="w-20 h-20 rounded-full bg-slate-800/60 border-2 border-slate-600 items-center justify-center mb-4">
-              <BookOpen size={36} color="#94A3B8" />
+              <BookOpen size={36} color="#8FA79A" />
             </View>
             <Text className="text-slate-400 text-xs font-bold tracking-[4px] mb-2">
               THE CIVIL VOICE
@@ -363,7 +363,7 @@ export default function ConstitutionScreen() {
           >
             <View className="rounded-2xl overflow-hidden border border-slate-600/30">
               <LinearGradient
-                colors={['#334155', '#1e293b']}
+                colors={['#2C4A3C', '#17362A']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ padding: 20 }}
@@ -451,7 +451,7 @@ export default function ConstitutionScreen() {
             className="items-center mt-8 pt-6 border-t border-slate-700/50"
           >
             <View className="w-16 h-16 rounded-full bg-slate-800/60 border-2 border-slate-600 items-center justify-center mb-3">
-              <Scale size={28} color="#94A3B8" />
+              <Scale size={28} color="#8FA79A" />
             </View>
             <Text className="text-slate-400 text-sm text-center">
               All code is subordinate to this Constitution

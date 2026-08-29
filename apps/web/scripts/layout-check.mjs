@@ -114,7 +114,7 @@ for (const width of WIDTHS) {
   await acceptTermsBeforeLoad(page);
   await routeApiToLocal(page, base);
   await page.goto(`${base}/reference/layout-check`, { waitUntil: "networkidle" });
-  await page.waitForSelector("text=Support", { timeout: 10_000 });
+  await page.waitForSelector("text=Aye", { timeout: 10_000 });
 
   const measured = await page.evaluate(() => {
     const buttonWithText = (text) =>
@@ -122,8 +122,9 @@ for (const width of WIDTHS) {
         (b.textContent ?? "").trim().startsWith(text),
       );
 
-    const support = buttonWithText("Support") ?? buttonWithText("Supported");
-    const oppose = buttonWithText("Oppose") ?? buttonWithText("Opposed");
+    // One word for a vote, and it is the platform's own name.
+    const support = buttonWithText("Aye");
+    const oppose = buttonWithText("Nay");
 
     return {
       scrollWidth: document.documentElement.scrollWidth,
@@ -140,9 +141,9 @@ for (const width of WIDTHS) {
     problems.push(`overflows by ${measured.scrollWidth - measured.innerWidth}px`);
   }
   if (measured.support === null || measured.oppose === null) {
-    problems.push("could not find the Support/Oppose buttons");
+    problems.push("could not find the Aye/Nay buttons");
   } else if (measured.support > measured.oppose) {
-    problems.push(`Support/Oppose overlap by ${Math.round(measured.support - measured.oppose)}px`);
+    problems.push(`Aye/Nay overlap by ${Math.round(measured.support - measured.oppose)}px`);
   }
 
   const status = problems.length === 0 ? "ok  " : "FAIL";

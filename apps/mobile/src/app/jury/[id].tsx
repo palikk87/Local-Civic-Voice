@@ -100,7 +100,7 @@ function Evidence({ file }: { file: JuryCase }) {
       {reference ? (
         <Panel tone="quiet">
           <View className="mb-2 flex-row items-center">
-            <FileText size={13} color="#94A3B8" />
+            <FileText size={13} color="#8FA79A" />
             <Text className="ml-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
               The law it points at
             </Text>
@@ -188,16 +188,16 @@ export default function JuryCaseScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
         <Pressable onPress={() => router.back()} className="mb-4 flex-row items-center">
-          <ArrowLeft size={16} color="#94A3B8" />
+          <ArrowLeft size={16} color="#8FA79A" />
           <Text className="ml-1 text-sm text-slate-400">Back</Text>
         </Pressable>
 
         <View className="mb-4 flex-row items-center">
-          <Scale size={20} color="#E2E8F0" />
+          <Scale size={20} color="#D0E0D6" />
           <Text className="ml-2 text-xl font-semibold text-white">Community Jury</Text>
         </View>
 
-        {isLoading ? <ActivityIndicator color="#94A3B8" /> : null}
+        {isLoading ? <ActivityIndicator color="#8FA79A" /> : null}
 
         {isError ? (
           <Text testID="jury-not-yours" className="text-sm leading-6 text-slate-400">
@@ -275,7 +275,7 @@ export default function JuryCaseScreen() {
             {file.viewer.seatState === 'accepted' ? (
               <Panel>
                 <View className="flex-row items-center">
-                  <Gavel size={16} color="#E2E8F0" />
+                  <Gavel size={16} color="#D0E0D6" />
                   <Text className="ml-2 text-sm font-semibold text-white">Your decision</Text>
                 </View>
                 <Text className="mt-1 text-sm leading-6 text-slate-400">
@@ -317,7 +317,7 @@ export default function JuryCaseScreen() {
                   multiline
                   numberOfLines={4}
                   placeholder={`Why? At least ${minReasoning} characters.`}
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                   className="mt-3 min-h-24 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
                 />
 
@@ -348,7 +348,7 @@ export default function JuryCaseScreen() {
 
                 <View className="mt-4 border-t border-slate-700/50 pt-3">
                   <View className="flex-row items-center">
-                    <Clock size={13} color="#94A3B8" />
+                    <Clock size={13} color="#8FA79A" />
                     <Text className="ml-1.5 flex-1 text-xs leading-5 text-slate-500">
                       If you do nothing, the platform releases you on its own
                       {file.viewer.releasedAt
@@ -380,7 +380,7 @@ export default function JuryCaseScreen() {
                   onChangeText={setRecusalReason}
                   multiline
                   numberOfLines={3}
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                   className="mt-3 min-h-20 rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
                 />
                 <Pressable

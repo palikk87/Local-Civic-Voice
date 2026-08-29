@@ -61,7 +61,7 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#475569"
+        placeholderTextColor="#4C6659"
         maxLength={maxLength}
         multiline={multiline}
         autoCapitalize={autoCapitalize ?? 'sentences'}
@@ -167,7 +167,7 @@ function EditProfileContent() {
 
       <View className="flex-row items-center justify-between px-4 py-3">
         <Pressable onPress={() => router.back()} className="flex-row items-center">
-          <ArrowLeft size={22} color="#F8FAFC" />
+          <ArrowLeft size={22} color="#F5F0E6" />
           <Text className="text-white text-lg font-semibold ml-2">Edit profile</Text>
         </Pressable>
 
@@ -196,9 +196,9 @@ function EditProfileContent() {
               />
               <View className="absolute bottom-0 right-0 bg-amber-500 w-8 h-8 rounded-full items-center justify-center border-2 border-slate-900">
                 {uploading ? (
-                  <ActivityIndicator size="small" color="#0F172A" />
+                  <ActivityIndicator size="small" color="#0C1D18" />
                 ) : (
-                  <Camera size={16} color="#0F172A" />
+                  <Camera size={16} color="#0C1D18" />
                 )}
               </View>
             </Pressable>

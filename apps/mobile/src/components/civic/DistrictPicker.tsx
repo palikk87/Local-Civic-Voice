@@ -159,7 +159,7 @@ export function DistrictPicker({ onChange }: { onChange?: (id: string | null) =>
   return (
     <View>
       <View className="flex-row items-center mb-2">
-        <MapPin size={16} color="#94A3B8" />
+        <MapPin size={16} color="#8FA79A" />
         <Text className="text-white font-medium ml-2">Your district</Text>
         <View className="bg-slate-800 rounded-full px-2 py-0.5 ml-2">
           <Text className="text-slate-400 text-xs">optional</Text>
@@ -209,7 +209,7 @@ export function DistrictPicker({ onChange }: { onChange?: (id: string | null) =>
             if (zip.length === 5) void lookUpZip(zip);
           }}
           placeholder="e.g. 90210"
-          placeholderTextColor="#64748B"
+          placeholderTextColor="#6E8A7C"
           keyboardType="number-pad"
           maxLength={5}
           className="flex-1 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2.5 text-white"
@@ -227,7 +227,7 @@ export function DistrictPicker({ onChange }: { onChange?: (id: string | null) =>
           }
         >
           {zipLooking ? (
-            <ActivityIndicator size="small" color="#0F172A" />
+            <ActivityIndicator size="small" color="#0C1D18" />
           ) : (
             <Text className={zip.length === 5 ? 'text-slate-900 font-semibold' : 'text-slate-500 font-semibold'}>
               Find
@@ -306,7 +306,7 @@ export function DistrictPicker({ onChange }: { onChange?: (id: string | null) =>
         value={search}
         onChangeText={setSearch}
         placeholder="Or search by state, district, or representative"
-        placeholderTextColor="#64748B"
+        placeholderTextColor="#6E8A7C"
         autoCapitalize="none"
         className="bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2.5 text-white"
       />

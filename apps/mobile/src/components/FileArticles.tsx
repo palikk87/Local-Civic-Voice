@@ -53,7 +53,7 @@ export function ArticlesForm({
         multiline
         numberOfLines={4}
         placeholder="State the accusation plainly."
-        placeholderTextColor="#64748B"
+        placeholderTextColor="#6E8A7C"
         className="mt-1 min-h-[96px] rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
       />
       <Text className="mt-1 text-xs text-slate-500">
@@ -70,7 +70,7 @@ export function ArticlesForm({
         multiline
         numberOfLines={4}
         placeholder="Point at what anybody can check."
-        placeholderTextColor="#64748B"
+        placeholderTextColor="#6E8A7C"
         className="mt-1 min-h-[96px] rounded-xl border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100"
       />
       <Text className="mt-1 text-xs text-slate-500">

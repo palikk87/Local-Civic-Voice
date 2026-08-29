@@ -191,7 +191,7 @@ function CivicScoreHeader() {
               </View>
             )}
             <Pressable className="relative p-2">
-              <Bell size={20} color="#94A3B8" />
+              <Bell size={20} color="#8FA79A" />
               {unreadCount > 0 && (
                 <View className="absolute -top-0.5 -right-0.5 bg-red-500 rounded-full w-4 h-4 items-center justify-center">
                   <Text className="text-white text-xs font-bold">{unreadCount > 9 ? '9+' : unreadCount}</Text>
@@ -240,7 +240,7 @@ function FeedTypeTabs({
       >
         {FEED_TYPES.map((feed, index) => {
           const isActive = activeType === feed.type;
-          const iconColor = isActive ? '#F59E0B' : '#64748B';
+          const iconColor = isActive ? '#F59E0B' : '#6E8A7C';
 
           return (
             <Pressable
@@ -263,7 +263,7 @@ function FeedTypeTabs({
             >
               <FeedTypeIcon type={feed.type} color={iconColor} />
               <Text
-                style={{ marginLeft: 6, color: isActive ? '#F59E0B' : '#94A3B8', fontSize: 12, fontWeight: '500' }}
+                style={{ marginLeft: 6, color: isActive ? '#F59E0B' : '#8FA79A', fontSize: 12, fontWeight: '500' }}
               >
                 {feed.label}
               </Text>
@@ -363,7 +363,7 @@ function FeedReasonBadge({ item }: { item: ScoredFeedItem }) {
       case 'delegate':
         return '#A855F7';
       default:
-        return '#64748B';
+        return '#6E8A7C';
     }
   };
 
@@ -451,7 +451,7 @@ function BranchFilterTabs({
             >
               <BranchFilterIcon type={filter.type} color={iconColor} />
               <Text
-                style={{ marginLeft: 4, color: isActive ? '#fff' : '#94A3B8', fontSize: 12, fontWeight: '500' }}
+                style={{ marginLeft: 4, color: isActive ? '#fff' : '#8FA79A', fontSize: 12, fontWeight: '500' }}
               >
                 {filter.label}
               </Text>
@@ -618,7 +618,7 @@ function VoteButtons({ bill }: VoteButtonsProps) {
                 userVote === 'yea' ? 'text-white' : 'text-emerald-500'
               )}
             >
-              Yea {yeaPercentage}%
+              Aye {yeaPercentage}%
             </Text>
           </AnimatedPressable>
 
@@ -692,7 +692,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
     transform: [{ scale: likeScale.value }],
   }));
 
-  const categoryColor = categoryColors[item.bill.category] ?? '#64748B';
+  const categoryColor = categoryColors[item.bill.category] ?? '#6E8A7C';
 
   return (
     <Animated.View
@@ -819,7 +819,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
           >
             <Heart
               size={18}
-              color={isLiked ? '#EF4444' : '#64748B'}
+              color={isLiked ? '#EF4444' : '#6E8A7C'}
               fill={isLiked ? '#EF4444' : 'transparent'}
             />
             <Text
@@ -839,7 +839,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
             }}
             className="flex-row items-center mr-6"
           >
-            <MessageCircle size={18} color="#64748B" />
+            <MessageCircle size={18} color="#6E8A7C" />
             <Text className="ml-1.5 text-slate-400 text-sm">Reply</Text>
           </Pressable>
 
@@ -850,7 +850,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
             }}
             className="flex-row items-center"
           >
-            <Share2 size={18} color="#64748B" />
+            <Share2 size={18} color="#6E8A7C" />
             <Text className="ml-1.5 text-slate-400 text-sm">Share</Text>
           </Pressable>
         </View>
@@ -1072,7 +1072,7 @@ export default function HomeScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -1130,7 +1130,7 @@ export default function HomeScreen() {
           ListEmptyComponent={
             feedLoading ? (
               <View className="items-center justify-center py-20">
-                <ActivityIndicator color="#64748B" />
+                <ActivityIndicator color="#6E8A7C" />
                 <Text className="text-slate-500 text-sm mt-3">Loading the feed…</Text>
               </View>
             ) : feedError ? (
@@ -1153,7 +1153,7 @@ export default function HomeScreen() {
                  which is not an empty state, it is a wrong one.
               */
               <View className="items-center justify-center py-20 px-6">
-                <MapPin size={28} color="#64748B" />
+                <MapPin size={28} color="#6E8A7C" />
                 <Text className="text-slate-300 text-lg mt-3">Local needs your state</Text>
                 <Text className="text-slate-500 text-sm mt-2 text-center">
                   Pick your district in your profile and this fills with records introduced by the
@@ -1169,7 +1169,7 @@ export default function HomeScreen() {
               </View>
             ) : feedType === 'local' ? (
               <View className="items-center justify-center py-20 px-6">
-                <MapPin size={28} color="#64748B" />
+                <MapPin size={28} color="#6E8A7C" />
                 <Text className="text-slate-300 text-lg mt-3">Nothing local yet</Text>
                 <Text className="text-slate-500 text-sm mt-2 text-center">
                   No stored record was introduced by a member from {myState}. This stays empty

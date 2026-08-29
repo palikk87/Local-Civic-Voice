@@ -115,7 +115,7 @@ function ContactRow({ person }: { person: Member | Official }) {
       key: 'call',
       label: 'Call',
       icon: Phone,
-      color: '#64748B',
+      color: '#6E8A7C',
       onPress: () => Linking.openURL(`tel:${person.phone!.replace(/[^\d+]/g, '')}`),
     });
   }
@@ -124,7 +124,7 @@ function ContactRow({ person }: { person: Member | Official }) {
       key: 'site',
       label: 'Website',
       icon: Globe,
-      color: '#64748B',
+      color: '#6E8A7C',
       onPress: () => Linking.openURL(person.website!),
     });
   }
@@ -214,7 +214,7 @@ function MemberCard({
           </View>
 
           <View className="justify-center">
-            <ChevronRight size={24} color="#64748B" />
+            <ChevronRight size={24} color="#6E8A7C" />
           </View>
         </View>
 
@@ -284,7 +284,7 @@ function OfficialCard({
           </View>
 
           <View className="justify-center">
-            <ChevronRight size={24} color="#64748B" />
+            <ChevronRight size={24} color="#6E8A7C" />
           </View>
         </View>
 
@@ -351,7 +351,7 @@ function DetailSheet({
               </View>
             ) : null}
             <Pressable onPress={onClose} className="ml-3 rounded-full bg-slate-800 p-2">
-              <X size={18} color="#94A3B8" />
+              <X size={18} color="#8FA79A" />
             </Pressable>
           </View>
 
@@ -411,7 +411,7 @@ function DetailSheet({
 
               <TextInput
                 placeholder="Write your message here..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 value={message}
                 onChangeText={setMessage}
                 multiline
@@ -569,7 +569,7 @@ export default function GovernmentScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -582,17 +582,17 @@ export default function GovernmentScreen() {
           </Text>
 
           <View className="mt-4 flex-row items-center rounded-xl border border-slate-700/50 bg-slate-800 px-4 py-3">
-            <Search size={20} color="#64748B" />
+            <Search size={20} color="#6E8A7C" />
             <TextInput
               placeholder={searchPlaceholder}
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={searchQuery}
               onChangeText={setSearchQuery}
               className="ml-3 flex-1 text-base text-white"
             />
             {searchQuery ? (
               <Pressable onPress={() => setSearchQuery('')} hitSlop={8}>
-                <X size={18} color="#64748B" />
+                <X size={18} color="#6E8A7C" />
               </Pressable>
             ) : null}
           </View>
@@ -615,7 +615,7 @@ export default function GovernmentScreen() {
                   active ? 'bg-amber-500' : 'bg-slate-800'
                 )}
               >
-                <item.icon size={16} color={active ? '#0F172A' : '#94A3B8'} />
+                <item.icon size={16} color={active ? '#0C1D18' : '#8FA79A'} />
                 <Text
                   className={cn(
                     'ml-1.5 font-medium',
@@ -676,7 +676,7 @@ export default function GovernmentScreen() {
             {officials?.lastUpdated || congress ? (
               <View className="mx-4 mb-4 flex-row items-start">
                 <View className="mt-0.5">
-                  <RefreshCw size={13} color="#94A3B8" />
+                  <RefreshCw size={13} color="#8FA79A" />
                 </View>
                 <Text className="ml-1.5 flex-1 text-xs text-slate-400">
                   {members.length > 0
@@ -734,9 +734,9 @@ export default function GovernmentScreen() {
                     onPress={() => setStatePickerOpen(true)}
                     className="min-h-[44px] flex-row items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2.5"
                   >
-                    <MapPin size={14} color="#64748B" />
+                    <MapPin size={14} color="#6E8A7C" />
                     <Text className="ml-2 flex-1 text-sm text-white">{selectedStateLabel}</Text>
-                    <ChevronDown size={16} color="#94A3B8" />
+                    <ChevronDown size={16} color="#8FA79A" />
                   </Pressable>
                 </View>
 
@@ -881,7 +881,7 @@ function StatePickerSheet({
         <View className="flex-row items-center justify-between px-6 py-4">
           <Text className="text-lg font-bold text-white">Filter by state</Text>
           <Pressable onPress={onClose} className="h-9 w-9 items-center justify-center rounded-full bg-slate-800">
-            <X size={18} color="#94A3B8" />
+            <X size={18} color="#8FA79A" />
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator>
@@ -917,7 +917,7 @@ function StatePickerSheet({
 function EmptyState() {
   return (
     <View className="items-center py-12">
-      <Search size={48} color="#64748B" />
+      <Search size={48} color="#6E8A7C" />
       <Text className="mt-4 text-lg text-slate-400">No officials found</Text>
       <Text className="mt-1 text-sm text-slate-500">Try a different search or filter</Text>
     </View>

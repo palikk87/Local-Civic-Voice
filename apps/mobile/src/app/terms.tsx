@@ -14,7 +14,7 @@ export default function TermsScreen() {
     <SafeAreaView className="flex-1 bg-slate-900" edges={['top']}>
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <Pressable onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </Pressable>
         <Text className="text-white text-lg font-semibold ml-2">Terms of Use</Text>
       </View>

@@ -58,7 +58,7 @@ function PostCard({ post, onFlag, onDelete, onView }: PostCardProps) {
       {/* Header */}
       <View className="flex-row items-center mb-3">
         <View className="w-10 h-10 bg-slate-700 rounded-full items-center justify-center">
-          <User size={20} color="#64748B" />
+          <User size={20} color="#6E8A7C" />
         </View>
         <View className="flex-1 ml-3">
           <Text className="text-white font-semibold">{post.authorDisplayName}</Text>
@@ -77,15 +77,15 @@ function PostCard({ post, onFlag, onDelete, onView }: PostCardProps) {
       {/* Stats */}
       <View className="flex-row items-center gap-4 mb-3">
         <View className="flex-row items-center">
-          <ThumbsUp size={14} color="#64748B" />
+          <ThumbsUp size={14} color="#6E8A7C" />
           <Text className="text-slate-400 text-sm ml-1">{post.likes}</Text>
         </View>
         <View className="flex-row items-center">
-          <MessageSquare size={14} color="#64748B" />
+          <MessageSquare size={14} color="#6E8A7C" />
           <Text className="text-slate-400 text-sm ml-1">{post.comments}</Text>
         </View>
         <View className="flex-row items-center">
-          <Calendar size={14} color="#64748B" />
+          <Calendar size={14} color="#6E8A7C" />
           <Text className="text-slate-400 text-sm ml-1">
             {new Date(post.createdAt).toLocaleDateString()}
           </Text>
@@ -114,7 +114,7 @@ function PostCard({ post, onFlag, onDelete, onView }: PostCardProps) {
           onPress={onView}
           className="flex-1 flex-row items-center justify-center py-3 bg-slate-700/50 rounded-xl"
         >
-          <Eye size={16} color="#94A3B8" />
+          <Eye size={16} color="#8FA79A" />
           <Text className="text-slate-300 font-medium ml-2">View</Text>
         </TouchableOpacity>
 
@@ -228,7 +228,7 @@ export default function AdminPostsScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">Content Moderation</Text>
         <View className="flex-1" />
@@ -240,11 +240,11 @@ export default function AdminPostsScreen() {
       {/* Search Bar */}
       <View className="px-4 py-3">
         <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-2">
-          <Search size={20} color="#64748B" />
+          <Search size={20} color="#6E8A7C" />
           <TextInput
             className="flex-1 text-white ml-3 py-2"
             placeholder="Search posts..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={handleSearch}
@@ -252,7 +252,7 @@ export default function AdminPostsScreen() {
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
-              <X size={18} color="#64748B" />
+              <X size={18} color="#6E8A7C" />
             </TouchableOpacity>
           )}
         </View>
@@ -300,7 +300,7 @@ export default function AdminPostsScreen() {
         >
           {posts.length === 0 ? (
             <View className="flex-1 items-center justify-center py-20">
-              <FileText size={48} color="#475569" />
+              <FileText size={48} color="#4C6659" />
               <Text className="text-slate-400 text-lg mt-4">No posts found</Text>
             </View>
           ) : (
@@ -334,7 +334,7 @@ export default function AdminPostsScreen() {
             <TextInput
               className="bg-slate-700 text-white rounded-xl p-4 mb-4"
               placeholder="Enter reason for flagging..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={flagReason}
               onChangeText={setFlagReason}
               multiline
@@ -374,7 +374,7 @@ export default function AdminPostsScreen() {
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-white text-xl font-bold">Post Details</Text>
               <TouchableOpacity onPress={() => setViewPost(null)}>
-                <X size={24} color="#94A3B8" />
+                <X size={24} color="#8FA79A" />
               </TouchableOpacity>
             </View>
 
@@ -382,7 +382,7 @@ export default function AdminPostsScreen() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View className="flex-row items-center mb-4">
                   <View className="w-12 h-12 bg-slate-700 rounded-full items-center justify-center">
-                    <User size={24} color="#64748B" />
+                    <User size={24} color="#6E8A7C" />
                   </View>
                   <View className="ml-3">
                     <Text className="text-white font-semibold">{viewPost.authorDisplayName}</Text>

@@ -252,7 +252,7 @@ export function KeysAndEmailCard() {
             value={to}
             onChangeText={setTo}
             placeholder="you@example.com"
-            placeholderTextColor="#475569"
+            placeholderTextColor="#4C6659"
             keyboardType="email-address"
             autoCapitalize="none"
             className="bg-slate-800/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white mt-3"
@@ -264,10 +264,10 @@ export function KeysAndEmailCard() {
             style={{ opacity: sending ? 0.6 : 1 }}
           >
             {sending ? (
-              <ActivityIndicator color="#0F172A" />
+              <ActivityIndicator color="#0C1D18" />
             ) : (
               <>
-                <Send size={16} color="#0F172A" />
+                <Send size={16} color="#0C1D18" />
                 <Text className="text-slate-900 font-semibold ml-2">Send test</Text>
               </>
             )}
@@ -444,7 +444,7 @@ function NewKeyForm({ rule, onChanged }: { rule: string; onChanged: () => void }
         value={name}
         onChangeText={(t) => setName(t.toUpperCase())}
         placeholder="NAME, e.g. ACLED_API_KEY"
-        placeholderTextColor="#64748B"
+        placeholderTextColor="#6E8A7C"
         autoCapitalize="characters"
         autoCorrect={false}
         className="bg-slate-900 text-white font-mono text-xs rounded-lg px-3 py-2.5"
@@ -453,7 +453,7 @@ function NewKeyForm({ rule, onChanged }: { rule: string; onChanged: () => void }
         value={value}
         onChangeText={setValue}
         placeholder="Paste the key"
-        placeholderTextColor="#64748B"
+        placeholderTextColor="#6E8A7C"
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
@@ -582,7 +582,7 @@ function KeyEditor({
             value={value}
             onChangeText={setValue}
             placeholder={`Paste ${name}`}
-            placeholderTextColor="#475569"
+            placeholderTextColor="#4C6659"
             secureTextEntry
             autoCapitalize="none"
             autoCorrect={false}
@@ -595,7 +595,7 @@ function KeyEditor({
               className="bg-amber-500 rounded-xl px-4 py-2 min-h-[44px] justify-center"
             >
               {busy ? (
-                <ActivityIndicator color="#0F172A" />
+                <ActivityIndicator color="#0C1D18" />
               ) : (
                 <Text className="text-slate-900 font-semibold text-sm">Save</Text>
               )}

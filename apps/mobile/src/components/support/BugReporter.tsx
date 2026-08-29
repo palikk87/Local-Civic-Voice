@@ -161,7 +161,7 @@ export function BugReporter() {
         style={{ position: 'absolute', right: 16, bottom: 96 }}
         className="w-11 h-11 rounded-full bg-slate-800/95 border border-slate-700 items-center justify-center"
       >
-        <Bug size={20} color="#94A3B8" />
+        <Bug size={20} color="#8FA79A" />
       </TouchableOpacity>
     );
   }
@@ -206,7 +206,7 @@ export function BugReporter() {
               <Text className="text-white font-semibold ml-2">Report a problem</Text>
             </View>
             <TouchableOpacity onPress={reset} accessibilityLabel="Close">
-              <X size={20} color="#94A3B8" />
+              <X size={20} color="#8FA79A" />
             </TouchableOpacity>
           </View>
 
@@ -224,7 +224,7 @@ export function BugReporter() {
               onPress={() => setStage('picking')}
               className="flex-row items-center justify-center border border-slate-600 rounded-lg py-2.5 mb-3"
             >
-              <Crosshair size={16} color="#94A3B8" />
+              <Crosshair size={16} color="#8FA79A" />
               <Text className="text-slate-200 ml-2">Point at the problem</Text>
             </TouchableOpacity>
           )}
@@ -238,7 +238,7 @@ export function BugReporter() {
             value={problem}
             onChangeText={setProblem}
             placeholder="I pressed Vote Nay and the bar stayed grey."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
           />
 
           <Text className="text-white text-xs font-medium mb-1">
@@ -252,7 +252,7 @@ export function BugReporter() {
             value={wanted}
             onChangeText={setWanted}
             placeholder="Filled the bar red and counted my vote."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
           />
 
           <TouchableOpacity

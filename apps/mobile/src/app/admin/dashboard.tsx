@@ -90,7 +90,7 @@ function MenuItem({ title, subtitle, icon, onPress, badge }: MenuItemProps) {
           <Text className="text-white text-xs font-bold">{badge}</Text>
         </View>
       )}
-      <ChevronRight size={20} color="#64748B" />
+      <ChevronRight size={20} color="#6E8A7C" />
     </TouchableOpacity>
   );
 }
@@ -177,7 +177,7 @@ export default function AdminDashboardScreen() {
               }}
               className="p-2 -ml-2 mr-1"
             >
-              <ArrowLeft size={22} color="#94A3B8" />
+              <ArrowLeft size={22} color="#8FA79A" />
             </TouchableOpacity>
             <View className="w-10 h-10 bg-amber-500/20 rounded-full items-center justify-center">
               <Shield size={20} color="#F59E0B" />
@@ -372,7 +372,7 @@ export default function AdminDashboardScreen() {
           <MenuItem
             title="System Settings"
             subtitle="Configure app settings"
-            icon={<Settings size={24} color="#64748B" />}
+            icon={<Settings size={24} color="#6E8A7C" />}
             onPress={() => router.push('/admin/settings')}
           />
         ) : null}

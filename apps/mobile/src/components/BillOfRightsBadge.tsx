@@ -462,7 +462,7 @@ export function FoundingDocumentsLink({ variant = 'horizontal' }: FoundingDocume
           }}
           className="flex-1 flex-row items-center justify-center bg-slate-800/60 rounded-l-lg py-2 px-3 border-r border-slate-700"
         >
-          <BookOpen size={14} color="#94A3B8" />
+          <BookOpen size={14} color="#8FA79A" />
           <Text className="text-slate-300 text-xs font-medium ml-1.5">Constitution</Text>
         </Pressable>
         <Pressable
@@ -488,7 +488,7 @@ export function FoundingDocumentsLink({ variant = 'horizontal' }: FoundingDocume
         }}
         className="flex-row items-center bg-slate-800/60 rounded-t-lg py-2 px-3 border-b border-slate-700"
       >
-        <BookOpen size={14} color="#94A3B8" />
+        <BookOpen size={14} color="#8FA79A" />
         <Text className="text-slate-300 text-xs font-medium ml-1.5">Constitution</Text>
       </Pressable>
       <Pressable

@@ -64,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
               onPress={this.handleReset}
               className="bg-amber-500 rounded-xl py-3 px-6 flex-row items-center active:bg-amber-600"
             >
-              <RefreshCw size={18} color="#0F172A" strokeWidth={2} />
+              <RefreshCw size={18} color="#0C1D18" strokeWidth={2} />
               <Text className="text-slate-900 font-semibold text-base ml-2">
                 Try Again
               </Text>

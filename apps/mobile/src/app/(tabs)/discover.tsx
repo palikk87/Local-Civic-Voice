@@ -203,7 +203,7 @@ function DiscoverTabSelector({
 function TrendingBillCard({ bill, index }: { bill: Bill; index: number }) {
   const router = useRouter();
   const userVote = useVotingStore(selectUserVote(bill.id));
-  const categoryColor = categoryColors[bill.category] ?? '#64748B';
+  const categoryColor = categoryColors[bill.category] ?? '#6E8A7C';
 
   const totalVotes = bill.communityVotes.totalVoters || 1;
   const yeaPercentage = Math.round((bill.communityVotes.yea / totalVotes) * 100);
@@ -248,7 +248,7 @@ function TrendingBillCard({ bill, index }: { bill: Bill; index: number }) {
               <Text className="text-emerald-500 text-xs ml-1">{yeaPercentage}%</Text>
             </View>
             <View className="flex-row items-center">
-              <Users size={12} color="#64748B" />
+              <Users size={12} color="#6E8A7C" />
               <Text className="text-slate-400 text-xs ml-1">
                 {bill.communityVotes.totalVoters.toLocaleString()}
               </Text>
@@ -325,7 +325,7 @@ function SectionState({
 
 function ExecutiveOrderCard({ eo, index }: { eo: ExecutiveOrder; index: number }) {
   const router = useRouter();
-  const categoryColor = categoryColors[eo.category] ?? '#64748B';
+  const categoryColor = categoryColors[eo.category] ?? '#6E8A7C';
 
   const statusColors: Record<string, { bg: string; text: string }> = {
     active: { bg: 'bg-emerald-900/50', text: 'text-emerald-400' },
@@ -382,7 +382,7 @@ function ExecutiveOrderCard({ eo, index }: { eo: ExecutiveOrder; index: number }
               ({eo.communityVotes.totalVoters.toLocaleString()} votes)
             </Text>
           </View>
-          <ChevronRight size={18} color="#64748B" />
+          <ChevronRight size={18} color="#6E8A7C" />
         </View>
       </Pressable>
     </Animated.View>
@@ -395,7 +395,7 @@ function ExecutiveOrderCard({ eo, index }: { eo: ExecutiveOrder; index: number }
 
 function SupremeCourtCaseCard({ scotusCase, index }: { scotusCase: SupremeCourtCase; index: number }) {
   const router = useRouter();
-  const categoryColor = categoryColors[scotusCase.category] ?? '#64748B';
+  const categoryColor = categoryColors[scotusCase.category] ?? '#6E8A7C';
 
   const statusColors: Record<string, { bg: string; text: string }> = {
     decided: { bg: 'bg-emerald-900/50', text: 'text-emerald-400' },
@@ -464,7 +464,7 @@ function SupremeCourtCaseCard({ scotusCase, index }: { scotusCase: SupremeCourtC
           </View>
           <View className="flex-row items-center">
             <Text className="text-purple-400 text-sm mr-1">{yeaPercentage}% agree</Text>
-            <ChevronRight size={18} color="#64748B" />
+            <ChevronRight size={18} color="#6E8A7C" />
           </View>
         </View>
       </Pressable>
@@ -495,7 +495,7 @@ function OfficeHolderCard({ holder, index }: { holder: Official; index: number }
         <Image
           source={{ uri: officialPhoto(holder) }}
           className="w-full h-24 rounded-lg mb-2"
-          style={{ backgroundColor: '#334155' }}
+          style={{ backgroundColor: '#2C4A3C' }}
         />
         <Text className="text-white font-semibold text-sm" numberOfLines={1}>
           {holder.name}
@@ -566,9 +566,9 @@ function GovernmentBranchSection({
             </View>
           </View>
           {expanded ? (
-            <ChevronUp size={20} color="#64748B" />
+            <ChevronUp size={20} color="#6E8A7C" />
           ) : (
-            <ChevronDown size={20} color="#64748B" />
+            <ChevronDown size={20} color="#6E8A7C" />
           )}
         </View>
 
@@ -644,7 +644,7 @@ function PresidentialSuccessionSection({ succession: successionInput }: { succes
               <Image
                 source={{ uri: officialPhoto(holder) }}
                 className="w-8 h-8 rounded-full mr-3"
-                style={{ backgroundColor: '#334155' }}
+                style={{ backgroundColor: '#2C4A3C' }}
               />
               <View className="flex-1">
                 <Text className="text-white font-medium text-sm">{holder.name}</Text>
@@ -703,7 +703,7 @@ function SupremeCourtJusticesSection({ justices }: { justices: Official[] }) {
                   <Image
                     source={{ uri: officialPhoto(justice) }}
                     className="w-12 h-12 rounded-full mb-1"
-                    style={{ backgroundColor: '#334155' }}
+                    style={{ backgroundColor: '#2C4A3C' }}
                   />
                   <Text className="text-white text-xs font-medium text-center" numberOfLines={1}>
                     {justice.name.split(' ').pop()}
@@ -902,7 +902,7 @@ export default function DiscoverScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -916,10 +916,10 @@ export default function DiscoverScreen() {
 
           {/* Search Bar */}
           <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-3 border border-slate-700/50">
-            <Search size={20} color="#64748B" />
+            <Search size={20} color="#6E8A7C" />
             <TextInput
               placeholder="Search bills, cases, officials..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={searchQuery}
               onChangeText={setSearchQuery}
               className="flex-1 text-white ml-3 text-base"

@@ -107,7 +107,7 @@ function VoteHistoryCard({
 
   if (!displayBill) return null;
 
-  const categoryColor = categoryColors[displayBill.category] ?? '#64748B';
+  const categoryColor = categoryColors[displayBill.category] ?? '#6E8A7C';
 
   return (
     <Animated.View
@@ -167,7 +167,7 @@ function VoteHistoryCard({
             </Text>
           </View>
 
-          <ChevronRight size={20} color="#64748B" />
+          <ChevronRight size={20} color="#6E8A7C" />
         </View>
       </Pressable>
     </Animated.View>
@@ -252,7 +252,7 @@ function ProfileContent() {
    * THE VOTE COUNTS COME FROM THE SERVER NOW.
    *
    * They were read from `voting-store`, a zustand store persisted to this
-   * device. So the three numbers on a person's own profile — Yea, Nay, Total —
+   * device. So the three numbers on a person's own profile — Aye, Nay, Total —
    * described one phone. Sign in on the web after voting all week here and the
    * profile said you had never voted, on a platform whose entire subject is the
    * record of what you have stood for.
@@ -419,25 +419,25 @@ function ProfileContent() {
     {
       title: 'First Vote',
       description: 'Cast your first vote',
-      icon: <ThumbsUp size={20} color={totalVotes > 0 ? '#F59E0B' : '#64748B'} />,
+      icon: <ThumbsUp size={20} color={totalVotes > 0 ? '#F59E0B' : '#6E8A7C'} />,
       earned: totalVotes > 0,
     },
     {
       title: 'Voice Heard',
       description: '10 votes cast',
-      icon: <TrendingUp size={20} color={totalVotes >= 10 ? '#F59E0B' : '#64748B'} />,
+      icon: <TrendingUp size={20} color={totalVotes >= 10 ? '#F59E0B' : '#6E8A7C'} />,
       earned: totalVotes >= 10,
     },
     {
       title: 'Civic Hero',
       description: '50 votes cast',
-      icon: <Award size={20} color={totalVotes >= 50 ? '#F59E0B' : '#64748B'} />,
+      icon: <Award size={20} color={totalVotes >= 50 ? '#F59E0B' : '#6E8A7C'} />,
       earned: totalVotes >= 50,
     },
     {
       title: 'Engaged',
       description: '5 followers',
-      icon: <Users size={20} color={followerCount >= 5 ? '#F59E0B' : '#64748B'} />,
+      icon: <Users size={20} color={followerCount >= 5 ? '#F59E0B' : '#6E8A7C'} />,
       earned: followerCount >= 5,
     },
   ];
@@ -462,7 +462,7 @@ function ProfileContent() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -497,14 +497,14 @@ function ProfileContent() {
               accessibilityLabel="Edit profile"
               className="bg-slate-800 p-2 rounded-full mr-2"
             >
-              <Pencil size={20} color="#64748B" />
+              <Pencil size={20} color="#6E8A7C" />
             </Pressable>
             <Pressable
               onPress={handleOpenSettings}
               accessibilityLabel="Settings"
               className="bg-slate-800 p-2 rounded-full"
             >
-              <Settings size={22} color="#64748B" />
+              <Settings size={22} color="#6E8A7C" />
             </Pressable>
           </View>
         </View>
@@ -540,12 +540,12 @@ function ProfileContent() {
             ) : null}
 
             <View className="flex-row items-center mt-2">
-              <MapPin size={14} color="#64748B" />
+              <MapPin size={14} color="#6E8A7C" />
               <Text className="text-slate-400 text-sm ml-1">
                 {user.location}
               </Text>
               <Text className="text-slate-600 mx-2">·</Text>
-              <Calendar size={14} color="#64748B" />
+              <Calendar size={14} color="#6E8A7C" />
               <Text className="text-slate-400 text-sm ml-1">
                 Joined {new Date(user.joinedDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
               </Text>
@@ -572,7 +572,7 @@ function ProfileContent() {
           <View className="flex-row px-4 mb-6">
             <StatCard
               icon={<ThumbsUp size={14} color="#22C55E" />}
-              label="Yea Votes"
+              label="Aye Votes"
               value={yeaVotes}
               color="#22C55E"
             />
@@ -607,7 +607,7 @@ function ProfileContent() {
               className="rounded-xl overflow-hidden border border-slate-600/30 mb-3"
             >
               <LinearGradient
-                colors={['#334155', '#1e293b']}
+                colors={['#2C4A3C', '#17362A']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ padding: 16 }}
@@ -615,7 +615,7 @@ function ProfileContent() {
                 <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center flex-1">
                     <View className="w-12 h-12 rounded-full bg-slate-500/20 items-center justify-center mr-3">
-                      <BookOpen size={24} color="#94A3B8" />
+                      <BookOpen size={24} color="#8FA79A" />
                     </View>
                     <View className="flex-1">
                       <Text className="text-slate-100 font-semibold text-lg">
@@ -626,7 +626,7 @@ function ProfileContent() {
                       </Text>
                     </View>
                   </View>
-                  <ChevronRight size={20} color="#94A3B8" />
+                  <ChevronRight size={20} color="#8FA79A" />
                 </View>
               </LinearGradient>
             </Pressable>

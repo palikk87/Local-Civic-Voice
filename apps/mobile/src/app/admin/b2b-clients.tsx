@@ -180,7 +180,7 @@ export default function B2BClientsScreen() {
     <SafeAreaView className="flex-1 bg-slate-950">
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <View className="flex-1 ml-2">
           <Text className="text-white text-lg font-semibold">B2B clients</Text>
@@ -204,7 +204,7 @@ export default function B2BClientsScreen() {
               setRefreshing(true);
               void load();
             }}
-            tintColor="#94A3B8"
+            tintColor="#8FA79A"
           />
         }
       >
@@ -212,7 +212,7 @@ export default function B2BClientsScreen() {
           <Text className="text-slate-500 text-center mt-10">Loading…</Text>
         ) : clients.length === 0 ? (
           <View className="items-center mt-16 px-8">
-            <Building2 size={40} color="#475569" />
+            <Building2 size={40} color="#4C6659" />
             <Text className="text-slate-400 text-center mt-4">
               No B2B accounts yet. Create one, or run scripts/seed-b2b.ts.
             </Text>
@@ -252,14 +252,14 @@ export default function B2BClientsScreen() {
                   onPress={() => void rotate(client.id, 'password')}
                   className="flex-1 bg-slate-800 rounded-lg py-2 m-1 flex-row items-center justify-center"
                 >
-                  <RefreshCw size={14} color="#94A3B8" />
+                  <RefreshCw size={14} color="#8FA79A" />
                   <Text className="text-slate-300 text-xs ml-1.5">Password</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => void rotate(client.id, 'apiKey')}
                   className="flex-1 bg-slate-800 rounded-lg py-2 m-1 flex-row items-center justify-center"
                 >
-                  <KeyRound size={14} color="#94A3B8" />
+                  <KeyRound size={14} color="#8FA79A" />
                   <Text className="text-slate-300 text-xs ml-1.5">API key</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -281,7 +281,7 @@ export default function B2BClientsScreen() {
             <View className="flex-row items-center justify-between mb-4">
               <Text className="text-white text-lg font-semibold">New B2B client</Text>
               <TouchableOpacity onPress={() => setCreateOpen(false)} className="p-1">
-                <X size={22} color="#94A3B8" />
+                <X size={22} color="#8FA79A" />
               </TouchableOpacity>
             </View>
 
@@ -291,7 +291,7 @@ export default function B2BClientsScreen() {
 
             <TextInput
               placeholder="Username (letters, digits, _ . -)"
-              placeholderTextColor="#475569"
+              placeholderTextColor="#4C6659"
               autoCapitalize="none"
               value={form.username}
               onChangeText={(username) => setForm({ ...form, username })}
@@ -299,7 +299,7 @@ export default function B2BClientsScreen() {
             />
             <TextInput
               placeholder="Display name"
-              placeholderTextColor="#475569"
+              placeholderTextColor="#4C6659"
               value={form.name}
               onChangeText={(name) => setForm({ ...form, name })}
               className="bg-slate-800 text-white rounded-xl px-4 py-3 mb-3"
@@ -407,7 +407,7 @@ function CredentialRow({
           onPress={() => void onCopy(label, value)}
           className="bg-slate-800 rounded-lg p-2.5"
         >
-          <Copy size={16} color="#94A3B8" />
+          <Copy size={16} color="#8FA79A" />
         </TouchableOpacity>
       </View>
     </View>

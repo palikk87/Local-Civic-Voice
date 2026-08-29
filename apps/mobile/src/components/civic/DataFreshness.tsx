@@ -72,7 +72,7 @@ export function DataFreshness() {
   return (
     <View className="mx-4 mb-4 rounded-xl border border-slate-700/50 bg-slate-800/40 p-3">
       <View className="flex-row items-center">
-        <RefreshCw size={14} color="#94A3B8" />
+        <RefreshCw size={14} color="#8FA79A" />
         {/*
           Null is a real answer and it is said plainly. "Never" is alarming in
           exactly the way it should be — it means the sync has not run.
@@ -89,7 +89,7 @@ export function DataFreshness() {
       {data.newestAction?.date ? (
         <View className="mt-1.5 flex-row items-start">
           <View className="mt-0.5">
-            <Clock size={12} color="#94A3B8" />
+            <Clock size={12} color="#8FA79A" />
           </View>
           <Text className="ml-1.5 flex-1 text-xs text-slate-400">
             Most recent action we hold: {new Date(data.newestAction.date).toLocaleDateString()} —{' '}

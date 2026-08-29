@@ -238,7 +238,7 @@ function ViewModeButton({
   onPress: () => void;
   iconType: 'simplified' | 'full' | 'impact' | 'related';
 }) {
-  const iconColor = isActive ? '#0F172A' : '#F59E0B';
+  const iconColor = isActive ? '#0C1D18' : '#F59E0B';
 
   const renderIcon = () => {
     switch (iconType) {
@@ -463,7 +463,7 @@ export default function BillDetailScreen() {
     );
   }
 
-  const categoryColor = categoryColors[bill.category] ?? '#64748B';
+  const categoryColor = categoryColors[bill.category] ?? '#6E8A7C';
   const yeaPercentage = Math.round(
     (bill.communityVotes.yea / (bill.communityVotes.totalVoters || 1)) * 100
   );
@@ -536,7 +536,7 @@ export default function BillDetailScreen() {
       />
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -555,13 +555,13 @@ export default function BillDetailScreen() {
                 onPress={handleBookmark}
                 className="bg-slate-800 p-2 rounded-full mr-2"
               >
-                <Bookmark size={20} color="#64748B" />
+                <Bookmark size={20} color="#6E8A7C" />
               </Pressable>
               <Pressable
                 onPress={handleShare}
                 className="bg-slate-800 p-2 rounded-full"
               >
-                <Share2 size={20} color="#64748B" />
+                <Share2 size={20} color="#6E8A7C" />
               </Pressable>
             </View>
           </View>
@@ -681,7 +681,7 @@ export default function BillDetailScreen() {
                 <View className="flex-row mt-3">
                   {bill.introducedDate ? (
                     <View className="flex-row items-center mr-4">
-                      <Clock size={14} color="#64748B" />
+                      <Clock size={14} color="#6E8A7C" />
                       <Text className="text-slate-400 text-sm ml-1.5">
                         Introduced {new Date(bill.introducedDate).toLocaleDateString()}
                       </Text>
@@ -689,7 +689,7 @@ export default function BillDetailScreen() {
                   ) : null}
                   {bill.lastActionDate ? (
                     <View className="flex-row items-center">
-                      <Building2 size={14} color="#64748B" />
+                      <Building2 size={14} color="#6E8A7C" />
                       <Text className="text-slate-400 text-sm ml-1.5">
                         Last action {new Date(bill.lastActionDate).toLocaleDateString()}
                       </Text>
@@ -723,7 +723,7 @@ export default function BillDetailScreen() {
                   <View className="flex-row items-center">
                     <ThumbsUp size={16} color="#22C55E" />
                     <Text className="text-emerald-500 font-semibold ml-1.5">
-                      {yeaPercentage}% Yea
+                      {yeaPercentage}% Aye
                     </Text>
                     <Text className="text-slate-500 text-sm ml-1">
                       ({bill.communityVotes.yea.toLocaleString()})
@@ -945,7 +945,7 @@ export default function BillDetailScreen() {
                           </Text>
                         </View>
                         <View className="ml-2">
-                          <ExternalLink size={18} color="#64748B" />
+                          <ExternalLink size={18} color="#6E8A7C" />
                         </View>
                       </View>
                     </Animated.View>
@@ -953,7 +953,7 @@ export default function BillDetailScreen() {
 
                   {bill.relatedLaws.length === 0 && (
                     <View className="bg-slate-800/40 rounded-xl p-8 items-center border border-slate-700/30">
-                      <Scale size={40} color="#64748B" />
+                      <Scale size={40} color="#6E8A7C" />
                       <Text className="text-slate-400 text-lg mt-4">
                         No related laws
                       </Text>
@@ -973,20 +973,20 @@ export default function BillDetailScreen() {
                   style={yeaAnimStyle}
                   className={cn(
                     'flex-1 flex-row items-center justify-center py-4 rounded-xl mr-2',
-                    userVote === 'yea' ? 'bg-emerald-600' : 'bg-emerald-900/60'
+                    userVote === 'yea' ? 'bg-emerald-400' : 'bg-emerald-400/20 border border-emerald-400/70'
                   )}
                 >
                   <ThumbsUp
                     size={22}
-                    color={userVote === 'yea' ? '#fff' : '#22C55E'}
+                    color={userVote === 'yea' ? '#052E1B' : '#6EE7A8'}
                   />
                   <Text
                     className={cn(
                       'ml-2 font-bold text-lg',
-                      userVote === 'yea' ? 'text-white' : 'text-emerald-500'
+                      userVote === 'yea' ? 'text-emerald-950' : 'text-emerald-300'
                     )}
                   >
-                    Vote Yea
+                    Aye
                   </Text>
                 </AnimatedPressable>
 
@@ -995,20 +995,20 @@ export default function BillDetailScreen() {
                   style={nayAnimStyle}
                   className={cn(
                     'flex-1 flex-row items-center justify-center py-4 rounded-xl ml-2',
-                    userVote === 'nay' ? 'bg-red-600' : 'bg-red-900/60'
+                    userVote === 'nay' ? 'bg-rose-900 border-2 border-rose-400' : 'bg-rose-950/70 border border-rose-700'
                   )}
                 >
                   <ThumbsDown
                     size={22}
-                    color={userVote === 'nay' ? '#fff' : '#EF4444'}
+                    color={userVote === 'nay' ? '#FFE4E6' : '#FDA4AF'}
                   />
                   <Text
                     className={cn(
                       'ml-2 font-bold text-lg',
-                      userVote === 'nay' ? 'text-white' : 'text-red-500'
+                      userVote === 'nay' ? 'text-rose-50' : 'text-rose-300'
                     )}
                   >
-                    Vote Nay
+                    Nay
                   </Text>
                 </AnimatedPressable>
               </View>

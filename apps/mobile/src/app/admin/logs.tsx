@@ -47,9 +47,9 @@ function LogItem({ log }: LogItemProps) {
       case 'comment':
         return <MessageSquare size={16} color="#8B5CF6" />;
       case 'system':
-        return <Settings size={16} color="#64748B" />;
+        return <Settings size={16} color="#6E8A7C" />;
       default:
-        return <Activity size={16} color="#64748B" />;
+        return <Activity size={16} color="#6E8A7C" />;
     }
   };
 
@@ -93,7 +93,7 @@ function LogItem({ log }: LogItemProps) {
           )}
 
           <View className="flex-row items-center mt-2">
-            <Clock size={12} color="#64748B" />
+            <Clock size={12} color="#6E8A7C" />
             <Text className="text-slate-500 text-xs ml-1">
               {new Date(log.timestamp).toLocaleString()}
             </Text>
@@ -136,7 +136,7 @@ export default function AdminLogsScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">Activity Logs</Text>
         <View className="flex-1" />
@@ -181,7 +181,7 @@ export default function AdminLogsScreen() {
       >
         {logs.length === 0 ? (
           <View className="flex-1 items-center justify-center py-20">
-            <Activity size={48} color="#475569" />
+            <Activity size={48} color="#4C6659" />
             <Text className="text-slate-400 text-lg mt-4">No activity logs</Text>
             <Text className="text-slate-500 text-sm mt-1">Admin actions will appear here</Text>
           </View>

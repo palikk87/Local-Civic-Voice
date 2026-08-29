@@ -103,7 +103,7 @@ export default function PostOptionsModal({
       onPress: () => onShare?.(post),
     },
     {
-      icon: <Copy size={20} color="#64748B" />,
+      icon: <Copy size={20} color="#6E8A7C" />,
       label: 'Copy Link',
       onPress: () => {
         // Copy link logic would go here
@@ -111,7 +111,7 @@ export default function PostOptionsModal({
       },
     },
     {
-      icon: <Bookmark size={20} color="#64748B" />,
+      icon: <Bookmark size={20} color="#6E8A7C" />,
       label: 'Save Post',
       onPress: () => {
         // Save post logic
@@ -120,7 +120,7 @@ export default function PostOptionsModal({
     },
     // Non-owner options
     {
-      icon: <VolumeX size={20} color="#64748B" />,
+      icon: <VolumeX size={20} color="#6E8A7C" />,
       label: `Mute @${post.author.username}`,
       onPress: () => onMute?.(post.author.id),
       nonOwnerOnly: true,
@@ -175,7 +175,7 @@ export default function PostOptionsModal({
           style={{ maxHeight: '85%' }}
         >
           <LinearGradient
-            colors={['#1E293B', '#0F172A']}
+            colors={['#17362A', '#0C1D18']}
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
           />
 
@@ -194,7 +194,7 @@ export default function PostOptionsModal({
                 onPress={handleClose}
                 className="w-8 h-8 items-center justify-center rounded-full bg-slate-800"
               >
-                <X size={18} color="#94A3B8" />
+                <X size={18} color="#8FA79A" />
               </Pressable>
             </View>
 

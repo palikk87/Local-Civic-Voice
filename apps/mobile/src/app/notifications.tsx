@@ -75,7 +75,7 @@ const notificationIcons: Record<NotificationType, { icon: typeof Heart; color: s
  * on the server — or an older app talking to a newer backend — took the whole
  * screen down rather than showing a bell.
  */
-const FALLBACK_ICON = { icon: Bell, color: '#94A3B8' };
+const FALLBACK_ICON = { icon: Bell, color: '#8FA79A' };
 
 // Single notification item
 function NotificationItem({
@@ -151,7 +151,7 @@ function EmptyState() {
     <View className="flex-1 items-center justify-center py-20">
       <Animated.View entering={FadeIn.delay(100)}>
         <View className="w-24 h-24 rounded-full bg-slate-800 items-center justify-center mb-4">
-          <Bell size={48} color="#64748B" />
+          <Bell size={48} color="#6E8A7C" />
         </View>
         <Text className="text-white font-semibold text-lg text-center">
           No notifications yet
@@ -251,7 +251,7 @@ function NotificationsContent() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -297,7 +297,7 @@ function NotificationsContent() {
               onPress={handleSettings}
               className="w-10 h-10 rounded-full bg-slate-800 items-center justify-center"
             >
-              <Settings size={20} color="#94A3B8" />
+              <Settings size={20} color="#8FA79A" />
             </Pressable>
           </View>
         </View>

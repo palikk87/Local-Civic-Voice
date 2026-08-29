@@ -178,11 +178,11 @@ function SearchBar({
         {isLoading ? (
           <ActivityIndicator size="small" color="#F59E0B" />
         ) : (
-          <Search size={18} color="#64748B" />
+          <Search size={18} color="#6E8A7C" />
         )}
         <TextInput
           placeholder={placeholder}
-          placeholderTextColor="#64748B"
+          placeholderTextColor="#6E8A7C"
           value={value}
           onChangeText={onChangeText}
           onSubmitEditing={onSubmit}
@@ -197,7 +197,7 @@ function SearchBar({
             className="p-1"
             hitSlop={8}
           >
-            <X size={16} color="#64748B" />
+            <X size={16} color="#6E8A7C" />
           </Pressable>
         )}
       </View>
@@ -213,7 +213,7 @@ function SearchBar({
         }`}
       >
         {isLoading ? (
-          <ActivityIndicator size="small" color="#0F172A" />
+          <ActivityIndicator size="small" color="#0C1D18" />
         ) : (
           <Text className="text-slate-900 font-bold text-base">Search</Text>
         )}
@@ -314,7 +314,7 @@ function ResultCard({
             )}
           </View>
           <View className="flex-row items-center">
-            <Clock size={10} color="#64748B" />
+            <Clock size={10} color="#6E8A7C" />
             <Text className="text-slate-500 text-xs ml-1">
               {new Date(result.date).toLocaleDateString('en-US', {
                 month: 'short',
@@ -347,12 +347,12 @@ function ResultCard({
 
         <View className="flex-row items-center justify-between">
           <View className="flex-row items-center">
-            <ExternalLink size={12} color="#64748B" />
+            <ExternalLink size={12} color="#6E8A7C" />
             <Text className="text-slate-500 text-xs ml-1">
               Official Source
             </Text>
           </View>
-          <ChevronRight size={16} color="#64748B" />
+          <ChevronRight size={16} color="#6E8A7C" />
         </View>
       </Pressable>
     </Animated.View>
@@ -466,7 +466,7 @@ function SlideOverPreview({
                 className="p-2 bg-slate-800 rounded-full"
                 hitSlop={8}
               >
-                <X size={16} color="#94A3B8" />
+                <X size={16} color="#8FA79A" />
               </Pressable>
             </View>
 
@@ -516,7 +516,7 @@ function SlideOverPreview({
               {isUnidentifiable ? (
                 <View className="bg-slate-800/50 rounded-lg p-4 mb-4 border border-slate-700">
                   <View className="flex-row items-center mb-2">
-                    <FileWarning size={16} color="#94A3B8" />
+                    <FileWarning size={16} color="#8FA79A" />
                     <Text className="text-slate-400 font-semibold text-sm ml-2">
                       BRIEF UNAVAILABLE
                     </Text>
@@ -625,7 +625,7 @@ function EmptyState({ activeTab, onSuggestionPress }: { activeTab: LibraryTab; o
     <Animated.View entering={FadeIn.duration(300)} className="flex-1 px-6 pt-8">
       <View className="items-center mb-8">
         <View className="bg-slate-800/50 rounded-full p-6 mb-4">
-          <Search size={32} color="#64748B" />
+          <Search size={32} color="#6E8A7C" />
         </View>
         <Text className="text-white font-semibold text-lg mb-2">
           Search {info.name}
@@ -774,7 +774,7 @@ export default function LibraryScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 

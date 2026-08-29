@@ -156,7 +156,7 @@ interface DigestCardProps {
 }
 
 function DigestCard({ row: bill, index, onPress }: DigestCardProps) {
-  const categoryColor = categoryColors[bill.category as BillCategory] || '#64748B';
+  const categoryColor = categoryColors[bill.category as BillCategory] || '#6E8A7C';
   const tierColor = getWeightTierColor(bill.weightTier);
   const branch = BRANCH_OF[bill.referenceType];
 

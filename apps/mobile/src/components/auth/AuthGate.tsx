@@ -53,7 +53,7 @@ function SignInWall({ reason, onSignIn }: { reason: string; onSignIn: () => void
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E3A5F', '#0F172A']}
+        colors={['#0C1D18', '#1E3A5F', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       <SafeAreaView className="flex-1">
@@ -83,7 +83,7 @@ function SignInWall({ reason, onSignIn }: { reason: string; onSignIn: () => void
             onPress={() => router.replace('/(tabs)/discover')}
             className="mt-3 w-full border border-slate-700 rounded-xl py-4 flex-row items-center justify-center"
           >
-            <Compass size={18} color="#94A3B8" />
+            <Compass size={18} color="#8FA79A" />
             <Text className="text-slate-300 font-semibold text-base ml-2">
               Browse public records
             </Text>

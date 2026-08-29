@@ -111,7 +111,7 @@ const contentTypeConfig: Record<ContentType, { icon: 'landmark' | 'file' | 'scal
   bill: { icon: 'landmark', color: '#3B82F6', label: 'Bill' },
   executive_order: { icon: 'file', color: '#F59E0B', label: 'Executive Order' },
   scotus_case: { icon: 'scale', color: '#8B5CF6', label: 'Court Case' },
-  text: { icon: 'file', color: '#64748B', label: 'Post' },
+  text: { icon: 'file', color: '#6E8A7C', label: 'Post' },
 };
 
 // Branch labels and colors (matching Feed)
@@ -370,7 +370,7 @@ function PostCard({
               onPress={() => Linking.openURL(post.sharedContent?.sourceUrl ?? '')}
               className="flex-row items-center"
             >
-              <ExternalLink size={12} color="#64748B" />
+              <ExternalLink size={12} color="#6E8A7C" />
               <Text className="text-slate-500 text-xs ml-1">Source</Text>
             </Pressable>
           )}
@@ -398,7 +398,7 @@ function PostCard({
       {/* Repost indicator (for non-library shares) */}
       {!isLibraryPost && post.type === 'share' && post.sharedContent?.originalAuthor && (
         <View className="flex-row items-center px-4 pt-3 pb-1">
-          <Repeat2 size={14} color="#64748B" />
+          <Repeat2 size={14} color="#6E8A7C" />
           <Text className="text-slate-500 text-xs ml-2">
             {post.author.displayName} shared
           </Text>
@@ -447,7 +447,7 @@ function PostCard({
           >
             {post.author.isFollowing ? (
               <>
-                <UserCheck size={14} color="#94A3B8" />
+                <UserCheck size={14} color="#8FA79A" />
                 <Text className="text-slate-300 text-xs ml-1">Following</Text>
               </>
             ) : (
@@ -460,7 +460,7 @@ function PostCard({
         )}
 
         <Pressable onPress={() => onMore(post)} className="p-2">
-          <MoreHorizontal size={20} color="#64748B" />
+          <MoreHorizontal size={20} color="#6E8A7C" />
         </Pressable>
       </View>
 
@@ -522,10 +522,10 @@ function PostCard({
               {post.sharedContent.category && (
                 <View
                   className="px-2 py-0.5 rounded-full mr-2"
-                  style={{ backgroundColor: `${categoryColors[post.sharedContent.category] ?? '#64748B'}30` }}
+                  style={{ backgroundColor: `${categoryColors[post.sharedContent.category] ?? '#6E8A7C'}30` }}
                 >
                   <Text
-                    style={{ color: categoryColors[post.sharedContent.category] ?? '#64748B' }}
+                    style={{ color: categoryColors[post.sharedContent.category] ?? '#6E8A7C' }}
                     className="text-xs font-medium"
                   >
                     {categoryLabels[post.sharedContent.category] ?? post.sharedContent.category.replace('_', ' ')}
@@ -585,7 +585,7 @@ function PostCard({
                           userVote === 'support' ? 'text-white' : 'text-emerald-500'
                         )}
                       >
-                        Yea {supportCount + opposeCount > 0 ? Math.round((supportCount / (supportCount + opposeCount)) * 100) : 50}%
+                        Aye {supportCount + opposeCount > 0 ? Math.round((supportCount / (supportCount + opposeCount)) * 100) : 50}%
                       </Text>
                     </Pressable>
 
@@ -663,7 +663,7 @@ function PostCard({
           <Animated.View style={likeAnimatedStyle}>
             <Heart
               size={18}
-              color={post.isLiked ? '#EF4444' : '#64748B'}
+              color={post.isLiked ? '#EF4444' : '#6E8A7C'}
               fill={post.isLiked ? '#EF4444' : 'transparent'}
             />
           </Animated.View>
@@ -680,13 +680,13 @@ function PostCard({
           }}
           className="flex-row items-center mr-6"
         >
-          <MessageCircle size={18} color="#64748B" />
+          <MessageCircle size={18} color="#6E8A7C" />
           <Text className="ml-1.5 text-slate-400 text-sm">Reply</Text>
         </Pressable>
 
         {/* Repost */}
         <Pressable onPress={handleRepost} className="flex-row items-center mr-6">
-          <Repeat2 size={18} color={reposted ? '#22C55E' : '#64748B'} />
+          <Repeat2 size={18} color={reposted ? '#22C55E' : '#6E8A7C'} />
           <Text className={cn('ml-1.5 text-sm', reposted ? 'text-emerald-500' : 'text-slate-400')}>
             {reposts > 0 ? reposts : ''}
           </Text>
@@ -700,7 +700,7 @@ function PostCard({
           }}
           className="flex-row items-center"
         >
-          <Share2 size={18} color="#64748B" />
+          <Share2 size={18} color="#6E8A7C" />
           <Text className="ml-1.5 text-slate-400 text-sm">Share</Text>
         </Pressable>
       </View>
@@ -757,7 +757,7 @@ function PostDetailModal({
     >
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -965,7 +965,7 @@ function TimelineFeed() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -991,7 +991,7 @@ function TimelineFeed() {
               onPress={handleNotifications}
               className="w-10 h-10 rounded-full bg-slate-800 items-center justify-center mr-2 relative"
             >
-              <Bell size={20} color="#94A3B8" />
+              <Bell size={20} color="#8FA79A" />
               {notificationUnreadCount > 0 && (
                 <View className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 items-center justify-center">
                   <Text className="text-slate-900 text-xs font-bold">
@@ -1006,7 +1006,7 @@ function TimelineFeed() {
               onPress={handleMessages}
               className="w-10 h-10 rounded-full bg-slate-800 items-center justify-center mr-2 relative"
             >
-              <Mail size={20} color="#94A3B8" />
+              <Mail size={20} color="#8FA79A" />
               {unreadMessages > 0 && (
                 <View className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-500 items-center justify-center">
                   <Text className="text-slate-900 text-xs font-bold">
@@ -1024,7 +1024,7 @@ function TimelineFeed() {
               }}
               className="w-10 h-10 rounded-full bg-amber-500 items-center justify-center"
             >
-              <Plus size={22} color="#0F172A" />
+              <Plus size={22} color="#0C1D18" />
             </Pressable>
           </View>
         </View>
@@ -1055,7 +1055,7 @@ function TimelineFeed() {
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-20">
               <View className="w-20 h-20 rounded-full bg-slate-800 items-center justify-center mb-4">
-                <MessageCircle size={36} color="#64748B" />
+                <MessageCircle size={36} color="#6E8A7C" />
               </View>
               <Text className="text-white font-semibold text-lg">
                 No posts yet

@@ -197,9 +197,9 @@ function PreferenceToggle({
               onToggle(config.key, newValue);
             }
           }}
-          trackColor={{ false: '#334155', true: '#F59E0B50' }}
-          thumbColor={value ? '#F59E0B' : '#64748B'}
-          ios_backgroundColor="#334155"
+          trackColor={{ false: '#2C4A3C', true: '#F59E0B50' }}
+          thumbColor={value ? '#F59E0B' : '#6E8A7C'}
+          ios_backgroundColor="#2C4A3C"
           disabled={isSaving}
         />
       </Pressable>
@@ -340,7 +340,7 @@ function NotificationSettingsContent() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 

@@ -92,7 +92,7 @@ export function ChangePassword() {
           onChangeText={setCurrent}
           secureTextEntry
           autoComplete="current-password"
-          placeholderTextColor="#475569"
+          placeholderTextColor="#4C6659"
           className={field}
         />
       </View>
@@ -104,7 +104,7 @@ export function ChangePassword() {
           onChangeText={setNext}
           secureTextEntry
           autoComplete="new-password"
-          placeholderTextColor="#475569"
+          placeholderTextColor="#4C6659"
           className={field}
         />
       </View>
@@ -116,7 +116,7 @@ export function ChangePassword() {
           onChangeText={setConfirm}
           secureTextEntry
           autoComplete="new-password"
-          placeholderTextColor="#475569"
+          placeholderTextColor="#4C6659"
           className={field}
         />
       </View>
@@ -130,8 +130,8 @@ export function ChangePassword() {
         <Switch
           value={signOutOthers}
           onValueChange={setSignOutOthers}
-          trackColor={{ false: '#334155', true: '#F59E0B' }}
-          thumbColor="#F8FAFC"
+          trackColor={{ false: '#2C4A3C', true: '#F59E0B' }}
+          thumbColor="#F5F0E6"
         />
       </View>
 
@@ -145,7 +145,7 @@ export function ChangePassword() {
         style={{ opacity: saving ? 0.6 : 1 }}
       >
         {saving ? (
-          <ActivityIndicator color="#0F172A" />
+          <ActivityIndicator color="#0C1D18" />
         ) : (
           <Text className="text-slate-900 font-semibold">Change password</Text>
         )}

@@ -47,10 +47,10 @@ import { recordApi, type PositionRecord } from "@/lib/civic";
 
 function positionLook(position: string) {
   if (position === "support") {
-    return { icon: <ThumbsUp className="h-4 w-4" />, label: "Backed", tone: "text-support" };
+    return { icon: <ThumbsUp className="h-4 w-4" />, label: "Aye", tone: "text-support" };
   }
   if (position === "oppose") {
-    return { icon: <ThumbsDown className="h-4 w-4" />, label: "Opposed", tone: "text-oppose" };
+    return { icon: <ThumbsDown className="h-4 w-4" />, label: "Nay", tone: "text-oppose" };
   }
   return { icon: <Undo2 className="h-4 w-4" />, label: "Withdrew", tone: "text-muted-foreground" };
 }
@@ -187,8 +187,8 @@ export function CivicRecord({ userId, isMine, variant = "full" }: CivicRecordPro
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
               { label: "Positions", value: summary.total },
-              { label: "Backed", value: summary.support },
-              { label: "Opposed", value: summary.oppose },
+              { label: "Aye", value: summary.support },
+              { label: "Nay", value: summary.oppose },
               // Shown, not hidden. On a platform about legislation the text
               // moves under people, and reconsidering is the correct response
               // to new information rather than something to be caught at.

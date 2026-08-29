@@ -254,13 +254,13 @@ export default function B2BTeamScreen() {
   return (
     <View className="flex-1 bg-slate-950">
       <LinearGradient
-        colors={['#0F172A', '#1E1B4B', '#0F172A']}
+        colors={['#0C1D18', '#1E1B4B', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       <SafeAreaView className="flex-1">
         <View className="flex-row items-center px-4 py-3 border-b border-slate-800/50">
           <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </TouchableOpacity>
           <View className="flex-1 ml-2">
             <Text className="text-white text-lg font-semibold">Team</Text>
@@ -349,7 +349,7 @@ export default function B2BTeamScreen() {
                   value={addName}
                   onChangeText={setAddName}
                   placeholder="Dana Okafor"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                 />
 
                 <Text className="text-slate-300 text-sm mb-1">Username they will type</Text>
@@ -359,7 +359,7 @@ export default function B2BTeamScreen() {
                   onChangeText={setAddUsername}
                   autoCapitalize="none"
                   placeholder="dana"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                 />
 
                 <Text className="text-slate-300 text-sm mb-1">Email (optional)</Text>
@@ -370,7 +370,7 @@ export default function B2BTeamScreen() {
                   autoCapitalize="none"
                   keyboardType="email-address"
                   placeholder="dana@company.com"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                 />
 
                 <Text className="text-slate-300 text-sm mb-1">What they can do</Text>
@@ -406,7 +406,7 @@ export default function B2BTeamScreen() {
                   onChangeText={setAddPassword}
                   autoCapitalize="none"
                   placeholder="Leave blank and one will be generated"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                 />
                 {/* Both paths exist because both are things real administrators
                     do. Forcing a generated password is what gets it pasted into
@@ -549,7 +549,7 @@ export default function B2BTeamScreen() {
                       onChangeText={setTypedPassword}
                       autoCapitalize="none"
                       placeholder="Leave blank and one will be generated"
-                      placeholderTextColor="#64748B"
+                      placeholderTextColor="#6E8A7C"
                     />
                     {passwordError ? (
                       <Text className="text-red-300 text-sm mt-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2">

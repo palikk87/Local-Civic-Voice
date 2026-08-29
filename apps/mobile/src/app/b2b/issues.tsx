@@ -45,12 +45,12 @@ function IssueCard({ issue, onPress }: IssueCardProps) {
       'Environment': '#22C55E',
       'Education': '#3B82F6',
       'Civil Rights': '#EC4899',
-      'Defense': '#64748B',
+      'Defense': '#6E8A7C',
       'Technology': '#06B6D4',
       'Housing': '#F97316',
       'Crime': '#DC2626',
     };
-    return colors[category] || '#64748B';
+    return colors[category] || '#6E8A7C';
   };
 
   const categoryColor = getCategoryColor(issue.category);
@@ -109,11 +109,11 @@ function IssueCard({ issue, onPress }: IssueCardProps) {
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-4">
           <View className="flex-row items-center">
-            <BarChart3 size={14} color="#64748B" />
+            <BarChart3 size={14} color="#6E8A7C" />
             <Text className="text-slate-400 text-sm ml-1">{issue.relatedBills} bills</Text>
           </View>
           <View className="flex-row items-center">
-            <Users size={14} color="#64748B" />
+            <Users size={14} color="#6E8A7C" />
             <Text className="text-slate-400 text-sm ml-1">{sentiment.total.toLocaleString()} votes</Text>
           </View>
         </View>
@@ -144,7 +144,7 @@ function IssueCard({ issue, onPress }: IssueCardProps) {
       {/* Hotspots */}
       {issue.hotspots && issue.hotspots.length > 0 && (
         <View className="flex-row items-center mt-3 pt-3 border-t border-slate-700/30">
-          <MapPin size={12} color="#64748B" />
+          <MapPin size={12} color="#6E8A7C" />
           <Text className="text-slate-400 text-xs ml-1">
             Hotspots: {issue.hotspots.slice(0, 3).join(', ')}
           </Text>
@@ -214,7 +214,7 @@ export default function B2BIssuesScreen() {
   return (
     <View className="flex-1 bg-slate-950">
       <LinearGradient
-        colors={['#0F172A', '#1E1B4B', '#0F172A']}
+        colors={['#0C1D18', '#1E1B4B', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -222,7 +222,7 @@ export default function B2BIssuesScreen() {
         {/* Header */}
         <View className="flex-row items-center px-4 py-3 border-b border-slate-800/50">
           <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </TouchableOpacity>
           <View className="flex-1 ml-2">
             <Text className="text-white text-lg font-semibold">Issue Tracker</Text>
@@ -233,17 +233,17 @@ export default function B2BIssuesScreen() {
         {/* Search & Sort */}
         <View className="px-4 py-3">
           <View className="flex-row items-center bg-slate-800/50 rounded-xl px-4 py-2 mb-3">
-            <Search size={20} color="#64748B" />
+            <Search size={20} color="#6E8A7C" />
             <TextInput
               className="flex-1 text-white ml-3 py-2"
               placeholder="Search issues..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={search}
               onChangeText={setSearch}
             />
             {search.length > 0 && (
               <TouchableOpacity onPress={() => setSearch('')}>
-                <X size={18} color="#64748B" />
+                <X size={18} color="#6E8A7C" />
               </TouchableOpacity>
             )}
           </View>
@@ -276,7 +276,7 @@ export default function B2BIssuesScreen() {
         >
           {filteredIssues.length === 0 ? (
             <View className="flex-1 items-center justify-center py-20">
-              <Target size={48} color="#475569" />
+              <Target size={48} color="#4C6659" />
               <Text className="text-slate-400 text-lg mt-4">No issues found</Text>
             </View>
           ) : (
@@ -304,7 +304,7 @@ export default function B2BIssuesScreen() {
               <View className="flex-row items-center justify-between mb-4">
                 <Text className="text-white text-xl font-bold flex-1">{selectedIssue?.name}</Text>
                 <TouchableOpacity onPress={() => setSelectedIssue(null)}>
-                  <X size={24} color="#94A3B8" />
+                  <X size={24} color="#8FA79A" />
                 </TouchableOpacity>
               </View>
 

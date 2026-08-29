@@ -180,7 +180,7 @@ export default function MergeReviewScreen() {
     <SafeAreaView className="flex-1 bg-slate-950">
       <View className="flex-row items-center justify-between px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="flex-row items-center">
-          <ArrowLeft size={22} color="#94A3B8" />
+          <ArrowLeft size={22} color="#8FA79A" />
           <Text className="text-slate-300 ml-2 text-base">Back</Text>
         </TouchableOpacity>
         <View className="flex-row items-center">
@@ -188,7 +188,7 @@ export default function MergeReviewScreen() {
           <Text className="text-white font-bold text-base ml-2">Merge review</Text>
         </View>
         <TouchableOpacity onPress={() => void recheck()}>
-          <RefreshCw size={20} color="#94A3B8" />
+          <RefreshCw size={20} color="#8FA79A" />
         </TouchableOpacity>
       </View>
 
@@ -201,7 +201,7 @@ export default function MergeReviewScreen() {
               setRefreshing(true);
               void load();
             }}
-            tintColor="#94A3B8"
+            tintColor="#8FA79A"
           />
         }
       >
@@ -239,7 +239,7 @@ export default function MergeReviewScreen() {
               <View className="flex-row flex-wrap items-center gap-2">
                 {candidate.isSuggestion ? (
                   <View className="flex-row items-center px-2 py-1 rounded-full bg-slate-800">
-                    <Lightbulb size={12} color="#94A3B8" />
+                    <Lightbulb size={12} color="#8FA79A" />
                     <Text className="text-slate-300 text-xs ml-1">Suggestion only</Text>
                   </View>
                 ) : (
@@ -318,7 +318,7 @@ export default function MergeReviewScreen() {
                       setNote('');
                     }}
                   >
-                    <CircleX size={16} color="#94A3B8" />
+                    <CircleX size={16} color="#8FA79A" />
                     <Text className="text-slate-300 text-sm ml-2">Different laws</Text>
                   </TouchableOpacity>
                 </View>
@@ -342,7 +342,7 @@ export default function MergeReviewScreen() {
               value={note}
               onChangeText={setNote}
               placeholder="e.g. Same subject, different appropriations year."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               multiline
               className="bg-slate-800 text-white rounded-lg p-3 mt-3 min-h-[80px]"
             />

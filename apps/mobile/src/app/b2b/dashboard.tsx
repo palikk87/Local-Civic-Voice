@@ -218,7 +218,7 @@ export default function B2BDashboardScreen() {
   return (
     <View className="flex-1 bg-slate-950">
       <LinearGradient
-        colors={['#0F172A', '#1E1B4B', '#0F172A']}
+        colors={['#0C1D18', '#1E1B4B', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -237,7 +237,7 @@ export default function B2BDashboardScreen() {
                 }}
                 className="p-2 -ml-2 mr-1"
               >
-                <ArrowLeft size={22} color="#94A3B8" />
+                <ArrowLeft size={22} color="#8FA79A" />
               </TouchableOpacity>
               <View className="w-10 h-10 bg-indigo-500/20 rounded-xl items-center justify-center">
                 <BarChart3 size={20} color="#818CF8" />
@@ -458,7 +458,7 @@ export default function B2BDashboardScreen() {
           {/* Privacy Notice */}
           <View className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 mt-4 mb-8">
             <View className="flex-row items-start">
-              <AlertCircle size={20} color="#64748B" />
+              <AlertCircle size={20} color="#6E8A7C" />
               <View className="flex-1 ml-3">
                 <Text className="text-slate-400 text-sm">
                   All data is aggregated and anonymized. Individual user information is never shared or accessible through this platform.

@@ -282,7 +282,7 @@ try {
     check("their profile carries the record heading", /Their record/i.test(text));
     check(
       "the numbers are still open — those were never the problem",
-      /Positions/.test(text) && /Backed/.test(text) && /Opposed/.test(text),
+      /Positions/.test(text) && /Aye/.test(text) && /Nay/.test(text),
     );
     check(
       "THE POSITIONS THEMSELVES ARE NOT LISTED — the list is behind a click now",

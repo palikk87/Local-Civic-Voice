@@ -97,7 +97,7 @@ export function ReportSheet({
           className="max-h-[85%] rounded-t-3xl border-t border-slate-700 bg-slate-900 p-5"
         >
           <View className="flex-row items-center mb-2">
-            <Flag size={18} color="#F8FAFC" />
+            <Flag size={18} color="#F5F0E6" />
             <Text className="text-white text-lg font-bold ml-2">
               Report {target?.what ?? 'this'}
             </Text>
@@ -139,7 +139,7 @@ export function ReportSheet({
               value={detail}
               onChangeText={(next) => setDetail(next.slice(0, 2000))}
               placeholder="Where it happened, and what you saw. The jury reads this."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               multiline
               numberOfLines={4}
               className="rounded-xl border border-slate-700 bg-slate-800/50 p-3 text-white"
@@ -172,7 +172,7 @@ export function ReportSheet({
                   : 'flex-1 flex-row items-center justify-center rounded-xl bg-slate-700 py-3'
               }
             >
-              {sending ? <ActivityIndicator size="small" color="#0F172A" /> : null}
+              {sending ? <ActivityIndicator size="small" color="#0C1D18" /> : null}
               <Text
                 className={canSend ? 'text-slate-900 font-semibold ml-1.5' : 'text-slate-500 font-semibold ml-1.5'}
               >

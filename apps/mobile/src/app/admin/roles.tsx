@@ -205,7 +205,7 @@ export default function AdminRolesScreen() {
     <SafeAreaView className="flex-1 bg-slate-900">
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">Roles</Text>
       </View>
@@ -220,7 +220,7 @@ export default function AdminRolesScreen() {
               await load();
               setRefreshing(false);
             }}
-            tintColor="#94A3B8"
+            tintColor="#8FA79A"
           />
         }
       >
@@ -259,13 +259,13 @@ export default function AdminRolesScreen() {
               className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 mb-4"
             >
               <View className="flex-row items-center flex-wrap">
-                <Shield size={16} color="#94A3B8" />
+                <Shield size={16} color="#8FA79A" />
                 {isEditing ? (
                   <TextInput
                     value={draftName}
                     onChangeText={setDraftName}
                     className="text-white bg-slate-900 rounded-lg px-3 py-1.5 ml-2 flex-1"
-                    placeholderTextColor="#64748B"
+                    placeholderTextColor="#6E8A7C"
                   />
                 ) : (
                   <Text className="text-white font-semibold ml-2">{role.name}</Text>
@@ -394,7 +394,7 @@ export default function AdminRolesScreen() {
                 value={newName}
                 onChangeText={setNewName}
                 placeholder="Content Editor"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 className="text-white bg-slate-900 rounded-lg px-3 py-2"
               />
               <Text className="text-slate-500 text-xs mt-3 mb-1">Slug (permanent)</Text>
@@ -402,7 +402,7 @@ export default function AdminRolesScreen() {
                 value={newSlug}
                 onChangeText={(text) => setNewSlug(text.toLowerCase())}
                 placeholder="content-editor"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 autoCapitalize="none"
                 className="text-white bg-slate-900 rounded-lg px-3 py-2"
               />
@@ -427,7 +427,7 @@ export default function AdminRolesScreen() {
               onPress={() => setCreating(true)}
               className="flex-row items-center justify-center p-4 rounded-xl border border-slate-700 mb-8"
             >
-              <Plus size={18} color="#94A3B8" />
+              <Plus size={18} color="#8FA79A" />
               <Text className="text-slate-300 font-medium ml-2">New role</Text>
             </TouchableOpacity>
           )

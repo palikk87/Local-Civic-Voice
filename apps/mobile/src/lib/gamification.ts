@@ -47,7 +47,7 @@ export type CivicLevel =
  * not one person. Signing in elsewhere starts it at zero again.
  */
 export const CIVIC_LEVELS: Record<CivicLevel, { min: number; max: number; title: string; color: string }> = {
-  newcomer: { min: 0, max: 99, title: 'New here', color: '#94A3B8' },
+  newcomer: { min: 0, max: 99, title: 'New here', color: '#8FA79A' },
   citizen: { min: 100, max: 249, title: 'Engaged Citizen', color: '#22C55E' },
   advocate: { min: 250, max: 499, title: 'Democracy Advocate', color: '#3B82F6' },
   activist: { min: 500, max: 749, title: 'Civic Activist', color: '#8B5CF6' },

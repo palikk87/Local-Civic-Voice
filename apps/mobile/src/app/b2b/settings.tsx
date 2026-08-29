@@ -239,13 +239,13 @@ export default function B2BSettingsScreen() {
   return (
     <View className="flex-1 bg-slate-950">
       <LinearGradient
-        colors={['#0F172A', '#1E1B4B', '#0F172A']}
+        colors={['#0C1D18', '#1E1B4B', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       <SafeAreaView className="flex-1">
         <View className="flex-row items-center px-4 py-3 border-b border-slate-800/50">
           <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </TouchableOpacity>
           <View className="flex-1 ml-2">
             <Text className="text-white text-lg font-semibold">Settings</Text>
@@ -309,7 +309,7 @@ export default function B2BSettingsScreen() {
               value={currentPassword}
               onChangeText={setCurrentPassword}
               placeholder="Your current password"
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
             />
             <Text className="text-slate-500 text-xs mt-1 mb-3">
               Asked for every time. A phone left unlocked on a table should not be enough to lock
@@ -323,7 +323,7 @@ export default function B2BSettingsScreen() {
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="At least 12 characters"
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
             />
 
             <Text className="text-slate-300 text-sm mb-1">New password again</Text>
@@ -333,7 +333,7 @@ export default function B2BSettingsScreen() {
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Type it once more"
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
             />
 
             {passwordError ? (
@@ -371,7 +371,7 @@ export default function B2BSettingsScreen() {
                 value={keyPassword}
                 onChangeText={setKeyPassword}
                 placeholder="Your current password"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
               />
               {keyError ? <Text className="text-red-400 text-sm mt-3">{keyError}</Text> : null}
               <TouchableOpacity

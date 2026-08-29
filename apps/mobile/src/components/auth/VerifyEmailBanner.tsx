@@ -69,7 +69,7 @@ export function VerifyEmailBanner() {
         <SafeAreaView className="flex-1 bg-slate-900">
           <View className="flex-row justify-end px-4 py-3">
             <Pressable onPress={() => setOpen(false)} hitSlop={12}>
-              <X size={22} color="#94A3B8" />
+              <X size={22} color="#8FA79A" />
             </Pressable>
           </View>
           {/* SCROLLS. The code box, the resend link and the explanation are

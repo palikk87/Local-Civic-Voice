@@ -48,7 +48,7 @@ export default function B2BLoginScreen() {
   return (
     <View className="flex-1 bg-slate-950">
       <LinearGradient
-        colors={['#0F172A', '#1E1B4B', '#0F172A']}
+        colors={['#0C1D18', '#1E1B4B', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -63,7 +63,7 @@ export default function B2BLoginScreen() {
               onPress={() => router.back()}
               className="p-2 -ml-2"
             >
-              <ArrowLeft size={24} color="#94A3B8" />
+              <ArrowLeft size={24} color="#8FA79A" />
             </TouchableOpacity>
           </View>
 
@@ -117,11 +117,11 @@ export default function B2BLoginScreen() {
             <View className="mb-4">
               <Text className="text-slate-400 text-sm mb-2 font-medium">Username</Text>
               <View className="bg-slate-800/50 border border-slate-700 rounded-xl flex-row items-center px-4">
-                <User size={20} color="#64748B" />
+                <User size={20} color="#6E8A7C" />
                 <TextInput
                   className="flex-1 text-white py-4 px-3 text-base"
                   placeholder="Enter your username"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                   value={username}
                   onChangeText={setUsername}
                   autoCapitalize="none"
@@ -134,11 +134,11 @@ export default function B2BLoginScreen() {
             <View className="mb-6">
               <Text className="text-slate-400 text-sm mb-2 font-medium">Password</Text>
               <View className="bg-slate-800/50 border border-slate-700 rounded-xl flex-row items-center px-4">
-                <Lock size={20} color="#64748B" />
+                <Lock size={20} color="#6E8A7C" />
                 <TextInput
                   className="flex-1 text-white py-4 px-3 text-base"
                   placeholder="Enter your password"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                   value={password}
                   onChangeText={setPassword}
                   autoCapitalize="none"
@@ -150,9 +150,9 @@ export default function B2BLoginScreen() {
                   className="p-2"
                 >
                   {showPassword ? (
-                    <EyeOff size={20} color="#64748B" />
+                    <EyeOff size={20} color="#6E8A7C" />
                   ) : (
-                    <Eye size={20} color="#64748B" />
+                    <Eye size={20} color="#6E8A7C" />
                   )}
                 </TouchableOpacity>
               </View>

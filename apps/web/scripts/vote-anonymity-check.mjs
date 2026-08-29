@@ -241,7 +241,7 @@ try {
   {
     const { context, page } = await open(ASKED, `/reference/${ids.one}`);
 
-    await page.getByRole("button", { name: /^Support$/ }).click();
+    await page.getByRole("button", { name: /^Aye/ }).click();
     const asked = await page
       .waitForSelector('[data-testid="vote-anonymity-dialog"]', { timeout: 10_000 })
       .then(() => true)
@@ -272,7 +272,7 @@ try {
   {
     // Second vote, different law. The question must not come back.
     const { context, page } = await open(ASKED, `/reference/${ids.two}`);
-    await page.getByRole("button", { name: /^Support$/ }).click();
+    await page.getByRole("button", { name: /^Aye/ }).click();
     await page.waitForTimeout(2_500);
 
     const askedAgain = await page.locator('[data-testid="vote-anonymity-dialog"]').count();
@@ -286,7 +286,7 @@ try {
   // ---------------------------------------- closing it cancels rather than publishes
   {
     const { context, page } = await open(REFUSER, `/reference/${ids.three}`);
-    await page.getByRole("button", { name: /^Oppose$/ }).click();
+    await page.getByRole("button", { name: /^Nay/ }).click();
     await page.waitForSelector('[data-testid="vote-anonymity-dialog"]', { timeout: 10_000 });
     await page.keyboard.press("Escape");
     await page.waitForTimeout(2_500);

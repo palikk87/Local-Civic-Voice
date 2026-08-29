@@ -404,7 +404,7 @@ export default function CreatePostModal({
               Congressional bills and legislation
             </Text>
           </View>
-          <ChevronRight size={20} color="#64748B" />
+          <ChevronRight size={20} color="#6E8A7C" />
         </Pressable>
 
         <Pressable
@@ -420,7 +420,7 @@ export default function CreatePostModal({
               Presidential executive orders
             </Text>
           </View>
-          <ChevronRight size={20} color="#64748B" />
+          <ChevronRight size={20} color="#6E8A7C" />
         </Pressable>
 
         <Pressable
@@ -436,7 +436,7 @@ export default function CreatePostModal({
               SCOTUS decisions and pending cases
             </Text>
           </View>
-          <ChevronRight size={20} color="#64748B" />
+          <ChevronRight size={20} color="#6E8A7C" />
         </Pressable>
       </View>
     </Animated.View>
@@ -507,7 +507,7 @@ export default function CreatePostModal({
               onChangeText={handleTextChange}
               onSelectionChange={handleSelectionChange}
               placeholder="Share your thoughts on this..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               multiline
               autoFocus
               textAlignVertical="top"
@@ -545,7 +545,7 @@ export default function CreatePostModal({
                         {item.type === 'video' && (
                           <View className="absolute inset-0 items-center justify-center bg-black/30 rounded-lg">
                             <View className="w-8 h-8 rounded-full bg-white/80 items-center justify-center">
-                              <Play size={16} color="#0F172A" />
+                              <Play size={16} color="#0C1D18" />
                             </View>
                           </View>
                         )}
@@ -612,7 +612,7 @@ export default function CreatePostModal({
               >
                 <ImageIcon
                   size={20}
-                  color={mediaItems.length >= 4 ? '#475569' : '#F59E0B'}
+                  color={mediaItems.length >= 4 ? '#4C6659' : '#F59E0B'}
                 />
                 <Text
                   className={cn(
@@ -634,7 +634,7 @@ export default function CreatePostModal({
               >
                 <Video
                   size={20}
-                  color={mediaItems.length >= 4 ? '#475569' : '#F59E0B'}
+                  color={mediaItems.length >= 4 ? '#4C6659' : '#F59E0B'}
                 />
                 <Text
                   className={cn(
@@ -656,7 +656,7 @@ export default function CreatePostModal({
               >
                 <Camera
                   size={20}
-                  color={mediaItems.length >= 4 ? '#475569' : '#F59E0B'}
+                  color={mediaItems.length >= 4 ? '#4C6659' : '#F59E0B'}
                 />
                 <Text
                   className={cn(
@@ -707,7 +707,7 @@ export default function CreatePostModal({
       >
         <View className="flex-1 bg-slate-900">
           <LinearGradient
-            colors={['#0F172A', '#1E293B', '#0F172A']}
+            colors={['#0C1D18', '#17362A', '#0C1D18']}
             style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
           />
 
@@ -718,7 +718,7 @@ export default function CreatePostModal({
                 onPress={handleClose}
                 className="w-10 h-10 items-center justify-center"
               >
-                <X size={24} color="#94A3B8" />
+                <X size={24} color="#8FA79A" />
               </Pressable>
 
               <Text className="text-white font-semibold text-lg">
@@ -736,7 +736,7 @@ export default function CreatePostModal({
                 )}
               >
                 {isPosting || isUploadingMedia ? (
-                  <ActivityIndicator size="small" color="#0F172A" />
+                  <ActivityIndicator size="small" color="#0C1D18" />
                 ) : (
                   <Text
                     className={cn(

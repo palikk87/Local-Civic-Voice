@@ -159,10 +159,10 @@ function DelegateCard({
                   <View
                     key={cat}
                     className="mr-1.5 mb-1 px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${categoryColors[cat] ?? '#64748B'}30` }}
+                    style={{ backgroundColor: `${categoryColors[cat] ?? '#6E8A7C'}30` }}
                   >
                     <Text
-                      style={{ color: categoryColors[cat] ?? '#94A3B8' }}
+                      style={{ color: categoryColors[cat] ?? '#8FA79A' }}
                       className="text-xs font-medium capitalize"
                     >
                       {categoryLabels[cat] ?? cat.replace(/_/g, ' ')}
@@ -199,7 +199,7 @@ function DelegateCard({
         {/* Stats */}
         <View className="flex-row mt-3 pt-3 border-t border-slate-700/50">
           <View className="flex-1 flex-row items-center">
-            <Users size={14} color="#64748B" />
+            <Users size={14} color="#6E8A7C" />
             <Text className="text-slate-400 text-sm ml-1.5">
               {delegate.delegatorCount.toLocaleString()} delegators
             </Text>
@@ -394,7 +394,7 @@ function DelegatesContent() {
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -472,7 +472,7 @@ function DelegatesContent() {
                         {req.met ? (
                           <CheckCircle size={14} color="#22C55E" />
                         ) : (
-                          <XCircle size={14} color="#64748B" />
+                          <XCircle size={14} color="#6E8A7C" />
                         )}
                         <Text
                           className={cn(
@@ -566,12 +566,12 @@ function DelegatesContent() {
                 {/* Search */}
                 <View className="px-4 mb-4">
                   <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-3">
-                    <Search size={18} color="#64748B" />
+                    <Search size={18} color="#6E8A7C" />
                     <TextInput
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                       placeholder="Search delegates by name or expertise..."
-                      placeholderTextColor="#64748B"
+                      placeholderTextColor="#6E8A7C"
                       className="flex-1 ml-3 text-white"
                     />
                   </View>
@@ -583,7 +583,7 @@ function DelegatesContent() {
                 <ActivityIndicator size="large" color="#F59E0B" className="mt-8" />
               ) : (
                 <View className="items-center py-12 px-8">
-                  <ShieldCheck size={48} color="#64748B" />
+                  <ShieldCheck size={48} color="#6E8A7C" />
                   <Text className="text-slate-400 text-lg mt-4 text-center">
                     No one has earned delegate eligibility yet
                   </Text>

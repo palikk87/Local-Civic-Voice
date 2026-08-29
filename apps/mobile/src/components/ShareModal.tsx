@@ -137,7 +137,7 @@ export default function ShareModal({
     >
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -148,7 +148,7 @@ export default function ShareModal({
               onPress={handleClose}
               className="w-10 h-10 items-center justify-center"
             >
-              <X size={24} color="#94A3B8" />
+              <X size={24} color="#8FA79A" />
             </Pressable>
 
             <Text className="text-white font-semibold text-lg">Share</Text>
@@ -195,7 +195,7 @@ export default function ShareModal({
             >
               <Share2
                 size={20}
-                color={shareTarget === 'timeline' ? '#F59E0B' : '#64748B'}
+                color={shareTarget === 'timeline' ? '#F59E0B' : '#6E8A7C'}
               />
               <Text
                 className={cn(
@@ -218,7 +218,7 @@ export default function ShareModal({
             >
               <MessageCircle
                 size={20}
-                color={shareTarget === 'message' ? '#F59E0B' : '#64748B'}
+                color={shareTarget === 'message' ? '#F59E0B' : '#6E8A7C'}
               />
               <Text
                 className={cn(
@@ -257,7 +257,7 @@ export default function ShareModal({
                   value={opinion}
                   onChangeText={setOpinion}
                   placeholder="What do you think about this?"
-                  placeholderTextColor="#64748B"
+                  placeholderTextColor="#6E8A7C"
                   multiline
                   className="text-white text-base min-h-24"
                   textAlignVertical="top"
@@ -283,7 +283,7 @@ export default function ShareModal({
                   isSharing ? 'bg-slate-700' : 'bg-amber-500'
                 )}
               >
-                <Share2 size={20} color={isSharing ? '#94A3B8' : '#0F172A'} />
+                <Share2 size={20} color={isSharing ? '#8FA79A' : '#0C1D18'} />
                 <Text
                   className={cn(
                     'font-semibold text-lg ml-2',
@@ -344,7 +344,7 @@ export default function ShareModal({
                       </View>
                       {selectedUser?.id === item.id && (
                         <View className="w-6 h-6 rounded-full bg-amber-500 items-center justify-center">
-                          <Check size={14} color="#0F172A" />
+                          <Check size={14} color="#0C1D18" />
                         </View>
                       )}
                     </Pressable>
@@ -360,7 +360,7 @@ export default function ShareModal({
                   selectedUser ? 'bg-amber-500' : 'bg-slate-700'
                 )}
               >
-                <Send size={20} color={selectedUser ? '#0F172A' : '#64748B'} />
+                <Send size={20} color={selectedUser ? '#0C1D18' : '#6E8A7C'} />
                 <Text
                   className={cn(
                     'font-semibold text-lg ml-2',
@@ -388,7 +388,7 @@ export default function ShareModal({
                 </>
               ) : (
                 <>
-                  <Copy size={18} color="#64748B" />
+                  <Copy size={18} color="#6E8A7C" />
                   <Text className="text-slate-400 font-medium ml-2">
                     Copy Link
                   </Text>

@@ -74,7 +74,7 @@ function ViewModeButton({
   onPress: () => void;
   iconType: 'brief' | 'question' | 'opinion' | 'impact';
 }) {
-  const iconColor = isActive ? '#0F172A' : '#8B5CF6';
+  const iconColor = isActive ? '#0C1D18' : '#8B5CF6';
 
   const renderIcon = () => {
     switch (iconType) {
@@ -115,7 +115,7 @@ function CaseStatusBadge({ status, outcome }: { status: SupremeCourtCase['status
     pending: { color: '#F59E0B', bgColor: 'bg-amber-900/50', label: 'Pending' },
     argued: { color: '#3B82F6', bgColor: 'bg-blue-900/50', label: 'Argued' },
     decided: { color: '#22C55E', bgColor: 'bg-emerald-900/50', label: 'Decided' },
-    dismissed: { color: '#64748B', bgColor: 'bg-slate-700', label: 'Dismissed' },
+    dismissed: { color: '#6E8A7C', bgColor: 'bg-slate-700', label: 'Dismissed' },
     remanded: { color: '#8B5CF6', bgColor: 'bg-purple-900/50', label: 'Remanded' },
   };
 
@@ -280,7 +280,7 @@ export default function SupremeCourtDetailScreen() {
     );
   }
 
-  const categoryColor = categoryColors[scotusCase.category] ?? '#64748B';
+  const categoryColor = categoryColors[scotusCase.category] ?? '#6E8A7C';
   const yeaPercentage = Math.round(
     (scotusCase.communityVotes.yea / (scotusCase.communityVotes.totalVoters || 1)) * 100
   );
@@ -331,7 +331,7 @@ export default function SupremeCourtDetailScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -356,13 +356,13 @@ export default function SupremeCourtDetailScreen() {
                 onPress={handleBookmark}
                 className="bg-slate-800 p-2 rounded-full mr-2"
               >
-                <Bookmark size={20} color="#64748B" />
+                <Bookmark size={20} color="#6E8A7C" />
               </Pressable>
               <Pressable
                 onPress={handleShare}
                 className="bg-slate-800 p-2 rounded-full"
               >
-                <Share2 size={20} color="#64748B" />
+                <Share2 size={20} color="#6E8A7C" />
               </Pressable>
             </View>
           </View>
@@ -429,7 +429,7 @@ export default function SupremeCourtDetailScreen() {
               <View className="flex-row mt-3 flex-wrap">
                 {scotusCase.arguedDate && (
                   <View className="flex-row items-center mr-4 mb-2">
-                    <Gavel size={14} color="#64748B" />
+                    <Gavel size={14} color="#6E8A7C" />
                     <Text className="text-slate-400 text-sm ml-1.5">
                       Argued {new Date(scotusCase.arguedDate).toLocaleDateString()}
                     </Text>
@@ -437,7 +437,7 @@ export default function SupremeCourtDetailScreen() {
                 )}
                 {scotusCase.decidedDate && (
                   <View className="flex-row items-center mb-2">
-                    <Calendar size={14} color="#64748B" />
+                    <Calendar size={14} color="#6E8A7C" />
                     <Text className="text-slate-400 text-sm ml-1.5">
                       Decided {new Date(scotusCase.decidedDate).toLocaleDateString()}
                     </Text>
@@ -521,7 +521,7 @@ export default function SupremeCourtDetailScreen() {
                   <View className="flex-row items-center">
                     <ThumbsUp size={16} color="#22C55E" />
                     <Text className="text-emerald-500 font-semibold ml-1.5">
-                      {yeaPercentage}% Agree
+                      {yeaPercentage}% Aye
                     </Text>
                     <Text className="text-slate-500 text-sm ml-1">
                       ({scotusCase.communityVotes.yea.toLocaleString()})
@@ -532,7 +532,7 @@ export default function SupremeCourtDetailScreen() {
                       ({scotusCase.communityVotes.nay.toLocaleString()})
                     </Text>
                     <Text className="text-red-500 font-semibold mr-1.5">
-                      {nayPercentage}% Disagree
+                      {nayPercentage}% Nay
                     </Text>
                     <ThumbsDown size={16} color="#EF4444" />
                   </View>
@@ -670,20 +670,20 @@ export default function SupremeCourtDetailScreen() {
                   style={yeaAnimStyle}
                   className={cn(
                     'flex-1 flex-row items-center justify-center py-4 rounded-xl mr-2',
-                    userVote === 'yea' ? 'bg-emerald-600' : 'bg-emerald-900/60'
+                    userVote === 'yea' ? 'bg-emerald-400' : 'bg-emerald-400/20 border border-emerald-400/70'
                   )}
                 >
                   <ThumbsUp
                     size={22}
-                    color={userVote === 'yea' ? '#fff' : '#22C55E'}
+                    color={userVote === 'yea' ? '#052E1B' : '#6EE7A8'}
                   />
                   <Text
                     className={cn(
                       'ml-2 font-bold text-lg',
-                      userVote === 'yea' ? 'text-white' : 'text-emerald-500'
+                      userVote === 'yea' ? 'text-emerald-950' : 'text-emerald-300'
                     )}
                   >
-                    Agree
+                    Aye
                   </Text>
                 </AnimatedPressable>
 
@@ -692,20 +692,20 @@ export default function SupremeCourtDetailScreen() {
                   style={nayAnimStyle}
                   className={cn(
                     'flex-1 flex-row items-center justify-center py-4 rounded-xl ml-2',
-                    userVote === 'nay' ? 'bg-red-600' : 'bg-red-900/60'
+                    userVote === 'nay' ? 'bg-rose-900 border-2 border-rose-400' : 'bg-rose-950/70 border border-rose-700'
                   )}
                 >
                   <ThumbsDown
                     size={22}
-                    color={userVote === 'nay' ? '#fff' : '#EF4444'}
+                    color={userVote === 'nay' ? '#FFE4E6' : '#FDA4AF'}
                   />
                   <Text
                     className={cn(
                       'ml-2 font-bold text-lg',
-                      userVote === 'nay' ? 'text-white' : 'text-red-500'
+                      userVote === 'nay' ? 'text-rose-50' : 'text-rose-300'
                     )}
                   >
-                    Disagree
+                    Nay
                   </Text>
                 </AnimatedPressable>
               </View>

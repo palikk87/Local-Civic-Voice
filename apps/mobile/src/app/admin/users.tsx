@@ -147,7 +147,7 @@ function UserCard({
           onPress={() => setShowMenu(true)}
           className="p-2 bg-slate-700/50 rounded-lg"
         >
-          <MoreVertical size={18} color="#94A3B8" />
+          <MoreVertical size={18} color="#8FA79A" />
         </TouchableOpacity>
       </View>
 
@@ -247,7 +247,7 @@ function UserCard({
               onPress={() => setShowMenu(false)}
               className="flex-row items-center justify-center p-4 bg-slate-700 rounded-xl mt-2"
             >
-              <X size={20} color="#94A3B8" />
+              <X size={20} color="#8FA79A" />
               <Text className="text-slate-300 font-medium ml-2">Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -440,7 +440,7 @@ export default function AdminUsersScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">User Management</Text>
         <View className="flex-1" />
@@ -452,11 +452,11 @@ export default function AdminUsersScreen() {
       {/* Search Bar */}
       <View className="px-4 py-3">
         <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-2">
-          <Search size={20} color="#64748B" />
+          <Search size={20} color="#6E8A7C" />
           <TextInput
             className="flex-1 text-white ml-3 py-2"
             placeholder="Search users..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
             value={search}
             onChangeText={setSearch}
             onSubmitEditing={handleSearch}
@@ -464,7 +464,7 @@ export default function AdminUsersScreen() {
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch('')}>
-              <X size={18} color="#64748B" />
+              <X size={18} color="#6E8A7C" />
             </TouchableOpacity>
           )}
         </View>
@@ -512,7 +512,7 @@ export default function AdminUsersScreen() {
         >
           {users.length === 0 ? (
             <View className="flex-1 items-center justify-center py-20">
-              <User size={48} color="#475569" />
+              <User size={48} color="#4C6659" />
               <Text className="text-slate-400 text-lg mt-4">No users found</Text>
             </View>
           ) : (
@@ -554,7 +554,7 @@ export default function AdminUsersScreen() {
             <TextInput
               className="bg-slate-700 text-white rounded-xl p-4 mb-4"
               placeholder="Enter reason for ban..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={banReason}
               onChangeText={setBanReason}
               multiline
@@ -565,7 +565,7 @@ export default function AdminUsersScreen() {
             <TextInput
               className="bg-slate-700 text-white rounded-xl p-4 mb-4"
               placeholder="Leave empty for permanent ban"
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={banDuration}
               onChangeText={setBanDuration}
               keyboardType="number-pad"
@@ -615,7 +615,7 @@ export default function AdminUsersScreen() {
               className="bg-slate-700/40 border border-slate-600 p-4 rounded-xl mb-3"
             >
               <View className="flex-row items-center">
-                <Shield size={24} color="#94A3B8" />
+                <Shield size={24} color="#8FA79A" />
                 <View className="ml-3 flex-1">
                   <Text className="text-slate-200 font-bold">No administrative access</Text>
                   <Text className="text-slate-400 text-sm">

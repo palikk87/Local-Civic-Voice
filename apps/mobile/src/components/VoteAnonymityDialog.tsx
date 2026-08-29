@@ -85,7 +85,7 @@ export function VoteAnonymityDialog() {
             className="mb-2 rounded-xl border border-slate-600 bg-slate-800/60 p-3"
           >
             <View className="flex-row items-center">
-              <Eye size={16} color="#F8FAFC" />
+              <Eye size={16} color="#F5F0E6" />
               <Text className="text-white font-semibold ml-2">Put my name on it</Text>
             </View>
             <Text className="text-slate-400 text-xs mt-0.5">
@@ -99,7 +99,7 @@ export function VoteAnonymityDialog() {
             className="rounded-xl border border-slate-600 bg-slate-800/60 p-3"
           >
             <View className="flex-row items-center">
-              <EyeOff size={16} color="#F8FAFC" />
+              <EyeOff size={16} color="#F5F0E6" />
               <Text className="text-white font-semibold ml-2">Keep my name off it</Text>
             </View>
             <Text className="text-slate-400 text-xs mt-0.5">

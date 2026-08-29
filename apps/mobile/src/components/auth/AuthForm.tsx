@@ -229,11 +229,11 @@ export function AuthForm({
           <View className="mb-4">
             <Text className="text-slate-300 font-medium mb-2">Full name</Text>
             <View className={fieldWrap}>
-              <UserIcon size={20} color="#64748B" />
+              <UserIcon size={20} color="#6E8A7C" />
               <TextInput
                 className={fieldInput}
                 placeholder="Jane Citizen"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 value={displayName}
                 onChangeText={setDisplayName}
                 autoCapitalize="words"
@@ -248,7 +248,7 @@ export function AuthForm({
               <TextInput
                 className="flex-1 py-4 px-2 text-white text-base"
                 placeholder="janecitizen"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 value={username}
                 onChangeText={(text) => setUsername(text.toLowerCase().replace(/\s/g, ''))}
                 autoCapitalize="none"
@@ -264,11 +264,11 @@ export function AuthForm({
           {isSignup ? 'Email address' : 'Email or username'}
         </Text>
         <View className={fieldWrap}>
-          <Mail size={20} color="#64748B" />
+          <Mail size={20} color="#6E8A7C" />
           <TextInput
             className={fieldInput}
             placeholder={isSignup ? 'you@example.com' : 'you@example.com or username'}
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
             value={email}
             onChangeText={setEmail}
             keyboardType={isSignup ? 'email-address' : 'default'}
@@ -281,11 +281,11 @@ export function AuthForm({
       <View className="mb-4">
         <Text className="text-slate-300 font-medium mb-2">Password</Text>
         <View className={fieldWrap}>
-          <Lock size={20} color="#64748B" />
+          <Lock size={20} color="#6E8A7C" />
           <TextInput
             className={fieldInput}
             placeholder={isSignup ? 'At least 6 characters' : 'Your password'}
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
             value={password}
             onChangeText={setPassword}
             secureTextEntry={!showPassword}
@@ -298,9 +298,9 @@ export function AuthForm({
             accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? (
-              <EyeOff size={20} color="#64748B" />
+              <EyeOff size={20} color="#6E8A7C" />
             ) : (
-              <Eye size={20} color="#64748B" />
+              <Eye size={20} color="#6E8A7C" />
             )}
           </Pressable>
         </View>
@@ -310,11 +310,11 @@ export function AuthForm({
         <View className="mb-4">
           <Text className="text-slate-300 font-medium mb-2">Confirm password</Text>
           <View className={fieldWrap}>
-            <Lock size={20} color="#64748B" />
+            <Lock size={20} color="#6E8A7C" />
             <TextInput
               className={fieldInput}
               placeholder="Re-enter password"
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showPassword}
@@ -342,13 +342,13 @@ export function AuthForm({
         }}
       >
         {loading ? (
-          <ActivityIndicator color="#0F172A" />
+          <ActivityIndicator color="#0C1D18" />
         ) : (
           <>
             <Text className="text-slate-900 font-bold text-lg mr-2">
               {isSignup ? 'Create Account' : 'Sign In'}
             </Text>
-            <ArrowRight size={20} color="#0F172A" />
+            <ArrowRight size={20} color="#0C1D18" />
           </>
         )}
       </Pressable>
@@ -377,7 +377,7 @@ export function AuthForm({
               }}
               className="flex-1 flex-row items-center justify-center bg-slate-800/60 rounded-l-lg py-2.5 px-3 border-r border-slate-700"
             >
-              <BookOpen size={14} color="#94A3B8" />
+              <BookOpen size={14} color="#8FA79A" />
               <Text className="text-slate-300 text-xs font-medium ml-1.5">Constitution</Text>
             </Pressable>
             <Pressable

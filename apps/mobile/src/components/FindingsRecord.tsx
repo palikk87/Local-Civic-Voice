@@ -38,9 +38,9 @@ function Entry({ finding }: { finding: LeaderFinding }) {
         className="flex-row items-start"
       >
         {open ? (
-          <ChevronDown size={16} color="#94A3B8" />
+          <ChevronDown size={16} color="#8FA79A" />
         ) : (
-          <ChevronRight size={16} color="#94A3B8" />
+          <ChevronRight size={16} color="#8FA79A" />
         )}
         <View className="ml-2 flex-1">
           <Text className="text-sm font-medium text-white">

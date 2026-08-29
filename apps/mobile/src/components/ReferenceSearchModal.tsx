@@ -214,7 +214,7 @@ export default function ReferenceSearchModal({
     >
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -225,7 +225,7 @@ export default function ReferenceSearchModal({
               onPress={handleClose}
               className="w-10 h-10 items-center justify-center"
             >
-              <X size={24} color="#94A3B8" />
+              <X size={24} color="#8FA79A" />
             </Pressable>
 
             <Text className="text-white font-semibold text-lg">
@@ -238,19 +238,19 @@ export default function ReferenceSearchModal({
           {/* Search Input */}
           <View className="px-4 py-3">
             <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-3">
-              <Search size={20} color="#64748B" />
+              <Search size={20} color="#6E8A7C" />
               <TextInput
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholder="Search bills, executive orders, cases..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 className="flex-1 ml-3 text-white text-base"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
               {searchQuery.length > 0 && (
                 <Pressable onPress={() => setSearchQuery('')}>
-                  <X size={18} color="#64748B" />
+                  <X size={18} color="#6E8A7C" />
                 </Pressable>
               )}
             </View>
@@ -314,7 +314,7 @@ export default function ReferenceSearchModal({
               className="flex-1 items-center justify-center px-8"
             >
               <View className="w-16 h-16 rounded-full bg-slate-800 items-center justify-center mb-4">
-                <Search size={32} color="#64748B" />
+                <Search size={32} color="#6E8A7C" />
               </View>
               <Text className="text-slate-400 text-center text-base">
                 {searchQuery

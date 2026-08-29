@@ -511,7 +511,7 @@ function PostCard({
                           userVote === "support" ? "text-white" : "text-emerald-500"
                         )}
                       >
-                        Yea{" "}
+                        Aye{" "}
                         {supportCount + opposeCount > 0
                           ? Math.round((supportCount / (supportCount + opposeCount)) * 100)
                           : 50}

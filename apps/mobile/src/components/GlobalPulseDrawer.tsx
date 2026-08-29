@@ -159,7 +159,7 @@ function TrendingCard({
                   <Image
                     source={{ uri: contributor.avatar }}
                     className="w-5 h-5 rounded-full"
-                    style={{ marginLeft: idx > 0 ? -8 : 0, borderWidth: 1, borderColor: '#1E293B' }}
+                    style={{ marginLeft: idx > 0 ? -8 : 0, borderWidth: 1, borderColor: '#17362A' }}
                   />
                 </View>
               ))}
@@ -170,7 +170,7 @@ function TrendingCard({
                 </Text>
               )}
             </View>
-            <ChevronRight size={14} color="#64748B" />
+            <ChevronRight size={14} color="#6E8A7C" />
           </View>
         )}
       </Pressable>
@@ -190,7 +190,7 @@ function LeaderCard({
 }) {
   const rankIcon = index === 0 ? Crown : index === 1 ? Medal : Award;
   const RankIcon = rankIcon;
-  const rankColor = index === 0 ? '#F59E0B' : index === 1 ? '#94A3B8' : '#CD7F32';
+  const rankColor = index === 0 ? '#F59E0B' : index === 1 ? '#8FA79A' : '#CD7F32';
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 60).springify()}>
@@ -333,7 +333,7 @@ export default function GlobalPulseDrawer({
           ]}
         >
           <LinearGradient
-            colors={['#1E293B', '#0F172A']}
+            colors={['#17362A', '#0C1D18']}
             style={{ flex: 1 }}
           >
             <SafeAreaView edges={['bottom']} className="flex-1">
@@ -357,7 +357,7 @@ export default function GlobalPulseDrawer({
                   onPress={handleClose}
                   className="w-8 h-8 rounded-full bg-slate-800 items-center justify-center"
                 >
-                  <X size={18} color="#94A3B8" />
+                  <X size={18} color="#8FA79A" />
                 </Pressable>
               </View>
 

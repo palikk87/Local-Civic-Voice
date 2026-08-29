@@ -55,7 +55,7 @@ export default function SignUpScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <LinearGradient
-        colors={['#0F172A', '#1E3A5F', '#0F172A']}
+        colors={['#0C1D18', '#1E3A5F', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -102,7 +102,7 @@ export default function SignUpScreen() {
                 onPress={() => router.replace('/(tabs)/discover')}
                 className="mt-6 flex-row items-center justify-center py-2"
               >
-                <Compass size={16} color="#94A3B8" />
+                <Compass size={16} color="#8FA79A" />
                 <Text className="text-slate-400 ml-2">Browse without an account</Text>
               </Pressable>
             </Animated.View>

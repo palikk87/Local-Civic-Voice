@@ -117,7 +117,7 @@ function ConversationItem({
                   {lastMessage.isRead ? (
                     <CheckCheck size={14} color="#F59E0B" />
                   ) : (
-                    <Check size={14} color="#64748B" />
+                    <Check size={14} color="#6E8A7C" />
                   )}
                 </View>
               )}
@@ -171,7 +171,7 @@ function NewConversationSheet({
             onPress={onClose}
             className="w-10 h-10 items-center justify-center -ml-2"
           >
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </Pressable>
           <Text className="text-white font-semibold text-lg ml-2">
             New Message
@@ -181,12 +181,12 @@ function NewConversationSheet({
         {/* Search */}
         <View className="px-4 py-3">
           <View className="flex-row items-center bg-slate-800 rounded-xl px-4 py-3">
-            <Search size={20} color="#64748B" />
+            <Search size={20} color="#6E8A7C" />
             <TextInput
               value={searchQuery}
               onChangeText={setSearchQuery}
               placeholder="Search people..."
-              placeholderTextColor="#64748B"
+              placeholderTextColor="#6E8A7C"
               className="flex-1 text-white ml-3"
               autoFocus
             />
@@ -277,7 +277,7 @@ function MessagesContent() {
     <View className="flex-1 bg-slate-900">
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -289,7 +289,7 @@ function MessagesContent() {
               onPress={handleBack}
               className="w-10 h-10 items-center justify-center -ml-2"
             >
-              <ArrowLeft size={24} color="#94A3B8" />
+              <ArrowLeft size={24} color="#8FA79A" />
             </Pressable>
             <Text className="text-white font-bold text-2xl ml-2">Messages</Text>
           </View>
@@ -301,7 +301,7 @@ function MessagesContent() {
             }}
             className="w-10 h-10 rounded-full bg-amber-500 items-center justify-center"
           >
-            <Plus size={22} color="#0F172A" />
+            <Plus size={22} color="#0C1D18" />
           </Pressable>
         </View>
 
@@ -330,7 +330,7 @@ function MessagesContent() {
             ) : (
               <View className="flex-1 items-center justify-center py-20">
                 <View className="w-20 h-20 rounded-full bg-slate-800 items-center justify-center mb-4">
-                  <MessageCircle size={36} color="#64748B" />
+                  <MessageCircle size={36} color="#6E8A7C" />
                 </View>
                 <Text className="text-white font-semibold text-lg">
                   No messages yet

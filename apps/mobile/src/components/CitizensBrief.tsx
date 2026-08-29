@@ -134,7 +134,7 @@ export function CitizensBriefCard({
         }}
         className="flex-row items-center justify-center gap-2 mt-4 py-3 px-4 rounded-xl bg-white/5 w-full"
       >
-        <ExternalLink size={16} color="#94A3B8" />
+        <ExternalLink size={16} color="#8FA79A" />
         <Text className="text-slate-400 text-sm ml-2">{sourceLabel}</Text>
       </Pressable>
     ) : null;
@@ -169,11 +169,11 @@ export function CitizensBriefCard({
             }`}
           >
             {isRequesting ? (
-              <ActivityIndicator size="small" color="#0F172A" />
+              <ActivityIndicator size="small" color="#0C1D18" />
             ) : unavailable ? (
-              <RefreshCw size={20} color="#0F172A" />
+              <RefreshCw size={20} color="#0C1D18" />
             ) : (
-              <Sparkles size={20} color="#0F172A" />
+              <Sparkles size={20} color="#0C1D18" />
             )}
             <Text className="text-slate-900 font-bold text-base ml-2">
               {unavailable ? 'Check the source again' : 'Get the Citizen\'s Brief'}

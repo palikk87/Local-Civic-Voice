@@ -124,10 +124,10 @@ function UserCard({ user, currentUserId, onPress, onFollowChange }: UserCardProp
               )}
             >
               {isProcessing ? (
-                <ActivityIndicator size="small" color={isFollowing ? '#F59E0B' : '#0F172A'} />
+                <ActivityIndicator size="small" color={isFollowing ? '#F59E0B' : '#0C1D18'} />
               ) : (
                 <>
-                  {!isFollowing && <UserPlus size={14} color="#0F172A" strokeWidth={2.5} />}
+                  {!isFollowing && <UserPlus size={14} color="#0C1D18" strokeWidth={2.5} />}
                   <Text
                     className={cn(
                       'font-semibold text-sm',
@@ -246,19 +246,19 @@ export default function PeopleScreen() {
 
         {/* Search Bar */}
         <View className="bg-slate-800 rounded-xl flex-row items-center px-4 py-3">
-          <Search size={20} color="#64748B" strokeWidth={2} />
+          <Search size={20} color="#6E8A7C" strokeWidth={2} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
             placeholder="Search by name or username..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
             className="flex-1 text-white text-base ml-3"
             autoCapitalize="none"
             autoCorrect={false}
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery('')} className="p-1">
-              <X size={18} color="#64748B" strokeWidth={2} />
+              <X size={18} color="#6E8A7C" strokeWidth={2} />
             </Pressable>
           )}
         </View>

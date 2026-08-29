@@ -61,7 +61,7 @@ function FindingRow({ finding }: { finding: AuditFinding }) {
         {finding.status === 'attention' ? (
           <AlertTriangle size={16} color="#F59E0B" />
         ) : finding.status === 'withheld' ? (
-          <EyeOff size={16} color="#94A3B8" />
+          <EyeOff size={16} color="#8FA79A" />
         ) : (
           <Check size={16} color="#10B981" />
         )}
@@ -142,7 +142,7 @@ export function IntegrityAuditPanel({
       <View className="flex-row items-start justify-between">
         <View className="flex-1 pr-3">
           <View className="flex-row items-center">
-            <ScanSearch size={16} color="#94A3B8" />
+            <ScanSearch size={16} color="#8FA79A" />
             <Text className="ml-2 text-sm font-semibold text-white">{title}</Text>
           </View>
           <Text className="mt-1 text-xs leading-5 text-slate-400">
@@ -159,7 +159,7 @@ export function IntegrityAuditPanel({
             className="rounded-lg border border-slate-600 px-3 py-1.5"
           >
             {demand.isPending ? (
-              <ActivityIndicator size="small" color="#94A3B8" />
+              <ActivityIndicator size="small" color="#8FA79A" />
             ) : (
               <Text className="text-xs font-medium text-slate-200">Request an audit</Text>
             )}

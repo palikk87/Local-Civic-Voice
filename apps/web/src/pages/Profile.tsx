@@ -290,7 +290,7 @@ export default function Profile() {
    *
    * They were read from `voting-store`, a zustand store persisted to this
    * browser's localStorage. So the three numbers on a person's own profile —
-   * Yea, Nay, Total — described one device. Sign in on a phone after voting all
+   * Aye, Nay, Total — described one device. Sign in on a phone after voting all
    * week on a laptop and the profile said you had never voted, on a platform
    * whose entire subject is the record of what you have stood for.
    *
@@ -507,7 +507,7 @@ export default function Profile() {
           <div className="flex px-4 mb-6 gap-2">
             <StatCard
               icon={<ThumbsUp size={14} color="#22C55E" />}
-              label="Yea Votes"
+              label="Aye Votes"
               value={yeaVotes}
               color="#22C55E"
             />

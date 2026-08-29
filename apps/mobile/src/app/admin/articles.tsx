@@ -171,7 +171,7 @@ export default function AdminArticlesScreen() {
     <SafeAreaView className="flex-1 bg-slate-900">
       <View className="flex-row items-center px-4 py-3">
         <TouchableOpacity onPress={() => router.back()} className="p-1">
-          <ArrowLeft size={22} color="#94A3B8" />
+          <ArrowLeft size={22} color="#8FA79A" />
         </TouchableOpacity>
         <Scale size={18} color="#F59E0B" />
         <Text className="ml-2 flex-1 text-lg font-bold text-white">Article V filings</Text>
@@ -192,7 +192,7 @@ export default function AdminArticlesScreen() {
               setRefreshing(true);
               void load();
             }}
-            tintColor="#94A3B8"
+            tintColor="#8FA79A"
           />
         }
       >

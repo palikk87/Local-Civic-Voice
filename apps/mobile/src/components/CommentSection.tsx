@@ -137,7 +137,7 @@ function CommentItem({
             >
               <Heart
                 size={14}
-                color={comment.isLiked ? '#F59E0B' : '#64748B'}
+                color={comment.isLiked ? '#F59E0B' : '#6E8A7C'}
                 fill={comment.isLiked ? '#F59E0B' : 'transparent'}
               />
               {comment.likes > 0 && (
@@ -156,7 +156,7 @@ function CommentItem({
               onPress={handleReply}
               className="flex-row items-center ml-4"
             >
-              <Reply size={14} color="#64748B" />
+              <Reply size={14} color="#6E8A7C" />
               <Text className="text-slate-500 text-xs ml-1">Reply</Text>
             </Pressable>
           </View>
@@ -383,7 +383,7 @@ function CommentInput({
             onChangeText={handleTextChange}
             onSelectionChange={handleSelectionChange}
             placeholder="Write a comment..."
-            placeholderTextColor="#64748B"
+            placeholderTextColor="#6E8A7C"
             multiline
             className="flex-1 text-white text-base max-h-24"
           />
@@ -399,7 +399,7 @@ function CommentInput({
             }}
             className="ml-2 p-1"
           >
-            <AtSign size={18} color="#64748B" />
+            <AtSign size={18} color="#6E8A7C" />
           </Pressable>
         </View>
 
@@ -413,7 +413,7 @@ function CommentInput({
         >
           <Send
             size={18}
-            color={content.trim() ? '#0F172A' : '#64748B'}
+            color={content.trim() ? '#0C1D18' : '#6E8A7C'}
           />
         </Pressable>
       </View>

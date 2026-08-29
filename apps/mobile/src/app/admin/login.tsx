@@ -55,7 +55,7 @@ export default function AdminLoginScreen() {
             onPress={() => router.back()}
             className="p-2 -ml-2"
           >
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </TouchableOpacity>
           <Text className="text-white text-lg font-semibold ml-2">Admin Login</Text>
         </View>
@@ -83,11 +83,11 @@ export default function AdminLoginScreen() {
           <View className="mb-4">
             <Text className="text-slate-400 text-sm mb-2 font-medium">Username</Text>
             <View className="bg-slate-800 border border-slate-700 rounded-xl flex-row items-center px-4">
-              <Shield size={20} color="#64748B" />
+              <Shield size={20} color="#6E8A7C" />
               <TextInput
                 className="flex-1 text-white py-4 px-3 text-base"
                 placeholder="Enter admin username"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
@@ -100,11 +100,11 @@ export default function AdminLoginScreen() {
           <View className="mb-6">
             <Text className="text-slate-400 text-sm mb-2 font-medium">Password</Text>
             <View className="bg-slate-800 border border-slate-700 rounded-xl flex-row items-center px-4">
-              <Lock size={20} color="#64748B" />
+              <Lock size={20} color="#6E8A7C" />
               <TextInput
                 className="flex-1 text-white py-4 px-3 text-base"
                 placeholder="Enter password"
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -116,9 +116,9 @@ export default function AdminLoginScreen() {
                 className="p-2"
               >
                 {showPassword ? (
-                  <EyeOff size={20} color="#64748B" />
+                  <EyeOff size={20} color="#6E8A7C" />
                 ) : (
-                  <Eye size={20} color="#64748B" />
+                  <Eye size={20} color="#6E8A7C" />
                 )}
               </TouchableOpacity>
             </View>
@@ -133,10 +133,10 @@ export default function AdminLoginScreen() {
             }`}
           >
             {isLoading ? (
-              <ActivityIndicator color="#0F172A" />
+              <ActivityIndicator color="#0C1D18" />
             ) : (
               <>
-                <Shield size={20} color="#0F172A" />
+                <Shield size={20} color="#0C1D18" />
                 <Text className="text-slate-900 font-bold text-base ml-2">
                   Sign In to Admin
                 </Text>

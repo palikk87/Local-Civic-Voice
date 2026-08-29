@@ -179,7 +179,7 @@ export default function UserProfileScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       <View className="flex-1 bg-slate-900">
         <LinearGradient
-          colors={['#0F172A', '#1E293B', '#0F172A']}
+          colors={['#0C1D18', '#17362A', '#0C1D18']}
           style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
         />
 
@@ -216,12 +216,12 @@ export default function UserProfileScreen() {
               <View className="flex-row items-center mt-2">
                 {profile.location ? (
                   <>
-                    <MapPin size={14} color="#64748B" />
+                    <MapPin size={14} color="#6E8A7C" />
                     <Text className="text-slate-400 text-sm ml-1">{profile.location}</Text>
                     <Text className="text-slate-600 mx-2">·</Text>
                   </>
                 ) : null}
-                <Calendar size={14} color="#64748B" />
+                <Calendar size={14} color="#6E8A7C" />
                 <Text className="text-slate-400 text-sm ml-1">
                   Joined{' '}
                   {new Date(profile.joinedDate).toLocaleDateString('en-US', {
@@ -270,9 +270,9 @@ export default function UserProfileScreen() {
                     )}
                   >
                     {profile.isFollowing ? (
-                      <UserMinus size={16} color="#CBD5E1" />
+                      <UserMinus size={16} color="#B4C7BC" />
                     ) : (
-                      <UserPlus size={16} color="#0F172A" />
+                      <UserPlus size={16} color="#0C1D18" />
                     )}
                     <Text
                       className={cn(
@@ -304,7 +304,7 @@ export default function UserProfileScreen() {
                     disabled={startConversation.isPending}
                     className="flex-1 flex-row items-center justify-center rounded-xl py-3 mx-2 bg-slate-800 border border-slate-600"
                   >
-                    <MessageCircle size={16} color="#94A3B8" />
+                    <MessageCircle size={16} color="#8FA79A" />
                     <Text className="text-slate-200 font-semibold ml-1.5">Message</Text>
                   </Pressable>
 

@@ -189,7 +189,7 @@ function ConversationContent() {
     <View className="flex-1 bg-slate-900">
       <Stack.Screen options={{ headerShown: false }} />
       <LinearGradient
-        colors={['#0F172A', '#1E293B', '#0F172A']}
+        colors={['#0C1D18', '#17362A', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
@@ -200,7 +200,7 @@ function ConversationContent() {
             onPress={handleBack}
             className="w-10 h-10 items-center justify-center -ml-2"
           >
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </Pressable>
 
           <Image
@@ -218,7 +218,7 @@ function ConversationContent() {
           </View>
 
           <Pressable className="w-10 h-10 items-center justify-center">
-            <MoreHorizontal size={24} color="#64748B" />
+            <MoreHorizontal size={24} color="#6E8A7C" />
           </Pressable>
         </View>
 
@@ -270,7 +270,7 @@ function ConversationContent() {
                 value={messageText}
                 onChangeText={setMessageText}
                 placeholder="Message..."
-                placeholderTextColor="#64748B"
+                placeholderTextColor="#6E8A7C"
                 multiline
                 className="flex-1 text-white text-base max-h-24"
               />
@@ -286,7 +286,7 @@ function ConversationContent() {
             >
               <Send
                 size={18}
-                color={messageText.trim() ? '#0F172A' : '#64748B'}
+                color={messageText.trim() ? '#0C1D18' : '#6E8A7C'}
               />
             </Pressable>
           </View>

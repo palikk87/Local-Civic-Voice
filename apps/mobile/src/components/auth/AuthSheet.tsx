@@ -57,7 +57,7 @@ export function AuthSheet() {
                   <Vote size={28} color="#F59E0B" />
                 </View>
                 <Pressable onPress={closeAuth} hitSlop={10} className="p-1">
-                  <X size={22} color="#64748B" />
+                  <X size={22} color="#6E8A7C" />
                 </Pressable>
               </View>
               <Text className="text-2xl font-bold text-white">Claim your voice</Text>

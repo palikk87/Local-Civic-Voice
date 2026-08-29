@@ -84,13 +84,13 @@ export default function B2BHeatmapScreen() {
   return (
     <View className="flex-1 bg-slate-950">
       <LinearGradient
-        colors={['#0F172A', '#1E1B4B', '#0F172A']}
+        colors={['#0C1D18', '#1E1B4B', '#0C1D18']}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
       <SafeAreaView className="flex-1">
         <View className="flex-row items-center px-4 py-3 border-b border-slate-800/50">
           <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-            <ArrowLeft size={24} color="#94A3B8" />
+            <ArrowLeft size={24} color="#8FA79A" />
           </TouchableOpacity>
           <View className="flex-1 ml-2">
             <Text className="text-white text-lg font-semibold">Heatmap</Text>
@@ -144,7 +144,7 @@ export default function B2BHeatmapScreen() {
 
           {points.length === 0 ? (
             <View className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6 items-center">
-              <MapPin size={28} color="#64748B" />
+              <MapPin size={28} color="#6E8A7C" />
               <Text className="text-white font-medium mt-3">Nothing can be shown yet.</Text>
               <Text className="text-slate-400 text-sm text-center mt-2">
                 No district has reached {floor} voters. Districts appear as members declare where
@@ -204,7 +204,7 @@ export default function B2BHeatmapScreen() {
           {suppressed.length > 0 ? (
             <View className="bg-slate-800/20 border border-slate-700/50 rounded-2xl p-4 mt-4">
               <View className="flex-row items-center">
-                <EyeOff size={16} color="#94A3B8" />
+                <EyeOff size={16} color="#8FA79A" />
                 <Text className="text-white font-medium ml-2">
                   {suppressed.length} {suppressed.length === 1 ? 'district' : 'districts'} withheld
                 </Text>

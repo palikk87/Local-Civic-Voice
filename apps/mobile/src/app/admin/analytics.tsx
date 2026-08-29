@@ -48,7 +48,7 @@ function MetricCard({ title, value, change, changeType, icon }: MetricCardProps)
         <View className="flex-row items-center">
           <TrendingUp
             size={12}
-            color={changeType === 'positive' ? '#22C55E' : changeType === 'negative' ? '#EF4444' : '#64748B'}
+            color={changeType === 'positive' ? '#22C55E' : changeType === 'negative' ? '#EF4444' : '#6E8A7C'}
           />
           <Text className={`text-xs ml-1 ${changeColors[changeType]}`}>{change}</Text>
         </View>
@@ -132,7 +132,7 @@ export default function AdminAnalyticsScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">Analytics</Text>
       </View>

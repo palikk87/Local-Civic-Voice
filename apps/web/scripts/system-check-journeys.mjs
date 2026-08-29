@@ -174,7 +174,7 @@ try {
   // ---------------------------------------------------------------- voting
   await one.page.goto(`${siteOrigin}/reference/${billId}`, { waitUntil: "domcontentloaded" });
   await signedInPage(one.page, leaderShortName);
-  const support = one.page.getByRole("button", { name: /^support$/i }).first();
+  const support = one.page.getByRole("button", { name: /^aye/i }).first();
   await support.waitFor({ timeout: 25_000 });
   await support.click();
 
@@ -226,7 +226,7 @@ try {
   // --------------------------------------------------- voting over your delegate
   await two.page.goto(`${siteOrigin}/reference/${billId}`, { waitUntil: "domcontentloaded" });
   await signedInPage(two.page, followerName);
-  const oppose = two.page.getByRole("button", { name: /^oppose$/i }).first();
+  const oppose = two.page.getByRole("button", { name: /^nay/i }).first();
   await oppose.waitFor({ timeout: 25_000 });
   await oppose.click();
 
@@ -250,7 +250,7 @@ try {
   // -------------------------------------------------------------- revoking
   // Withdraw the direct vote first, so what is left to observe is purely the
   // delegated weight coming back out of the count.
-  await two.page.getByRole("button", { name: /^opposed$/i }).first().click();
+  await two.page.getByRole("button", { name: /^nay/i }).first().click();
   state = await settles((p) => p.oppose.total === 0);
   expect(
     "withdrawing your own vote hands the weight back to your delegate",

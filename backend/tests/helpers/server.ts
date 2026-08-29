@@ -441,6 +441,14 @@ export async function resetData(): Promise<void> {
           "GovernmentReferenceVote", "ReferenceMergeCandidate", "ReferenceName", "GovernmentReference",
           "Message", "ConversationParticipant", "Conversation",
           "AdminSession", "B2BSession", "B2BMember", "AdminActivityLog", "Announcement",
+          -- SystemReset records who filed them as a plain id, on purpose: a
+          -- reset is not about its filer. That also means truncating "User"
+          -- cannot reach them, so before this line an open reset outlived
+          -- every reset of the database and the next test to file one got a
+          -- 409 "one is already open". It passed alone and failed in company,
+          -- which is the worst way for a test to fail. Its ballots and journal
+          -- rows cascade from it.
+          "SystemReset",
           "User"
         RESTART IDENTITY CASCADE
       `);

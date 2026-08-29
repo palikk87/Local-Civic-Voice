@@ -124,7 +124,7 @@ export default function AdminSettingsScreen() {
       {/* Header */}
       <View className="flex-row items-center px-4 py-3 border-b border-slate-800">
         <TouchableOpacity onPress={() => router.back()} className="p-2 -ml-2">
-          <ArrowLeft size={24} color="#94A3B8" />
+          <ArrowLeft size={24} color="#8FA79A" />
         </TouchableOpacity>
         <Text className="text-white text-lg font-semibold ml-2">System Settings</Text>
       </View>
@@ -182,7 +182,7 @@ export default function AdminSettingsScreen() {
         {/* Version Info */}
         <View className="mt-6 items-center py-8">
           <View className="flex-row items-center">
-            <Info size={16} color="#64748B" />
+            <Info size={16} color="#6E8A7C" />
             <Text className="text-slate-500 text-sm ml-2">AYE & NAY Admin v1.0.0</Text>
           </View>
           <Text className="text-slate-600 text-xs mt-2">Built with React Native & Expo</Text>

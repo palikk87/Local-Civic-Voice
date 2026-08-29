@@ -83,7 +83,7 @@ function Nothing({ title, children }: { title: string; children: React.ReactNode
   return (
     <Panel>
       <View className="flex-row items-start">
-        <Scale size={20} color="#94A3B8" />
+        <Scale size={20} color="#8FA79A" />
         <View className="ml-3 flex-1">
           <Text className="font-semibold text-white">{title}</Text>
           <View className="mt-1">{children}</View>
@@ -128,7 +128,7 @@ function Articles({
       className="mt-3 rounded-xl border border-slate-700/50 bg-slate-900/50 p-3"
     >
       <View className="flex-row items-start border-b border-slate-700/50 pb-2">
-        <FileText size={16} color="#94A3B8" />
+        <FileText size={16} color="#8FA79A" />
         <View className="ml-2 flex-1">
           <Text className="text-sm font-semibold text-white">
             {kind === 'impeachment'
@@ -418,7 +418,7 @@ function ImpeachmentTab() {
         ) : null}
       </Panel>
 
-      {mine.isLoading ? <ActivityIndicator className="py-6" color="#94A3B8" /> : null}
+      {mine.isLoading ? <ActivityIndicator className="py-6" color="#8FA79A" /> : null}
 
       {!mine.isLoading && open.length === 0 ? (
         <Nothing title="No proceedings are open that you can vote in">
@@ -573,7 +573,7 @@ function ResetTab() {
       setError(cause instanceof Error ? cause.message : 'Could not restore your positions.'),
   });
 
-  if (state.isLoading) return <ActivityIndicator className="py-6" color="#94A3B8" />;
+  if (state.isLoading) return <ActivityIndicator className="py-6" color="#8FA79A" />;
 
   if (!state.data) {
     return (
@@ -804,14 +804,14 @@ export default function ArticleVScreen() {
 
       <View className="flex-row items-center justify-between px-4 py-3">
         <Pressable onPress={() => router.back()} className="p-1">
-          <ChevronLeft size={24} color="#94A3B8" />
+          <ChevronLeft size={24} color="#8FA79A" />
         </Pressable>
         <View className="items-center">
           <Text className="font-bold text-white">Article V</Text>
           <Text className="text-xs text-slate-400">Self-Correction</Text>
         </View>
         <Pressable onPress={() => router.push('/constitution')} className="p-1">
-          <BookOpen size={22} color="#94A3B8" />
+          <BookOpen size={22} color="#8FA79A" />
         </Pressable>
       </View>
 
@@ -861,7 +861,7 @@ export default function ArticleVScreen() {
                 : 'border-slate-700/50 bg-slate-800/40'
             )}
           >
-            <Users size={16} color={tab === 'impeachment' ? '#FCD34D' : '#94A3B8'} />
+            <Users size={16} color={tab === 'impeachment' ? '#FCD34D' : '#8FA79A'} />
             <Text
               className={cn(
                 'ml-2',
@@ -881,7 +881,7 @@ export default function ArticleVScreen() {
                 : 'border-slate-700/50 bg-slate-800/40'
             )}
           >
-            <AlertTriangle size={16} color={tab === 'reset' ? '#FCA5A5' : '#94A3B8'} />
+            <AlertTriangle size={16} color={tab === 'reset' ? '#FCA5A5' : '#8FA79A'} />
             <Text className={cn('ml-2', tab === 'reset' ? 'text-red-200' : 'text-slate-400')}>
               System Reset
             </Text>
@@ -891,7 +891,7 @@ export default function ArticleVScreen() {
         {tab === 'impeachment' ? <ImpeachmentTab /> : <ResetTab />}
 
         <View className="mt-8 flex-row items-start">
-          <FileText size={16} color="#64748B" />
+          <FileText size={16} color="#6E8A7C" />
           <Text className="ml-2 flex-1 text-xs leading-5 text-slate-500">
             Both filings are formal documents. They go to the platform's administrators, and the
             person named in Articles of Impeachment is sent a copy. Nobody — no administrator, no
