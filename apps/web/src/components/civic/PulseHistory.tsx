@@ -21,14 +21,32 @@ interface PulsePoint {
  * continuous measurement between two points and this is a count of discrete
  * days on which somebody actually did something. Nothing is interpolated.
  */
-export function PulseHistory({ referenceId }: { referenceId: string }) {
+/**
+ * `ready` is the page's load order, not a feature flag.
+ *
+ * This panel sits far below the fold on a law page, and the page used to ask
+ * for it in the same breath as the record itself — so the thing a reader came
+ * for queued behind panels they had not scrolled to. The page now opens its
+ * requests top to bottom and passes `ready` when this one's turn arrives.
+ *
+ * Defaults to true, so every other caller behaves exactly as it did. Nothing is
+ * ever skipped: a false here delays a request by a frame or two, it does not
+ * cancel it.
+ */
+interface PulseHistoryProps {
+  referenceId: string;
+  /** False until this panel's turn in the page's load order. */
+  ready?: boolean;
+}
+
+export function PulseHistory({ referenceId, ready = true }: PulseHistoryProps) {
   const { data } = useQuery({
     queryKey: ["pulse-history", referenceId],
     queryFn: () =>
       api.get<{ points: PulsePoint[]; count: number }>(
         `/api/government-references/${referenceId}/pulse-history`,
       ),
-    enabled: Boolean(referenceId),
+    enabled: Boolean(referenceId) && ready,
   });
 
   // Same rule as everywhere else here: an unexpected shape leaves the panel

@@ -20,6 +20,7 @@
  */
 import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
 import { createServer } from "node:http";
+import { performance } from "node:perf_hooks";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
 
@@ -35,6 +36,17 @@ const REFERENCE_ID = "ref_master_0001";
 const resolves = [];
 const posts = [];
 
+/**
+ * Every API path the page asked for, in the order it asked.
+ *
+ * The law page used to fire all ten of its requests at once, so the brief a
+ * reader came for queued behind five panels 1,500px down the screen. Nothing
+ * was dropped in the fix and nothing should be: this records the ORDER, and
+ * the assertion at the bottom is that the top of the page is asked for before
+ * the bottom of it — not that the bottom is skipped.
+ */
+const askedFor = [];
+
 const REFERENCE = {
   id: REFERENCE_ID,
   masterReferenceId: "hr-4836-119",
@@ -42,6 +54,11 @@ const REFERENCE = {
   referenceType: "bill",
   title: "Veterans Healthcare Improvement Act",
   status: "proposed",
+  // A real record has both. Without them the page's metadata row does not
+  // render at all, which is not what a law looks like — and it is the row the
+  // styling comparison below measures against.
+  introducedDate: "2026-08-24T00:00:00.000Z",
+  lastActionDate: "2026-08-24T00:00:00.000Z",
   briefState: "idle",
   supportVotes: 0,
   opposeVotes: 0,
@@ -76,6 +93,7 @@ const CONVERSATION_POST = {
 
 const server = createServer(async (req, res) => {
   const [path] = req.url.split("?");
+  if (path.startsWith("/api/")) askedFor.push({ path, at: performance.now() });
   const json = (body, code = 200) => {
     res.writeHead(code, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
@@ -263,7 +281,18 @@ check(
 // item you can press from the two you cannot.
 //
 // "The button exists" passed that. So this asserts the thing that was actually
-// wrong: an action has to look different from the facts printed next to it.
+// wrong: an action has to look different from the passive text printed near it.
+//
+// IT COMPARES AGAINST THE METADATA NOW, not against those counts. The counts
+// are gone — two dead numbers stacked on two live buttons, and "comments" was
+// untrue of a law besides. Which quietly hollowed this check out: the compare
+// target disappeared, the evaluate returned "share only", and the distinctness
+// assertion stopped running while the line above it went on printing ok. A
+// check that cannot fail is worse than no check, because it is trusted.
+//
+// The muted metadata line ("Introduced …") is the better comparison anyway. It
+// is the passive grey text this page is full of, and the exact register the
+// share control must not sit in.
 // ---------------------------------------------------------------------------
 
 await page.goto(`${base}/reference/${REFERENCE_ID}`, { waitUntil: "networkidle" });
@@ -273,15 +302,20 @@ const looks = await page.evaluate(() => {
   const share = [...document.querySelectorAll("button")].find((b) =>
     /to your timeline/i.test(b.getAttribute("aria-label") ?? ""),
   );
-  if (!share) return null;
+  if (!share) return { missing: "share" };
 
-  const count = [...document.querySelectorAll("a, span")].find((n) =>
-    /\d+\s+comments/i.test(n.textContent ?? ""),
-  );
-  if (!count) return { shareOnly: true };
+  // Passive page text, in the muted register: the record's own metadata.
+  const quiet = [...document.querySelectorAll("span, p, div")].find((n) => {
+    const text = (n.textContent ?? "").trim();
+    if (!/^(Introduced|Last action)\b/i.test(text)) return false;
+    // The line wraps an icon, so it is never childless — but it must be the
+    // line itself rather than a container that happens to start with it.
+    return [...n.children].every((child) => child.tagName.toLowerCase() === "svg");
+  });
+  if (!quiet) return { missing: "metadata" };
 
   const s = getComputedStyle(share);
-  const c = getComputedStyle(count);
+  const c = getComputedStyle(quiet);
   const opaque = (v) => v && v !== "transparent" && !/rgba\(0,\s*0,\s*0,\s*0\)/.test(v);
 
   return {
@@ -291,13 +325,25 @@ const looks = await page.evaluate(() => {
     outlined: s.borderTopWidth !== "0px",
     heavier: parseInt(s.fontWeight, 10) > parseInt(c.fontWeight, 10),
     share: { color: s.color, fontSize: s.fontSize, background: s.backgroundColor },
-    count: { color: c.color, fontSize: c.fontSize },
+    quiet: { color: c.color, fontSize: c.fontSize, text: (quiet.textContent ?? "").trim().slice(0, 40) },
   };
 });
 
-check("the share control and the comment count are both on the page", !!looks, "one of them is missing");
+// No "shareOnly" escape hatch. If either half is missing, that is a failure —
+// not a reason to skip the comparison.
+check(
+  "the share control and the page's quiet text are both there to compare",
+  looks && !looks.missing,
+  `missing: ${looks?.missing ?? "both"}`,
+);
 
-if (looks && !looks.shareOnly) {
+// And the dead counts row is gone for good.
+const deadCounts = await page.evaluate(() =>
+  /\d+\s+comments|\d+\s+shares/i.test(document.body.innerText),
+);
+check("the law page prints no comment or share count", !deadCounts, "a counts row is back");
+
+if (looks && !looks.missing) {
   check(
     "THE SHARE CONTROL DOES NOT LOOK LIKE A DEAD COUNT",
     looks.filled || looks.outlined || !looks.sameColour || looks.heavier,
@@ -317,8 +363,91 @@ if (looks && !looks.shareOnly) {
 // a reader can DO once they are in it, not that a heading rendered.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// THE PAGE ASKS FOR THE TOP OF ITSELF FIRST.
+//
+// Ten requests used to leave together. Five of them paint panels far below the
+// fold — the representation gap, the pulse history, the turning points, the
+// other side, the integrity audit — and the browser opened them before it had
+// finished painting the top of the screen, so the brief landed at about four
+// seconds behind things nobody had scrolled to.
+//
+// ALL TEN STILL RUN. This asserts the order, and separately asserts that the
+// bottom ones happen at all, because "faster because it stopped asking" is the
+// wrong fix and would otherwise pass an ordering test trivially.
+// ---------------------------------------------------------------------------
+{
+  const when = (re) => askedFor.find((r) => re.test(r.path))?.at ?? null;
+
+  const record = when(new RegExp(`^/api/government-references/${REFERENCE_ID}$`));
+  const belowTheFold = [
+    ["representation gap", /\/representation-gap$/],
+    ["pulse history", /\/pulse-history$/],
+    ["turning points", /\/turning-points$/],
+    ["the other side", /\/other-side$/],
+  ];
+
+  const summary = askedFor
+    .map((r) => `${r.path.replace("/api/government-references/", "…/")}@${Math.round(r.at - record)}ms`)
+    .join(" ");
+
+  check("the record itself is asked for", record !== null, summary);
+  if (process.env.SHARE_CHECK_TIMELINE) console.log("TIMELINE:", summary);
+
+  /**
+   * MEASURED AGAINST THE VOTE PANEL, IN TIME, BECAUSE THAT IS WHERE THE BURST
+   * ACTUALLY WAS.
+   *
+   * Two earlier versions of this check passed with the fix turned off, and both
+   * failures are worth recording because both looked reasonable.
+   *
+   * Comparing LIST POSITION was meaningless: React renders the top of the tree
+   * before the bottom, so the record request always left first anyway.
+   *
+   * Comparing against THE RECORD in time was meaningless too, for a subtler
+   * reason — none of these panels exist until the record resolves, because they
+   * live inside the branch that renders once the reference has loaded. So every
+   * one of them was already ~55ms behind the record, fix or no fix. The premise
+   * that ten requests leave together at page load was simply wrong.
+   *
+   * Measured, with the fix off:
+   *   record @0  posts @53  vote-details @55  gap @56  pulse @57
+   *   turning @62  other-side @64
+   * Eight requests inside an eleven-millisecond window, all released the
+   * instant the record came back. THAT was the burst.
+   *
+   * With the fix on:
+   *   vote-details @51  posts @79  gap @125  pulse @130  turning @130
+   *   other-side @130
+   * Three waves — the vote panel, then the conversation, then the sidebar.
+   *
+   * So the anchor is vote-details, the first thing asked for after the record
+   * and the top of what a reader sees. 30ms sits between a 1-9ms burst and a
+   * 74-79ms stagger, nowhere near either edge.
+   */
+  const anchor = when(/\/vote-details$/);
+  const STAGGER_MS = 30;
+
+  check("the vote panel is asked for", anchor !== null, summary);
+
+  for (const [name, pattern] of belowTheFold) {
+    const at = when(pattern);
+    check(
+      `${name} is still requested — nothing was dropped`,
+      at !== null,
+      `never asked for. ${summary}`,
+    );
+    check(
+      `THE VOTE PANEL IS ASKED FOR BEFORE ${name.toUpperCase()}, WITH ROOM TO BREATHE`,
+      anchor !== null && at !== null && at - anchor >= STAGGER_MS,
+      `${name} left ${at === null || anchor === null ? "never" : `${Math.round(at - anchor)}ms`} ` +
+        `after the vote panel — under ${STAGGER_MS}ms means they went out in one burst. ${summary}`,
+    );
+  }
+}
+
 const conversation = await page.evaluate(() => !!document.querySelector("#conversation"));
-check("the page offers the conversation its comment count refers to", conversation, "no #conversation section");
+check("the page carries the conversation itself, not a count of it", conversation, "no #conversation section");
 
 const inside = await page.evaluate(() => {
   const section = document.querySelector("#conversation");

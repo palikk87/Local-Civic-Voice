@@ -230,7 +230,24 @@ try {
     check("the Citizen's Brief is still here", /Citizen's Brief|Brief/i.test(text));
     check("the Integrity Audit is still here", /Integrity Audit/i.test(text));
     check("the vote panel is still here", /Public Pulse/i.test(text));
-    check("comments are still here", /comment/i.test(text));
+    // NOT "the word comment appears". It used to be exactly that, and it was
+    // passing on a dead counts row — "0 comments · 0 shares" — printed above
+    // the share buttons. That row is gone: both numbers were inert, and a law
+    // has no comments of its own. What is under this page is POSTS people
+    // wrote about the law, each on its author's own timeline.
+    //
+    // So this asserts the conversation itself is on the page, which is what
+    // the count had been pointing at with no way to reach it.
+    check(
+      "THE CONVERSATION IS STILL HERE",
+      /What people are saying|Nobody has written about this one yet/i.test(text),
+      text.slice(0, 200).replace(/\n/g, " | "),
+    );
+    check(
+      "…and no dead count is printed above it",
+      !/\d+\s+comments|\d+\s+shares/i.test(text),
+      "a counts row is back",
+    );
 
     // The old screens are gone, not hiding behind a different label.
     check("nothing on it is the retired screen", !/Community Vote/.test(text));

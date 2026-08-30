@@ -35,12 +35,30 @@ interface OtherSideResponse {
  * Shows nothing until the reader has taken a position of their own. Without one
  * there is no "other" side, and picking one for them is the thing being avoided.
  */
-export function OtherSide({ referenceId }: { referenceId: string }) {
+/**
+ * `ready` is the page's load order, not a feature flag.
+ *
+ * This panel sits far below the fold on a law page, and the page used to ask
+ * for it in the same breath as the record itself — so the thing a reader came
+ * for queued behind panels they had not scrolled to. The page now opens its
+ * requests top to bottom and passes `ready` when this one's turn arrives.
+ *
+ * Defaults to true, so every other caller behaves exactly as it did. Nothing is
+ * ever skipped: a false here delays a request by a frame or two, it does not
+ * cancel it.
+ */
+interface OtherSideProps {
+  referenceId: string;
+  /** False until this panel's turn in the page's load order. */
+  ready?: boolean;
+}
+
+export function OtherSide({ referenceId, ready = true }: OtherSideProps) {
   const { data } = useQuery({
     queryKey: ["other-side", referenceId],
     queryFn: () =>
       api.get<OtherSideResponse>(`/api/government-references/${referenceId}/other-side`),
-    enabled: Boolean(referenceId),
+    enabled: Boolean(referenceId) && ready,
   });
 
   // A backend that answers this route with something else — an error envelope,

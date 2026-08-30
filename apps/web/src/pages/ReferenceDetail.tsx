@@ -12,7 +12,6 @@ import {
   Hash,
   MessageSquare,
   Send,
-  Share2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,7 @@ import { RepresentationGapPanel } from "@/components/civic/RepresentationGapPane
 import { ShareToTimeline, type ShareBranch } from "@/components/civic/ShareToTimeline";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import { useIsWide } from "@/hooks/use-is-wide";
+import { useLoadOrder } from "@/hooks/use-load-order";
 
 /**
  * Send this law to one person.
@@ -90,10 +90,11 @@ function SendToSomeone({ reference }: { reference: { id: string; title: string }
  * and every post here carries its own replies and likes, which is where the
  * count on this page comes from.
  */
-function Conversation({ referenceId }: { referenceId: string }) {
+function Conversation({ referenceId, ready }: { referenceId: string; ready: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ["reference-posts", referenceId],
     queryFn: () => api.get<{ posts: Post[] }>(`/api/government-references/${referenceId}/posts`),
+    enabled: ready,
   });
 
   const posts = data?.posts ?? [];
@@ -163,6 +164,29 @@ export default function ReferenceDetail() {
   const { id = "" } = useParams();
   // Where the vote panel belongs. See the comment at its mobile position.
   const isWide = useIsWide();
+
+  /**
+   * TEN REQUESTS, ASKED FOR IN THE ORDER YOU MEET THEM.
+   *
+   * Opening a law fired all ten at once — the record, the vote tally, the
+   * conversation, the representation gap, the pulse history, the turning
+   * points, the other side, the integrity audit, the session, the
+   * notifications. Five of those paint panels 1,500px down the page, and the
+   * browser opened them before it had finished painting the top of the screen.
+   * The brief a reader came for landed at about four seconds, queued behind
+   * things they had not scrolled to.
+   *
+   * NOTHING IS DROPPED. All ten still run on every visit, unconditionally. The
+   * instruction was exactly this: "keep all the requests but prioritize the
+   * requests from top to bottom of the page." Deferring to a scroll would mean
+   * fewer requests and a worse product — a panel that has not started loading
+   * when you reach it is a spinner you wait at.
+   *
+   *   0  the record and the vote panel — the top of the screen
+   *   1  the conversation, which is on this column and read next
+   *   2  the sidebar: gap, pulse, turning points, other side, audit
+   */
+  const loaded = useLoadOrder(3);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["reference", id],
@@ -333,37 +357,26 @@ export default function ReferenceDetail() {
               ) : null}
 
               {/*
-                THE COUNTS AND THE ACTION ARE NOT THE SAME KIND OF THING.
+                THERE IS NO COUNTS ROW HERE ANY MORE.
 
-                They used to sit in one row, inheriting one colour. Measured on
-                the live site: the share control rendered at rgb(143,168,156)
-                and 12px — the same colour and the same size as the two counts
-                beside it, with no fill and no outline. Nothing separated the
-                one item you can press from the two you cannot, and the owner of
-                the product could not find it. His words, once given the pixel
-                coordinates: "ok now I see them."
+                "0 comments · 0 shares" sat on this line, in grey, directly
+                above the two buttons below. Two dead numbers stacked on two
+                live controls.
 
-                A count is a fact. A share is an offer. So the facts stay quiet
-                and the offer looks like something you can press.
+                The first word was also untrue. A law is not a post and owns no
+                comments — what is under this page is POSTS people wrote about
+                the law, each living on its author's own timeline. The owner
+                caught it: "that comment in the law card is just a comment
+                count, I don't like it, it's very misleading." Then, on the
+                whole row: "we are on different pages" — he meant both numbers,
+                not just the word.
 
-                The comment count is now a link to the conversation rather than
-                a number with nowhere to go — see the section below, which is
-                the thing it had been advertising all along.
+                A count that needs a different noun to be true is worth less
+                than the list sitting right under it. The conversation section
+                below shows what is there; if three people have written about
+                this law, you see three. The buttons do the acting. Neither
+                needed a number introducing it.
               */}
-              <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                <a
-                  href="#conversation"
-                  className="inline-flex items-center gap-1.5 rounded transition-colors hover:text-foreground"
-                >
-                  <MessageSquare className="h-4 w-4" />
-                  {reference.engagement.comments} comments
-                </a>
-                <span className="inline-flex items-center gap-1.5">
-                  <Share2 className="h-4 w-4" />
-                  {reference.engagement.shares} shares
-                </span>
-              </div>
-
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <ShareToTimeline
                   target={{
@@ -498,7 +511,7 @@ export default function ReferenceDetail() {
 
               {/* Last, deliberately: you say something about a law after you
                   have read it, not before. */}
-              <Conversation referenceId={reference.id} />
+              <Conversation referenceId={reference.id} ready={loaded >= 1} />
             </article>
 
             {/* Vote sidebar */}
@@ -513,15 +526,15 @@ export default function ReferenceDetail() {
                   "Congress has not voted yet" and "not enough people here have
                   voted yet" are different sentences. */}
               <div className="mt-4">
-                <RepresentationGapPanel referenceId={reference.id} />
+                <RepresentationGapPanel referenceId={reference.id} ready={loaded >= 2} />
               </div>
 
               {/* Only this platform can do either of these: every post is
                   attached to a government record, and every position on that
                   record is known. */}
-              <PulseHistory referenceId={reference.id} />
-              <TurningPoints referenceId={reference.id} />
-              <OtherSide referenceId={reference.id} />
+              <PulseHistory referenceId={reference.id} ready={loaded >= 2} />
+              <TurningPoints referenceId={reference.id} ready={loaded >= 2} />
+              <OtherSide referenceId={reference.id} ready={loaded >= 2} />
 
               {/* ARTICLE III §2. The tally above is the platform's claim; this
                   is where anybody can make it prove itself. */}
@@ -531,6 +544,7 @@ export default function ReferenceDetail() {
                   subjectId={reference.id}
                   title="Integrity Audit of this vote"
                   what="the votes on this record, as totals and timings"
+                  ready={loaded >= 2}
                 />
               </div>
             </aside>

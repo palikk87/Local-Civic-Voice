@@ -111,11 +111,21 @@ export function IntegrityAuditPanel({
   title = "Integrity Audit",
   /** What this audit is of, in the reader's words. */
   what,
+  /**
+   * False until this panel's turn in the page's load order.
+   *
+   * On a law page this sits at the very bottom, and the page used to request it
+   * in the same breath as the record itself. Defaults to true so every other
+   * caller is unchanged; a false delays the request by a frame, never cancels
+   * it.
+   */
+  ready = true,
 }: {
   subjectType: AuditSubjectType;
   subjectId: string;
   title?: string;
   what: string;
+  ready?: boolean;
 }) {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
@@ -126,7 +136,7 @@ export function IntegrityAuditPanel({
   const { data, isLoading } = useQuery({
     queryKey: historyKey,
     queryFn: () => audits.history(subjectType, subjectId),
-    enabled: Boolean(subjectId),
+    enabled: Boolean(subjectId) && ready,
   });
 
   const demand = useMutation({

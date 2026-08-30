@@ -57,11 +57,29 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function RepresentationGapPanel({ referenceId }: { referenceId?: string }) {
+/**
+ * `ready` is the page's load order, not a feature flag.
+ *
+ * This panel sits far below the fold on a law page, and the page used to ask
+ * for it in the same breath as the record itself — so the thing a reader came
+ * for queued behind panels they had not scrolled to. The page now opens its
+ * requests top to bottom and passes `ready` when this one's turn arrives.
+ *
+ * Defaults to true, so every other caller behaves exactly as it did. Nothing is
+ * ever skipped: a false here delays a request by a frame or two, it does not
+ * cancel it.
+ */
+interface RepresentationGapPanelProps {
+  referenceId?: string;
+  /** False until this panel's turn in the page's load order. */
+  ready?: boolean;
+}
+
+export function RepresentationGapPanel({ referenceId, ready = true }: RepresentationGapPanelProps) {
   const { data, isLoading } = useQuery({
     queryKey: ["representation-gap", referenceId],
     queryFn: () => api.get<GapResponse>(`/api/government-references/${referenceId}/representation-gap`),
-    enabled: !!referenceId,
+    enabled: !!referenceId && ready,
   });
 
   // No record to ask about yet — the page is still resolving which law this is.
