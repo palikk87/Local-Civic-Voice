@@ -251,6 +251,56 @@ export default function B2BSettings() {
           )}
         </Card>
 
+        {/*
+          HAS ANYTHING MOVED, AND WHEN.
+
+          This card is the whole reason GET /api/b2b/account/security exists.
+          Its own docstring on the server says so: a B2B password changed once
+          and nobody could account for it, and from the desk of the business
+          paying for the dashboard a working login that stops working for no
+          stated reason is indistinguishable from a breach.
+
+          The page has been FETCHING that endpoint on every load since it was
+          written, into a `security` state that nothing rendered. Set, never
+          read. So the question the endpoint was built to answer went on being
+          unanswerable from the UI, and the night somebody actually needed it —
+          his password rejected, certain he had not changed it — the only way
+          to find out was to read an admin activity log he could not reach.
+
+          Lint does not catch this: `security` is referenced by its own setter,
+          so it looks used. Nothing but opening the page and looking for the
+          number will find it, which is the argument for checking what a screen
+          shows rather than what its code fetches.
+        */}
+        <Card title="Credential history" icon={<ShieldAlert size={18} color="#818CF8" />}>
+          {security ? (
+            <dl className="space-y-2 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-400">Password or API key last changed</dt>
+                <dd className="text-right font-medium text-white">
+                  {when(security.credentials.lastRotatedAt)}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-slate-400">Times changed</dt>
+                <dd className="text-right font-medium text-white">
+                  {security.credentials.rotationCount}
+                </dd>
+              </div>
+              <p className="pt-2 text-xs text-slate-400">
+                {security.credentials.rotationCount === 0
+                  ? "Nothing has changed since this account was created. If a sign-in is being refused, it is not because the credential moved."
+                  : "If a change here is one you did not make, tell us — this is the record, and it is the fastest way to tell a mistake from a breach."}
+              </p>
+            </dl>
+          ) : (
+            <p className="text-sm text-slate-400">
+              The credential record could not be loaded just now. That is this page failing to
+              reach the server, not a statement about your account.
+            </p>
+          )}
+        </Card>
+
         <Card title="Signed in as" icon={<User size={18} color="#818CF8" />}>
           {info ? (
             <div className="text-sm">
