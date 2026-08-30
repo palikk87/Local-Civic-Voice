@@ -42,12 +42,14 @@ const bugReportsRouter = new Hono<{ Variables: AuthVariables }>();
  * link cannot be used to hammer the database.
  */
 const exportLimit = createRateLimiter({
+  name: "bug-report-export",
   maxRequests: 60,
   windowMs: 60 * 60 * 1000,
   message: "Too many reads of the bug queue from this address. Try again shortly.",
 });
 
 const submitLimit = createRateLimiter({
+  name: "bug-report-submit",
   maxRequests: 10,
   windowMs: 60 * 60 * 1000,
   message: "That is a lot of reports in one hour. Take a breath, then try again.",

@@ -41,6 +41,7 @@ const systemResetRouter = new Hono<{ Variables: AuthVariables }>();
 
 /** One filing a day. It notifies every account on the platform. */
 const openLimit = createRateLimiter({
+  name: "system-reset-file",
   maxRequests: 1,
   windowMs: 24 * 60 * 60 * 1000,
   message:

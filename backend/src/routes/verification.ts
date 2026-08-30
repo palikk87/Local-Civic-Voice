@@ -37,6 +37,7 @@ const verificationRouter = new Hono<{ Variables: AuthVariables }>();
  * account rather than per network.
  */
 const sendCodeRateLimit = createRateLimiter({
+  name: "verification-send-code",
   maxRequests: 5,
   windowMs: 60 * 1000,
   message: "Too many codes requested. Wait a minute, then try again.",

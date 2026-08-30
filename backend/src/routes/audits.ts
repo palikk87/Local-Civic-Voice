@@ -44,6 +44,7 @@ const auditsRouter = new Hono<{ Variables: AuthVariables }>();
  * loop. Twenty is far above anything a person reading results would do.
  */
 const requestLimit = createRateLimiter({
+  name: "audit-request",
   maxRequests: 20,
   windowMs: 60 * 60 * 1000,
   message: "That is a lot of audits at once. Try again shortly.",

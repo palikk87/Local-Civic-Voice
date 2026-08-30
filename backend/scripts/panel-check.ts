@@ -34,13 +34,13 @@ import { createServer, request as httpRequest } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname, resolve } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { hashPassword } from "better-auth/crypto";
 import {
   POPULATION_PASSWORD,
   assertPopulationDatabase,
   buildPopulation,
   citizen,
   countPopulation,
+  makePopulationAccount,
 } from "./lib/test-population";
 
 const DATABASE_URL = process.env.TEST_POPULATION_DATABASE_URL;
@@ -235,40 +235,24 @@ const site = createServer(async (req, res) => {
 
 // ------------------------------------------------------------------ fixtures
 
-/** A signable-in account, created the way the population builder creates one. */
+/**
+ * A signable-in operator, made by the population module rather than here.
+ *
+ * IT USED TO HASH ITS OWN PASSWORD, and tests/credential-writes.test.ts caught
+ * it within the hour: only src/services/credentials.ts may hash a password, so
+ * that every credential write carries an actor, a reason, and a log row. A
+ * harness that grows its own is a second place credentials are made.
+ *
+ * scripts/lib/test-population.ts is the one exemption, for a reason that covers
+ * this too — nothing it writes is anybody's credential — so the helper lives
+ * there and this asks for one.
+ */
 async function makeAccount(
   who: { id: string; email: string; username: string; name: string },
   password: string,
   role: string,
 ): Promise<void> {
-  const passwordHash = await hashPassword(password);
-
-  await prisma.user.upsert({
-    where: { id: who.id },
-    create: {
-      id: who.id,
-      name: who.name,
-      email: who.email,
-      username: who.username,
-      displayUsername: who.username,
-      emailVerified: true,
-      role,
-    },
-    update: { name: who.name, email: who.email, username: who.username, role, banned: false },
-  });
-
-  const accountId = `${who.id}-credential`;
-  await prisma.account.upsert({
-    where: { id: accountId },
-    create: {
-      id: accountId,
-      accountId: who.email,
-      providerId: "credential",
-      userId: who.id,
-      password: passwordHash,
-    },
-    update: { password: passwordHash },
-  });
+  await makePopulationAccount(prisma, who, password, role);
 }
 
 /**

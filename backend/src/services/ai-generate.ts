@@ -122,8 +122,34 @@ const MODEL_SPECS: Record<string, ModelSpec> = {
  * no access" is struck off and the next one is tried in the same request, so
  * the reader gets their brief rather than an apology.
  */
+/**
+ * THE TWO OLDER GEMINI MODELS ARE GONE, IN THE PROVIDER'S OWN WORDS.
+ *
+ * Read off the admin console's incident panel on 2026-08-30, where the platform
+ * had been recording the failures for a day:
+ *
+ *   gemini-2.0-flash  HTTP 404  "This model models/gemini-2.0-flash is no
+ *                               longer available. Please update your code to
+ *                               use models/gemini-3.6-flash"        13 times
+ *   gemini-2.5-flash  HTTP 404  "no longer available to new users … use
+ *                               models/gemini-3.6-flash"            13 times
+ *
+ * A fallback that 404s is not redundancy. It is two guaranteed round trips
+ * between a reader pressing the button and anything real being tried, on every
+ * job, until the strike-off list happens to be warm — and the strike-off list is
+ * in memory, so it empties on every deploy and every restart and the platform
+ * pays for the lesson again.
+ *
+ * They are removed rather than reordered, because there is no traffic level at
+ * which a retired model answers. The redundancy the chain exists for is still
+ * there: Gemini's current flash model, then OpenAI's two.
+ *
+ * The registry above still names them. That is deliberate — a stored brief or an
+ * incident row can refer to a model by name long after it stops being callable,
+ * and dropping the entry would make those unreadable.
+ */
 const MODEL_CHAINS: Record<AIProvider, string[]> = {
-  gemini: ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"],
+  gemini: ["gemini-3.6-flash"],
   openai: ["gpt-5.4-mini", "gpt-4o-mini"],
 };
 

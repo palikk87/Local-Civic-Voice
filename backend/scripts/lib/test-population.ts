@@ -236,3 +236,74 @@ export async function removePopulation(prisma: PrismaClient): Promise<number> {
 export async function countPopulation(prisma: PrismaClient): Promise<number> {
   return prisma.user.count({ where: { id: { startsWith: POPULATION_ID_PREFIX } } });
 }
+
+/**
+ * One named synthetic account, signable-in, with a role.
+ *
+ * WHY IT LIVES HERE rather than in the check that wanted it. Creating an
+ * account means hashing a password, and `tests/credential-writes.test.ts`
+ * enforces a rule this project earned the hard way: only
+ * `src/services/credentials.ts` may hash one, so that every real credential
+ * write carries an actor, a reason, and an activity-log row. A check that
+ * hashed its own password would be a second place credentials are made, and the
+ * next one would be a third.
+ *
+ * This module is the one exemption, and it is exempt for a reason that holds
+ * here too: nothing it writes is anybody's credential. Every id starts with
+ * `pop-`, every address ends in `.invalid`, and it refuses to run outside a
+ * database whose name says what it is. The password below unlocks accounts that
+ * hold nothing, in a database that serves nobody.
+ *
+ * So: harnesses that need a synthetic operator ask for one here. They do not
+ * grow their own.
+ */
+export async function makePopulationAccount(
+  prisma: PrismaClient,
+  who: { id: string; email: string; username: string; name: string },
+  password: string,
+  role: string,
+): Promise<void> {
+  if (!who.id.startsWith(POPULATION_ID_PREFIX)) {
+    throw new Error(
+      `Refusing to create "${who.id}": every synthetic account's id must start with ` +
+        `"${POPULATION_ID_PREFIX}", which is what makes check-no-population.ts able to ` +
+        `prove a real database is clean of them.`,
+    );
+  }
+  if (!who.email.endsWith(POPULATION_EMAIL_DOMAIN)) {
+    throw new Error(
+      `Refusing to create "${who.email}": a synthetic address must end in ` +
+        `"${POPULATION_EMAIL_DOMAIN}", a domain RFC 2606 reserves so it can never exist ` +
+        `and can never receive mail.`,
+    );
+  }
+
+  const passwordHash = await hashPassword(password);
+
+  await prisma.user.upsert({
+    where: { id: who.id },
+    create: {
+      id: who.id,
+      name: who.name,
+      email: who.email,
+      username: who.username,
+      displayUsername: who.username,
+      emailVerified: true,
+      role,
+    },
+    update: { name: who.name, email: who.email, username: who.username, role, banned: false },
+  });
+
+  const accountId = `${who.id}-credential`;
+  await prisma.account.upsert({
+    where: { id: accountId },
+    create: {
+      id: accountId,
+      accountId: who.email,
+      providerId: "credential",
+      userId: who.id,
+      password: passwordHash,
+    },
+    update: { password: passwordHash },
+  });
+}

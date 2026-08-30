@@ -132,6 +132,57 @@ describe("the rate limit follows the person, not the address", () => {
     expect(daveKnock.status).toBe(200);
   });
 
+  test("ORDINARY BROWSING DOES NOT SPEND A CONSTITUTIONAL RIGHT", async () => {
+    /**
+     * THE BUG THIS PINS, which was live and completely invisible.
+     *
+     * Every limiter shares one store, and that store was keyed by the caller's
+     * identity alone — so two limiters that produced the same identity shared
+     * one list of timestamps, and each then filtered that shared list by ITS
+     * OWN window before counting.
+     *
+     * Filing Articles of System Reset is limited to one a day, on purpose: it
+     * notifies every account on the platform. The general limiter writes a
+     * timestamp for the same person on every ordinary request. Same key. So the
+     * daily limiter read ordinary page loads as filings, and a citizen who had
+     * used the site at all that day was told "One a day." — about something
+     * they had never done.
+     *
+     * It surfaced only because the general limiter started keying by person
+     * rather than by address. Before that the two keys happened not to collide,
+     * which is not a design; it is a coincidence that was one change away from
+     * ending. Twenty-five tests went red at once and the message said nothing
+     * about rate limiting.
+     */
+    const eve = await signUp({
+      email: "eve-limit@example.com",
+      password: PASSWORD,
+      name: "Eve",
+    });
+
+    // She uses the platform normally for a bit. Nowhere near any limit.
+    for (let i = 0; i < 20; i += 1) {
+      await knock(eve.cookie);
+    }
+
+    // And then exercises Article V. This must be her FIRST filing, not her
+    // twenty-first request.
+    const filed = await fetch(`${BASE_URL}/api/system-reset`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-forwarded-for": SHARED_ADDRESS,
+        Cookie: eve.cookie,
+      },
+      body: JSON.stringify({
+        grounds: "The tallies on this platform no longer describe what anybody currently believes.",
+        evidence: "Half the records carry positions taken on text that has since been amended twice.",
+      }),
+    });
+
+    expect(filed.status).not.toBe(429);
+  });
+
   test("a stranger is still limited, because there is nothing else to go on", async () => {
     // The IP fallback has to keep working. Removing the shared-address problem
     // for signed-in people must not hand an anonymous flood a free pass.

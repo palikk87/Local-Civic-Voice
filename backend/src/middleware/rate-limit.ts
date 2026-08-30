@@ -5,6 +5,32 @@ import type { auth } from "../auth";
  * Rate Limiter Configuration
  */
 export interface RateLimitConfig {
+  /**
+   * WHICH LIMIT THIS IS. Required, and it is not a label — it is half the key.
+   *
+   * THE BUG THIS EXISTS TO PREVENT, which was live and invisible. Every limiter
+   * shares one store, and that store was keyed by the caller's identity alone.
+   * So two limiters that produced the same identity shared one list of
+   * timestamps — and each then filtered that shared list by ITS OWN window
+   * before counting.
+   *
+   * The worst pairing was the one that mattered most. Filing Articles of System
+   * Reset is deliberately limited to one a day, because it notifies every
+   * account on the platform. The general limiter writes a timestamp for the
+   * same person on every ordinary request. Same key, so the daily limiter read
+   * those timestamps as filings: a citizen who had loaded a single page had
+   * already spent their constitutional right to file, and got back "One a day."
+   *
+   * It was not only that one. The feed's 30-a-minute, uploads, search, the AI
+   * limit, the email-code limit, the audit and impeachment limits — all of them
+   * counted ordinary browsing against their own budgets, because all of them
+   * key by the same person.
+   *
+   * Namespacing the key makes each limit mean only itself. Required rather than
+   * optional so that a new limiter cannot be added without deciding what it is,
+   * and so the compiler finds every existing one.
+   */
+  name: string;
   /** Maximum number of requests allowed in the window */
   maxRequests: number;
   /** Time window in milliseconds */
@@ -202,6 +228,7 @@ export function getClientIdentifier(c: Context<{ Variables: AuthVariables }>): s
  */
 export function createRateLimiter(config: RateLimitConfig): MiddlewareHandler {
   const {
+    name,
     maxRequests,
     windowMs,
     keyGenerator,
@@ -216,10 +243,13 @@ export function createRateLimiter(config: RateLimitConfig): MiddlewareHandler {
       return;
     }
 
-    // Generate the key for this client
-    const key = keyGenerator
+    // Generate the key for this client, under THIS limit's own name. The name
+    // is what stops one limit's traffic from being counted by another — see
+    // RateLimitConfig.name.
+    const who = keyGenerator
       ? keyGenerator(c)
       : getClientIdentifier(c as Context<{ Variables: AuthVariables }>);
+    const key = `${name}|${who}`;
 
     // Check rate limit
     const result = rateLimiter.checkAndTrack(key, maxRequests, windowMs);
@@ -257,6 +287,7 @@ export function createRateLimiter(config: RateLimitConfig): MiddlewareHandler {
  * Suitable for most API endpoints
  */
 export const generalRateLimit = createRateLimiter({
+  name: "general",
   maxRequests: 100,
   windowMs: 60 * 1000, // 1 minute
   message: "Too many requests. Please slow down.",
@@ -267,6 +298,7 @@ export const generalRateLimit = createRateLimiter({
  * More restrictive for expensive feed operations
  */
 export const feedRateLimit = createRateLimiter({
+  name: "feed",
   maxRequests: 30,
   windowMs: 60 * 1000, // 1 minute
   message: "Feed requests are limited. Please wait before refreshing.",
@@ -277,6 +309,7 @@ export const feedRateLimit = createRateLimiter({
  * For likes, comments, shares, etc.
  */
 export const interactionRateLimit = createRateLimiter({
+  name: "interaction",
   maxRequests: 60,
   windowMs: 60 * 1000, // 1 minute
   message: "Too many interactions. Please slow down.",
@@ -287,6 +320,7 @@ export const interactionRateLimit = createRateLimiter({
  * Very restrictive for authentication endpoints to prevent brute force
  */
 export const authRateLimit = createRateLimiter({
+  name: "auth",
   maxRequests: 10,
   windowMs: 60 * 1000, // 1 minute
   message: "Too many authentication attempts. Please try again later.",
@@ -297,6 +331,7 @@ export const authRateLimit = createRateLimiter({
  * For sensitive operations like password reset
  */
 export const strictAuthRateLimit = createRateLimiter({
+  name: "auth-strict",
   maxRequests: 5,
   windowMs: 5 * 60 * 1000, // 5 minutes
   message: "Too many attempts. Please wait 5 minutes before trying again.",
@@ -307,6 +342,7 @@ export const strictAuthRateLimit = createRateLimiter({
  * For file upload endpoints
  */
 export const uploadRateLimit = createRateLimiter({
+  name: "upload",
   maxRequests: 20,
   windowMs: 60 * 1000, // 1 minute
   message: "Too many upload requests. Please wait before uploading more files.",
@@ -317,6 +353,7 @@ export const uploadRateLimit = createRateLimiter({
  * For search endpoints which can be resource-intensive
  */
 export const searchRateLimit = createRateLimiter({
+  name: "search",
   maxRequests: 40,
   windowMs: 60 * 1000, // 1 minute
   message: "Too many search requests. Please slow down.",
@@ -331,6 +368,7 @@ export const searchRateLimit = createRateLimiter({
  * IP and one account cannot multiply its budget across addresses.
  */
 export const aiRateLimit = createRateLimiter({
+  name: "ai",
   maxRequests: 10,
   windowMs: 60 * 1000, // 1 minute
   message: "Too many AI requests. Please wait a moment before trying again.",

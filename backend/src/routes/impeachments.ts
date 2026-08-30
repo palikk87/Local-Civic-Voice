@@ -48,6 +48,7 @@ const impeachmentsRouter = new Hono<{ Variables: AuthVariables }>();
  * turn one account into a mailing campaign.
  */
 const fileLimit = createRateLimiter({
+  name: "impeachment-file",
   maxRequests: 3,
   windowMs: 24 * 60 * 60 * 1000,
   message:
