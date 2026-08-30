@@ -106,6 +106,20 @@ a branch is not done. A green build is not done. Never write "done", "shipped",
 "live", or "complete" about work that is sitting on a branch, unpushed, or
 undeployed — say exactly where it is instead.
 
+### 3b. Check BEFORE you claim, not after
+
+Do not state that something is missing, unreachable, unconfigured or broken
+until a command has said so. In one evening: "I cannot see the platform" (one
+curl reached it), "Turnstile may not be configured" (it was enforced), "Article
+V conflicts with your rule" (it did not, on a plain reading).
+
+Each was a guess dressed as a finding, and each wasted his time correcting me.
+The cost is not the wrong answer — it is that a real finding now sounds the
+same as a guess.
+
+If checking takes one command, run it. If it cannot be checked, say "I have not
+checked" rather than picking the pessimistic guess and asserting it.
+
 ### 3. Verify, never infer
 
 Every factual claim about the live system needs a command or a URL behind it,
