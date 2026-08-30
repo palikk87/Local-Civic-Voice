@@ -182,7 +182,11 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
     status?: string;
     category?: string;
     mergedIntoId?: null;
-    OR?: Array<{ title: { contains: string } } | { shortTitle: { contains: string } } | { masterReferenceId: { contains: string } }>;
+    OR?: Array<
+      | { title: { contains: string; mode: "insensitive" } }
+      | { shortTitle: { contains: string; mode: "insensitive" } }
+      | { masterReferenceId: { contains: string; mode: "insensitive" } }
+    >;
   } = {
     mergedIntoId: null, // Don't include merged references
   };
@@ -197,13 +201,32 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
     where.category = category;
   }
   if (search) {
+    // CASE-INSENSITIVE, AND IT WAS NOT.
+    //
+    // Prisma's `contains` is case-SENSITIVE on PostgreSQL unless told
+    // otherwise, so searching this catalogue only worked if you happened to
+    // capitalise a law the way its title does. Reported against the composer's
+    // "attach a law" box, with a screenshot that says it perfectly: "End Gas
+    // Station Heroin Act" sitting in the list above, and typing "end gas
+    // station" answering "No bills found".
+    //
+    // It was never only that box. This is the one list endpoint behind the
+    // composer AND the Library, so law search has been case-sensitive
+    // everywhere in the product. It went unnoticed because the obvious way to
+    // test a search is to type a title you are looking at, in the case you are
+    // looking at.
+    //
+    // Post search next door has had `mode: "insensitive"` on all four of its
+    // clauses since it was written, which is what makes this a slip rather than
+    // a decision.
+    //
     // Ids are stored hyphenated and lowercase but read as printed ("H.R. 4836"),
     // so match every plausible spelling of what was typed, not just the literal.
     where.OR = [
-      { title: { contains: search } },
-      { shortTitle: { contains: search } },
+      { title: { contains: search, mode: "insensitive" } },
+      { shortTitle: { contains: search, mode: "insensitive" } },
       ...referenceIdSearchVariants(search).map((variant) => ({
-        masterReferenceId: { contains: variant },
+        masterReferenceId: { contains: variant, mode: "insensitive" as const },
       })),
     ];
   }
