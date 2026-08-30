@@ -43,7 +43,7 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { useVotingStore, selectIsLiked, selectUserVote } from '@/lib/voting-store';
+import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import { castReferenceVote, yeaNayToPosition } from '@/lib/reference-votes';
 import { categoryColors, categoryLabels, branchLabels, branchColors } from '@/lib/mock-data';
 import type { FeedItem, Bill, BillCategory, GovernmentBranch } from '@/lib/types';
@@ -57,6 +57,7 @@ import type { FeedItemWithDetails, Bill as SupabaseBill } from '@/lib/database.t
 import { useJurisdiction } from '@/lib/use-jurisdiction';
 import { rankFeedItems, getTrendingItems, getGapItems, getLocalItems, FEED_TYPES, type FeedType, type ScoredFeedItem, getRandomizedBillFeed, fisherYatesShuffle } from '@/lib/feed-algorithm';
 import { CIVIC_LEVELS } from '@/lib/gamification';
+import { api } from '@/lib/api/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCivicScore } from '@/lib/use-civic-score';
 import { useUnreadNotifications } from '@/lib/use-unread-notifications';
@@ -700,11 +701,22 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
   const router = useRouter();
   const requireAuth = useRequireAuth();
 
-  // Likes live in the local store. The other half of this used to call a
-  // Supabase mutation behind an `isSupabaseConfigured()` gate that has returned
-  // a hardcoded false since the client was removed, so it was unreachable.
-  const toggleLike = useVotingStore((s) => s.toggleLike);
-  const isLiked = useVotingStore(selectIsLiked(item.id));
+  /*
+   * A LIKE GOES TO THE SERVER, LIKE THE WEB APP'S ALREADY DOES.
+   *
+   * This kept likes in a store on the phone and never told anybody. Liking
+   * something here did not show on a computer, and signing in on a new device
+   * showed none of your likes at all — the heart was a note this handset had
+   * written to itself.
+   *
+   * `item.isLiked` and `item.likes` already come from /api/posts; they were
+   * simply not being read. The optimistic value is held only until the refetch
+   * lands, so the count on screen is the real one rather than a local number
+   * added to a server number.
+   */
+  const queryClient = useQueryClient();
+  const [optimisticLike, setOptimisticLike] = useState<boolean | null>(null);
+  const isLiked = optimisticLike ?? item.isLiked;
 
   const likeScale = useSharedValue(1);
 
@@ -717,7 +729,18 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
     );
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    toggleLike(item.id);
+    setOptimisticLike(!isLiked);
+    void api
+      .post(`/api/posts/${item.id}/like`)
+      .then(() => {
+        // Every view of this post agrees, which is the whole point.
+        void queryClient.invalidateQueries({ queryKey: ['algorithmic-feed'] });
+        void queryClient.invalidateQueries({ queryKey: ['post', item.id] });
+      })
+      .catch(() => {
+        setOptimisticLike(null);
+        Alert.alert('Not recorded', "Couldn't record that like.", [{ text: 'OK' }]);
+      });
   };
 
   const likeAnimStyle = useAnimatedStyle(() => ({

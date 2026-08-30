@@ -1,76 +1,56 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 // Web port: zustand persist uses localStorage instead of AsyncStorage
 import type { FeedItem } from './types';
 
 /**
- * Local mirror of "my vote" per government reference (master reference system).
+ * An in-session mirror of "my vote" per government reference.
  *
- * This store no longer talks to the network. Every real vote goes through
- * castReferenceVote in reference-votes.ts — the ONE vote pipeline — which
- * records the vote on the law's central record and then calls setLocalVote
- * here so any card showing that law lights up instantly. Values are yea/nay
- * for the UI; the server speaks support/oppose.
+ * NOT PERSISTED, ON PURPOSE. It used to be written to the device, which made it
+ * the only thing that remembered your votes there — so a second device showed
+ * none of them, and worse, whoever signed in next on a shared computer saw the
+ * previous person's votes lit up until server data arrived and overwrote them.
+ * A cache that outlives the session stops being a cache and becomes a record,
+ * and an individual record does not belong on a device.
+ *
+ * The server is the truth. syncServerVote() in reference-votes.ts fills this in
+ * from what the server returns; this exists only so every card showing the same
+ * law lights up together without each one asking again. Empty on load is right.
+ *
+ * Likes are gone from here. /api/posts returns isLiked per post and both feeds
+ * read it now — a like made on a phone shows on a computer, which it did not.
  */
 interface VotingState {
   userVotes: Record<string, 'yea' | 'nay'>;
-  likedItems: Record<string, boolean>;
   feedItems: FeedItem[];
   /** Set or clear (null) my vote for a reference. Local only — no network. */
   setLocalVote: (referenceId: string, vote: 'yea' | 'nay' | null) => void;
-  toggleLike: (itemId: string) => void;
   getUserVote: (billId: string) => 'yea' | 'nay' | null;
 }
 
-export const useVotingStore = create<VotingState>()(
-  persist(
-    (set, get) => ({
-      userVotes: {},
-      // Both of these used to be seeded: three hardcoded post ids pre-marked as
-      // liked, and the full array of invented feed posts. A brand new visitor
-      // arrived with likes they had never given, on posts that did not exist.
-      likedItems: {},
-      feedItems: [],
+export const useVotingStore = create<VotingState>()((set, get) => ({
+  userVotes: {},
+  // feedItems used to be seeded with the full array of invented feed posts, so
+  // a brand new visitor arrived with content nobody had written.
+  feedItems: [],
 
-      setLocalVote: (referenceId, vote) => {
-        set((state) => {
-          const newVotes = { ...state.userVotes };
-          if (vote === null) {
-            delete newVotes[referenceId];
-          } else {
-            newVotes[referenceId] = vote;
-          }
-          return { userVotes: newVotes };
-        });
-      },
+  setLocalVote: (referenceId, vote) => {
+    set((state) => {
+      const newVotes = { ...state.userVotes };
+      if (vote === null) {
+        delete newVotes[referenceId];
+      } else {
+        newVotes[referenceId] = vote;
+      }
+      return { userVotes: newVotes };
+    });
+  },
 
-      toggleLike: (itemId: string) => {
-        set((state) => ({
-          likedItems: {
-            ...state.likedItems,
-            [itemId]: !state.likedItems[itemId],
-          },
-        }));
-      },
-
-      getUserVote: (billId: string) => {
-        return get().userVotes[billId] ?? null;
-      },
-    }),
-    {
-      name: 'civic-voting-storage',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        userVotes: state.userVotes,
-        likedItems: state.likedItems,
-      }),
-    }
-  )
-);
+  getUserVote: (billId: string) => {
+    return get().userVotes[billId] ?? null;
+  },
+}));
 
 // Selectors for optimal re-renders
 export const selectUserVote = (billId: string) => (state: VotingState | undefined) =>
   state?.userVotes[billId] ?? null;
 
-export const selectIsLiked = (itemId: string) => (state: VotingState | undefined) =>
-  state?.likedItems[itemId] ?? false;

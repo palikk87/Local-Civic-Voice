@@ -27,7 +27,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { BetaWelcomeDialog } from "@/components/feed/BetaWelcomeDialog";
 import { MotionDiv } from "@/components/civic/Motion";
-import { useVotingStore, selectIsLiked, selectUserVote } from "@/lib/mobile/voting-store";
+import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import { castReferenceVote, yeaNayToPosition } from "@/lib/mobile/reference-votes";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
