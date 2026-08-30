@@ -55,10 +55,19 @@ export default function Documents() {
               The Constitution
             </h2>
           </div>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
-            v{CONSTITUTION.version} · Effective{" "}
-            {new Date(CONSTITUTION.effectiveDate).toLocaleDateString()}
-          </p>
+          {/* NO VERSION STAMP ON A FOUNDING DOCUMENT.
+              Reported against /constitution in these words: "v2.0 Effective
+              8/28/2026 — this line should not be here", wanted: "erase it."
+              It was erased there and left standing here and on the Bill of
+              Rights page, which is the third time in this project a fix has
+              landed in one place out of three.
+              The objection is right and it is general: a release number and an
+              effective date make a constitution read like software release
+              notes, and a document that announces its own version invites the
+              question of what the last one said. The version is still on the
+              record — founding-documents.ts holds it, and the badge counts and
+              the compliance tests read it — it is just not presented to a
+              citizen as though the text were a build. */}
 
           <blockquote className="mt-6 rounded-2xl border border-border bg-secondary/40 p-6">
             <div className="text-xs font-semibold uppercase tracking-institutional text-accent">
@@ -107,10 +116,7 @@ export default function Documents() {
               The Bill of Rights
             </h2>
           </div>
-          <p className="mt-1 font-mono text-xs text-muted-foreground">
-            Amendments I–V · v{BILL_OF_RIGHTS.version} · Effective{" "}
-            {new Date(BILL_OF_RIGHTS.effectiveDate).toLocaleDateString()}
-          </p>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">Amendments I–V</p>
 
           <blockquote className="mt-6 rounded-2xl border border-accent/30 bg-accent/5 p-6">
             <div className="text-xs font-semibold uppercase tracking-institutional text-accent">

@@ -33,10 +33,8 @@ export default function BillOfRights() {
             <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground">
               The Bill of Rights
             </h1>
-            <p className="font-mono text-xs text-muted-foreground">
-              Amendments I–V · v{BILL_OF_RIGHTS.version} · Effective{" "}
-              {new Date(BILL_OF_RIGHTS.effectiveDate).toLocaleDateString()}
-            </p>
+            {/* No version stamp — see the note in Documents.tsx. */}
+            <p className="font-mono text-xs text-muted-foreground">Amendments I–V</p>
           </div>
         </div>
 
