@@ -170,6 +170,25 @@ async function startBackend(): Promise<void> {
 // -------------------------------------------------------------------- signing in
 
 /**
+ * A distinct address per citizen.
+ *
+ * WHY THIS IS NOT CHEATING, and why leaving it out was. Sign-in happens before
+ * anybody is identified, so /api/auth/* is necessarily limited by address — ten
+ * a minute. Five hundred citizens arriving from ONE address is not five hundred
+ * people using the platform; it is one person hammering a login form, and the
+ * server is supposed to stop that. Sending them from their own addresses is
+ * what a real crowd looks like.
+ *
+ * The first run of this check did not do that, read the resulting 429s as
+ * server failures, and reported the platform as collapsing under load. It was
+ * measuring its own rate limiter. The consolation is that fixing the harness is
+ * what surfaced the real bug underneath — see tests/rate-limit-per-person.ts.
+ */
+function addressFor(index: number): string {
+  return `203.0.113.${index % 254}`;
+}
+
+/**
  * Sign a citizen in over real HTTP and keep the cookie.
  *
  * Not a planted session row. The session middleware, the cookie, and the ban
@@ -180,7 +199,7 @@ async function signIn(index: number): Promise<string | null> {
   const who = citizen(index);
   const response = await fetch(`${ORIGIN}/api/auth/sign-in/email`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-forwarded-for": addressFor(index) },
     body: JSON.stringify({ email: who.email, password: POPULATION_PASSWORD }),
   });
   if (!response.ok) return null;
@@ -427,10 +446,14 @@ async function main() {
   for (const path of surfaces) {
     const times: number[] = [];
     let errors = 0;
-    await pool(Array.from({ length: 100 }, (_, i) => i), CONCURRENCY, async () => {
+    await pool(Array.from({ length: 100 }, (_, i) => i), CONCURRENCY, async (i) => {
       const began = Date.now();
       try {
-        const response = await fetch(`${ORIGIN}${path}`);
+        // Signed-out readers, each from their own address — a hundred strangers
+        // rather than one stranger asking a hundred times.
+        const response = await fetch(`${ORIGIN}${path}`, {
+          headers: { "x-forwarded-for": addressFor(i) },
+        });
         if (!response.ok) errors += 1;
       } catch {
         errors += 1;

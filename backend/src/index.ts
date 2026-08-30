@@ -100,10 +100,30 @@ app.use(
 // Logging
 app.use("*", logger());
 
-// Apply general rate limiting to all routes as fallback
-app.use("*", generalRateLimit);
-
 // Auth middleware - populates user/session for all routes
+//
+// AHEAD OF THE RATE LIMITER, AND THAT ORDER IS THE WHOLE POINT.
+//
+// getClientIdentifier keys the limit by the signed-in person's id and falls
+// back to the IP address only for a stranger — which is right, and was
+// unreachable. The general limiter used to run first, so when it asked who was
+// calling, nothing had answered yet: c.get("user") was undefined on every
+// request in the system and every request was keyed by IP.
+//
+// A hundred requests a minute, shared by everybody behind one address. An
+// office, a school, a household, or anybody on a mobile carrier doing
+// carrier-grade NAT, which is most phones. A page view is several requests, so
+// during exactly the hour a bill is being voted on and colleagues are talking
+// about it, a workplace gets locked out together.
+//
+// Found by the load check, and it did not look like this: five hundred
+// citizens voting from one machine produced four accepted votes and then 429
+// on everything including /health, which reads like a server falling over. It
+// was one bucket.
+//
+// Identifying an anonymous request is still nearly free — no cookie means no
+// session lookup — so limiting a flood of strangers costs what it did before.
+// tests/rate-limit-per-person.test.ts fails if this order is put back.
 app.use("*", async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session) {
@@ -161,6 +181,11 @@ app.use("*", async (c, next) => {
   c.set("session", session.session);
   await next();
 });
+
+// General rate limiting, now that there is a person to attribute it to.
+// Everyone gets their own budget; strangers share theirs by address, which is
+// all there is to go on for them.
+app.use("*", generalRateLimit);
 
 // ARTICLE IV — SEQUESTRATION.
 //
