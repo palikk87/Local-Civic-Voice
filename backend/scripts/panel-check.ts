@@ -570,8 +570,57 @@ async function main() {
 
   await prisma.b2BMember.deleteMany({ where: { username: { startsWith: "popseat" } } });
   await prisma.b2BClient.deleteMany({ where: { username: { startsWith: "popclient" } } });
+  await prisma.b2BClient.deleteMany({ where: { name: { startsWith: "Panel check" } } });
   await prisma.adminRole.deleteMany({ where: { slug: { startsWith: "pop-panel-made" } } });
+  await prisma.adminRole.deleteMany({ where: { slug: LIMITED.roleSlug } });
   await prisma.announcement.deleteMany({ where: { title: { startsWith: "Panel check" } } });
+
+  // LEAVE THE POPULATION DATABASE AS THIS RUN FOUND IT.
+  //
+  // It did not, and jury-check caught it: "…no reports left" failed with one
+  // report and 1,004 citizens where a thousand belong. The four accounts this
+  // check creates and the report it files were staying behind, in a database
+  // three other checks assert the exact contents of.
+  //
+  // That is the same fault this whole night has been about, committed by the
+  // thing built to find it: a check that leaves residue makes the NEXT check
+  // fail for a reason that has nothing to do with what it tests, and the
+  // failure names the innocent party.
+  //
+  // DELETING THE USER IS NOT ENOUGH. Seven tables carry a userId that is a
+  // plain string with no relation to User, so the database will not cascade
+  // them — the same trap removePopulation documents, and the reason a closed
+  // account's votes survive it. The list below mirrors that one.
+  const mine = [ADMIN.id, LIMITED.id, VICTIM.id, DOOMED.id];
+  await prisma.report.deleteMany({ where: { detail: { startsWith: "Panel check" } } });
+  await prisma.report.deleteMany({ where: { reportedUserId: { in: mine } } });
+  await prisma.bugReport.deleteMany({ where: { problem: { startsWith: "Panel check" } } });
+  await prisma.serviceIncident.deleteMany({ where: { kind: "panel-check" } });
+  await prisma.referenceMergeCandidate.deleteMany({
+    where: { left: { masterReferenceId: { startsWith: "pop-panel-" } } },
+  });
+  await prisma.governmentReference.deleteMany({
+    where: { masterReferenceId: { startsWith: "pop-panel-" } },
+  });
+
+  const userId = { in: mine };
+  await prisma.governmentReferenceVote.deleteMany({ where: { userId } });
+  await prisma.postLike.deleteMany({ where: { userId } });
+  await prisma.postSave.deleteMany({ where: { userId } });
+  await prisma.postShare.deleteMany({ where: { userId } });
+  await prisma.userInteraction.deleteMany({ where: { userId } });
+  await prisma.userFeedProfile.deleteMany({ where: { userId } });
+  await prisma.creatorMetrics.deleteMany({ where: { userId } });
+  await prisma.media.deleteMany({ where: { userId } });
+  await prisma.user.deleteMany({ where: { id: { in: mine } } });
+
+  const left = await countPopulation(prisma);
+  expect(
+    "the population database is left as it was found",
+    left === 1_000,
+    `${left} citizens remain where 1,000 belong — this check has left residue, and the next ` +
+      `check to run will fail for a reason that has nothing to do with what it tests`,
+  );
 }
 
 const started = Date.now();
