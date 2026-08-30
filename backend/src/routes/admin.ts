@@ -38,7 +38,7 @@ import {
   STORABLE_SECRETS,
 } from "../services/platform-secrets";
 import { purgeMediaObjects } from "../services/media-objects";
-import { deleteAccount } from "../services/account-deletion";
+import { closeAccount } from "../services/account-closure";
 import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
 import { undoSystemReset } from "../services/system-reset";
 import { LOOK_ALIKE } from "../services/reference-lineage";
@@ -758,10 +758,20 @@ adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) =
     // proceedings rule: an open jury draws a replacement juror, an open
     // impeachment or reset loses the ballot, and a concluded one keeps its
     // recorded outcome.
-    const outcome = await deleteAccount(id);
+    // AND AN ADMINISTRATOR IS HELD BY THE SAME RULE — harder, if anything.
+    //
+    // Article V §3: "No Proceeding under this Article may be halted, delayed or
+    // reversed by any Officer, at any level of authority." Deleting the accused
+    // out of a live impeachment is exactly that halt, and doing it from the
+    // console is the case the clause names by hand. So this goes through
+    // closeAccount too: a party to an open proceeding is suspended and kept
+    // readable until it is decided, then erased by the sweep.
+    const outcome = await closeAccount(id);
     if (!outcome.ok) {
       return c.json({ error: outcome.message ?? "The account could not be deleted." }, { status: 500 });
     }
+
+    const who = user.name || user.username || user.email;
 
     createActivityLog(
       "delete_user",
@@ -769,12 +779,18 @@ adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) =
       session.username,
       "user",
       id,
-      `Deleted user ${user.name || user.username || user.email}`
+      outcome.deleted
+        ? `Deleted user ${who}`
+        : `Closed user ${who}; held until ${outcome.held.length} open proceeding(s) are decided`
     );
 
     return c.json({
       success: true,
-      message: `User ${user.name || user.username || user.email} has been deleted`,
+      deleted: outcome.deleted,
+      held: outcome.held,
+      message: outcome.deleted
+        ? `User ${who} has been deleted`
+        : `User ${who} is closed. The profile stays visible until their open proceedings are decided, then it is erased.`,
     });
   } catch (error) {
     console.error("Error deleting user:", error);
@@ -3793,7 +3809,13 @@ adminRouter.get("/articles", async (c) => {
   });
 
   const resetFilers = await prisma.user.findMany({
-    where: { id: { in: resets.map((reset) => reset.filedById) } },
+    where: {
+      id: {
+        in: resets
+          .map((reset) => reset.filedById)
+          .filter((id): id is string => !!id),
+      },
+    },
     select: person,
   });
   const filerById = new Map(resetFilers.map((filer) => [filer.id, filer]));
@@ -3822,7 +3844,7 @@ adminRouter.get("/articles", async (c) => {
       evidence: reset.evidence,
       // Null when the filer's account is gone. SystemReset has no foreign key
       // to User on purpose, so this is the honest "we no longer know".
-      filedBy: filerById.get(reset.filedById) ?? null,
+      filedBy: (reset.filedById ? filerById.get(reset.filedById) : null) ?? null,
       openedAt: reset.openedAt.toISOString(),
       expiresAt: reset.expiresAt.toISOString(),
       decidedAt: reset.decidedAt?.toISOString() ?? null,

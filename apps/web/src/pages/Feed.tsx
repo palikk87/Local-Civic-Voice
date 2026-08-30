@@ -292,24 +292,53 @@ function StreakRow() {
   // error boundary before this was one character longer.
   const activeDays = useMemo(() => new Set(data?.score?.activeDays ?? []), [data]);
 
-  const letters = ["M", "T", "W", "T", "F", "S", "S"];
-  const today = (new Date().getDay() + 6) % 7; // Monday-first
+  /**
+   * ONE CLOCK, NOT TWO.
+   *
+   * This used to take the day of the week from `new Date().getDay()`, which is
+   * LOCAL, and then look up dates with `setUTCDate`/`toISOString`, which are
+   * UTC. The two agree for part of the day and disagree for the rest, so every
+   * evening once local time crossed UTC midnight all seven pips silently slid
+   * one day along: the letter said Sunday and the pip was reading Monday.
+   *
+   * That is the "changes randomly" that was reported. It was not random — it
+   * changed at the same moment every evening, and the moment moved with
+   * daylight saving.
+   *
+   * The fix is not to pick the right clock, it is to stop having two. Each pip
+   * is built from ONE UTC date, and its letter is read off that same date, so a
+   * label can never describe a day other than the one underneath it. The server
+   * counts days in UTC (civic-score.ts, dayOf), so UTC is the clock that
+   * matches what is being displayed.
+   */
+  const week = useMemo(() => {
+    const LETTERS = ["S", "M", "T", "W", "T", "F", "S"]; // indexed by getUTCDay()
+    const now = new Date();
+    // Monday-first, in UTC: Sunday (0) sits at the end of the week, not the
+    // start.
+    const offsetFromMonday = (now.getUTCDay() + 6) % 7;
 
-  // The date each pip stands for, in UTC, which is how the server counts them.
-  const dateOf = (index: number) => {
-    const at = new Date();
-    at.setUTCDate(at.getUTCDate() - (today - index));
-    return at.toISOString().slice(0, 10);
-  };
+    return Array.from({ length: 7 }, (_, index) => {
+      const at = new Date(now);
+      at.setUTCDate(at.getUTCDate() - (offsetFromMonday - index));
+      return {
+        date: at.toISOString().slice(0, 10),
+        letter: LETTERS[at.getUTCDay()]!,
+        isToday: index === offsetFromMonday,
+        isFuture: index > offsetFromMonday,
+      };
+    });
+  }, []);
 
   return (
     <div className="mx-4 mb-3 flex items-center gap-1.5">
-      {letters.map((letter, index) => {
-        const lit = index <= today && activeDays.has(dateOf(index));
-        const isToday = index === today;
+      {week.map((day) => {
+        const lit = !day.isFuture && activeDays.has(day.date);
+        const isToday = day.isToday;
         return (
           <span
-            key={`${letter}-${index}`}
+            key={day.date}
+            title={day.date}
             className={cn(
               "grid h-6 flex-1 place-items-center rounded-md border font-mono text-[9px] font-semibold",
               lit
@@ -319,7 +348,7 @@ function StreakRow() {
                   : "border-white/10 bg-white/5 text-white/25",
             )}
           >
-            {letter}
+            {day.letter}
           </span>
         );
       })}

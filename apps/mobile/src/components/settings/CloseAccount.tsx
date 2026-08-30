@@ -16,7 +16,7 @@
 // WHY TWO STEPS. The password, because an unlocked phone must not be enough to
 // erase somebody's civic record. And the typed name, because a single tap is
 // how this happens by accident, and it cannot be undone by us or by anyone.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { TriangleAlert } from 'lucide-react-native';
@@ -24,6 +24,15 @@ import { useRouter } from 'expo-router';
 
 import { api } from '@/lib/api/api';
 import { useAuthStore } from '@/lib/auth-store';
+
+interface HoldingProceeding {
+  kind: 'impeachment' | 'system_reset' | 'report';
+  id: string;
+  role: 'filed' | 'subject';
+  label: string;
+  openedAt: string;
+  expectedBy: string | null;
+}
 
 export function CloseAccount() {
   const router = useRouter();
@@ -35,6 +44,37 @@ export function CloseAccount() {
   const [confirm, setConfirm] = useState('');
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [held, setHeld] = useState<HoldingProceeding[] | null>(null);
+
+  /*
+   * WHAT WOULD HOLD THE RECORD BACK, ASKED BEFORE THEY CONFIRM.
+   *
+   * Amendment IV: the platform "shall state what it protects and how, and shall
+   * claim no protection it does not provide." The "we keep no copy" line below
+   * is true for almost everybody and false for somebody in the middle of a
+   * proceeding, and a warning that goes wrong exactly when the stakes are
+   * highest is worse than none. So the screen asks, and says what it is told.
+   *
+   * Identical to the web screen on purpose. This is the one sentence on the
+   * platform that must not differ between a phone and a computer.
+   */
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api
+      .get<{ wouldBeHeld: boolean; held: HoldingProceeding[] }>('/api/users/me/closing')
+      .then((answer) => {
+        if (!cancelled) setHeld(answer?.held ?? []);
+      })
+      // An unreachable server is not "nothing is holding you". Left null, which
+      // shows the honest line rather than a false all-clear.
+      .catch(() => {
+        if (!cancelled) setHeld(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Their username if they have one, otherwise their email. Not every account
   // carries a username, and one that does not must still be closable by the
@@ -107,9 +147,60 @@ export function CloseAccount() {
         stand, with your name off them.
       </Text>
 
+      {/*
+        THE PROMISE, MADE ONLY WHERE IT IS TRUE. See the note on the effect
+        above: "we keep no copy" is false while a proceeding is holding the
+        record, so it is said three different ways depending on the answer.
+      */}
+      {held && held.length > 0 ? (
+        <View className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+          <Text className="text-white text-sm font-semibold">
+            Your account will not be erased immediately.
+          </Text>
+          <Text className="text-slate-300 text-sm mt-2">
+            You are a party to {held.length === 1 ? 'a proceeding' : `${held.length} proceedings`}{' '}
+            that {held.length === 1 ? 'has' : 'have'} not yet been decided. Your account is closed
+            immediately — you are signed out and it cannot be used again — but your profile
+            remains visible to those entitled to see it until{' '}
+            {held.length === 1 ? 'it is' : 'they are'} concluded, so that the record before them
+            stays complete for the duration of the proceedings.
+          </Text>
+
+          {held.map((one) => (
+            <View
+              key={`${one.kind}-${one.id}`}
+              className="mt-3 border-l-2 border-amber-500/50 pl-3"
+            >
+              <Text className="text-slate-200 text-sm font-medium">{one.label}</Text>
+              <Text className="text-slate-400 text-xs mt-0.5">
+                {one.role === 'filed' ? 'Brought by you.' : 'Brought against you.'} Opened{' '}
+                {new Date(one.openedAt).toLocaleDateString()}.{' '}
+                {one.expectedBy
+                  ? `Currently scheduled to conclude ${new Date(one.expectedBy).toLocaleDateString()}.`
+                  : /*
+                     * A report waits on a jury and a jury waits on people, so
+                     * there is no honest date. Saying so beats inventing one.
+                     */
+                    'No scheduled conclusion — it ends when it is decided.'}
+              </Text>
+            </View>
+          ))}
+
+          <Text className="text-white text-sm font-semibold mt-3">
+            This closure is final and takes effect immediately; it is not a waiting period, and
+            it cannot be reversed. Your profile remains visible solely for the purposes of the
+            proceedings listed above, and is permanently erased once the last of them has been
+            decided.
+          </Text>
+        </View>
+      ) : null}
+
       <Text className="text-white text-sm font-semibold mt-3">
-        We keep no copy. There is no undo, and no support request can bring it back. If you
-        sign up again later it will be a new account, starting at zero.
+        {held === null
+          ? 'We could not check whether anything is holding your account right now. There is no undo either way, and no support request can bring it back. If you sign up again later it will be a new account, starting at zero.'
+          : held.length > 0
+            ? 'Once those are decided we keep no copy. There is no undo, and no support request can bring it back. If you sign up again later it will be a new account, starting at zero.'
+            : 'We keep no copy. There is no undo, and no support request can bring it back. If you sign up again later it will be a new account, starting at zero.'}
       </Text>
 
       <Text className="text-slate-400 text-xs mt-4 mb-1">Your password</Text>

@@ -55,6 +55,11 @@ interface PublicUser {
   following: number;
   votesCount: number;
   isFollowing: boolean;
+  /**
+   * WHEN THEY CLOSED THEIR ACCOUNT, if this page is only still here because a
+   * proceeding has not been decided. Null for everybody else.
+   */
+  closingAt?: string | null;
 }
 
 interface UserPost {
@@ -201,6 +206,33 @@ export default function UserProfileScreen() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 32 }}
           >
+            {/*
+              THE PAGE SAYS WHAT IT IS.
+
+              This person has closed their account. The profile is only still up
+              because they are a party to a proceeding nobody has decided yet,
+              and it goes the moment that finishes. Everything on it is frozen —
+              no new posts, no votes, no replies, no answer to a message.
+
+              Without this line a visitor reads a normal profile and waits for a
+              reply that is never coming. Word for word the same as the web
+              banner: a person checking on somebody must not be told two
+              different things by two screens.
+            */}
+            {profile.closingAt ? (
+              <View className="mx-4 mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4">
+                <Text className="text-white text-sm font-semibold">
+                  This account has been closed.
+                </Text>
+                <Text className="text-slate-400 text-sm mt-1">
+                  {profile.displayName} deleted their profile on{' '}
+                  {new Date(profile.closingAt).toLocaleDateString()}. It stays visible only until
+                  the proceedings they are part of have been decided, and is then erased. Nothing
+                  here can change, and they cannot reply.
+                </Text>
+              </View>
+            ) : null}
+
             {/* Profile header */}
             <View className="items-center px-4 py-6">
               <Image

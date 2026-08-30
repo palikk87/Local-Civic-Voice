@@ -309,7 +309,7 @@ export function UsersTab() {
                     size="sm"
                     variant="destructive"
                     onClick={() => setDeleteTarget(user)}
-                    aria-label={`Delete ${user.name || user.username || user.email}`}
+                    aria-label={`Delete ${user.displayName || user.username || user.email}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

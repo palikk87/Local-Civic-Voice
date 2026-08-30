@@ -18,7 +18,7 @@ import { MIN_COHORT, listDistricts } from "../services/jurisdiction";
 import { districtsForZip } from "../services/zip-districts";
 import { trustScore, WEIGHTS } from "../services/trust-score";
 import { publicHandle } from "../services/public-identity";
-import { deleteAccount } from "../services/account-deletion";
+import { closeAccount, proceedingsHolding } from "../services/account-closure";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -372,6 +372,19 @@ usersRouter.get("/:id", async (c) => {
     ...formatUser(user, isFollowing),
     votesCount: (user._count?.votes ?? 0) + referenceVotes,
     isFriend: followsBack,
+    /**
+     * SAID OUT LOUD, BECAUSE THE PAGE IS NOT WHAT IT LOOKS LIKE.
+     *
+     * This person has closed their account. The profile is only still here
+     * because they are a party to a proceeding that has not been decided, and
+     * it disappears the moment it is. Everything on it is frozen — they cannot
+     * post, vote, reply or be replied to — so a visitor reading it as a live
+     * profile would be reading it wrong, and would be waiting on an answer that
+     * is never coming.
+     *
+     * Null for everybody else, which is almost everybody.
+     */
+    closingAt: user.deletionRequestedAt?.toISOString() ?? null,
   });
 });
 
@@ -1126,17 +1139,52 @@ usersRouter.delete("/me", zValidator("json", deleteMeSchema), async (c) => {
   const ok = await verifyPasswordOrDummy(credential?.password ?? null, password, "user");
   if (!ok) return c.json({ error: "That password is not right." }, 401);
 
-  const outcome = await deleteAccount(me.id);
+  // ONE DOOR. closeAccount erases the account outright, unless the person is a
+  // party to a live proceeding — then it holds the record and suspends them.
+  // Either way the decision is final from here; see services/account-closure.ts.
+  const outcome = await closeAccount(me.id);
   if (!outcome.ok) {
     return c.json({ error: outcome.message ?? "The account could not be closed." }, 500);
   }
 
   return c.json({
     success: true,
+    deleted: outcome.deleted,
+    // What is keeping the record here, and until roughly when. Said back so the
+    // screen can show it rather than claiming an erasure that has not happened.
+    held: outcome.held,
     // Said back, because these are consequences for other people that the
-    // person leaving asked about on the warning screen.
-    juriesRedrawn: outcome.juriesRedrawn,
-    ballotsPulled: outcome.ballotsPulled,
+    // person leaving asked about on the warning screen. Absent on a held
+    // closing: nothing has been pulled from anything yet.
+    juriesRedrawn: outcome.deletion?.juriesRedrawn ?? 0,
+    ballotsPulled: outcome.deletion?.ballotsPulled ?? 0,
+  });
+});
+
+/**
+ * GET /api/users/me/closing
+ *
+ * WHAT WOULD HAPPEN IF THEY CLOSED THEIR ACCOUNT RIGHT NOW.
+ *
+ * Amendment IV: the platform "shall state what it protects and how, and shall
+ * claim no protection it does not provide." The warning screen used to promise
+ * "we keep no copy" flatly. That is true in the ordinary case and false for
+ * somebody in the middle of a proceeding, and a warning that is false exactly
+ * when the stakes are highest is worse than no warning.
+ *
+ * So the screen asks first, and says what it is told: nothing, or the list of
+ * proceedings that will hold the record, which side of each one they are on,
+ * and when each is currently due to end.
+ */
+usersRouter.get("/me/closing", async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  const held = await proceedingsHolding(currentUser.id);
+  return c.json({
+    // False means closing is immediate and total.
+    wouldBeHeld: held.length > 0,
+    held,
   });
 });
 

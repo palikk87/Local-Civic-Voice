@@ -73,6 +73,21 @@ model User {
   //
   // `banExpiresAt` null means permanent. Expiry is evaluated on read rather
   // than swept by a job — see isCurrentlyBanned() in routes/admin.ts.
+  /// WHEN THEY ASKED TO BE GONE, if they are not gone yet.
+  ///
+  /// Closing an account is normally immediate and total. It is held only when
+  /// the person is a party to a live proceeding — an article or a report they
+  /// filed, or one brought against them. Until every one of those is decided
+  /// the account is suspended, its profile stays publicly readable, and nothing
+  /// writes to it. When the last proceeding closes, the sweep in
+  /// services/account-closure.ts runs the real deletion and this row goes.
+  ///
+  /// NOT A GRACE PERIOD. There is no undo and no way back in. The hold exists
+  /// for the people voting or being judged alongside them, not for the person
+  /// leaving — Article V §3 says no proceeding may be halted or delayed, and an
+  /// accused who could vanish mid-case would halt one by walking away.
+  deletionRequestedAt DateTime?
+
   banned          Boolean   @default(false)
   banReason       String?
   banExpiresAt    DateTime?
@@ -1620,7 +1635,13 @@ model SystemReset {
   /// platform must not disappear because the person who brought it deleted
   /// theirs. Impeachment cascades from its leader because the proceeding is
   /// meaningless without them; this one is not about its filer.
-  filedById String
+  ///
+  /// NULLABLE, also on purpose. Surviving the filer does not mean keeping a
+  /// piece of them. Closing an account "removes all trace of the user" — an id
+  /// sitting in this column forever is exactly such a trace, and having no
+  /// foreign key meant nothing was ever going to clear it. Deletion nulls it.
+  /// Both readers already render a missing filer as "we no longer know".
+  filedById String?
 
   /// voting | failed | scheduled | executed
   ///

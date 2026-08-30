@@ -28,6 +28,8 @@ import { bugReportsRouter } from "./routes/bug-reports";
 import { auditsRouter } from "./routes/audits";
 import { juriesRouter } from "./routes/juries";
 import { sequestration } from "./middleware/sequestration";
+import { closingAccount } from "./middleware/closing-account";
+import { scheduleAccountClosureSweeps } from "./services/account-closure";
 import { impeachmentsRouter } from "./routes/impeachments";
 import { systemResetRouter } from "./routes/system-reset";
 import { logger } from "hono/logger";
@@ -198,6 +200,12 @@ app.use("*", generalRateLimit);
 // is bypassed by a second browser tab, and a duty that can be bypassed is not
 // a duty.
 app.use("*", sequestration);
+
+// And directly after it, for the same reason and in the same place: an account
+// that has asked to be closed is closed. Its record is only still here because
+// a proceeding it is a party to has not been decided yet, and that is other
+// people's business, not a way back in. See middleware/closing-account.ts.
+app.use("*", closingAccount);
 
 // Apply auth rate limiting to auth routes
 app.use("/api/auth/*", authRateLimit);
@@ -794,6 +802,16 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   // adds is closing the seat properly, so the record says "lapsed" rather than
   // "still sitting" — and that record is what the Trust Score reads.
   scheduleJurySweeps();
+
+  // AND THE ONE THAT FINISHES WHAT THE THREE ABOVE START.
+  //
+  // Somebody who closes their account while they are a party to a live
+  // proceeding is held, not erased — their profile stays readable for the
+  // people voting or being judged alongside them. The moment the last of those
+  // proceedings is decided the hold has no justification left, and keeping the
+  // record any longer is retention Amendment IV does not allow. This is what
+  // notices, and it runs just after the three sweeps that do the deciding.
+  scheduleAccountClosureSweeps();
 }
 
 // Accounts live in Postgres, external to this container, so they survive

@@ -212,6 +212,17 @@ export async function deleteAccount(userId: string): Promise<DeletionOutcome> {
     await notifyFilerLeft("system_reset", reset.id, voters, filerLabel);
   }
 
+  // AND THEN THEIR NAME COMES OFF IT — every reset they filed, open or long
+  // since executed. Having no foreign key kept the proceeding safe and also
+  // meant nothing was ever going to clear this column: the id of somebody who
+  // closed their account sat in it permanently. Both readers already treat a
+  // filer they cannot find as "we no longer know", so this is the honest state
+  // rather than a broken one.
+  await prisma.systemReset.updateMany({
+    where: { filedById: userId },
+    data: { filedById: null },
+  });
+
   // ----------------------------------------------------------------- media
   //
   // Every object they ever uploaded, not only what they posted. Media.userId is

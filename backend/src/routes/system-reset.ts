@@ -78,10 +78,15 @@ systemResetRouter.get("/", async (c) => {
   }
 
   const tally = await tallyOf(reset.id);
-  const filedBy = await prisma.user.findUnique({
-    where: { id: reset.filedById },
-    select: { id: true, name: true, username: true, image: true },
-  });
+  // Null once the filer has closed their account. Not a gap to paper over — the
+  // reset stands on its articles, and "we no longer know who brought it" is the
+  // true answer rather than an invented one.
+  const filedBy = reset.filedById
+    ? await prisma.user.findUnique({
+        where: { id: reset.filedById },
+        select: { id: true, name: true, username: true, image: true },
+      })
+    : null;
 
   const ballot = viewer
     ? await prisma.systemResetBallot.findUnique({

@@ -31,6 +31,17 @@ Before pushing: `bun run verify`. After: `bun run deploy-check`.
 
 ## Settled — do not reopen
 
+- **THE CONSTITUTION IS NOT MINE TO EDIT.** Never change a word of
+  `packages/civic-core/src/constitution.ts` — no article, no amendment, no
+  preamble, no definition — without Khalid saying to, in those words, for that
+  clause. Not to make a clause match the code. Not because the code and the
+  text disagree. Not as a step inside some larger task he approved.
+
+  When they disagree, the code is what is wrong, or it is a decision for him.
+  Say which clause, say what conflicts, and stop. He said it plainly: "I did not
+  say amend the constitution. never ever amend it without express direct
+  permission from me." Rewriting the supreme document to make my own work
+  compliant is the exact move the whole platform exists to make impossible.
 - **Terms of Use / governing jurisdiction.** Closed. Leave the files alone and
   never raise the subject again.
 - **Vibecode.** No longer used for this project. Do not assume it, suggest it,

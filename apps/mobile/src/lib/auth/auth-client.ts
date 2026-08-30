@@ -1,6 +1,6 @@
 import { createAuthClient } from "better-auth/react";
 import { expoClient } from "@better-auth/expo/client";
-import { emailOTPClient } from "better-auth/client/plugins";
+import { emailOTPClient, inferAdditionalFields } from "better-auth/client/plugins";
 import type { BetterAuthClientPlugin } from "better-auth/client";
 import * as SecureStore from "expo-secure-store";
 import { BACKEND_URL } from "@/lib/config";
@@ -36,9 +36,32 @@ const expoPlugin = expoClient({
   storage: SecureStore,
 }) as unknown as BetterAuthClientPlugin;
 
+/**
+ * THE PROFILE FIELDS THE SERVER ALREADY SENDS.
+ *
+ * backend/src/auth.ts declares these under `user.additionalFields`, so every
+ * session response carries them. Neither client told Better Auth that, so the
+ * inferred session user had only Better Auth's built-ins on it — reading
+ * `username` off a session was a type error even though the value was in the
+ * payload.
+ *
+ * Kept identical to apps/web/src/lib/auth-client.ts. The whole reason these
+ * fields live on the server is so both clients read the same values from the
+ * same place; declaring them differently on each side would put the drift back.
+ */
+const sessionProfileFields = {
+  user: {
+    username: { type: "string", required: false },
+    displayUsername: { type: "string", required: false },
+    bio: { type: "string", required: false },
+    location: { type: "string", required: false },
+    role: { type: "string", required: false },
+  },
+} as const;
+
 const client = createAuthClient({
   baseURL: BACKEND_URL,
-  plugins: [expoPlugin, emailOTPClient()],
+  plugins: [expoPlugin, emailOTPClient(), inferAdditionalFields(sessionProfileFields)],
 });
 
 /**

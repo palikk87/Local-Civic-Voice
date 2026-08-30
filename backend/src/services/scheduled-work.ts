@@ -87,6 +87,13 @@ export const FIRST_RUN = {
    * locked out of their own account.
    */
   jury: 85_000,
+  /**
+   * Straight after the three proceeding sweeps above, and deliberately so. They
+   * are what closes an impeachment, a reset and a jury; this is what notices
+   * that the last thing holding a closing account is finally over and finishes
+   * the deletion. Running it before them would just wait another hour.
+   */
+  accountClosure: 88_000,
   /** One local pass plus a few calls. */
   selfHeal: 90_000,
   /** Reads congress.gov lineage for stored records. */

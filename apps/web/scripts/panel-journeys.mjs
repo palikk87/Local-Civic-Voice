@@ -75,15 +75,55 @@ let sharedPage = null;
  */
 async function settle() {
   if (!sharedPage) return;
+
   for (let attempt = 0; attempt < 4; attempt += 1) {
     const open = await sharedPage
       .locator('[role="dialog"], [role="alertdialog"]')
       .count()
       .catch(() => 0);
-    if (open === 0) return;
+    if (open === 0) break;
     await sharedPage.keyboard.press("Escape").catch(() => undefined);
     await sharedPage.waitForTimeout(250);
   }
+
+  /*
+   * THE THING THAT WAS ACTUALLY BREAKING EVERY CLICK.
+   *
+   * Radix sets `pointer-events: none` on <body> while a dialog is open, so the
+   * page behind it cannot be clicked. It removes the style when the dialog
+   * closes — but the close is animated, and the style outlives the element by
+   * the length of that animation.
+   *
+   * Which meant: the first step that opened a dialog succeeded, and every step
+   * after it timed out on `locator.click`. Not because the button was missing —
+   * the diagnostics printed "Role", "Delete paneldoomed" and "Delete the post
+   * by Panel Check Target" as present on screen — but because Playwright waits
+   * for an element to RECEIVE EVENTS, and nothing on that page could.
+   *
+   * Three separate "the admin console is broken" findings, one stale inline
+   * style. Waiting for it to clear is the whole fix.
+   */
+  // THE PAGE MAY ALREADY BE GONE. `step` calls this in a `finally`, so it also
+  // runs after the LAST step — by which point the run is finishing and the
+  // browser may be closing. Tidying up a closed page threw an uncaught
+  // exception out of the whole process, which the harness read as "the journey
+  // process exited 1" AFTER every single journey had passed. A cleanup helper
+  // must never be able to fail a run it was not part of.
+  if (sharedPage.isClosed()) return;
+
+  await sharedPage
+    .waitForFunction(() => document.body.style.pointerEvents !== "none", null, { timeout: 4000 })
+    .catch(async () => {
+      // It never cleared — a dialog that failed to unmount, or an animation
+      // that never ran because the tab was backgrounded. Clear it by hand
+      // rather than let the next thirty steps time out one at a time.
+      await sharedPage
+        .evaluate(() => {
+          document.body.style.pointerEvents = "";
+          document.body.removeAttribute("data-scroll-locked");
+        })
+        .catch(() => undefined);
+    });
 }
 
 async function step(what, fn) {
@@ -107,9 +147,14 @@ async function step(what, fn) {
     } catch {
       // The page may be gone. The message below is still worth having.
     }
+    // THE WHOLE MESSAGE, not its first line. Playwright puts "Timeout 30000ms
+    // exceeded" on line one and the actual REASON — "element is not visible",
+    // "intercepts pointer events", "element is not enabled" — in the call log
+    // underneath. Truncating to the first line threw away the answer and left
+    // three runs reporting nothing but the timeout.
     fail(
       what,
-      `${String(error.message ?? error).split("\n")[0].slice(0, 160)}` +
+      `${String(error.message ?? error).split("\n").slice(0, 8).join("\n        ").slice(0, 700)}` +
         (visible ? `\n        on screen: ${visible}` : ""),
     );
   } finally {
@@ -233,8 +278,21 @@ await step("Role changes the role", async () => {
   await seen(page, victim.username);
   await page.getByRole("button", { name: /^Role$/ }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("combobox").click();
-  await page.getByRole("option").nth(1).click();
+  // A NATIVE <select>, not a Radix popup. Playwright will never click an
+  // <option> — the browser draws that list itself, outside the page, so it is
+  // permanently "not visible" and the click sits there for the full 30s.
+  // `selectOption` is the only way in. This check spent two runs timing out
+  // here because the failure was reported as one line with the reason cut off.
+  const chooser = dialog.getByRole("combobox").first();
+  const slugs = await chooser
+    .locator("option")
+    .evaluateAll((nodes) => nodes.map((node) => node.value));
+  const wanted = slugs.find((slug) => slug && slug !== "user");
+  if (!wanted) {
+    fail("Role changes the role", `the role dialog offered nothing to pick: ${slugs.join(", ")}`);
+    return;
+  }
+  await chooser.selectOption(wanted);
   await dialog.getByRole("button", { name: /save|change|update|set/i }).last().click();
   await page.waitForTimeout(900);
   ok("Role opens, offers the configured roles, and saves");
@@ -258,6 +316,16 @@ await step("Business account converts a citizen", async () => {
   await page.getByRole("button", { name: /^Done$/ }).click().catch(() => undefined);
 });
 
+/**
+ * A confirmation box, whichever kind it is.
+ *
+ * shadcn ships two: `Dialog` (role="dialog") and `AlertDialog`
+ * (role="alertdialog"). `getByRole("dialog")` matches ONLY the first one, so
+ * every confirm built on AlertDialog — both deletes, as it turns out — was
+ * being waited on for 30s against a box that was open the whole time.
+ */
+const confirmBox = (target) => target.locator('[role="alertdialog"], [role="dialog"]').last();
+
 await step("Delete removes the account", async () => {
   await tab(page, "users");
   await page.getByPlaceholder(/search by username/i).fill(doomed.username);
@@ -273,11 +341,21 @@ await step("Delete removes the account", async () => {
   // They carry `aria-label="Delete <who>"` now. That fixes the accessibility
   // hole and gives the test the one thing it actually needs — a way to say
   // WHICH row it means.
+  // The label is `Delete ${user.name || user.username || user.email}` — it
+  // falls back, and these seeded accounts have no display name, so on screen it
+  // reads "Delete paneldoomed". Accept whichever of the three the row settled
+  // on rather than assuming the first one is set.
+  const who = [doomed.name, doomed.username, doomed.email]
+    .filter(Boolean)
+    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
   await page
-    .getByRole("button", { name: new RegExp(`^Delete ${doomed.name}$`, "i") })
+    .getByRole("button", { name: new RegExp(`^Delete (${who})$`, "i") })
+    .first()
     .click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: /delete/i }).last().click();
+  await confirmBox(page)
+    .getByRole("button", { name: /^delete permanently$/i })
+    .click();
 
   const removed = await gone(page, doomed.username);
   expect("the deleted account leaves the list", !!removed, "the row is still on screen");
@@ -317,8 +395,9 @@ await step("Delete removes a post", async () => {
     .getByRole("button", { name: /^Delete the post by /i })
     .first()
     .click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: /delete/i }).last().click();
+  // "Remove post", not "Delete" — the button says what it does to the post,
+  // not what the admin pressed to get here.
+  await confirmBox(page).getByRole("button", { name: /^remove post$/i }).click();
 
   const removed = await gone(page, "Panel check post");
   expect("the deleted post leaves the list", !!removed, "the post is still on screen");
@@ -358,6 +437,14 @@ await step("Fixed marks a bug report fixed", async () => {
 
 await step("a read link can be minted and revoked", async () => {
   await tab(page, "bug-reports");
+
+  // THE SECTION IS COLLAPSED. "Read links" is a disclosure that starts closed,
+  // so the button inside it is not in the DOM until somebody opens it. This
+  // check reported "no button to create a read link is on the page" — which was
+  // true, and read as a missing feature rather than a shut drawer.
+  await page.getByRole("button", { name: /read links/i }).first().click();
+  await page.waitForTimeout(400);
+
   const mint = page.getByRole("button", { name: /create link and copy/i }).first();
   if ((await mint.count()) === 0) {
     fail("a read link can be minted", "no button to create a read link is on the page");
@@ -580,9 +667,17 @@ await step("the log records what just happened", async () => {
 
 await step("Acknowledge clears an incident", async () => {
   await tab(page, "settings");
-  const ack = page.getByRole("button", { name: /acknowledge/i }).first();
+  // THE BUTTON SAYS "Mark seen". This looked for /acknowledge/i, which is the
+  // name of the ENDPOINT, not the word on the screen — so it reported "no
+  // Acknowledge button on the settings tab", which was true and read as a
+  // missing feature. The server assertion then failed for the same reason:
+  // nothing had been pressed.
+  const ack = page.getByRole("button", { name: /^mark seen$/i }).first();
   if ((await ack.count()) === 0) {
-    fail("Acknowledge clears an incident", "no Acknowledge button on the settings tab");
+    fail(
+      "Acknowledge clears an incident",
+      "no 'Mark seen' button on the settings tab — is there an unacknowledged incident?",
+    );
     return;
   }
   await ack.click();
@@ -698,28 +793,45 @@ await step("the B2B portal accepts the credential the console issued", async () 
 
   const seatName = `popseat${Date.now().toString(36)}`;
   await b2b.getByRole("button", { name: /add|new seat|seat/i }).first().click();
-  const fields = b2b.locator("input:visible");
-  const howMany = await fields.count();
-  for (let i = 0; i < Math.min(howMany, 3); i += 1) {
-    const placeholder = (await fields.nth(i).getAttribute("placeholder")) ?? "";
-    if (/user/i.test(placeholder)) await fields.nth(i).fill(seatName);
-    else if (/name/i.test(placeholder)) await fields.nth(i).fill("Panel check seat");
-    else if (/mail/i.test(placeholder)) await fields.nth(i).fill(`${seatName}@population.invalid`);
-  }
+  await b2b.waitForTimeout(400);
+
+  /*
+   * BY ID, NOT BY PLACEHOLDER.
+   *
+   * This walked the visible inputs and matched their PLACEHOLDER text. Only one
+   * field in this form has a placeholder — the optional password — so name,
+   * username and email were never filled, Create submitted an empty required
+   * form, nothing happened, and the check reported "the new seat is not
+   * listed". Which was true, and read as the feature being broken.
+   *
+   * The fields have stable ids and real <label for> associations. Using them
+   * also means this fails loudly if a field is renamed, instead of quietly
+   * filling nothing.
+   */
+  await b2b.locator("#seat-name").fill("Panel check seat");
+  await b2b.locator("#seat-username").fill(seatName);
+  await b2b.locator("#seat-email").fill(`${seatName}@population.invalid`);
+
   await b2b.getByRole("button", { name: /create the seat/i }).click();
+  await b2b.waitForTimeout(900);
 
   const created = await seen(b2b, "Panel check seat");
   expect("Create the seat adds a seat", !!created, "the new seat is not listed");
 
   // Disable it, which is the button whose effect is easiest to get wrong: it
   // must change the row, not merely grey the button out.
-  const disable = b2b.getByRole("button", { name: /^disable$/i }).first();
+  // THE BUTTON SAYS "Turn access off". This looked for /^disable$/i — the name
+  // of the FIELD on B2BMember, not the words on the screen — so it reported
+  // "no Disable button next to the seat", which was true and read as a missing
+  // feature. Third one in this file with the same shape: the check was written
+  // from the data model rather than from the product.
+  const disable = b2b.getByRole("button", { name: /^turn access off$/i }).first();
   if ((await disable.count()) > 0) {
     await disable.click();
     await b2b.waitForTimeout(900);
-    ok("Disable was pressed on the seat");
+    ok("Turn access off was pressed on the seat");
   } else {
-    fail("Disable turns a seat off", "no Disable button next to the seat");
+    fail("Disable turns a seat off", "no 'Turn access off' button next to the seat");
   }
 
   // ---------------------------------------------------------- the downloads

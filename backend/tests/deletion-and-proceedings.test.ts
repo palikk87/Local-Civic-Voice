@@ -465,6 +465,159 @@ describe("the person who FILED a proceeding leaves", () => {
   });
 });
 
+describe("the person who FILED A SYSTEM RESET leaves mid vote", () => {
+  /**
+   * The same rule as an impeachment, applied to the other Article V
+   * proceeding: "proceedings may survive but everyone that's got a right to
+   * vote in the proceedings is notified that the filer has deleted their
+   * profile."
+   *
+   * A reset has no elector roster — every account is entitled to vote — so
+   * "everyone with a right to vote" cannot be listed. The notice goes to
+   * everybody who has actually cast a ballot: the people with something at
+   * stake in this vote, and the only ones the system can name.
+   */
+  async function openReset() {
+    const filer = await citizen("resetfiler");
+    const backer = await citizen("resetbacker");
+    const objector = await citizen("resetobjector");
+
+    const reset = await prisma.systemReset.create({
+      data: {
+        filedById: filer.userId,
+        grounds: "A reason somebody gave.",
+        evidence: "What was pointed at.",
+        status: "voting",
+        eligibleCount: 3,
+        expiresAt: new Date(Date.now() + 7 * DAY),
+      },
+    });
+
+    // One for, one against. The notice is not a recruiting message — it goes
+    // to both sides, because both are voting on the same articles.
+    for (const [person, support] of [
+      [filer, true],
+      [backer, true],
+      [objector, false],
+    ] as const) {
+      await prisma.systemResetBallot.create({
+        data: { resetId: reset.id, voterId: person.userId, support },
+      });
+    }
+
+    return { reset, filer, backer, objector };
+  }
+
+  test("THE RESET SURVIVES THEM, articles and all", async () => {
+    const { reset, filer } = await openReset();
+
+    await deleteAccount(filer.userId);
+
+    const still = await prisma.systemReset.findUnique({ where: { id: reset.id } });
+    expect(still).not.toBeNull();
+    expect(still?.status).toBe("voting");
+    expect(still?.grounds).toBe("A reason somebody gave.");
+    expect(still?.evidence).toBe("What was pointed at.");
+  });
+
+  test("with the filer's name off it", async () => {
+    // The column had no foreign key, which kept the reset safe and also meant
+    // nothing ever cleared it. A departed account's id used to sit here for
+    // good — a trace of somebody who asked for every trace to go.
+    const { reset, filer } = await openReset();
+    await deleteAccount(filer.userId);
+
+    const still = await prisma.systemReset.findUnique({ where: { id: reset.id } });
+    expect(still?.filedById).toBeNull();
+  });
+
+  test("AND EVERY OTHER BALLOT SURVIVES", async () => {
+    const { reset, filer } = await openReset();
+    await deleteAccount(filer.userId);
+
+    // Three were cast. The filer's comes out; the other two are not theirs to
+    // take.
+    const ballots = await prisma.systemResetBallot.findMany({
+      where: { resetId: reset.id },
+      select: { voterId: true },
+    });
+    expect(ballots.length).toBe(2);
+    expect(ballots.some((ballot) => ballot.voterId === filer.userId)).toBe(false);
+  });
+
+  test("AND EVERYONE WITH A BALLOT IN IT IS TOLD", async () => {
+    const { filer, backer, objector } = await openReset();
+    await deleteAccount(filer.userId);
+
+    for (const person of [backer, objector]) {
+      const told = await prisma.notification.count({
+        where: { userId: person.userId, type: "filer_left" },
+      });
+      expect(told).toBe(1);
+    }
+  });
+
+  test("AND THE NOTICE SAYS THEY DELETED THEIR PROFILE, not that they left", async () => {
+    /*
+     * The owner's correction, in their words: "Not just they left that they
+     * deleted their profile." Somebody stepping back from a proceeding and
+     * somebody erasing their account are different facts, and the people still
+     * voting are entitled to the second one.
+     */
+    const { filer, backer } = await openReset();
+    await prisma.user.update({
+      where: { id: filer.userId },
+      data: { username: "resetfiler" },
+    });
+
+    await deleteAccount(filer.userId);
+
+    const notice = await prisma.notification.findFirst({
+      where: { userId: backer.userId, type: "filer_left" },
+    });
+    expect(notice?.title).toBe("@resetfiler deleted their profile");
+    // The articles of a reset are shown to every voter before they vote, so
+    // the filing is public and the notice names them. Same rule as Article V
+    // impeachment: the vote is restricted, the accusation is not.
+    expect(notice?.title).toContain("resetfiler");
+  });
+
+  test("AND NOBODY IS TOLD ABOUT A RESET THAT IS ALREADY DECIDED", async () => {
+    // Nothing left to decide, so there is no decision to inform. The outcome
+    // stands either way.
+    const filer = await citizen("donefiler");
+    const backer = await citizen("donebacker");
+
+    const reset = await prisma.systemReset.create({
+      data: {
+        filedById: filer.userId,
+        grounds: "A reason somebody gave.",
+        evidence: "What was pointed at.",
+        status: "executed",
+        eligibleCount: 2,
+        expiresAt: new Date(Date.now() - DAY),
+        decidedAt: new Date(Date.now() - DAY),
+        executedAt: new Date(Date.now() - DAY),
+      },
+    });
+    await prisma.systemResetBallot.create({
+      data: { resetId: reset.id, voterId: backer.userId, support: true },
+    });
+
+    await deleteAccount(filer.userId);
+
+    const told = await prisma.notification.count({
+      where: { userId: backer.userId, type: "filer_left" },
+    });
+    expect(told).toBe(0);
+
+    // But the name still comes off the concluded reset.
+    const still = await prisma.systemReset.findUnique({ where: { id: reset.id } });
+    expect(still?.filedById).toBeNull();
+    expect(still?.status).toBe("executed");
+  });
+});
+
 describe("leaving after a system reset has run", () => {
   test("THE RESET IS NOT UNDONE", async () => {
     const filer = await citizen("filer");

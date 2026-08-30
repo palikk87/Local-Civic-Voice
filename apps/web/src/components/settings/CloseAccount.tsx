@@ -19,7 +19,7 @@
  * name, because a checkbox is one absent-minded click and this cannot be undone
  * by us, by support, or by anybody.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -28,6 +28,73 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrentUser } from "@/hooks/use-civic-auth";
 
+
+/**
+ * WHAT WOULD HOLD THE RECORD BACK, ASKED BEFORE THEY CONFIRM.
+ *
+ * Amendment IV: the platform "shall state what it protects and how, and shall
+ * claim no protection it does not provide." The line below this used to promise
+ * "We keep no copy" without qualification. That is true for almost everybody
+ * and false for somebody in the middle of a proceeding, and a warning that goes
+ * wrong exactly when the stakes are highest is worse than no warning at all.
+ *
+ * So the screen asks the server first and shows what it is told.
+ */
+interface HoldingProceeding {
+  kind: "impeachment" | "system_reset" | "report";
+  id: string;
+  role: "filed" | "subject";
+  label: string;
+  openedAt: string;
+  expectedBy: string | null;
+}
+
+function HoldNotice({ held }: { held: HoldingProceeding[] }) {
+  if (held.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-4">
+      <p className="text-sm font-semibold text-foreground">
+        Your account will not be erased immediately.
+      </p>
+      <p className="mt-2 text-sm text-foreground/90">
+        You are a party to {held.length === 1 ? "a proceeding" : `${held.length} proceedings`} that
+        {held.length === 1 ? " has" : " have"} not yet been decided. Your account is closed
+        immediately — you are signed out and it cannot be used again — but your profile remains
+        visible to those entitled to see it until {held.length === 1 ? "it is" : "they are"}{" "}
+        concluded, so that the record before them stays complete for the duration of the
+        proceedings.
+      </p>
+
+      <ul className="mt-3 space-y-2 text-sm text-foreground/90">
+        {held.map((one) => (
+          <li key={`${one.kind}-${one.id}`} className="border-l-2 border-amber-500/50 pl-3">
+            <span className="font-medium">{one.label}</span>
+            <span className="block text-xs text-muted-foreground">
+              {one.role === "filed" ? "Brought by you." : "Brought against you."} Opened{" "}
+              {new Date(one.openedAt).toLocaleDateString()}.{" "}
+              {one.expectedBy
+                ? `Currently scheduled to conclude ${new Date(one.expectedBy).toLocaleDateString()}.`
+                : /*
+                   * A report waits on a jury and a jury waits on people, so
+                   * there is no honest date. Saying so beats inventing one.
+                   */
+                  "No scheduled conclusion — it ends when it is decided."}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-3 text-sm font-semibold text-foreground">
+        This closure is final and takes effect immediately; it is not a waiting period, and it
+        cannot be reversed. Your profile remains visible solely for the purposes of the
+        proceedings listed above, and is permanently erased once the last of them has been
+        decided.
+      </p>
+    </div>
+  );
+}
+
 export function CloseAccount() {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
@@ -35,6 +102,27 @@ export function CloseAccount() {
   const [password, setPassword] = useState("");
   const [confirmUsername, setConfirmUsername] = useState("");
   const [working, setWorking] = useState(false);
+  const [held, setHeld] = useState<HoldingProceeding[] | null>(null);
+
+  // Asked when they open the warning, not on every render of the settings page:
+  // nobody needs this answered until they are actually looking at it.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api
+      .get<{ wouldBeHeld: boolean; held: HoldingProceeding[] }>("/api/users/me/closing")
+      .then((answer) => {
+        if (!cancelled) setHeld(answer.held ?? []);
+      })
+      // An unreachable server is not "nothing is holding you". Left null, which
+      // shows the honest line below rather than a false all-clear.
+      .catch(() => {
+        if (!cancelled) setHeld(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   /**
    * What they have to type. Their username if they have one, otherwise their
@@ -46,13 +134,24 @@ export function CloseAccount() {
   const close = async () => {
     setWorking(true);
     try {
-      await api.delete("/api/users/me", {
-        body: JSON.stringify({ password, confirmUsername }),
-        headers: { "Content-Type": "application/json" },
-      });
-      // Nothing to go back to. Straight out, and the session is already dead on
-      // the server.
-      toast.success("Your account is closed.");
+      const answer = await api.delete<{ deleted: boolean; held?: HoldingProceeding[] }>(
+        "/api/users/me",
+        {
+          body: JSON.stringify({ password, confirmUsername }),
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      // Nothing to go back to either way. Straight out, and the session is
+      // already dead on the server.
+      //
+      // The wording follows what actually happened. Saying "closed" flatly when
+      // the profile is still up would be the same untrue promise the warning
+      // was just fixed to stop making.
+      toast.success(
+        answer?.deleted === false
+          ? "Your account is closed. Your profile stays visible until your open proceedings are decided, then it is erased."
+          : "Your account is closed.",
+      );
       window.location.href = "/";
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The account could not be closed.");
@@ -114,10 +213,34 @@ export function CloseAccount() {
             outcomes stand, with your name off them.
           </p>
 
-          <p className="mt-3 text-sm font-semibold text-foreground">
-            We keep no copy. There is no undo, and no support request can bring it back. If
-            you sign up again later it will be a new account, starting at zero.
-          </p>
+          {/*
+            THE PROMISE, MADE ONLY WHERE IT IS TRUE.
+            Amendment IV forbids claiming a protection the platform does not
+            provide. "We keep no copy" is true when nothing is holding the
+            record and false while a proceeding is, so it is said in three
+            different ways depending on which of those the server reports.
+          */}
+          {held === null ? (
+            <p className="mt-3 text-sm font-semibold text-foreground">
+              We could not check whether anything is holding your account right now. There is no
+              undo either way, and no support request can bring it back. If you sign up again
+              later it will be a new account, starting at zero.
+            </p>
+          ) : held.length > 0 ? (
+            <>
+              <HoldNotice held={held} />
+              <p className="mt-3 text-sm font-semibold text-foreground">
+                Once those are decided we keep no copy. There is no undo, and no support request
+                can bring it back. If you sign up again later it will be a new account, starting
+                at zero.
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm font-semibold text-foreground">
+              We keep no copy. There is no undo, and no support request can bring it back. If
+              you sign up again later it will be a new account, starting at zero.
+            </p>
+          )}
 
           <div className="mt-5 space-y-3">
             <div>

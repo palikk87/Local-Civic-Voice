@@ -52,6 +52,11 @@ interface PublicUser {
   isFollowing: boolean;
   /** You follow each other. This platform has no friend request. */
   isFriend?: boolean;
+  /**
+   * WHEN THEY CLOSED THEIR ACCOUNT, if this page is only still here because a
+   * proceeding has not been decided. Null for everybody else.
+   */
+  closingAt?: string | null;
 }
 
 /*
@@ -209,6 +214,33 @@ export default function UserProfile() {
           <ArrowLeft className="mr-1.5 h-4 w-4" />
           Back
         </Button>
+
+        {/*
+          THE PAGE SAYS WHAT IT IS.
+
+          This person has closed their account. The profile is only still up
+          because they are a party to a proceeding nobody has decided yet, and
+          it goes the moment that finishes. Everything on it is frozen — no new
+          posts, no votes, no replies, and no answer to a message.
+
+          Without this line a visitor reads a normal profile and waits for a
+          reply that is never coming, or reads a Trust Score as current when it
+          stopped moving the day they left. The owner's rule for the whole
+          platform: when something is not what it looks like, say so.
+        */}
+        {profile.closingAt ? (
+          <div className="mx-4 mt-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              This account has been closed.
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {profile.displayName} deleted their profile on{" "}
+              {new Date(profile.closingAt).toLocaleDateString()}. It stays visible only until the
+              proceedings they are part of have been decided, and is then erased. Nothing here
+              can change, and they cannot reply.
+            </p>
+          </div>
+        ) : null}
 
         {/* Profile header */}
         <div className="flex flex-col items-center px-4 py-6">

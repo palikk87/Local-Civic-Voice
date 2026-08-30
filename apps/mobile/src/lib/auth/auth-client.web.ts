@@ -1,5 +1,5 @@
 import { createAuthClient } from "better-auth/react";
-import { emailOTPClient } from "better-auth/client/plugins";
+import { emailOTPClient, inferAdditionalFields } from "better-auth/client/plugins";
 import { BACKEND_URL } from "@/lib/config";
 
 // Web-only auth client.
@@ -10,9 +10,23 @@ import { BACKEND_URL } from "@/lib/config";
 // HTTP cookie that the browser sends automatically on every request that uses
 // `credentials: "include"`.
 
+// Same profile fields the native client declares, for the same reason: the
+// server sends them on every session and neither client used to say so, which
+// made reading `username` off a session a type error. Metro picks one of these
+// two files per platform, so they have to agree.
+const sessionProfileFields = {
+  user: {
+    username: { type: "string", required: false },
+    displayUsername: { type: "string", required: false },
+    bio: { type: "string", required: false },
+    location: { type: "string", required: false },
+    role: { type: "string", required: false },
+  },
+} as const;
+
 const client = createAuthClient({
   baseURL: BACKEND_URL,
-  plugins: [emailOTPClient()],
+  plugins: [emailOTPClient(), inferAdditionalFields(sessionProfileFields)],
 });
 
 // The Expo plugin adds `getCookie()` so native code can inject the stored

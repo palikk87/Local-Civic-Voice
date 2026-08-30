@@ -16,7 +16,7 @@
  * responsible default.
  */
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Check, Download, Loader2, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -68,6 +68,94 @@ function Card({
   );
 }
 
+/**
+ * WHAT IS ACTUALLY RUNNING, shown rather than promised.
+ *
+ * The failure this closes: the owner's B2B password changed, the cause was
+ * found and fixed in code, and nobody could say whether the server they were
+ * logging into was running the fixed code. It later turned out the web build
+ * had been failing for a day — the bundle in front of us was old, and the
+ * change everybody was discussing was not on the screen at all.
+ *
+ * `/health` has carried the deployed commit the whole time. Nothing displayed
+ * it, so the question could only be answered by curling an endpoint from a
+ * terminal, which is the same terminal problem the rest of this tab exists to
+ * remove. CLAUDE.md rule 11 — "before debugging a live system, prove it is
+ * running your code" — is not followable if the proof is not reachable.
+ *
+ * "unknown" is a real answer and is printed as one. A commit this deployment
+ * cannot discover is not a commit worth inventing.
+ */
+interface HealthResponse {
+  version: { commit: string; builtAt: string | null };
+  schema: { inSync: boolean; pending: string[]; failed: string[] };
+}
+
+function RunningVersion() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin", "health"],
+    queryFn: () => api.get<HealthResponse>("/health"),
+    // Deliberately not cached for long. The whole point is to answer "is the
+    // fix live yet", asked repeatedly during a deploy.
+    staleTime: 10_000,
+  });
+
+  if (isLoading) {
+    return <p className="text-sm text-muted-foreground">Asking the server…</p>;
+  }
+
+  // The server being unreachable is itself the answer to the question, and is
+  // said plainly instead of being shown as a missing value.
+  if (error || !data) {
+    return (
+      <p className="text-sm text-destructive">
+        The server did not answer. Nothing here can be trusted until it does.
+      </p>
+    );
+  }
+
+  const commit = data.version?.commit ?? "unknown";
+  const schema = data.schema;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <span className="text-sm text-muted-foreground">Serving commit</span>
+        <span className="font-mono text-sm font-semibold text-foreground">
+          {commit === "unknown" ? "unknown" : commit.slice(0, 12)}
+        </span>
+      </div>
+
+      {commit === "unknown" ? (
+        <p className="text-sm text-muted-foreground">
+          This deployment cannot tell which commit it is running. That is worth fixing before
+          the next time somebody needs to know.
+        </p>
+      ) : null}
+
+      {data.version?.builtAt ? (
+        <p className="text-sm text-muted-foreground">
+          Built {new Date(data.version.builtAt).toLocaleString()}
+        </p>
+      ) : null}
+
+      {schema ? (
+        <p className="text-sm text-muted-foreground">
+          {schema.inSync ? (
+            <>The database schema matches this code.</>
+          ) : (
+            <span className="text-destructive">
+              The database does not match this code
+              {schema.failed?.length ? ` — ${schema.failed.length} migration(s) failed` : ""}
+              {schema.pending?.length ? `, ${schema.pending.length} still to apply` : ""}.
+            </span>
+          )}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function MaintenanceTab() {
   const [purge, setPurge] = useState<PurgeResponse["data"] | null>(null);
   const [backfill, setBackfill] = useState<BackfillResponse["data"] | null>(null);
@@ -103,6 +191,14 @@ export function MaintenanceTab() {
 
   return (
     <div className="space-y-5">
+      {/*
+        First on the page on purpose. Every other button here reports what the
+        server did; this says which server, running which code, said it.
+      */}
+      <Card title="What this console is talking to">
+        <RunningVersion />
+      </Card>
+
       <Card title="Official text that is really a block page">
         <p className="text-sm text-muted-foreground">
           The Federal Register serves an anti-scraping page to servers, as HTTP 200. Before the
