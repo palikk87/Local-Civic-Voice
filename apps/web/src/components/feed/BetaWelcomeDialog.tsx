@@ -3,8 +3,20 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TERMS_VERSION } from "@/lib/legal/terms";
+import { api } from "@/lib/api";
+import { useCurrentUser } from "@/hooks/use-civic-auth";
 
-/** What version of the Terms this device has accepted, if any. */
+/**
+ * What version this BROWSER has accepted — for signed-out visitors only.
+ *
+ * Somebody who has not signed in has no profile to record an agreement against,
+ * and re-prompting them on every page load would be its own kind of broken. So
+ * the browser remembers it for them, and the moment they have an account the
+ * server takes over.
+ *
+ * For anybody signed in this is not consulted. Their acceptance lives on their
+ * profile, so it follows them to a new phone instead of being asked again.
+ */
 const ACCEPTED_KEY = "ayeandnay:accepted-terms-version";
 
 /**
@@ -38,7 +50,32 @@ export function BetaWelcomeDialog() {
   const [agreed, setAgreed] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
+  const { isAuthenticated, isLoading } = useCurrentUser();
+
   useEffect(() => {
+    // Wait for the session before deciding. Asking a signed-in person to accept
+    // again, because their session had not resolved yet, is the exact "two
+    // profiles" feeling this is meant to remove.
+    if (isLoading) return;
+    let cancelled = false;
+
+    if (isAuthenticated) {
+      api
+        .get<{ acceptedVersion: string | null }>("/api/users/me/terms")
+        .then((answer) => {
+          if (!cancelled) setShow(answer?.acceptedVersion !== TERMS_VERSION);
+        })
+        // Unreachable server: ask rather than assume. Accepting twice costs a
+        // click; assuming an agreement nobody gave costs more than that.
+        .catch(() => {
+          if (!cancelled) setShow(true);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // Signed out: this browser is the only thing that can remember.
     try {
       if (localStorage.getItem(ACCEPTED_KEY) !== TERMS_VERSION) setShow(true);
     } catch {
@@ -46,7 +83,10 @@ export function BetaWelcomeDialog() {
       // pretend it was accepted.
       setShow(true);
     }
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isLoading]);
 
   useEffect(() => {
     if (!show) return;
@@ -55,10 +95,19 @@ export function BetaWelcomeDialog() {
 
   const accept = () => {
     if (!agreed) return;
-    try {
-      localStorage.setItem(ACCEPTED_KEY, TERMS_VERSION);
-    } catch {
-      // The modal still closes for this session even if we cannot remember it.
+
+    if (isAuthenticated) {
+      // ON THE PROFILE, so it follows them to every device they ever use.
+      // Fire and forget: the modal closes now either way, and a failed write
+      // means they are asked once more rather than silently recorded.
+      void api.post("/api/users/me/terms", { version: TERMS_VERSION }).catch(() => undefined);
+    } else {
+      // No account to record it against yet.
+      try {
+        localStorage.setItem(ACCEPTED_KEY, TERMS_VERSION);
+      } catch {
+        // The modal still closes for this session even if we cannot remember it.
+      }
     }
     setShow(false);
   };

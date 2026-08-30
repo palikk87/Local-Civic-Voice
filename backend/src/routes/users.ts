@@ -1162,6 +1162,57 @@ usersRouter.delete("/me", zValidator("json", deleteMeSchema), async (c) => {
 });
 
 /**
+ * GET  /api/users/me/terms   — which version this person has accepted
+ * POST /api/users/me/terms   — record that they accepted one
+ *
+ * ACCEPTING IS A FACT ABOUT A PERSON, NOT ABOUT A BROWSER.
+ *
+ * This lived in localStorage. Agreeing on a phone left a computer asking again,
+ * clearing a browser erased the agreement, and the platform held no record of
+ * who had accepted what — which for an agreement is the only part worth having.
+ *
+ * Versioned both ways, so a later material change to the Terms re-prompts
+ * rather than being assumed from a yes that has forgotten what it answered.
+ */
+usersRouter.get("/me/terms", async (c) => {
+  const currentUser = c.get("user");
+  // A signed-out visitor has no record to read. Not an error — the modal simply
+  // asks them, and the answer is kept once they have an account to keep it on.
+  if (!currentUser) return c.json({ acceptedVersion: null, acceptedAt: null });
+
+  const me = await prisma.user.findUnique({
+    where: { id: currentUser.id },
+    select: { termsAcceptedVersion: true, termsAcceptedAt: true },
+  });
+
+  return c.json({
+    acceptedVersion: me?.termsAcceptedVersion ?? null,
+    acceptedAt: me?.termsAcceptedAt?.toISOString() ?? null,
+  });
+});
+
+const acceptTermsSchema = z.object({
+  /** The version string the client displayed. Recorded verbatim. */
+  version: z.string().min(1).max(64),
+});
+
+usersRouter.post("/me/terms", zValidator("json", acceptTermsSchema), async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  const { version } = c.req.valid("json");
+
+  await prisma.user.update({
+    where: { id: currentUser.id },
+    // The time is set fresh on every acceptance. Somebody agreeing to a new
+    // version agreed to it today, not on the day they agreed to the last one.
+    data: { termsAcceptedVersion: version, termsAcceptedAt: new Date() },
+  });
+
+  return c.json({ success: true, acceptedVersion: version });
+});
+
+/**
  * GET /api/users/me/closing
  *
  * WHAT WOULD HAPPEN IF THEY CLOSED THEIR ACCOUNT RIGHT NOW.

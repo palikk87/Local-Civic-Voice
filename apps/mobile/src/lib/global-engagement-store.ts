@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { fallbackAvatarFor } from './signed-in-identity';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Global Engagement Store
@@ -123,8 +121,7 @@ function calculateTrendingScore(record: GlobalEngagementRecord): number {
 
 
 export const useGlobalEngagementStore = create<GlobalEngagementState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       // Empty, not fabricated. These used to be seeded with invented
       // engagement numbers and a leaderboard of people who do not exist.
       engagementRecords: {},
@@ -409,16 +406,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
 
         set({ engagementLeaders: leaders });
       },
-    }),
-    {
-      name: 'global-engagement-store',
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        engagementRecords: state.engagementRecords,
-        userVotes: state.userVotes,
-      }),
-    }
-  )
+  })
 );
 
 // Selectors

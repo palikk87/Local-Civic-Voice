@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { currentIdentity, fallbackAvatarFor } from './signed-in-identity';
 // Web port: zustand persist uses localStorage instead of AsyncStorage
 import type { User, Bill } from './types';
@@ -237,8 +236,7 @@ interface TimelineState {
 }
 
 export const useTimelineStore = create<TimelineState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       posts: [],
       isLoading: false,
       feedError: null,
@@ -827,18 +825,7 @@ export const useTimelineStore = create<TimelineState>()(
           }),
         }));
       },
-    }),
-    {
-      name: 'timeline-store',
-      storage: createJSONStorage(() => localStorage),
-      // Posts are deliberately NOT persisted — the backend is their source of truth.
-      // Persisting them would also resurrect the old locally-stored demo posts.
-      partialize: (state) => ({
-        conversations: state.conversations,
-        messages: state.messages,
-      }),
-    }
-  )
+  })
 );
 
 // Selectors

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { fallbackAvatarFor } from './signed-in-identity';
 // Web port: zustand persist uses localStorage instead of AsyncStorage
 
@@ -122,8 +121,7 @@ function calculateTrendingScore(record: GlobalEngagementRecord): number {
 
 
 export const useGlobalEngagementStore = create<GlobalEngagementState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       // Empty, not fabricated. These used to be seeded with invented
       // engagement numbers and a leaderboard of people who do not exist, which
       // rendered as a populated Global Pulse on a platform with no activity.
@@ -414,16 +412,7 @@ export const useGlobalEngagementStore = create<GlobalEngagementState>()(
         // to whatever was there before, which was the mock cast.
         set({ engagementLeaders: leaders });
       },
-    }),
-    {
-      name: 'global-engagement-store',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        engagementRecords: state.engagementRecords,
-        userVotes: state.userVotes,
-      }),
-    }
-  )
+  })
 );
 
 // Selectors

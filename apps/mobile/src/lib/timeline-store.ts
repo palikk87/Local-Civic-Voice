@@ -1,7 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import { currentIdentity, fallbackAvatarFor } from './signed-in-identity';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User, Bill } from './types';
 import { api } from '@/lib/api/api';
 import { fetchServerFeed, type ServerPost } from './server-feed';
@@ -237,8 +235,7 @@ interface TimelineState {
 }
 
 export const useTimelineStore = create<TimelineState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       posts: [],
       isLoading: false,
       feedError: null,
@@ -804,18 +801,7 @@ export const useTimelineStore = create<TimelineState>()(
           }),
         }));
       },
-    }),
-    {
-      name: 'timeline-store',
-      storage: createJSONStorage(() => AsyncStorage),
-      // Posts are deliberately NOT persisted — the backend is their source of truth.
-      // Persisting them would also resurrect the old locally-stored demo posts.
-      partialize: (state) => ({
-        conversations: state.conversations,
-        messages: state.messages,
-      }),
-    }
-  )
+  })
 );
 
 // Selectors

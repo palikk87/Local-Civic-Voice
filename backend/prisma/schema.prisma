@@ -73,6 +73,19 @@ model User {
   //
   // `banExpiresAt` null means permanent. Expiry is evaluated on read rather
   // than swept by a job — see isCurrentlyBanned() in routes/admin.ts.
+  /// WHICH VERSION OF THE TERMS THIS PERSON ACCEPTED, AND WHEN.
+  ///
+  /// It lived in the browser's localStorage and nowhere else. So accepting on a
+  /// phone left a computer asking again, clearing a browser erased the fact
+  /// that somebody had agreed at all, and the platform held no record of who
+  /// had accepted what — which for an agreement is the one thing worth keeping.
+  ///
+  /// Versioned rather than a boolean: a later material change to the Terms has
+  /// to re-prompt, and it cannot do that against a yes/no that has forgotten
+  /// which document it was answering.
+  termsAcceptedVersion String?
+  termsAcceptedAt      DateTime?
+
   /// WHEN THEY ASKED TO BE GONE, if they are not gone yet.
   ///
   /// Closing an account is normally immediate and total. It is held only when
