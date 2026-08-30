@@ -124,8 +124,37 @@ const server = createServer(async (req, res) => {
     res.end(JSON.stringify(body));
   };
 
-  if (path.startsWith("/api/auth/get-session")) return json(null);
-  if (path === "/api/me") return json(null, 401);
+  /**
+   * SIGNED IN OR SIGNED OUT, SWITCHED BY AN ENVIRONMENT VARIABLE.
+   *
+   * This only ever answered "signed out", and that hid a real defect for as
+   * long as the check has existed. The bottom navigation shows FIVE tabs to a
+   * visitor and EIGHT to a citizen — Timeline, Messages and Profile appear once
+   * you are in. Eight labels across a 393px phone is where "Messages" and
+   * "Government" start being cut off, reported from a real phone as "Messa…"
+   * and "Govern…".
+   *
+   * So the check measured the easy half of the product and passed. A screen
+   * nobody signed in ever sees is not the screen to be measuring.
+   */
+  const SIGNED_IN = {
+    user: {
+      id: "fit-check-citizen",
+      name: "Fit Check",
+      username: "fitcheck",
+      email: "fit@check.invalid",
+      emailVerified: true,
+      image: null,
+    },
+    session: { id: "fit-check-session", userId: "fit-check-citizen" },
+  };
+
+  if (path.startsWith("/api/auth/get-session")) {
+    return json(process.env.FIT_SIGNED_IN ? SIGNED_IN : null);
+  }
+  if (path === "/api/me") {
+    return process.env.FIT_SIGNED_IN ? json({ user: SIGNED_IN.user }) : json(null, 401);
+  }
 
   // The populated law pages, answered with the real captured records.
   if (path === `/api/government-references/${BILL_ID}`) return json(FIXTURES);
@@ -230,8 +259,16 @@ async function measure(page) {
      */
     const clipped = [];
     for (const el of document.querySelectorAll("nav a, nav button, [role='tablist'] a, [role='tablist'] button")) {
+      // The desktop sidebar is in the DOM on a phone, hidden by a breakpoint.
+      // Measuring it here reported "Government" as cut off on an iPhone SE
+      // while the phone bar beside it was correctly saying "Gov" — a failure
+      // for a nav no phone ever shows. The overflow scan above already skips
+      // what a reader cannot see; this one has to as well.
+      if (!el.offsetParent && getComputedStyle(el).position !== "fixed") continue;
+
       for (const node of [el, ...el.querySelectorAll("span")]) {
         const style = getComputedStyle(node);
+        if (style.visibility === "hidden" || style.display === "none") continue;
         if (style.textOverflow !== "ellipsis" && style.overflow !== "hidden") continue;
         if (node.scrollWidth <= node.clientWidth + 1) continue;
         const text = (node.textContent || "").trim();

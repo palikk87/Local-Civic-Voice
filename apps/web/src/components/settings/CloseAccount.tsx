@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useCurrentUser } from "@/hooks/use-current-user";
+import { useCurrentUser } from "@/hooks/use-civic-auth";
 
 export function CloseAccount() {
   const navigate = useNavigate();

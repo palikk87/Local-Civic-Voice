@@ -28,19 +28,50 @@ import { publicHandle } from "@/lib/public-identity";
 interface NavItem {
   to: string;
   label: string;
+  /**
+   * What the PHONE bar says, when the full word does not fit in an eighth of a
+   * phone. The sidebar always uses `label`. Omitted means the two are the same.
+   */
+  shortLabel?: string;
   icon: LucideIcon;
   /** Omitted = public. Set = only shown to visitors who hold this capability. */
   capability?: Capability;
 }
 
+/**
+ * SHORT LABELS FOR THE PHONE BAR.
+ *
+ * Signed in there are EIGHT tabs, and eight across a 393px phone leaves each
+ * label 45px. Measured: "Government" needs 60px and "Messages" needs 52px, so
+ * both were rendering as "Govern…" and "Messa…" on every phone. On an iPhone SE
+ * the budget is 36px and "Timeline" and "Discover" went too.
+ *
+ * The truncation itself was deliberate and stays — the label gives way before
+ * the layout does, because the alternative was Safari zooming the whole page
+ * out. But a signpost you cannot read is not doing its job either, and
+ * "Govern…" is not a word.
+ *
+ * So the two long ones get a shorter form used ONLY in the phone bar. The
+ * sidebar has room and keeps the full word, which is the one that has to be
+ * unambiguous. The icon carries the rest of the meaning in the bar.
+ *
+ * phone-fit-check measures this now, signed IN — it only ever ran signed out,
+ * which is a five-tab nav, which is why it passed for as long as it existed.
+ */
 const NAV: NavItem[] = [
   { to: "/feed", label: "Feed", icon: Home },
   { to: "/timeline", label: "Timeline", icon: Newspaper, capability: "viewTimeline" },
   { to: "/library", label: "Library", icon: BookOpen },
   { to: "/discover", label: "Discover", icon: Compass },
   { to: "/people", label: "People", icon: Users },
-  { to: "/messages", label: "Messages", icon: MessageCircle, capability: "viewMessages" },
-  { to: "/government", label: "Government", icon: Landmark },
+  {
+    to: "/messages",
+    label: "Messages",
+    shortLabel: "Inbox",
+    icon: MessageCircle,
+    capability: "viewMessages",
+  },
+  { to: "/government", label: "Government", shortLabel: "Gov", icon: Landmark },
   // "My record" used to sit here. It is on the profile now — where you stood
   // is not a separate destination from who you are, and having it as one meant
   // a profile could be read without ever seeing a single position.
@@ -235,13 +266,29 @@ export function AppShell({
                 // which is why the app arrived shrunken with the layout no
                 // longer lining up with what was painted behind it.
                 "flex min-h-[44px] min-w-0 flex-1 flex-col items-center justify-center",
-                "gap-0.5 px-0.5 py-2 text-[10px] font-medium leading-none transition-colors",
+                // MEASURED, not chosen by eye. Eight tabs on a 320px iPhone SE
+                // leave 40px each. "Discover" and "Timeline" need 42px at 10px
+                // and were still being cut after the two long words got short
+                // forms. At 9px they need ~38px and fit with room.
+                //
+                // The padding goes to zero rather than the type going smaller
+                // still: the tap target is the whole flex item, so nothing gets
+                // harder to hit — only the gap between labels closes up.
+                //
+                // 9px only below sm, where the bar is the only navigation. The
+                // sidebar takes over above it and keeps the full words.
+                "gap-0.5 px-0 py-2 text-[9px] font-medium leading-none transition-colors sm:px-0.5 sm:text-[10px]",
                 active ? "text-accent" : "text-muted-foreground",
               )}
             >
               <Icon className="h-[18px] w-[18px] shrink-0" />
-              {/* The label gives way before the layout does. */}
-              <span className="w-full truncate text-center">{item.label}</span>
+              {/* The label still gives way before the layout does — but it
+                  should not have to. See the note on NAV: the two long words
+                  have a short form here so the bar reads as words rather than
+                  as "Govern…" and "Messa…". */}
+              <span className="w-full truncate text-center">
+                {item.shortLabel ?? item.label}
+              </span>
             </Link>
           );
         })}

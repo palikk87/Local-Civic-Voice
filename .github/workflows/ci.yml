@@ -182,6 +182,19 @@ jobs:
       - run: bun run phone-fit-check
         working-directory: apps/web
 
+      # AND AGAIN SIGNED IN, which is the half that was never measured.
+      #
+      # The bottom navigation shows FIVE tabs to a visitor and EIGHT to a
+      # citizen. Eight across a 393px phone leaves 45px a label, and
+      # "Government" needs 60 — so it rendered as "Govern…" on every phone from
+      # the day it shipped, while this check passed every time because it only
+      # ever ran signed out. A screen nobody signed in ever sees is not the
+      # screen to be measuring.
+      - run: bun run phone-fit-check
+        working-directory: apps/web
+        env:
+          FIT_SIGNED_IN: "1"
+
       # The bug queue has to be able to leave the bug queue. Clicking the real
       # button in a real browser and reading the real clipboard — a button that
       # renders and does nothing is the failure this catches.
