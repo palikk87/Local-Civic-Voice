@@ -135,6 +135,9 @@ export function CitizensBriefCard({
   isStale = false,
   className,
 }: CitizensBriefCardProps) {
+  /** Whether the rewrite button has been pressed once and is asking. */
+  const [confirmingRewrite, setConfirmingRewrite] = useState(false);
+
   const sourceLink = sourceUrl ? (
     <a
       href={sourceUrl}
@@ -219,16 +222,64 @@ export function CitizensBriefCard({
             </p>
           </div>
         </div>
+        {/*
+          REWRITING IS NOT FREE, AND THIS BUTTON USED TO SPEND ON ONE CLICK.
+
+          `onRewrite` asks the server with force=true, which deliberately skips
+          the stored brief — the whole point of "one brief per version of the
+          law, generated once, reused forever" — and pays for a fresh model
+          call. The control was an unlabelled circular arrow in the corner of a
+          card that every reader opens, with an aria-label and no visible text,
+          no tooltip, and nothing between the click and the charge.
+
+          It was spotted by somebody looking at the page for thirty seconds:
+          "if that calls the model it is an unlabelled paid trigger sitting one
+          stray click away". It was. On a card shown for every law, to every
+          reader, that is somebody's bill.
+
+          So: a visible word, a tooltip, and a second click that says what it
+          costs. Two steps rather than a dialog because this card renders inside
+          two different hosts and a native confirm is one Enter key from
+          accepted.
+        */}
         {onRewrite ? (
-          <button
-            type="button"
-            onClick={onRewrite}
-            disabled={isRequesting}
-            aria-label="Rewrite this brief"
-            className="rounded-lg bg-muted p-2 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-          >
-            <RefreshCw className={cn("h-4 w-4", isRequesting && "animate-spin")} />
-          </button>
+          confirmingRewrite ? (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Write it again from the law?
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingRewrite(false);
+                  onRewrite();
+                }}
+                disabled={isRequesting}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50"
+              >
+                Rewrite
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingRewrite(false)}
+                className="rounded-lg px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingRewrite(true)}
+              disabled={isRequesting}
+              aria-label="Rewrite this brief"
+              title="Write this brief again from the law's text"
+              className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              <RefreshCw className={cn("h-4 w-4", isRequesting && "animate-spin")} />
+              Rewrite
+            </button>
+          )
         ) : null}
       </div>
 

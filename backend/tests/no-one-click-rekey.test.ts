@@ -117,6 +117,37 @@ describe("a credential never moves on a single click", () => {
   });
 });
 
+describe("a paid model call never happens on a single click", () => {
+  /**
+   * The same principle as the credential buttons, and found the same night, by
+   * somebody glancing at the page for thirty seconds.
+   *
+   * The Citizen's Brief card carried an unlabelled circular arrow in its
+   * corner, on every law that already had a brief. It called the brief endpoint
+   * with force=true, which deliberately skips the stored brief — the whole
+   * point of "written once, reused forever" — and pays for a fresh model call.
+   * It had an aria-label and no visible text, no tooltip, and nothing between
+   * the click and the charge. On a card every reader opens, that is somebody's
+   * bill, one stray click at a time.
+   */
+  test("rewriting a brief asks first, and says what it is", () => {
+    const source = readFileSync(
+      resolve(REPO, "apps/web/src/components/civic/CitizensBriefCard.tsx"),
+      "utf8",
+    );
+
+    // The visible control opens the confirmation; it does not call onRewrite.
+    expect(source).toContain("setConfirmingRewrite(true)");
+
+    // It says what it is in words, not only to a screen reader.
+    expect(source).toContain('title="Write this brief again from the law\'s text"');
+
+    // And onRewrite is only reachable from inside the confirmation.
+    const direct = /onClick=\{\s*onRewrite\s*\}/;
+    expect(direct.test(source)).toBe(false);
+  });
+});
+
 describe("the backend still refuses to re-key on its own", () => {
   test("only the credentials service writes a password hash", () => {
     // The earlier rule, restated here so that a single test file describes the
