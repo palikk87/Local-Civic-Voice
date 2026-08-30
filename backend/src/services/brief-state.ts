@@ -132,6 +132,44 @@ export async function markSettled(
  * reading this. Without it, every row a deploy interrupted stays a spinner
  * until someone opens it and waits out the timeout.
  */
+/**
+ * Give the button back to every law that was written off by a failed attempt.
+ *
+ * THE DAMAGE THIS REPAIRS. `generateAndStoreBrief` used to record every kind of
+ * failure as contentStatus "unavailable" — an unreachable model, an empty
+ * completion, a fact-check that did not run. `briefState` reads that as "no
+ * source has the text, so there is nothing to write from", which is permanent
+ * and, unlike an abandoned "working" row, is never aged out. The reader is told
+ * a brief is impossible and given no way to ask again.
+ *
+ * Measured against the live library on 2026-08-30: 57 of 60 records held the
+ * full text of the law — one of them 113,624 characters of it — and every one
+ * of those 57 reported that there was nothing to write from. The flagship
+ * feature was dark on 95% of the catalogue, and the cause was transient model
+ * failures recorded as verdicts on the law.
+ *
+ * The call site is fixed so this cannot happen again. This clears the rows it
+ * already happened to. Idempotent by construction: a record with no text is
+ * left exactly as it is, because for that one the verdict is true.
+ *
+ * SAFE TO RUN ON EVERY BOOT. It writes nothing on a healthy library — the
+ * matching set is empty once the rows have been released and re-decided.
+ */
+export async function releaseRetryableUnavailable(): Promise<number> {
+  const { count } = await prisma.governmentReference.updateMany({
+    where: {
+      contentStatus: "unavailable",
+      // The only honest reason to say "unavailable" is that there is no text.
+      // A record holding the law's own text and claiming otherwise is a failed
+      // attempt that was written down as a verdict.
+      fullText: { not: null },
+      NOT: { fullText: "" },
+    },
+    data: { contentStatus: null, contentStartedAt: null },
+  });
+  return count;
+}
+
 export async function releaseAbandonedWork(): Promise<number> {
   const cutoff = new Date(Date.now() - WORK_TIMEOUT_MS);
   const { count } = await prisma.governmentReference.updateMany({

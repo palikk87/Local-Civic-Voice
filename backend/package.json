@@ -14,6 +14,8 @@
     "article-v-scenario": "bun run scripts/article-v-scenario.ts",
     "integrity-audit-scenario": "bun run scripts/integrity-audit-scenario.ts",
     "system-check": "bun run scripts/system-check.ts",
+    "panel-check": "bun run scripts/panel-check.ts",
+    "load-check": "bun run scripts/load-check.ts",
     "sync-roll-calls": "bun run scripts/sync-roll-calls.ts",
     "adjudicate-merges": "bun run scripts/adjudicate-merges.ts",
     "purge-blocked-text": "bun run scripts/purge-blocked-text.ts",

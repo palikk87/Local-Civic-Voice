@@ -35,7 +35,7 @@ import { join, resolve, sep } from "node:path";
 import { storageDriver, UPLOADS_DIR, checkStorage } from "./services/storage";
 import { schemaState } from "./services/schema-state";
 import { officialSources, repairStoredExtractions } from "./services/reference-content";
-import { releaseAbandonedWork } from "./services/brief-state";
+import { releaseAbandonedWork, releaseRetryableUnavailable } from "./services/brief-state";
 
 // Import rate limiters
 import {
@@ -519,6 +519,20 @@ void releaseAbandonedWork()
     }
   })
   .catch((error) => console.error("[Server] could not release abandoned brief work:", error));
+
+// And give the button back to every law a failed attempt wrote off. See
+// releaseRetryableUnavailable — a record holding the text of the law while
+// telling the reader there is nothing to write from is a bug, not a verdict.
+void releaseRetryableUnavailable()
+  .then((released) => {
+    if (released > 0) {
+      console.log(
+        `[Server] ${released} law(s) can be briefed again — they hold their text and had been ` +
+          `written off by a failed attempt`,
+      );
+    }
+  })
+  .catch((error) => console.error("[Server] could not release written-off briefs:", error));
 
 // One-time repair, on the deploy that carries the extraction fix.
 //

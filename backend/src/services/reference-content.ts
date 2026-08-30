@@ -895,8 +895,36 @@ async function generateAndStoreBrief(
   const outcome = await composeBrief(ref.fullText, attended ? undefined : UNATTENDED_BUDGET_MS);
 
   if (outcome.state === "unavailable") {
-    await markSettled(ref.id, "unavailable");
-    console.warn(`[Brief] no brief for ${ref.masterReferenceId}: ${outcome.reason}`);
+    // A FAILED ATTEMPT IS NOT A VERDICT ON THE LAW.
+    //
+    // This used to write "unavailable" for every kind of failure, and
+    // briefState turns that into a permanent "there is nothing to write from"
+    // with no button to ask again — and unlike an abandoned "working" row,
+    // nothing ever ages it out. So one unreachable model, one empty completion,
+    // or one fact-check that did not run took the Citizen's Brief away from
+    // that law for good.
+    //
+    // It was not rare. On 2026-08-30 the live library had 57 of 60 records
+    // holding the full text of the law and telling every reader no brief was
+    // possible — the feature was dark on 95% of the catalogue, and every one of
+    // those records could have been written from the text already stored on it.
+    //
+    // Only `permanent` is a fact about the law itself. Everything else clears
+    // the working state back to idle, which is what puts the button back and
+    // lets the next reader — or the background queue — try again.
+    if (outcome.permanent) {
+      await markSettled(ref.id, "unavailable");
+      console.warn(`[Brief] no brief possible for ${ref.masterReferenceId}: ${outcome.reason}`);
+      return;
+    }
+
+    await prisma.governmentReference.update({
+      where: { id: ref.id },
+      data: { contentStatus: null, contentStartedAt: null },
+    });
+    console.warn(
+      `[Brief] attempt failed for ${ref.masterReferenceId}, will be offered again: ${outcome.reason}`,
+    );
     return;
   }
 

@@ -64,6 +64,30 @@ export type BriefOutcome =
       state: "unavailable";
       reason: string;
       /**
+       * TRUE ONLY WHEN NO LATER ATTEMPT COULD DO BETTER.
+       *
+       * There is one such case and it is a fact about the law: no source
+       * publishes its text, so there is nothing to write a brief from. Every
+       * other way this returns "unavailable" is a fact about ONE ATTEMPT — the
+       * model was unreachable, it returned nothing usable, or the fact-check
+       * did not run. Those are transient by nature and the next reader may well
+       * succeed.
+       *
+       * WHY THE DISTINCTION HAD TO BE MADE EXPLICIT. It was not, and the caller
+       * treated all of them alike: any failure wrote contentStatus
+       * "unavailable" onto the record, briefState reported "unavailable"
+       * forever after, and the reader was told a brief was impossible with no
+       * button to ask again. Nothing ages that verdict out, the way abandoned
+       * "working" rows are aged out. Measured against the live library on
+       * 2026-08-30: 57 of 60 records held the full text of the law — one of
+       * them 113,624 characters of it — and every one of those 57 told the
+       * reader there was nothing to write from.
+       *
+       * So the flagship feature was dark on 95% of the library because of
+       * transient model failures recorded as permanent verdicts.
+       */
+      permanent?: true;
+      /**
        * WHAT ACTUALLY WENT WRONG, in the provider's own words, trimmed.
        *
        * WHY IT IS EXPOSED. This feature has now failed three times, and every
@@ -535,7 +559,9 @@ export async function composeBrief(
   // NO TEXT, NO BRIEF. The single most important line in this file: everything
   // else here exists to make the brief trustworthy, and a brief written without
   // the law is untrustworthy by construction.
-  if (!text) return { state: "unavailable", reason: NO_TEXT_REASON };
+  // The one permanent verdict: no text exists to write from, so no later
+  // attempt can do better until the law itself is published somewhere.
+  if (!text) return { state: "unavailable", reason: NO_TEXT_REASON, permanent: true };
 
   const first = await draftFromText(text);
   if (!first) {
