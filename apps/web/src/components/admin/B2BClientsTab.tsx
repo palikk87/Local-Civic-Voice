@@ -71,6 +71,29 @@ export function B2BClientsTab() {
   const [issued, setIssued] = useState<IssuedCredentials | null>(null);
   const [settingPasswordFor, setSettingPasswordFor] = useState<B2BClient | null>(null);
   const [chosenPassword, setChosenPassword] = useState("");
+  /**
+   * The rotation waiting to be confirmed.
+   *
+   * THE INCIDENT THIS EXISTS FOR. A B2B password stopped working and the person
+   * it belonged to was certain he had not changed it. The backend was already
+   * unable to re-key anybody on its own — that was fixed twice, and it held.
+   * The path that was left is this screen: "Password" and "API key" were plain
+   * buttons that rotated a live credential on a single click, no confirmation,
+   * sitting in the same row as a tier dropdown and wrapping onto two lines on a
+   * narrow window. The only control in the row that asked before acting was
+   * Delete, which is the less severe of the two: a deleted client is obviously
+   * gone, whereas a rotated one looks exactly like a working account that has
+   * started rejecting the right password.
+   *
+   * From the desk of the business paying for the dashboard, that is
+   * indistinguishable from a breach. So the rule this puts back is the one the
+   * project already had for the backend, applied to the UI: a credential moves
+   * only when somebody deliberately says so, naming the account and the
+   * consequence.
+   */
+  const [rotating, setRotating] = useState<{ client: B2BClient; what: "password" | "apiKey" } | null>(
+    null,
+  );
   const [form, setForm] = useState({
     username: "",
     name: "",
@@ -257,7 +280,7 @@ export function B2BClientsTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => rotate.mutate({ id: client.id, what: "password" })}
+                    onClick={() => setRotating({ client, what: "password" })}
                     disabled={rotate.isPending}
                   >
                     <RefreshCw className="mr-2 h-4 w-4" />
@@ -275,7 +298,7 @@ export function B2BClientsTab() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => rotate.mutate({ id: client.id, what: "apiKey" })}
+                    onClick={() => setRotating({ client, what: "apiKey" })}
                     disabled={rotate.isPending}
                   >
                     <KeyRound className="mr-2 h-4 w-4" />
@@ -398,6 +421,61 @@ export function B2BClientsTab() {
 
           <DialogFooter>
             <Button onClick={() => setIssued(null)}>I have copied them</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/*
+        Rotation, confirmed.
+
+        Deliberately NOT window.confirm, which Delete still uses. A browser
+        confirm is one Enter key away from accepted, and several people work
+        this console with a keyboard. This asks for a click on a button that
+        says what it is about to do, to an account it names.
+
+        The consequence is spelled out rather than implied, because the reason
+        this matters is not the new password — it is that every session the
+        client has open stops working at once, and the person on the other end
+        has no way to tell that from being locked out.
+      */}
+      <Dialog open={!!rotating} onOpenChange={(open) => !open && setRotating(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TriangleAlert className="h-5 w-5 text-amber-500" />
+              {rotating?.what === "password" ? "Rotate the password" : "Rotate the API key"}
+            </DialogTitle>
+            <DialogDescription>
+              {rotating ? (
+                <>
+                  This replaces the {rotating.what === "password" ? "password" : "API key"} for{" "}
+                  <span className="font-medium text-foreground">{rotating.client.name}</span>{" "}
+                  with a new one, right now.
+                  {rotating.what === "password"
+                    ? " Every session it has open is signed out, and nobody there will be able to sign in again until you have given them the new password."
+                    : " Anything calling the API with the old key starts failing immediately."}{" "}
+                  The new value is shown once and cannot be recovered. Recorded in the activity log
+                  with your name.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRotating(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={rotate.isPending}
+              onClick={() => {
+                if (!rotating) return;
+                rotate.mutate({ id: rotating.client.id, what: rotating.what });
+                setRotating(null);
+              }}
+            >
+              {rotating?.what === "password" ? "Rotate the password" : "Rotate the API key"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
