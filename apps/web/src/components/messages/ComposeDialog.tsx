@@ -39,9 +39,21 @@ interface Person {
 export function ComposeDialog({
   open,
   onOpenChange,
+  draft,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Something to say, already written, carried into the conversation this
+   * opens. Used by "Send to someone" on a law, which knows what you are
+   * sending before it knows who you are sending it to.
+   *
+   * It is a DRAFT and not a sent message: it lands in the box with the cursor
+   * after it, and nothing goes anywhere until the person presses send. Sending
+   * on somebody's behalf, to a person they only just chose, is putting words in
+   * their mouth.
+   */
+  draft?: string;
 }) {
   const navigate = useNavigate();
   const start = useStartConversation();
@@ -122,7 +134,7 @@ export function ComposeDialog({
        * wrong redirect after a successful write is worse than a failed write,
        * because the person retries something that already happened.
        */
-      navigate(`/conversation/${result.conversation.id}`);
+      navigate(`/conversation/${result.conversation.id}`, draft ? { state: { draft } } : undefined);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "That did not send.");
     }

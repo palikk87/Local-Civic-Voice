@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useLocation } from "react-router-dom";
 import { SharedLinkCard, findSharedLink, textWithoutLink } from "@/components/messages/SharedLink";
 import { ArrowLeft, Send } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -31,7 +31,13 @@ export default function Conversation() {
   const { data, isLoading, isError, error, refetch } = useConversation(id);
   const sendMessage = useSendMessage(id);
 
-  const [draft, setDraft] = useState("");
+  /**
+   * Opened from "Send to someone" on a law, the link is already written. In
+   * router state rather than the URL: a half-written message is not something
+   * to put in an address bar somebody might share.
+   */
+  const handed = (useLocation().state as { draft?: string } | null)?.draft;
+  const [draft, setDraft] = useState(handed ?? "");
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const messages = data?.messages ? [...data.messages].reverse() : [];

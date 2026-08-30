@@ -81,6 +81,7 @@ import {
 import type { Bill as SupabaseBill, Representative as SupabaseRepresentative } from '@/lib/database.types';
 import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 import { PulseBar } from '@/components/PulseBar';
+import CreatePostModal from '@/components/CreatePostModal';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -422,6 +423,21 @@ export default function BillDetailScreen() {
       syncServerVote(id, serverUserVote);
     }
   }, [id, serverUserVote]);
+
+  /**
+   * SHARING THIS LAW TO YOUR OWN TIMELINE — the thing this screen could not do.
+   *
+   * The only share here was the Share2 icon in the header, which opens the
+   * operating system's sheet. That sends the law OUT of AYE & NAY, to a person,
+   * in another app. It is a good thing to have and it stays; it is not the same
+   * act as saying "this one matters to me" where the people who can answer will
+   * see it.
+   *
+   * Web parity: the record page's "Share to your timeline" button. Same
+   * behaviour on both — it opens the composer with the law already attached and
+   * waits. It does not post for you. The words are the reader's.
+   */
+  const [shareToTimeline, setShareToTimeline] = useState(false);
 
   const yeaScale = useSharedValue(1);
   const nayScale = useSharedValue(1);
@@ -778,6 +794,42 @@ export default function BillDetailScreen() {
               ) : null;
             })()}
 
+            {/* Share to your own timeline. Filled and full width, because an
+                action has to look different from the facts printed around it —
+                the same lesson the web record page learned when its share
+                control was rendering as grey 12px text between two counts and
+                the owner of the product could not find it. */}
+            <Animated.View
+              entering={FadeInDown.delay(125).springify()}
+              className="px-4 mb-4"
+            >
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Share ${bill.title} to your timeline`}
+                onPress={() => {
+                  if (!requireAuth('Sign in to share this law.')) return;
+                  if (!billRefData?.reference?.id) return;
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShareToTimeline(true);
+                }}
+                disabled={!billRefData?.reference?.id}
+                className={cn(
+                  'flex-row items-center justify-center py-4 rounded-xl',
+                  billRefData?.reference?.id ? 'bg-amber-500' : 'bg-amber-500/50'
+                )}
+              >
+                <Share2 size={18} color="#0F172A" />
+                <Text className="text-slate-900 font-bold text-base ml-2">
+                  Share to my timeline
+                </Text>
+              </Pressable>
+              <Text className="text-slate-500 text-xs text-center mt-2">
+                {billRefData?.reference?.id
+                  ? 'Opens the composer with this law attached. The words are yours.'
+                  : 'Identifying this document at its official source…'}
+              </Text>
+            </Animated.View>
+
             {/* The three things only this platform can show: who crossed
                 sides and why, what the other side actually wrote, and when
                 opinion moved relative to the text moving. Web parity. */}
@@ -1015,6 +1067,21 @@ export default function BillDetailScreen() {
           </View>
         </SafeAreaView>
       </View>
+
+      {/* The composer, with the law already attached and nothing written.
+          Same modal the Library sheet opens, so a law shared from either place
+          reaches the same screen in the same state. */}
+      {billRefData?.reference?.id ? (
+        <CreatePostModal
+          visible={shareToTimeline}
+          onClose={() => setShareToTimeline(false)}
+          shareMode={{
+            type: 'bill',
+            id: billRefData.reference.id,
+            title: bill.title,
+          }}
+        />
+      ) : null}
     </>
   );
 }

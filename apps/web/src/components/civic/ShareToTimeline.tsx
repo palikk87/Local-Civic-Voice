@@ -61,7 +61,7 @@ export function ShareToTimeline({
   label?: string;
 }) {
   const navigate = useNavigate();
-  const { isAuthenticated } = useCurrentUser();
+  const { isAuthenticated, isLoading, sessionUnavailable } = useCurrentUser();
   const { openAuth } = useAuthUI();
   const [resolving, setResolving] = useState(false);
 
@@ -69,6 +69,30 @@ export function ShareToTimeline({
     // Cards are usually clickable themselves; sharing must not also open the law.
     event.stopPropagation();
     event.preventDefault();
+
+    /*
+     * THIS BUTTON MUST NEVER DO NOTHING.
+     *
+     * It read `sessionUnavailable` as signed out. The hook that returns it says
+     * in its own docstring why that is wrong: when the API cannot be reached,
+     * "you are signed out" and "I could not ask whether you are" became the same
+     * answer, and fifteen routes showed a sign-in wall to people who were
+     * already signed in. This was the sixteenth, and on this button the failure
+     * is worse than a wall — the press produced nothing at all.
+     *
+     * The same goes for the moment before the session has loaded. Pressing then
+     * is not a signed-out press; it is an early one, and it should say so rather
+     * than open a sign-in dialog at somebody who is signed in.
+     */
+    if (sessionUnavailable) {
+      toast.error("Couldn't check whether you're signed in. Try again in a moment.");
+      return;
+    }
+
+    if (isLoading) {
+      toast("Still checking your session — press it again in a second.");
+      return;
+    }
 
     if (!isAuthenticated) {
       openAuth("Sign in to share this to your timeline");

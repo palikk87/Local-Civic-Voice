@@ -1219,10 +1219,11 @@ governmentReferencesRouter.delete("/:id/vote", async (c) => {
 governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchema), async (c) => {
   const referenceId = c.req.param("id");
   const { limit, cursor } = c.req.valid("query");
+  const viewerId = c.get("user")?.id;
 
   const reference = await prisma.governmentReference.findUnique({
     where: { id: referenceId },
-    select: { id: true, mergedIntoId: true },
+    select: { id: true, mergedIntoId: true, referenceType: true, title: true },
   });
 
   if (!reference) {
@@ -1266,8 +1267,21 @@ governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchem
           comments: true,
           likes: true,
           shares: true,
+          reposts: true,
         },
       },
+      // WHO HAS ALREADY LIKED IT — for this reader only, one row at most.
+      // Without it a like button cannot render its own state, so the card
+      // either lies about whether you have liked something or does not offer
+      // the button at all. This endpoint offered neither, and that is why the
+      // record page had no conversation on it: the payload could not satisfy
+      // the app's own Post type, so the section was imported and never built.
+      ...(viewerId
+        ? {
+            likes: { where: { userId: viewerId }, select: { id: true }, take: 1 },
+            reposts: { where: { authorId: viewerId }, select: { id: true }, take: 1 },
+          }
+        : {}),
     },
   });
 
@@ -1279,6 +1293,12 @@ governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchem
     posts: results.map((post) => ({
       id: post.id,
       content: post.content,
+      // THE LAW THIS POST IS ABOUT. Every post here is about this record by
+      // definition, and the client's Post type requires it — a card with no
+      // reference cannot show what is being discussed, or link back to it.
+      referenceType: reference.referenceType,
+      referenceId: referenceId,
+      referenceTitle: reference.title,
       author: {
         id: post.author.id,
         displayName: post.author.name,
@@ -1295,6 +1315,13 @@ governmentReferencesRouter.get("/:id/posts", zValidator("query", paginationSchem
       commentsCount: post._count.comments,
       likesCount: post._count.likes,
       sharesCount: post._count.shares,
+      repostsCount: post._count.reposts,
+      isLiked: Array.isArray((post as { likes?: unknown[] }).likes)
+        ? ((post as { likes: unknown[] }).likes.length > 0)
+        : false,
+      isRepostedByMe: Array.isArray((post as { reposts?: unknown[] }).reposts)
+        ? ((post as { reposts: unknown[] }).reposts.length > 0)
+        : false,
       createdAt: post.createdAt.toISOString(),
     })),
     nextCursor,

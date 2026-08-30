@@ -45,6 +45,33 @@ const REFERENCE = {
   briefState: "idle",
   supportVotes: 0,
   opposeVotes: 0,
+  // The two shapes the page reads straight off the record without guarding:
+  // votes.total (the vote panel) and engagement.comments (the counts row).
+  // Neither was in this fixture, so the record page threw into its error
+  // boundary and this check spent its whole run asserting against "Something
+  // went wrong". A stub gap rather than a product bug — but a stub gap that
+  // made the check unable to see the button it exists to press, which is
+  // exactly the failure mode it was written to catch.
+  votes: { support: 0, oppose: 0, total: 0 },
+  engagement: { comments: 0, shares: 0, posts: 0 },
+};
+
+/** One person, already talking about this law. */
+const CONVERSATION_POST = {
+  id: "post_conversation_1",
+  content: "This one changes what my VA clinic can bill for. Worth reading past the title.",
+  author: { id: "u2", displayName: "Dana Whitfield", username: "dwhitfield", avatar: null },
+  referenceType: "bill",
+  referenceId: REFERENCE_ID,
+  referenceTitle: "Veterans Healthcare Improvement Act",
+  media: [],
+  commentsCount: 2,
+  likesCount: 4,
+  isLiked: false,
+  repostsCount: 1,
+  isRepostedByMe: false,
+  repostOf: null,
+  createdAt: new Date().toISOString(),
 };
 
 const server = createServer(async (req, res) => {
@@ -76,6 +103,38 @@ const server = createServer(async (req, res) => {
   if (path.startsWith("/api/auth/get-session")) {
     return json({ user: { id: "u1", name: "Test Reader", email: "reader@example.com" }, session: { id: "s1" } });
   }
+  // The law page fans out to several endpoints on load. A generic
+  // {results,bills,posts} answered them all and crashed the page into its error
+  // boundary, so the share button was never on screen to be clicked — which is
+  // how a check meant to press it ended up proving nothing.
+  if (/\/api\/government-references\/[^/]+\/vote-details$/.test(path)) {
+    return json({
+      support: { total: 0, direct: 0, delegated: 0 },
+      oppose: { total: 0, direct: 0, delegated: 0 },
+      total: 0,
+    });
+  }
+  if (/\/api\/government-references\/[^/]+\/(pulse-history|turning-points)$/.test(path)) {
+    return json({ points: [], history: [] });
+  }
+  if (/\/api\/government-references\/[^/]+\/other-side$/.test(path)) {
+    return json({ posts: [] });
+  }
+  // The conversation under the record. One post, because the thing being
+  // proved is not that a list renders — it is that what renders is a post you
+  // can reply to and like. An empty list would pass a "the section exists"
+  // check while the section itself did nothing.
+  if (/\/api\/government-references\/[^/]+\/posts$/.test(path)) {
+    return json({ posts: [CONVERSATION_POST] });
+  }
+  if (/\/api\/government-references\/[^/]+\/representation-gap$/.test(path)) {
+    return json({ gap: null });
+  }
+  if (path.startsWith("/api/audits")) return json({ audits: [], audit: null });
+  if (path.startsWith("/api/juries")) return json({ juries: [], seat: null });
+  if (path.startsWith("/api/notifications")) return json({ preferences: {}, notifications: [], unread: 0 });
+  if (path.startsWith("/api/delegations")) return json({ receipts: [], delegations: [] });
+
   if (path.startsWith("/api/")) return json({ results: [], bills: [], posts: [] });
 
   let file = join(DIST, path === "/" ? "index.html" : path);
@@ -97,13 +156,196 @@ const failures = [];
 
 function check(label, condition, detail) {
   const ok = !!condition;
-  console.log(`${ok ? "ok  " : "FAIL"} ${label}${detail ? `  — ${detail}` : ""}`);
+  // The detail is the diagnosis of a failure, so it only prints on one. Printed
+  // beside a pass it reads as a contradiction — "ok ... — no share button".
+  console.log(`${ok ? "ok  " : "FAIL"} ${label}${!ok && detail ? `  — ${detail}` : ""}`);
   if (!ok) failures.push(label);
 }
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+const pageErrors = [];
+page.on("pageerror", (e) => pageErrors.push(String(e.message).slice(0, 200)));
+page.on("requestfailed", (r) => pageErrors.push(`failed: ${r.url().slice(-70)} ${r.failure()?.errorText}`));
+page.on("console", (m) => {
+  if (m.type() === "error") pageErrors.push(`console: ${m.text().slice(0, 300)}`);
+});
 await acceptTermsBeforeLoad(page);
 await routeApiToLocal(page, base);
+
+// ---------------------------------------------------------------------------
+// THE HALF THIS CHECK WAS MISSING, AND IT IS THE HALF THAT BROKE.
+//
+// Everything below used to start here, by navigating STRAIGHT to
+// /timeline?share=<id>. That proves the destination works and proves nothing
+// about whether anything gets you there — so when the share button on the law
+// page stopped doing anything at all, this check went on passing.
+//
+// Reported from the live site and confirmed with a real coordinate click: the
+// control is present, enabled, correctly labelled, wired to a handler, and
+// pressing it produced no navigation, no network request and no error. A test
+// asserting the button exists passes that. A test asserting the URL changes
+// after clicking it does not.
+// ---------------------------------------------------------------------------
+
+await page.goto(`${base}/reference/${REFERENCE_ID}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+
+const shareButton = page.getByRole("button", { name: /share .* to your timeline/i }).first();
+if ((await shareButton.count()) === 0 && process.env.SHARE_CHECK_DEBUG) {
+  console.log("PAGE TEXT:", (await page.evaluate(() => document.body.innerText)).slice(0, 600));
+  console.log("ERRORS:", pageErrors.filter((e) => !/display=swap|ERR_CONNECTION_RESET/.test(e)).slice(0, 8));
+  console.log("BUTTONS:", await page.evaluate(() =>
+    [...document.querySelectorAll("button")].map((b) => b.getAttribute("aria-label") || b.innerText.trim()).slice(0, 25)));
+}
+check("the law page offers a share control", (await shareButton.count()) > 0, "no share button");
+
+const resolvesBefore = resolves.length;
+const postsBefore = posts.length;
+await shareButton.click();
+
+// The whole point: the address has to change. Polled rather than asserted once,
+// because the handler resolves the law before it navigates.
+//
+// It waits for /timeline and NOT for share= in the address. The parameter is
+// deliberately consumed on arrival — the last check in this file is the one
+// that pins that — so testing for it here is a race the product wins about half
+// the time. What matters is where the reader ends up, and what is waiting for
+// them when they get there.
+let arrived = false;
+for (let i = 0; i < 40 && !arrived; i += 1) {
+  arrived = page.url().includes("/timeline");
+  if (!arrived) await page.waitForTimeout(250);
+}
+
+check(
+  "PRESSING IT ACTUALLY GOES SOMEWHERE",
+  arrived,
+  `after clicking, the address was still ${page.url()}`,
+);
+
+check(
+  "and it resolved the law to its master record on the way",
+  resolves.length > resolvesBefore,
+  `resolve calls: ${resolves.length - resolvesBefore}`,
+);
+
+// AND WHAT IT WENT THERE FOR IS ON THE SCREEN.
+//
+// Arriving at /timeline is not the outcome; arriving with the law already
+// attached to a composer is. A share that navigates and drops the law is a
+// button that "works" and does nothing, which is the exact failure this file
+// was rewritten to stop passing.
+let landedWithTheLaw = 0;
+for (let i = 0; i < 24 && landedWithTheLaw === 0; i += 1) {
+  landedWithTheLaw = await page.getByText(REFERENCE.title).count();
+  if (landedWithTheLaw === 0) await page.waitForTimeout(250);
+}
+
+check(
+  "AND THE LAW IS WAITING IN THE COMPOSER WHEN IT GETS THERE",
+  landedWithTheLaw > 0,
+  "landed on the timeline with nothing attached",
+);
+
+check(
+  "pressing share still did not post anything for the reader",
+  posts.length === postsBefore,
+  `posts=${JSON.stringify(posts.slice(postsBefore))}`,
+);
+
+// ---------------------------------------------------------------------------
+// PRESENT IS NOT THE SAME AS FINDABLE.
+//
+// The control was there the whole time and the owner of the product could not
+// see it. Measured on the live site: colour rgb(143,168,156), 12px, no
+// background, no outline — the same colour and the same size as the "0
+// comments" and "0 shares" counts sitting beside it. Nothing separated the one
+// item you can press from the two you cannot.
+//
+// "The button exists" passed that. So this asserts the thing that was actually
+// wrong: an action has to look different from the facts printed next to it.
+// ---------------------------------------------------------------------------
+
+await page.goto(`${base}/reference/${REFERENCE_ID}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+
+const looks = await page.evaluate(() => {
+  const share = [...document.querySelectorAll("button")].find((b) =>
+    /to your timeline/i.test(b.getAttribute("aria-label") ?? ""),
+  );
+  if (!share) return null;
+
+  const count = [...document.querySelectorAll("a, span")].find((n) =>
+    /\d+\s+comments/i.test(n.textContent ?? ""),
+  );
+  if (!count) return { shareOnly: true };
+
+  const s = getComputedStyle(share);
+  const c = getComputedStyle(count);
+  const opaque = (v) => v && v !== "transparent" && !/rgba\(0,\s*0,\s*0,\s*0\)/.test(v);
+
+  return {
+    sameColour: s.color === c.color,
+    sameSize: s.fontSize === c.fontSize,
+    filled: opaque(s.backgroundColor),
+    outlined: s.borderTopWidth !== "0px",
+    heavier: parseInt(s.fontWeight, 10) > parseInt(c.fontWeight, 10),
+    share: { color: s.color, fontSize: s.fontSize, background: s.backgroundColor },
+    count: { color: c.color, fontSize: c.fontSize },
+  };
+});
+
+check("the share control and the comment count are both on the page", !!looks, "one of them is missing");
+
+if (looks && !looks.shareOnly) {
+  check(
+    "THE SHARE CONTROL DOES NOT LOOK LIKE A DEAD COUNT",
+    looks.filled || looks.outlined || !looks.sameColour || looks.heavier,
+    `share ${JSON.stringify(looks.share)} vs count ${JSON.stringify(looks.count)} — ` +
+      `same colour: ${looks.sameColour}, same size: ${looks.sameSize}, ` +
+      `filled: ${looks.filled}, outlined: ${looks.outlined}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// THE CONVERSATION THE COUNT HAD BEEN ADVERTISING WITH NO WAY IN.
+//
+// "0 comments" sat on this page as a number with nowhere to go. The posts
+// existed — the endpoint had always returned them — but the record page never
+// asked for them, so the count was pointing at something the reader could not
+// reach. The section below is that something, and these checks are about what
+// a reader can DO once they are in it, not that a heading rendered.
+// ---------------------------------------------------------------------------
+
+const conversation = await page.evaluate(() => !!document.querySelector("#conversation"));
+check("the page offers the conversation its comment count refers to", conversation, "no #conversation section");
+
+const inside = await page.evaluate(() => {
+  const section = document.querySelector("#conversation");
+  if (!section) return null;
+  const named = (label) =>
+    [...section.querySelectorAll("button, a")].filter(
+      (n) => (n.getAttribute("aria-label") ?? "").toLowerCase() === label,
+    ).length;
+  return {
+    showsThePost: /Dana Whitfield/.test(section.textContent ?? ""),
+    like: named("like"),
+    comment: named("comment"),
+    repost: named("repost"),
+  };
+});
+
+check("a post about this law shows up under it", inside?.showsThePost, JSON.stringify(inside));
+check("and it can be liked from here", (inside?.like ?? 0) > 0, `like controls: ${inside?.like}`);
+check("and replied to from here", (inside?.comment ?? 0) > 0, `comment controls: ${inside?.comment}`);
+check("and passed on from here", (inside?.repost ?? 0) > 0, `repost controls: ${inside?.repost}`);
+
+// Sharing to a PERSON, which is the other half of what share means and had no
+// control anywhere on this page.
+const toSomeone = await page
+  .getByRole("button", { name: /^send .+ to someone$/i })
+  .count();
+check("the law can also be sent to a person, not only to a timeline", toSomeone > 0, `matches=${toSomeone}`);
 
 // The composer, reached the way a share arrives: with a law already resolved.
 await page.goto(`${base}/timeline?share=${REFERENCE_ID}`, { waitUntil: "networkidle" });

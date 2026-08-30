@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import type { Post } from "@/lib/civic";
 import {
   ArrowLeft,
   ExternalLink,
@@ -8,6 +11,7 @@ import {
   Clock,
   Hash,
   MessageSquare,
+  Send,
   Share2,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
@@ -19,7 +23,8 @@ import { IntegrityAuditPanel } from "@/components/audit/IntegrityAuditPanel";
 import { OtherSide } from "@/components/civic/OtherSide";
 import { PulseHistory } from "@/components/civic/PulseHistory";
 import { TurningPoints } from "@/components/civic/TurningPoints";
-import { CommentThread } from "@/components/feed/CommentThread";
+import { PostCard } from "@/components/feed/PostCard";
+import { ComposeDialog } from "@/components/messages/ComposeDialog";
 import {
   ReferenceTypeBadge,
   CategoryBadge,
@@ -31,6 +36,99 @@ import { RepresentationGapPanel } from "@/components/civic/RepresentationGapPane
 import { ShareToTimeline, type ShareBranch } from "@/components/civic/ShareToTimeline";
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import { useIsWide } from "@/hooks/use-is-wide";
+
+/**
+ * Send this law to one person.
+ *
+ * "Share to your timeline" puts it in front of everybody; this puts it in front
+ * of somebody. Both were asked for and only the first existed — the record page
+ * had no way to reach one person at all, which is the thing you most want at
+ * the moment you have just read a law and thought of who needs to see it.
+ *
+ * It writes the draft and picks nobody. The message is not sent; the composer
+ * opens with the link in the box, and the reader chooses the person and presses
+ * send themselves.
+ */
+function SendToSomeone({ reference }: { reference: { id: string; title: string } }) {
+  const [open, setOpen] = useState(false);
+  const link = `${window.location.origin}/reference/${reference.id}`;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Send ${reference.title} to someone`}
+        className="inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent/15"
+      >
+        <Send className="h-4 w-4" />
+        Send to someone
+      </button>
+      <ComposeDialog open={open} onOpenChange={setOpen} draft={`${reference.title}\n${link}`} />
+    </>
+  );
+}
+
+/**
+ * THE CONVERSATION THIS PAGE HAD BEEN ADVERTISING.
+ *
+ * The record page printed a comment count and offered no way to join — no like,
+ * no reply, nothing. The lightweight feed card had all three. So the page where
+ * somebody has actually read the law, read the brief and taken a position was
+ * the one place they could not say anything about it, which is the loop
+ * breaking at its most valuable moment.
+ *
+ * CommentThread was imported at the top of this file and never rendered, which
+ * is the shape of the original intent: the section was planned and never built.
+ * It could not have been, either — GET /:id/posts returned a payload the app's
+ * own Post type cannot satisfy, with no reference fields and no isLiked, so a
+ * card rendered from it would have had a like button that could not know
+ * whether you had liked it. That endpoint now returns the feed's shape.
+ *
+ * These are POSTS ABOUT THE LAW, not comments on the law. That is the real
+ * model — a law is not a thing you reply to, it is a thing people write about —
+ * and every post here carries its own replies and likes, which is where the
+ * count on this page comes from.
+ */
+function Conversation({ referenceId }: { referenceId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["reference-posts", referenceId],
+    queryFn: () => api.get<{ posts: Post[] }>(`/api/government-references/${referenceId}/posts`),
+  });
+
+  const posts = data?.posts ?? [];
+
+  return (
+    <section id="conversation" className="mt-8 scroll-mt-20">
+      <h2 className="mb-1 text-lg font-bold text-foreground">What people are saying</h2>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Posts about this law. Reply to one, or share the law to your timeline to start your own.
+      </p>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-28 w-full rounded-2xl" />
+          <Skeleton className="h-28 w-full rounded-2xl" />
+        </div>
+      ) : posts.length === 0 ? (
+        /* An honest empty state. Nobody has written about this yet, and saying
+           so is a finished feature — the invitation is the share button above. */
+        <div className="rounded-2xl border border-border bg-secondary/30 p-6 text-center">
+          <MessageSquare className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">
+            Nobody has written about this one yet. Share it to your timeline and you will be first.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {posts.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function MetaRow({
   icon: Icon,
@@ -234,19 +332,39 @@ export default function ReferenceDetail() {
                 </p>
               ) : null}
 
+              {/*
+                THE COUNTS AND THE ACTION ARE NOT THE SAME KIND OF THING.
+
+                They used to sit in one row, inheriting one colour. Measured on
+                the live site: the share control rendered at rgb(143,168,156)
+                and 12px — the same colour and the same size as the two counts
+                beside it, with no fill and no outline. Nothing separated the
+                one item you can press from the two you cannot, and the owner of
+                the product could not find it. His words, once given the pixel
+                coordinates: "ok now I see them."
+
+                A count is a fact. A share is an offer. So the facts stay quiet
+                and the offer looks like something you can press.
+
+                The comment count is now a link to the conversation rather than
+                a number with nowhere to go — see the section below, which is
+                the thing it had been advertising all along.
+              */}
               <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                <span className="inline-flex items-center gap-1.5">
+                <a
+                  href="#conversation"
+                  className="inline-flex items-center gap-1.5 rounded transition-colors hover:text-foreground"
+                >
                   <MessageSquare className="h-4 w-4" />
                   {reference.engagement.comments} comments
-                </span>
+                </a>
                 <span className="inline-flex items-center gap-1.5">
                   <Share2 className="h-4 w-4" />
                   {reference.engagement.shares} shares
                 </span>
+              </div>
 
-                {/* The count was here and the button was not, on the one screen
-                    where somebody has actually read the law. It lived on the
-                    older /bill/:id page and on the Discover cards. */}
+              <div className="mt-4 flex flex-wrap items-center gap-2">
                 <ShareToTimeline
                   target={{
                     branch: BRANCH_OF[reference.referenceType],
@@ -255,7 +373,9 @@ export default function ReferenceDetail() {
                     sourceUrl: reference.sourceUrl ?? undefined,
                   }}
                   label="Share to your timeline"
+                  className="!bg-accent !px-4 !py-2 !text-sm !font-semibold !text-slate-900 hover:!bg-accent/90 hover:!text-slate-900"
                 />
+                <SendToSomeone reference={reference} />
               </div>
 
               <Separator className="my-6" />
@@ -375,6 +495,10 @@ export default function ReferenceDetail() {
                   </Button>
                 ) : null}
               </div>
+
+              {/* Last, deliberately: you say something about a law after you
+                  have read it, not before. */}
+              <Conversation referenceId={reference.id} />
             </article>
 
             {/* Vote sidebar */}
