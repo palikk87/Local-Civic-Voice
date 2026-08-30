@@ -291,7 +291,6 @@ export default function ReferenceDetail() {
                 reason={citizenBrief.reason}
                 isRequesting={citizenBrief.isRequesting}
                 onRequest={citizenBrief.request}
-                onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
                 isStale={briefIsStale}
                 sourceUrl={reference.fullTextUrl ?? reference.sourceUrl}
                 sourceLabel="View the official text"

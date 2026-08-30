@@ -36,7 +36,6 @@ export interface CitizensBriefCardProps {
   reason?: string | null;
   isRequesting?: boolean;
   onRequest: () => void;
-  onRewrite?: () => void;
   /** What the brief would summarize, for the empty state's one-liner. */
   emptyDescription?: string;
   /** Link to the official document — the source everything here came from. */
@@ -119,7 +118,6 @@ export function CitizensBriefCard({
   reason,
   isRequesting = false,
   onRequest,
-  onRewrite,
   emptyDescription = 'A plain-English summary of this law, written only from its full official text — plus the case for it and the case against it',
   sourceUrl,
   sourceLabel = 'Read the full official text',
@@ -201,18 +199,13 @@ export function CitizensBriefCard({
               </Text>
             </View>
           </View>
-          {onRewrite ? (
-            <Pressable
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onRewrite();
-              }}
-              disabled={isRequesting}
-              className="p-2 rounded-lg bg-white/10"
-            >
-              <RefreshCw size={18} color="#9CA3AF" />
-            </Pressable>
-          ) : null}
+          {/* NO REWRITE CONTROL — see apps/web CitizensBriefCard for the
+              reasoning. Every reader sees the same brief for a given version of
+              the law, and a control that replaces the stored copy breaks that
+              for everyone else reading it. On this screen it was also still the
+              bare unlabelled icon with no confirmation at all: the web fix
+              never reached here, which is the two-of-three pattern this project
+              keeps repeating. */}
         </View>
 
         {isStale ? (

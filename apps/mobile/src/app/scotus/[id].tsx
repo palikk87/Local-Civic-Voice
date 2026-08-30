@@ -592,7 +592,6 @@ export default function SupremeCourtDetailScreen() {
                   reason={citizenBrief.reason}
                   isRequesting={citizenBrief.isRequesting}
                   onRequest={citizenBrief.request}
-                  onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
                   emptyDescription={"A plain-English summary of this opinion, written only from its complete official text — plus the case for it and the case against it"}
                   sourceUrl={scotusCase.courtListenerUrl}
                   sourceLabel={'Read the full opinion on CourtListener'}

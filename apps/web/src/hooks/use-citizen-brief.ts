@@ -50,9 +50,21 @@ export interface CitizenBrief {
   isRequesting: boolean;
   /** Press me. */
   request: () => void;
-  /** Rewrite a brief that is already stored. */
-  rewrite: () => void;
 }
+
+/*
+ * THERE IS NO `rewrite` HERE, DELIBERATELY.
+ *
+ * It existed, and it forced regeneration — which replaces the stored
+ * brief. The rule is that every reader sees the same brief for a given version
+ * of the law, and a control that lets one reader replace it breaks that for
+ * everybody else looking at the same law, silently, including people reading it
+ * at that moment.
+ *
+ * `start` still takes a force flag because the server legitimately needs one
+ * when the law itself changes. Nothing in the client passes true, and nothing
+ * should: regenerating on demand belongs to whoever runs the platform.
+ */
 
 export interface UseCitizenBriefOptions {
   /** A brief already on the reference, so a stored one shows without a request. */
@@ -220,6 +232,5 @@ export function useCitizenBrief(
     reason,
     isRequesting,
     request: useCallback(() => start(false), [start]),
-    rewrite: useCallback(() => start(true), [start]),
   };
 }

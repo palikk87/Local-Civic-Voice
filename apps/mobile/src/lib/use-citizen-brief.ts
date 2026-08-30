@@ -50,8 +50,6 @@ export interface CitizenBrief {
   isRequesting: boolean;
   /** Press me. */
   request: () => void;
-  /** Rewrite a brief that is already stored. */
-  rewrite: () => void;
 }
 
 export interface UseCitizenBriefOptions {
@@ -180,6 +178,5 @@ export function useCitizenBrief(
     reason,
     isRequesting,
     request: useCallback(() => start(false), [start]),
-    rewrite: useCallback(() => start(true), [start]),
   };
 }

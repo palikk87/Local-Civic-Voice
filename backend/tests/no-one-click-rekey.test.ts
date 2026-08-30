@@ -117,34 +117,65 @@ describe("a credential never moves on a single click", () => {
   });
 });
 
-describe("a paid model call never happens on a single click", () => {
+describe("every reader sees the same brief", () => {
   /**
-   * The same principle as the credential buttons, and found the same night, by
-   * somebody glancing at the page for thirty seconds.
+   * THE RULE, in the owner's words: "every single user should have the same
+   * exact brief."
    *
-   * The Citizen's Brief card carried an unlabelled circular arrow in its
-   * corner, on every law that already had a brief. It called the brief endpoint
-   * with force=true, which deliberately skips the stored brief — the whole
-   * point of "written once, reused forever" — and pays for a fresh model call.
-   * It had an aria-label and no visible text, no tooltip, and nothing between
-   * the click and the charge. On a card every reader opens, that is somebody's
-   * bill, one stray click at a time.
+   * There was a control on the card that replaced it. It began as an unlabelled
+   * circular arrow — one stray click from a paid model call, on a card every
+   * reader opens — and was first fixed by labelling it and asking before
+   * spending. That fixed the money and left the real problem standing: force
+   * replaces the STORED brief, so one reader pressing it changes what every
+   * other reader sees of that law, including people reading it at that moment.
+   * Two citizens discussing the same bill could be looking at different
+   * summaries with nothing on either screen saying so.
+   *
+   * So it is gone rather than guarded. A brief is written once per version of
+   * the law and reused forever; when the law changes, the version moves and the
+   * ordinary request path offers a new one. Regenerating on demand belongs to
+   * whoever runs the platform, not to whoever happens to be reading.
    */
-  test("rewriting a brief asks first, and says what it is", () => {
+  test("the brief card has no control that replaces a stored brief", () => {
     const source = readFileSync(
       resolve(REPO, "apps/web/src/components/civic/CitizensBriefCard.tsx"),
       "utf8",
     );
 
-    // The visible control opens the confirmation; it does not call onRewrite.
-    expect(source).toContain("setConfirmingRewrite(true)");
+    expect(source).not.toContain("onRewrite");
+    expect(source).not.toMatch(/setConfirmingRewrite/);
+    expect(source.toLowerCase()).not.toContain(">rewrite<");
+  });
 
-    // It says what it is in words, not only to a screen reader.
-    expect(source).toContain('title="Write this brief again from the law\'s text"');
+  test("nothing in either app asks the server to force a brief", () => {
+    // The server still accepts force, because the law itself changing is a real
+    // reason to regenerate. No client may be the one to ask.
+    const offenders: string[] = [];
 
-    // And onRewrite is only reachable from inside the confirmation.
-    const direct = /onClick=\{\s*onRewrite\s*\}/;
-    expect(direct.test(source)).toBe(false);
+    for (const file of sources) {
+      const source = readFileSync(file, "utf8");
+      source.split("\n").forEach((line, index) => {
+        if (/\bstart\(\s*true\s*\)/.test(line) || /getCitizenBrief\([^)]*,\s*true\s*\)/.test(line)) {
+          offenders.push(`${relative(REPO, file)}:${index + 1}  ${line.trim()}`);
+        }
+      });
+    }
+
+    expect(
+      offenders,
+      offenders.length
+        ? `A client is forcing a brief to be rewritten, which replaces the copy every other ` +
+            `reader sees.\n${offenders.join("\n")}`
+        : "",
+    ).toEqual([]);
+  });
+
+  test("the hook offers no rewrite", () => {
+    const source = readFileSync(
+      resolve(REPO, "apps/web/src/hooks/use-citizen-brief.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/^\s*rewrite:/m);
   });
 });
 

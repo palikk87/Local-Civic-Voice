@@ -392,7 +392,6 @@ function SlideOverPreview({
     isResolving,
     isUnidentifiable,
     request: requestBrief,
-    rewrite: rewriteBrief,
   } = useLibraryBrief(result);
   /*
    * SHARING NO LONGER WAITS FOR A BRIEF.
@@ -534,7 +533,6 @@ function SlideOverPreview({
                     reason={reason}
                     isRequesting={briefBusy}
                     onRequest={requestBrief}
-                    onRewrite={brief ? rewriteBrief : undefined}
                   />
                 </View>
               )}

@@ -45,7 +45,6 @@ export function CitizensBriefPanel({
     isResolving,
     isUnidentifiable,
     request,
-    rewrite,
   } = useLibraryBrief(result);
 
   /*
@@ -161,7 +160,6 @@ export function CitizensBriefPanel({
               // ready to press before there is anything to press it against.
               isRequesting={isRequesting || isResolving}
               onRequest={request}
-              onRewrite={brief ? rewrite : undefined}
               sourceUrl={result.sourceUrl}
               sourceLabel="View Official Source"
             />

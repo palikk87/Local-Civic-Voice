@@ -881,7 +881,6 @@ export default function BillDetailScreen() {
                   reason={citizenBrief.reason}
                   isRequesting={citizenBrief.isRequesting}
                   onRequest={citizenBrief.request}
-                  onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
                   emptyDescription={"A plain-English summary of this bill, written only from its complete official text — plus the case for it and the case against it"}
                   sourceUrl={bill.congressUrl}
                   sourceLabel={'Read the full text on Congress.gov'}

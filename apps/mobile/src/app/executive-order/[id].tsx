@@ -481,7 +481,6 @@ export default function ExecutiveOrderDetailScreen() {
                   reason={citizenBrief.reason}
                   isRequesting={citizenBrief.isRequesting}
                   onRequest={citizenBrief.request}
-                  onRewrite={citizenBrief.brief ? citizenBrief.rewrite : undefined}
                   emptyDescription={"A plain-English summary of this order, written only from its complete official text — plus the case for it and the case against it"}
                   sourceUrl={eo.federalRegisterUrl}
                   sourceLabel={'Read the full text on the Federal Register'}
