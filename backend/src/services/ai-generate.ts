@@ -123,33 +123,41 @@ const MODEL_SPECS: Record<string, ModelSpec> = {
  * the reader gets their brief rather than an apology.
  */
 /**
- * THE TWO OLDER GEMINI MODELS ARE GONE, IN THE PROVIDER'S OWN WORDS.
+ * TWO OF THESE GEMINI MODELS MAY BE RETIRED, AND THEY STAY ANYWAY. HERE IS WHY.
  *
- * Read off the admin console's incident panel on 2026-08-30, where the platform
- * had been recording the failures for a day:
+ * The admin console's incident panel recorded this over 2026-08-29:
  *
  *   gemini-2.0-flash  HTTP 404  "This model models/gemini-2.0-flash is no
  *                               longer available. Please update your code to
  *                               use models/gemini-3.6-flash"        13 times
  *   gemini-2.5-flash  HTTP 404  "no longer available to new users … use
  *                               models/gemini-3.6-flash"            13 times
+ *   gemini-3.6-flash  threw     "TimeoutError: the operation timed out"
+ *                                                                   69 times
  *
- * A fallback that 404s is not redundancy. It is two guaranteed round trips
- * between a reader pressing the button and anything real being tried, on every
- * job, until the strike-off list happens to be warm — and the strike-off list is
- * in memory, so it empties on every deploy and every restart and the platform
- * pays for the lesson again.
+ * The obvious move is to delete the two dead names. It was made, and then
+ * reversed, and the reversal is the point:
  *
- * They are removed rather than reordered, because there is no traffic level at
- * which a retired model answers. The redundancy the chain exists for is still
- * there: Gemini's current flash model, then OpenAI's two.
+ *   1. THE STRIKE-OFF LIST IS ALREADY THE ANSWER. A model that says "I do not
+ *      exist" is struck off for an hour and skipped without paying for the
+ *      round trip — that is what it is for, and there is a test that proves it
+ *      works. The cost of a retired name is one 404 per process per hour, not
+ *      one per job.
+ *   2. SHORTENING THE CHAIN COSTS THE THING THE CHAIN IS FOR. It exists because
+ *      the owner said "whatever is happening keeps happening again and makes it
+ *      fail. there needs to be redundancies in place." Cutting Gemini to a
+ *      single model means one timeout is the end of that provider.
+ *   3. WHICH MODELS THIS ACCOUNT SHOULD CALL IS A BILLING DECISION, and it
+ *      belongs to whoever pays. "no longer available to new users" is a fact
+ *      about a tier, not about the model, and it can change without anybody
+ *      here noticing.
  *
- * The registry above still names them. That is deliberate — a stored brief or an
- * incident row can refer to a model by name long after it stops being callable,
- * and dropping the entry would make those unreadable.
+ * So the evidence is written down and the config is left alone, deliberately,
+ * for a person to decide. What the platform does today is already correct
+ * behaviour under the circumstances: try, learn, skip.
  */
 const MODEL_CHAINS: Record<AIProvider, string[]> = {
-  gemini: ["gemini-3.6-flash"],
+  gemini: ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash"],
   openai: ["gpt-5.4-mini", "gpt-4o-mini"],
 };
 
