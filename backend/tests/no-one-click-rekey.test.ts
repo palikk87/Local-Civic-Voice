@@ -94,16 +94,26 @@ describe("a credential never moves on a single click", () => {
       "utf8",
     );
 
-    // The buttons open the confirmation rather than acting.
-    expect(source).toContain('setRotating({ client, what: "password" })');
+    // THE PASSWORD HALF OF THIS IS GONE RATHER THAN GUARDED.
+    //
+    // This used to assert that BOTH rotate buttons opened a confirmation. The
+    // password one no longer exists: it was the only control in the system that
+    // could produce a password nobody chose, and "Set password" already did the
+    // job with a value a person picked. Asked for directly — simplify rather
+    // than build something that watches it. See no-generated-password.test.ts,
+    // which fails if it ever comes back.
+    expect(source).not.toContain('setRotating({ client, what: "password" })');
+
+    // The API key still rotates, and still asks first.
     expect(source).toContain('setRotating({ client, what: "apiKey" })');
 
     // The confirmation says whose account it is. A dialog that says "are you
     // sure?" without naming the client is how the wrong row gets rotated.
     expect(source).toContain("{rotating.client.name}");
 
-    // And says what it costs, which is the part people do not expect.
-    expect(source).toMatch(/signed out/i);
+    // Setting a password still says what it costs, which is the part people do
+    // not expect: every session the old password opened is ended.
+    expect(source).toMatch(/signs out every session/i);
   });
 
   test("deleting a client still asks too", () => {

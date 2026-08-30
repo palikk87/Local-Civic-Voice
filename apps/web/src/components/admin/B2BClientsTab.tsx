@@ -10,7 +10,7 @@
 // hard to dismiss by accident.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Copy, KeyRound, Plus, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
+import { Building2, Copy, KeyRound, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { adminAuthHeader } from "@/lib/mobile/admin-store";
@@ -43,6 +43,15 @@ interface B2BClient {
   lastAccessAt: string | null;
   createdAt: string;
   activeSessions: number;
+  /**
+   * When this account's password last moved, and who moved it. Null means it
+   * has not changed since the account was created.
+   *
+   * The password itself can never appear here or anywhere else — it is a
+   * one-way hash. This is the fact of a change, which is what was missing when
+   * the owner's own login stopped working and nobody could say why.
+   */
+  passwordLastChanged: { at: string; by: string | null } | null;
 }
 
 interface IssuedCredentials {
@@ -91,7 +100,7 @@ export function B2BClientsTab() {
    * only when somebody deliberately says so, naming the account and the
    * consequence.
    */
-  const [rotating, setRotating] = useState<{ client: B2BClient; what: "password" | "apiKey" } | null>(
+  const [rotating, setRotating] = useState<{ client: B2BClient; what: "apiKey" } | null>(
     null,
   );
   const [form, setForm] = useState({
@@ -128,17 +137,19 @@ export function B2BClientsTab() {
   });
 
   /**
-   * Rotate, either to a generated value or to one the admin typed.
+   * Rotate a credential.
    *
-   * The endpoint has always accepted `newPassword`; this UI only ever sent the
-   * randomize flag, so the only way to give a client a password they had agreed
-   * on was to rotate and then read the generated one back to them. A chosen
-   * password is a legitimate need — onboarding calls, shared credentials
-   * handed over in person — and refusing it here did not make anything safer,
-   * it just moved the workaround off the platform.
+   * TWO CALLERS, AND ONLY TWO. The API key dialog, which asks for a generated
+   * key because a key is not something anyone types. And "Set password", which
+   * always sends a password the administrator chose.
    *
-   * Generated is still the default and still the better path: a password an
-   * administrator invented is a password an administrator knows.
+   * NOTHING HERE GENERATES A PASSWORD ANY MORE. That button existed, sat beside
+   * "Set password", and was the only thing in the system that could produce a
+   * password nobody had picked. It went after the owner's own B2B login stopped
+   * working and he had to set a new one from this screen to get back in. His
+   * instruction was to simplify rather than to build something that watches for
+   * it: remove the one control that can conjure a password, and there is
+   * exactly one way a password changes with a person on the other end of it.
    */
   const rotate = useMutation({
     mutationFn: ({
@@ -258,6 +269,21 @@ export function B2BClientsTab() {
                     {client.username} · created {formatDate(client.createdAt)} · last login{" "}
                     {formatDate(client.lastAccessAt)}
                   </p>
+                  {/*
+                    The answer to "why did my password stop working", on the
+                    screen rather than in a log somebody has to know to read.
+                    It says when and who — never the password, which is a
+                    one-way hash and cannot be shown by anyone.
+                  */}
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {client.passwordLastChanged
+                      ? `Password changed ${formatDate(client.passwordLastChanged.at)}${
+                          client.passwordLastChanged.by
+                            ? ` by ${client.passwordLastChanged.by}`
+                            : ""
+                        }`
+                      : "Password unchanged since this account was created"}
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -277,15 +303,26 @@ export function B2BClientsTab() {
                     </SelectContent>
                   </Select>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setRotating({ client, what: "password" })}
-                    disabled={rotate.isPending}
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Password
-                  </Button>
+                  {/*
+                    THERE IS NO "GENERATE A RANDOM PASSWORD" BUTTON, DELIBERATELY.
+
+                    There used to be one, sitting right here, next to "Set
+                    password". It was the only control in the whole system that
+                    produced a password nobody had chosen — and it was
+                    redundant, because "Set password" already does the job with
+                    a value a person picked and can hand over.
+
+                    It went because of what happened to the owner's own B2B
+                    login: the password stopped working and he had to set a new
+                    one from this screen to get back in. Whatever moved it, the
+                    fix he asked for was to simplify rather than build a
+                    detector — remove the one thing that can produce a password
+                    out of thin air, so there is exactly one way a password
+                    changes and a person is always on the other end of it.
+
+                    The API key button below stays random, because a key is not
+                    something anyone types.
+                  */}
                   <Button
                     variant="outline"
                     size="sm"
@@ -443,19 +480,16 @@ export function B2BClientsTab() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <TriangleAlert className="h-5 w-5 text-amber-500" />
-              {rotating?.what === "password" ? "Rotate the password" : "Rotate the API key"}
+              Rotate the API key
             </DialogTitle>
             <DialogDescription>
               {rotating ? (
                 <>
-                  This replaces the {rotating.what === "password" ? "password" : "API key"} for{" "}
+                  This replaces the API key for{" "}
                   <span className="font-medium text-foreground">{rotating.client.name}</span>{" "}
-                  with a new one, right now.
-                  {rotating.what === "password"
-                    ? " Every session it has open is signed out, and nobody there will be able to sign in again until you have given them the new password."
-                    : " Anything calling the API with the old key starts failing immediately."}{" "}
-                  The new value is shown once and cannot be recovered. Recorded in the activity log
-                  with your name.
+                  with a new one, right now. Anything calling the API with the old key starts
+                  failing immediately. The new value is shown once and cannot be recovered.
+                  Recorded in the activity log with your name.
                 </>
               ) : null}
             </DialogDescription>
@@ -470,21 +504,20 @@ export function B2BClientsTab() {
               disabled={rotate.isPending}
               onClick={() => {
                 if (!rotating) return;
-                rotate.mutate({ id: rotating.client.id, what: rotating.what });
+                rotate.mutate({ id: rotating.client.id, what: "apiKey" });
                 setRotating(null);
               }}
             >
-              {rotating?.what === "password" ? "Rotate the password" : "Rotate the API key"}
+              Rotate the API key
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Set a chosen password.
-          Rotating to a generated value stays the default and the better path;
-          this exists because "the client agreed a password on a call" is a real
-          situation, and without it the workaround was to rotate and read the
-          generated one down the phone — which is worse. */}
+      {/* Set a chosen password — now the ONLY way a password changes from here.
+          Generating a random one used to sit beside it and is gone; see the
+          note on the button row above. A password a person chose is one they
+          can hand over, which is what actually happens on a call. */}
       <Dialog
         open={!!settingPasswordFor}
         onOpenChange={(open) => {

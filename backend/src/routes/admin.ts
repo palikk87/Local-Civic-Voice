@@ -1177,10 +1177,55 @@ adminRouter.get("/b2b-clients", async (c) => {
   });
   const activeByClient = new Map(sessions.map((s) => [s.clientId, s._count._all]));
 
+  /**
+   * WHEN EACH PASSWORD LAST MOVED, AND WHO MOVED IT.
+   *
+   * The owner's own B2B login stopped working and nobody could say what had
+   * changed it. The answer was in the database the whole time — every
+   * credential change is recorded by services/credentials.ts with the actor and
+   * the reason — but nothing displayed it, so answering the question meant
+   * reading the log by hand.
+   *
+   * A password can never be shown: it is a one-way hash, unreadable by us or by
+   * anybody holding the database. The fact of a change is the whole of what can
+   * honestly be reported, and it is also all that was needed.
+   *
+   * Read here rather than joined per row so the list stays one query regardless
+   * of how many clients there are.
+   */
+  const credentialEvents = await prisma.adminActivityLog.findMany({
+    where: {
+      targetType: "system",
+      targetId: { in: clients.map((row) => row.id) },
+      action: "rotate_b2b_client",
+    },
+    orderBy: { createdAt: "desc" },
+    select: { targetId: true, adminUsername: true, details: true, createdAt: true },
+  });
+
+  const lastChange = new Map<string, { at: string; by: string | null }>();
+  for (const event of credentialEvents) {
+    // Sorted newest first, so the first sighting of a client is its latest
+    // change. An API key rotation is not a password change and must not be
+    // reported as one — rotateB2BCredentials names what moved in the details
+    // line, which is the only thing that tells the two apart.
+    if (!event.targetId || lastChange.has(event.targetId)) continue;
+    if (!/password/i.test(event.details ?? "")) continue;
+    lastChange.set(event.targetId, {
+      at: event.createdAt.toISOString(),
+      by: event.adminUsername,
+    });
+  }
+
   return c.json({
     clients: clients.map((row) => ({
       ...toAdminB2BClient(row),
       activeSessions: activeByClient.get(row.id) ?? 0,
+      // Null means the password has not moved since the account was created.
+      // Not a gap and not a guess — creation is already shown as createdAt, and
+      // inventing a "changed" date from it would be exactly the kind of
+      // plausible value the governing rule forbids.
+      passwordLastChanged: lastChange.get(row.id) ?? null,
     })),
   });
 });

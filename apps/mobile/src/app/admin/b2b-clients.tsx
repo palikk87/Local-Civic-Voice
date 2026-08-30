@@ -25,7 +25,6 @@ import {
   ArrowLeft,
   Building2,
   Plus,
-  RefreshCw,
   KeyRound,
   Trash2,
   Copy,
@@ -145,7 +144,7 @@ export default function B2BClientsScreen() {
     }
   };
 
-  const rotate = async (id: string, what: 'password' | 'apiKey') => {
+  const rotate = async (id: string, what: 'apiKey') => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const result = await mutate(`/api/admin/b2b-clients/${id}/rotate`, 'POST', { [what]: true });
     if (result) setIssued(result.credentials as IssuedCredentials);
@@ -247,14 +246,26 @@ export default function B2BClientsScreen() {
                 ))}
               </View>
 
+              {/*
+                THERE IS NO "GENERATE A RANDOM PASSWORD" BUTTON, DELIBERATELY.
+
+                One sat here, and on this screen it did not even ask first — a
+                single tap rotated a live paying client's password and signed
+                out every session it had open. It was also redundant: setting a
+                chosen password does the same job with a value a person can
+                actually hand over.
+
+                It went after the owner's own B2B login stopped working and he
+                had to set a new password from the admin console to get back in.
+                His instruction was to simplify rather than build a detector:
+                remove the only control that can produce a password nobody
+                chose, so there is one way a password changes and a person is
+                always on the other end of it.
+
+                Same removal on web — see B2BClientsTab. The API key button
+                below stays, because a key is not something anyone types.
+              */}
               <View className="flex-row mt-2 -mx-1">
-                <TouchableOpacity
-                  onPress={() => void rotate(client.id, 'password')}
-                  className="flex-1 bg-slate-800 rounded-lg py-2 m-1 flex-row items-center justify-center"
-                >
-                  <RefreshCw size={14} color="#8FA79A" />
-                  <Text className="text-slate-300 text-xs ml-1.5">Password</Text>
-                </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => void rotate(client.id, 'apiKey')}
                   className="flex-1 bg-slate-800 rounded-lg py-2 m-1 flex-row items-center justify-center"

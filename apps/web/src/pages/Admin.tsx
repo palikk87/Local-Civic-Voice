@@ -14,6 +14,8 @@
 // copied link both behave the way people expect them to.
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import {
   ArrowLeft,
   Shield,
@@ -109,6 +111,44 @@ function isAdminTab(value: string | undefined): value is AdminTab {
   return !!value && (ADMIN_TABS as readonly string[]).includes(value);
 }
 
+/**
+ * WHICH COMMIT THE SERVER IS ACTUALLY RUNNING.
+ *
+ * Rule 11 of this project is "before debugging a live system, prove it is
+ * running your code", and it was written after hours went into fixing something
+ * that was already fixed but never deployed. It kept costing anyway: the
+ * owner's B2B password stopped working, the code that could have caused it had
+ * been repaired weeks earlier, and nobody could say whether the server he
+ * logged into had that repair — so a week went into ruling out seven causes
+ * that a single number would have settled.
+ *
+ * /health has returned this the whole time. Nothing displayed it, so answering
+ * the question meant knowing the endpoint existed and curling it. Now the
+ * console says it, and "is the live site running the fix" is something anybody
+ * can read off the screen.
+ *
+ * Fails quietly. A version banner that turns the admin page into an error when
+ * the API hiccups would be a worse page than one without it.
+ */
+function DeployedVersion() {
+  const { data } = useQuery({
+    queryKey: ["health", "version"],
+    queryFn: () => api.get<{ version: { commit: string; builtAt: string | null } }>("/health"),
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const commit = data?.version?.commit;
+  if (!commit) return null;
+
+  return (
+    <p className="mt-1 font-mono text-xs text-muted-foreground">
+      Backend running {commit === "unknown" ? "an unidentified build" : commit.slice(0, 12)}
+      {data?.version?.builtAt ? ` · built ${new Date(data.version.builtAt).toLocaleString()}` : ""}
+    </p>
+  );
+}
+
 export default function Admin() {
   const navigate = useNavigate();
   const { tab } = useParams<{ tab?: string }>();
@@ -172,6 +212,7 @@ export default function Admin() {
           <p className="mt-1 text-sm text-muted-foreground">
             Manage users, content, analytics, and platform communications.
           </p>
+          <DeployedVersion />
         </div>
 
         <Tabs
