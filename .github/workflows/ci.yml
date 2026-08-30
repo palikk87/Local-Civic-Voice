@@ -203,6 +203,48 @@ jobs:
       - run: bun run reported-bugs-check
         working-directory: apps/web
 
+      # ---------------------------------------------------------------------
+      # THE CHECKS THAT EXISTED AND NEVER RAN.
+      #
+      # Thirty browser checks are written and all thirty pass. Fourteen ran on
+      # every push; the other sixteen ran only when somebody remembered to type
+      # them, which is the same as not existing. Article V, the juries, the
+      # integrity audit and the trust score — most of the constitutional
+      # promises — could have broken and nothing would have said a word.
+      #
+      # These six need no server: they drive the built bundle against stubbed
+      # responses. The ten that need a real backend and the thousand-citizen
+      # population are in the fullstack-checks job below, which has a Postgres.
+      # ---------------------------------------------------------------------
+
+      # The Constitution and the Bill of Rights pages say what the code does.
+      # A promise the product no longer keeps is worse than one never made.
+      - run: bun run founding-documents-check
+        working-directory: apps/web
+
+      # The terms are the same on web and phone. They were not, once.
+      - run: bun run terms-parity-check
+        working-directory: apps/web
+
+      # A code is emailed, entered, and the account becomes verified. Every
+      # step of that was missing at one point while the screen said otherwise.
+      - run: bun run verify-email-check
+        working-directory: apps/web
+
+      # A ZIP finds a district and the ZIP is not kept afterwards.
+      - run: bun run zip-district-check
+        working-directory: apps/web
+
+      # Every dialog fits inside a phone. One that overflows has its confirm
+      # button off-screen, which reads as a broken feature.
+      - run: bun run dialog-fits-check
+        working-directory: apps/web
+
+      # The bug reporter is reachable from every page. It is how the owner
+      # hands work over, so a page it cannot reach is a page nobody can report.
+      - run: bun run bug-reporter-reach-check
+        working-directory: apps/web
+
       # The built site must be able to say which commit it is. Without the
       # stamp, deploy-check cannot tell a deploy that happened from one that
       # did not, and that is precisely how a finished fix sat unshipped.
@@ -212,6 +254,140 @@ jobs:
           test -f dist/version.json || { echo "::error::dist/version.json missing — the version stamp did not run"; exit 1; }
           cat dist/version.json
           node -e "const v=require('./dist/version.json'); if(!v.commit||v.commit==='unknown'){console.error('::error::build carries no commit stamp');process.exit(1)}"
+
+  # ==========================================================================
+  # THE FULL-STACK CHECKS.
+  #
+  # Ten checks that cannot run against a stub: they boot the real backend
+  # against a real Postgres holding the thousand synthetic citizens, then drive
+  # the built site through a browser. They cover the parts of this product that
+  # are promises rather than features — impeachment and system reset, the
+  # juries, the integrity audit, the trust score, whether an anonymous vote
+  # stays anonymous, whether somebody else's record stays behind a click.
+  #
+  # All ten were written, all ten passed, and none of them ran on a push. They
+  # were a manual step, which is a step nobody takes on the day it matters.
+  #
+  # ONE AT A TIME, deliberately. Running these concurrently starves them: a
+  # previous session ran the backend suite, a load test and the browser checks
+  # together and watched five of them fail on 30-second timeouts that had
+  # nothing to do with the code. A false failure in a constitutional check is
+  # worse than a slow job — it is the kind of thing that gets a check deleted.
+  #
+  # Each check asserts it leaves the population database exactly as it found
+  # it, 1,000 citizens and nothing of its own left behind.
+  # ==========================================================================
+  fullstack-checks:
+    name: full-stack browser checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_POPULATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_population
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.11"
+
+      - run: bun install --frozen-lockfile
+        working-directory: backend
+      - run: bun install --frozen-lockfile
+        working-directory: apps/web
+
+      - name: Generate the Prisma client
+        run: bunx prisma generate
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_population
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_population
+
+      # The population database, built the same way production is built: one
+      # `migrate deploy` against an empty database. Never `db push`.
+      - name: Build the population database
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_population
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/civicvoice_population
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE civicvoice_population;'
+          bunx prisma migrate deploy
+
+      # A thousand synthetic citizens. Several checks assert the count is
+      # unchanged when they finish, so this is their baseline as well as their
+      # material.
+      - name: Seed the thousand citizens
+        run: bun run seed-test-population
+        working-directory: backend
+
+      # Same build the web job produces. Any absolute URL satisfies the
+      # production guard; each check points the page at the backend it spawns.
+      - run: bun run build
+        working-directory: apps/web
+        env:
+          VITE_BACKEND_URL: https://ci.invalid
+
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      # Article V — impeachment and the system-wide reset. The two powers the
+      # Constitution gives citizens over the platform itself.
+      - run: bun run article-v-check
+        working-directory: apps/web
+
+      # Reports are decided by people, drawn at random, and a juror who is
+      # withdrawn is replaced.
+      - run: bun run jury-check
+        working-directory: apps/web
+
+      # An audit counts and never names. Below the five-person floor it prints
+      # the withheld notice and drops the numbers with it.
+      - run: bun run integrity-audit-check
+        working-directory: apps/web
+
+      # A trust score informs a delegation and ranks nobody. Nothing sorts by
+      # it, nothing filters by it.
+      - run: bun run trust-check
+        working-directory: apps/web
+
+      # A vote cast anonymously is anonymous everywhere, including to us.
+      - run: bun run vote-anonymity-check
+        working-directory: apps/web
+
+      # Somebody else's record is behind a click, and their anonymous positions
+      # are on neither screen.
+      - run: bun run record-privacy-check
+        working-directory: apps/web
+
+      # Reporting a person reaches a queue and a jury, with no dead ends.
+      - run: bun run report-flow-check
+        working-directory: apps/web
+
+      # A bug report carries what was pointed at and lands in the admin inbox.
+      - run: bun run bug-report-check
+        working-directory: apps/web
+
+      # A limited administrator can do exactly what their role allows and
+      # nothing else. The owner seat is unreachable from the console.
+      - run: bun run admin-permissions-check
+        working-directory: apps/web
+
+      # Everything routes to /reference/:id, and the page carries every piece
+      # the pages it replaced had.
+      - run: bun run one-law-page-check
+        working-directory: apps/web
 
   mobile:
     name: mobile

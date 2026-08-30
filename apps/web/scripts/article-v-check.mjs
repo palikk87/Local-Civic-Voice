@@ -316,12 +316,28 @@ try {
     await page.locator("#civic-password").fill(PASSWORD);
     await page.getByRole("button", { name: /^sign in$/i }).click();
 
+    // Poll until the session exists, tolerating the app navigating underneath.
+    //
+    // A successful sign-in redirects, and a redirect destroys the execution
+    // context an in-flight page.evaluate is running in — so the poll that is
+    // watching FOR the sign-in gets killed BY the sign-in, and the whole check
+    // dies with "Execution context was destroyed" after every assertion in it
+    // had already passed. The race is in this harness, not in the product.
+    //
+    // Swallowing the error and retrying is correct rather than lazy: a
+    // destroyed context means a navigation happened, which is evidence the
+    // sign-in worked, and the next poll runs in the new page and confirms it.
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      const signedIn = await page.evaluate(async () => {
-        const r = await fetch("/api/auth/get-session", { credentials: "include" });
-        const body = await r.json().catch(() => null);
-        return Boolean(body && body.user);
-      });
+      let signedIn = false;
+      try {
+        signedIn = await page.evaluate(async () => {
+          const r = await fetch("/api/auth/get-session", { credentials: "include" });
+          const body = await r.json().catch(() => null);
+          return Boolean(body && body.user);
+        });
+      } catch {
+        // Navigated mid-evaluate. Let the loop come round again.
+      }
       if (signedIn) break;
       await page.waitForTimeout(300);
     }
