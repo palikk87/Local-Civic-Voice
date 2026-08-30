@@ -4,12 +4,9 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   X,
   TrendingUp,
-  Award,
   ThumbsUp,
   ThumbsDown,
   Flame,
-  Crown,
-  Medal,
   ChevronRight,
   Landmark,
   FileText,
@@ -18,12 +15,12 @@ import {
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
 import { useQuery } from "@tanstack/react-query";
-import { civicApi } from "@/lib/civic";
-import {
-  useGlobalEngagementStore,
-  type GlobalEngagementRecord,
-  type EngagementLeader,
-  type ReferenceType,
+import { api } from "@/lib/api";
+// Types only: the store behind them fed the leaderboard that was dropped, and
+// nothing here reads its state any more.
+import type {
+  GlobalEngagementRecord,
+  ReferenceType,
 } from "@/lib/mobile/global-engagement-store";
 
 // Format large numbers
@@ -151,64 +148,6 @@ function TrendingCard({
 }
 
 // One row of the engagement leaderboard
-function LeaderCard({
-  leader,
-  index,
-  onFollow,
-}: {
-  leader: EngagementLeader;
-  index: number;
-  onFollow?: (userId: string) => void;
-}) {
-  const RankIcon = index === 0 ? Crown : index === 1 ? Medal : Award;
-  const rankColor = index === 0 ? "#F59E0B" : index === 1 ? "#94A3B8" : "#CD7F32";
-
-  return (
-    <MotionDiv
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.06 }}
-    >
-      <div className="flex items-center bg-slate-800/50 rounded-xl p-3 mb-2">
-        {/* Rank */}
-        <div className="w-8 flex items-center justify-center mr-3 shrink-0">
-          {index < 3 ? (
-            <RankIcon size={20} color={rankColor} />
-          ) : (
-            <span className="text-slate-500 font-bold">{index + 1}</span>
-          )}
-        </div>
-
-        {/* Avatar */}
-        <img src={leader.avatar} alt={leader.displayName} className="w-10 h-10 rounded-full" />
-
-        {/* Info */}
-        <div className="flex-1 ml-3 min-w-0">
-          <p className="text-white font-semibold text-sm truncate">{leader.displayName}</p>
-          <p className="text-slate-500 text-xs">@{leader.username}</p>
-        </div>
-
-        {/* Stats */}
-        <div className="flex flex-col items-end mr-3 shrink-0">
-          <span className="text-amber-500 font-bold text-sm">
-            {formatCount(leader.totalEngagementDriven)}
-          </span>
-          <span className="text-slate-500 text-xs">engagement</span>
-        </div>
-
-        {/* Follow Button */}
-        <button
-          onClick={() => onFollow?.(leader.userId)}
-          className="bg-amber-500 px-3 py-1.5 rounded-full shrink-0"
-        >
-          <UserPlus size={14} color="#000" />
-        </button>
-      </div>
-    </MotionDiv>
-  );
-}
-
-// Main Drawer Component
 export default function GlobalPulseDrawer({
   visible,
   onClose,
@@ -228,44 +167,44 @@ export default function GlobalPulseDrawer({
    *
    * /api/government-references/trending is the real ranking, across everybody.
    */
-  const { data: trending } = useQuery({
-    queryKey: ["global-pulse-trending"],
-    queryFn: () => civicApi.trending(5),
+  const { data: pulse } = useQuery({
+    queryKey: ["global-pulse", 7],
+    queryFn: () =>
+      api.get<{
+        days: number;
+        records: Array<{
+          id: string;
+          title: string;
+          referenceType: string;
+          category: string | null;
+          recentVotes: number;
+          recentPosts: number;
+          activity: number;
+          supportVotes: number;
+          opposeVotes: number;
+        }>;
+      }>("/api/government-references/pulse?days=7&limit=5"),
     enabled: visible,
   });
 
   const trendingReferences = useMemo(
     () =>
-      (trending?.references ?? []).map((reference) => ({
-        referenceId: reference.id,
-        referenceType: reference.referenceType,
-        title: reference.title,
-        supportVotes: reference.votes?.support ?? 0,
-        opposeVotes: reference.votes?.oppose ?? 0,
-        commentCount: reference.engagement?.comments ?? 0,
-        shareCount: reference.engagement?.shares ?? 0,
-        trendingScore: reference.votes?.total ?? 0,
-        // NOT SYNTHESISED. The server ranks records, not people, and naming
-        // who voted on what is precisely what this platform promises never to
-        // publish. An empty list renders nothing, which is the honest answer.
+      (pulse?.records ?? []).map((record) => ({
+        referenceId: record.id,
+        referenceType: record.referenceType,
+        title: record.title,
+        supportVotes: record.supportVotes,
+        opposeVotes: record.opposeVotes,
+        commentCount: record.recentPosts,
+        shareCount: 0,
+        trendingScore: record.activity,
+        // NOT SYNTHESISED. Naming who voted on what is precisely what this
+        // platform promises never to publish.
         topContributors: [],
       })) as unknown as GlobalEngagementRecord[],
-    [trending],
+    [pulse],
   );
 
-  /**
-   * THE LEADERBOARD IS DELIBERATELY EMPTY, AND NEEDS A DECISION.
-   *
-   * This ranked PEOPLE by how much they engage. The platform's own Constitution
-   * says the Trust Score informs a delegation and never ranks anybody, and a
-   * public league table of citizens is the same thing under a different name.
-   * The store behind it was local anyway, so it has never shown a real number.
-   *
-   * Left rendering nothing rather than quietly built or quietly deleted: this
-   * is a product decision about what the platform is, not a bug to fix.
-   */
-  const engagementLeadersData = useGlobalEngagementStore((s) => s.engagementLeaders);
-  const engagementLeaders: typeof engagementLeadersData = [];
 
   return (
     <Sheet open={visible} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -308,22 +247,18 @@ export default function GlobalPulseDrawer({
               </span>
             </div>
 
-            {trendingReferences.map((record, idx) => (
-              <TrendingCard key={record.referenceId} record={record} index={idx} />
-            ))}
-          </div>
-
-          {/* Most engagement driven */}
-          <div>
-            <div className="flex items-center mb-4">
-              <Crown size={18} color="#F59E0B" />
-              <span className="text-white font-semibold text-lg ml-2">Most Engagement Driven</span>
-              <span className="text-slate-500 text-xs ml-auto">Top engagement drivers</span>
-            </div>
-
-            {engagementLeaders.map((leader, idx) => (
-              <LeaderCard key={leader.userId} leader={leader} index={idx} onFollow={() => undefined} />
-            ))}
+            {trendingReferences.length === 0 ? (
+              // Nothing moved in the last week. Said plainly rather than filled
+              // with the biggest records of all time pretending to be current.
+              <p className="text-slate-400 text-sm">
+                Nothing has moved in the last seven days. Vote on a law or post about one and it
+                shows up here.
+              </p>
+            ) : (
+              trendingReferences.map((record, idx) => (
+                <TrendingCard key={record.referenceId} record={record} index={idx} />
+              ))
+            )}
           </div>
         </div>
       </SheetContent>

@@ -387,6 +387,119 @@ governmentReferencesRouter.get("/freshness", async (c) => {
   });
 });
 
+/**
+ * GET /api/government-references/pulse
+ *
+ * WHAT THE COUNTRY IS ARGUING ABOUT RIGHT NOW.
+ *
+ * Distinct from /trending, which ranks by ALL-TIME totals and therefore answers
+ * a different question: the biggest records of the year sit at the top of it
+ * forever, whatever happened this week. A pulse that never changes is not a
+ * pulse.
+ *
+ * This counts activity inside a window — votes cast, and posts written about
+ * the record — and ranks by the two together. A record nobody has touched in
+ * the window is absent rather than listed with a zero, because the panel is
+ * about what is moving.
+ *
+ * IT RANKS RECORDS, NOT PEOPLE. The panel this feeds used to carry a second
+ * list of "top engagement drivers" — a leaderboard of citizens. It was dropped
+ * on the owner\'s instruction, and it would have contradicted the platform\'s
+ * own rule that it never ranks anybody: a public table of who is most active is
+ * that with a different label.
+ */
+governmentReferencesRouter.get(
+  "/pulse",
+  zValidator(
+    "query",
+    z.object({
+      days: z.coerce.number().int().min(1).max(90).optional().default(7),
+      limit: z.coerce.number().int().min(1).max(20).optional().default(5),
+    }),
+  ),
+  async (c) => {
+    const { days, limit } = c.req.valid("query");
+    const since = new Date(Date.now() - days * 86_400_000);
+
+    // Grouped in the database, not pulled into memory: votes and posts are the
+    // two tables that grow without limit.
+    const [votes, posts] = await Promise.all([
+      prisma.governmentReferenceVote.groupBy({
+        by: ["governmentReferenceId"],
+        where: { createdAt: { gte: since } },
+        _count: { _all: true },
+      }),
+      prisma.post.groupBy({
+        by: ["governmentReferenceId"],
+        where: { createdAt: { gte: since }, governmentReferenceId: { not: null } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const activity = new Map<string, { votes: number; posts: number }>();
+    for (const row of votes) {
+      if (!row.governmentReferenceId) continue;
+      const at = activity.get(row.governmentReferenceId) ?? { votes: 0, posts: 0 };
+      at.votes += row._count._all;
+      activity.set(row.governmentReferenceId, at);
+    }
+    for (const row of posts) {
+      if (!row.governmentReferenceId) continue;
+      const at = activity.get(row.governmentReferenceId) ?? { votes: 0, posts: 0 };
+      at.posts += row._count._all;
+      activity.set(row.governmentReferenceId, at);
+    }
+
+    const ranked = [...activity.entries()]
+      .map(([id, at]) => ({ id, ...at, total: at.votes + at.posts }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, limit);
+
+    if (ranked.length === 0) {
+      // Nothing moved in the window. An empty list, rather than filling it with
+      // the biggest records of all time dressed up as current.
+      return c.json({ days, records: [] });
+    }
+
+    const records = await prisma.governmentReference.findMany({
+      where: { id: { in: ranked.map((row) => row.id) }, mergedIntoId: null },
+      select: {
+        id: true,
+        title: true,
+        shortTitle: true,
+        referenceType: true,
+        category: true,
+        supportVotes: true,
+        opposeVotes: true,
+      },
+    });
+
+    const byId = new Map(records.map((record) => [record.id, record]));
+
+    return c.json({
+      days,
+      // A record merged away between the two queries is skipped rather than
+      // returned as a row the client has to defend against.
+      records: ranked.flatMap((row) => {
+        const record = byId.get(row.id);
+        if (!record) return [];
+        return [{
+          id: record.id,
+          title: record.shortTitle ?? record.title,
+          referenceType: record.referenceType,
+          category: record.category,
+          recentVotes: row.votes,
+          recentPosts: row.posts,
+          activity: row.total,
+          supportVotes: record.supportVotes,
+          opposeVotes: record.opposeVotes,
+        }];
+      }),
+    });
+  },
+);
+
+
 governmentReferencesRouter.get("/trending", zValidator("query", z.object({
   limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 10)),
   referenceType: referenceTypeEnum.optional(),
