@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { postsApi } from "@/lib/civic";
 import { useTimelineStore } from "@/lib/mobile/timeline-store";
+import { useCivicScore } from "@/hooks/use-civic-score";
 import { PostComments } from "@/components/feed/PostComments";
 import {
   categoryColors,
@@ -157,13 +158,29 @@ function convertBillToLegacy(bill: SupabaseBill): Bill {
 // ==========================================
 
 function CivicScoreHeader() {
-  const civicScore = useGamificationStore(selectCivicScore) ?? { total: 0, level: 'newcomer' as const, xpToNextLevel: 100 };
-  const streak = useGamificationStore(selectStreak) ?? { current: 0, lastActivityDate: '', freezeDeadline: null };
+  /**
+   * THE NUMBER COMES FROM THE SERVER NOW.
+   *
+   * It read a zustand store persisted to localStorage, so each browser kept its
+   * own tally — reported as a streak "showing 1 thing on my computer but
+   * something else on my phone". Both were telling the truth about themselves.
+   * It is counted from real votes, posts and comments now, so every device
+   * gives the same answer and clearing a cache changes nothing.
+   */
+  const { data } = useCivicScore();
+  const score = data?.score;
   const unreadCount = useEngagementStore(selectUnreadCount) ?? 0;
   const navigate = useNavigate();
 
-  const levelInfo = CIVIC_LEVELS[civicScore.level] ?? CIVIC_LEVELS.newcomer;
-  const progressPct = ((civicScore.total - levelInfo.min) / (levelInfo.max - levelInfo.min)) * 100;
+  // Zero until the server answers, rather than a remembered number from this
+  // browser that might not be true any more.
+  const civicScore = { total: score?.total ?? 0, xpToNextLevel: score?.toNextLevel ?? 0 };
+  // Optional at every step, not just the first: this header is mounted on the
+  // busiest page in the app, so a response missing a field must degrade to a
+  // zero rather than take the feed down.
+  const streak = { current: score?.streak?.current ?? 0 };
+  const levelInfo = { title: score?.levelTitle ?? CIVIC_LEVELS.newcomer.title };
+  const progressPct = score ? (score.intoLevel / score.levelSpan) * 100 : 0;
 
   return (
     <MotionDiv
@@ -179,7 +196,10 @@ function CivicScoreHeader() {
         thing on the feed allowed to glow.
       */}
       <button
-        onClick={() => navigate("/profile")}
+        // OPENS THE SCORE, NOT THE PROFILE. Reported as "when you click on it
+        // it just takes you to your profile rather opening up the feature
+        // further and expanding more into what it is".
+        onClick={() => navigate("/civic-score")}
         className="relative w-full overflow-hidden rounded-2xl border border-accent/40 p-3 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_26px_-8px_rgba(245,158,11,0.5)]"
         style={{
           backgroundImage:
@@ -252,14 +272,40 @@ function CivicScoreHeader() {
  * Today is dashed rather than dark: not missed, not yet earned.
  */
 function StreakRow() {
-  const streak = useGamificationStore(selectStreak) ?? { current: 0, lastActivityDate: '', freezeDeadline: null };
+  /**
+   * THE DAYS YOU WERE ACTUALLY HERE, NOT THE DAYS INFERRED FROM A NUMBER.
+   *
+   * This lit a pip when `index < today && today - index <= streak.current` —
+   * working backwards from a streak length held in localStorage. Two problems
+   * in one line. The store was per browser, so the week looked different on a
+   * phone than on a computer, which is what was reported. And even within one
+   * browser the pips were a guess: a streak of three lights the previous three
+   * days whether or not those were the days.
+   *
+   * The server returns the real dates. A pip is lit because something happened
+   * on that day.
+   */
+  const { data } = useCivicScore();
+  // `data?.score.activeDays` guarded the response but not the FIELD, so any
+  // answer without a score in it — an older server, a stub, a shape that
+  // changes — took the whole feed down with it. Thirty pages crashed into the
+  // error boundary before this was one character longer.
+  const activeDays = useMemo(() => new Set(data?.score?.activeDays ?? []), [data]);
+
   const letters = ["M", "T", "W", "T", "F", "S", "S"];
   const today = (new Date().getDay() + 6) % 7; // Monday-first
+
+  // The date each pip stands for, in UTC, which is how the server counts them.
+  const dateOf = (index: number) => {
+    const at = new Date();
+    at.setUTCDate(at.getUTCDate() - (today - index));
+    return at.toISOString().slice(0, 10);
+  };
 
   return (
     <div className="mx-4 mb-3 flex items-center gap-1.5">
       {letters.map((letter, index) => {
-        const lit = index < today && today - index <= streak.current;
+        const lit = index <= today && activeDays.has(dateOf(index));
         const isToday = index === today;
         return (
           <span

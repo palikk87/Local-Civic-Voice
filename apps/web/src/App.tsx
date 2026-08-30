@@ -30,6 +30,7 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const Notifications = lazy(() => import("./pages/Notifications"));
+const CivicScore = lazy(() => import("./pages/CivicScore"));
 const Messages = lazy(() => import("./pages/Messages"));
 const Conversation = lazy(() => import("./pages/Conversation"));
 const Delegates = lazy(() => import("./pages/Delegates"));
@@ -143,6 +144,16 @@ const App = () => (
                 element={
                   <RouteGuard capability="viewMessages" reason="Sign in to read your messages.">
                     <Messages />
+                  </RouteGuard>
+                }
+              />
+              {/* The plaque on the feed opens this. It used to open the
+                  reader's profile, which is not what the plaque is about. */}
+              <Route
+                path="/civic-score"
+                element={
+                  <RouteGuard capability="viewMessages" reason="Sign in to see your civic score.">
+                    <CivicScore />
                   </RouteGuard>
                 }
               />

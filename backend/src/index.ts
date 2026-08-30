@@ -5,6 +5,7 @@ import "./env";
 import { corsOriginPatterns } from "./env";
 import { auth } from "./auth";
 import { prisma } from "./prisma";
+import { civicScoreFor } from "./services/civic-score";
 import { governmentRouter } from "./routes/government";
 import { usersRouter } from "./routes/users";
 import { messagesRouter } from "./routes/messages";
@@ -336,6 +337,22 @@ app.get("/api/me", (c) => {
   const user = c.get("user");
   if (!user) return c.body(null, 401);
   return c.json({ user });
+});
+
+/**
+ * GET /api/me/civic-score
+ *
+ * Your own score, counted from your own votes, posts and comments.
+ *
+ * YOURS ONLY, AND DELIBERATELY. There is no /api/users/:id/civic-score and
+ * there should not be one: a score somebody else can read is a score people
+ * compare, and comparing people is the one thing this platform says it does
+ * not do. It exists to show a person their own record.
+ */
+app.get("/api/me/civic-score", async (c) => {
+  const user = c.get("user");
+  if (!user) return c.json({ error: "Authentication required" }, 401);
+  return c.json({ score: await civicScoreFor(user.id) });
 });
 
 // Apply feed rate limiting to feed routes

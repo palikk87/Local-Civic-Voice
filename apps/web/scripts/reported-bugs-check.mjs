@@ -60,6 +60,33 @@ const server = createServer(async (req, res) => {
   if (path === "/api/me") return json(SIGNED_IN);
   if (path === "/api/feed") return json({ posts: [POST], hasMore: false, nextCursor: null });
 
+  // A score with a shape a person could actually have.
+  if (path === "/api/me/civic-score") {
+    const today = new Date().toISOString().slice(0, 10);
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    return json({
+      score: {
+        total: 137, level: "newcomer", levelTitle: "New here",
+        intoLevel: 137, levelSpan: 250, toNextLevel: 113,
+        counts: { votes: 9, posts: 4, comments: 6 },
+        earned: { votes: 90, posts: 20, comments: 12 },
+        streak: { current: 2, longest: 5, activeToday: true },
+        activeDays: [today, yesterday],
+        byCategory: [{ category: "economy", votes: 6 }, { category: "health", votes: 3 }],
+        badges: [
+          { id: "first_vote", name: "First Voice", description: "Cast your first vote on a law", requirement: 1, progress: 1, earned: true },
+          { id: "ten_votes", name: "Active Voter", description: "Vote on 10 laws", requirement: 10, progress: 9, earned: false },
+          { id: "thousand_votes", name: "Thousand Voices", description: "Cast 1,000 votes", requirement: 1000, progress: 9, earned: false },
+        ],
+        levels: [
+          { id: "newcomer", title: "New here", min: 0, max: 249, reached: true },
+          { id: "citizen", title: "Engaged Citizen", min: 250, max: 749, reached: false },
+          { id: "leader", title: "Democracy Leader", min: 7750, max: 20000, reached: false },
+        ],
+      },
+    });
+  }
+
   // Somebody to share with, the send itself, and the thread it lands in.
   if (path === "/api/users/discover") {
     return json({ results: [{ id: "u2", username: "friend", displayName: "A Friend", avatar: null }] });
@@ -362,6 +389,62 @@ try {
   await thread.close();
 } catch (e) {
   failures.push(`share to a message: ${String(e).slice(0, 110)}`);
+}
+
+// --- "it just takes you to your profile rather opening up the feature
+//      further" and "shows 1 thing on my computer but something else on my
+//      phone" ----------------------------------------------------------------
+//
+// The plaque read a score kept in localStorage, so two devices disagreed, and
+// pressing it opened the reader's profile rather than anything about the score.
+try {
+  const p = await page("/feed");
+
+  // The number on the plaque is the server's, not a remembered one.
+  const shown = await p.evaluate(() => document.body.innerText);
+  if (!shown.includes("137")) {
+    failures.push("the plaque does not show the score the server counted");
+  }
+  // The plaque is styled uppercase and innerText returns RENDERED text, so
+  // this matches without regard to case rather than asserting a style.
+  if (!/new here/i.test(shown)) {
+    failures.push("the plaque does not show the level the server named");
+  }
+
+  const plaque = p.getByRole("button", { name: /civic score/i });
+  if (!(await plaque.count())) {
+    failures.push("no civic score plaque on the feed");
+  } else {
+    await plaque.first().click();
+    await p.waitForTimeout(1200);
+    if (p.url().includes("/profile")) {
+      failures.push("the civic score plaque still opens the profile");
+    } else if (!p.url().includes("/civic-score")) {
+      failures.push(`the plaque opened ${p.url()} rather than the civic score page`);
+    } else {
+      // And the page has to explain the number rather than just repeat it.
+      const page2 = await p.evaluate(() => document.body.innerText);
+      for (const [what, needle] of [
+        ["the score", "137"],
+        ["where it came from", "Where it came from"],
+        ["the vote count behind it", "9"],
+        ["the streak", "longest ever"],
+        ["that it is not a ranking", "not a ranking"],
+        ["badges", "Badges"],
+        ["a locked badge and what earns it", "Thousand Voices"],
+        ["the whole ladder", "Levels"],
+        ["where the votes go", "Where your votes go"],
+        ["the activity history", "The last twelve weeks"],
+      ]) {
+        if (!page2.includes(needle)) {
+          failures.push(`the civic score page does not show ${what}`);
+        }
+      }
+    }
+  }
+  await p.close();
+} catch (e) {
+  failures.push(`civic score: ${String(e).slice(0, 110)}`);
 }
 
 await browser.close();
