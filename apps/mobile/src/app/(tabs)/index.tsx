@@ -56,8 +56,10 @@ import type { FeedItemWithDetails, Bill as SupabaseBill } from '@/lib/database.t
 // Import new systems
 import { useJurisdiction } from '@/lib/use-jurisdiction';
 import { rankFeedItems, getTrendingItems, getGapItems, getLocalItems, FEED_TYPES, type FeedType, type ScoredFeedItem, getRandomizedBillFeed, fisherYatesShuffle } from '@/lib/feed-algorithm';
-import { useGamificationStore, selectCivicScore, selectStreak, CIVIC_LEVELS } from '@/lib/gamification';
-import { useEngagementStore, selectUnreadCount } from '@/lib/engagement';
+import { CIVIC_LEVELS } from '@/lib/gamification';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCivicScore } from '@/lib/use-civic-score';
+import { useUnreadNotifications } from '@/lib/use-unread-notifications';
 import { verifyBill, getTrustBadge } from '@/lib/trust-verification';
 import ShareModal from '@/components/ShareModal';
 import { BillOfRightsBadge } from '@/components/BillOfRightsBadge';
@@ -139,13 +141,32 @@ function convertBillToLegacy(bill: SupabaseBill): Bill {
 // ==========================================
 
 function CivicScoreHeader() {
-  const civicScore = useGamificationStore(selectCivicScore);
-  const streak = useGamificationStore(selectStreak);
-  const unreadCount = useEngagementStore(selectUnreadCount);
+  /**
+   * FROM THE SERVER, NOT FROM THIS PHONE.
+   *
+   * These three numbers used to come out of stores persisted to the device,
+   * while the web app read the same three from /api/me/civic-score. One person,
+   * two devices, two different scores — reported as a streak "showing 1 thing
+   * on my computer but something else on my phone". Neither was lying; there
+   * were simply two records where there should be one.
+   *
+   * The rule this restores: a device may hold what makes the app faster, and
+   * nothing that is individual to a person. Signing in somewhere new must show
+   * the same record, not a fresh one.
+   */
+  const { data } = useCivicScore();
+  const score = data?.score;
+  const unreadCount = useUnreadNotifications();
   const router = useRouter();
 
-  const levelInfo = CIVIC_LEVELS[civicScore.level];
-  const progressPct = ((civicScore.total - levelInfo.min) / (levelInfo.max - levelInfo.min)) * 100;
+  const levelInfo = CIVIC_LEVELS[score?.level ?? 'newcomer'];
+  // The server sends where you are in the band and how wide it is, so the
+  // percentage is read rather than recomputed from two ends that could disagree
+  // with it. Zero until it answers — an unknown score is not a score of zero,
+  // and the bar simply does not fill yet.
+  const progressPct = score && score.levelSpan > 0
+    ? (score.intoLevel / score.levelSpan) * 100
+    : 0;
 
   return (
     <Animated.View entering={FadeIn.duration(500)} className="mx-4 mb-3">
@@ -161,7 +182,7 @@ function CivicScoreHeader() {
               style={{ backgroundColor: `${levelInfo.color}20` }}
             >
               <Text className="text-xl font-bold" style={{ color: levelInfo.color }}>
-                {civicScore.total}
+                {score?.total ?? 0}
               </Text>
             </View>
             <View className="flex-1">
@@ -177,17 +198,17 @@ function CivicScoreHeader() {
                     style={{ width: `${progressPct}%`, backgroundColor: levelInfo.color }}
                   />
                 </View>
-                <Text className="text-slate-400 text-xs">{civicScore.xpToNextLevel} to next</Text>
+                <Text className="text-slate-400 text-xs">{score?.toNextLevel ?? 0} to next</Text>
               </View>
             </View>
           </View>
 
           {/* Streak & Notifications */}
           <View className="flex-row items-center ml-2">
-            {streak.current > 0 && (
+            {(score?.streak.current ?? 0) > 0 && (
               <View className="flex-row items-center bg-amber-500/20 px-2 py-1 rounded-full mr-2">
                 <Flame size={14} color="#F59E0B" />
-                <Text className="text-amber-500 text-xs font-bold ml-1">{streak.current}</Text>
+                <Text className="text-amber-500 text-xs font-bold ml-1">{score?.streak.current}</Text>
               </View>
             )}
             <Pressable className="relative p-2">
@@ -530,8 +551,7 @@ interface VoteButtonsProps {
 function VoteButtons({ bill }: VoteButtonsProps) {
   const router = useRouter();
   const requireAuth = useRequireAuth();
-  const recordVote = useGamificationStore((s) => s.recordVote);
-  const updateStreak = useGamificationStore((s) => s.updateStreak);
+  const queryClient = useQueryClient();
 
   // My standing vote on this law — same mirror every surface reads.
   const userVote = useVotingStore(selectUserVote(bill.id));
@@ -552,15 +572,27 @@ function VoteButtons({ bill }: VoteButtonsProps) {
 
     // One central vote per citizen per law — feed cards carry the law's
     // reference id, so this lands on the same record as every other surface.
-    void castReferenceVote(bill.id, yeaNayToPosition(vote)).catch(() => {
-      Alert.alert('Vote not recorded', 'Could not record your vote. Please try again.', [
-        { text: 'OK' },
-      ]);
-    });
-
-    // Record in gamification
-    recordVote(bill.id, bill.category, vote);
-    updateStreak();
+    void castReferenceVote(bill.id, yeaNayToPosition(vote))
+      .then(() => {
+        /*
+         * THE SCORE IS RECOUNTED, NOT INCREMENTED.
+         *
+         * This used to call recordVote() and updateStreak() on a store held on
+         * this phone, which kept its own running total beside the server's. Two
+         * tallies for one person, and a vote cast here never reached the one on
+         * a computer.
+         *
+         * The vote is the only thing worth writing. The score and the streak
+         * are counted from the votes, so asking again is both simpler and the
+         * only way the answer can be the same everywhere.
+         */
+        void queryClient.invalidateQueries({ queryKey: ['civic-score'] });
+      })
+      .catch(() => {
+        Alert.alert('Vote not recorded', 'Could not record your vote. Please try again.', [
+          { text: 'OK' },
+        ]);
+      });
   };
 
   const yeaAnimStyle = useAnimatedStyle(() => ({
@@ -886,15 +918,19 @@ export default function HomeScreen() {
   const addSeenBills = useSeenBillsStore(selectAddSeenBills);
   const clearSeenBills = useSeenBillsStore(selectClearSeenBills);
 
-  // Gamification
-  const updateStreak = useGamificationStore((s) => s.updateStreak);
-  const startSession = useEngagementStore((s) => s.startSession);
-
-  // Track session and streak on mount
-  useEffect(() => {
-    startSession();
-    updateStreak();
-  }, []);
+  /*
+   * NO "TRACK STREAK ON MOUNT".
+   *
+   * This called startSession() and updateStreak() on every mount, both writing
+   * to stores kept on the device. Nothing reads those values any more — the
+   * score, the level and the streak all come from /api/me/civic-score now — so
+   * these were two writes to a record nobody would ever look at again.
+   *
+   * And the streak they kept was the wrong shape of thing. Opening the app is
+   * not turning up; the server counts a day from what you actually did on it —
+   * a vote, a post, a comment. A streak you could keep alive by launching the
+   * app and closing it is a streak that measures nothing.
+   */
 
   // Live public feed — every user's timeline posts, cycled through the
   // backend feed algorithm (GET /api/feed). Refetches so the feed stays fresh.

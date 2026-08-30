@@ -5,7 +5,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { User, Bill } from './types';
 import { api } from '@/lib/api/api';
 import { fetchServerFeed, type ServerPost } from './server-feed';
-import { useUserProfilesStore } from './user-profiles-store';
 import { useGlobalEngagementStore, type ReferenceType } from './global-engagement-store';
 
 // Timeline Post Types
@@ -379,11 +378,19 @@ export const useTimelineStore = create<TimelineState>()(
         const { posts } = get();
         const post = posts.find((p) => p.id === postId);
 
-        // Increment comment count for post author
-        if (post) {
-          const profilesStore = useUserProfilesStore.getState();
-          profilesStore.incrementComment(post.author.id);
-        }
+        /*
+         * NO PER-AUTHOR TALLY KEPT ON THIS DEVICE.
+         *
+         * These lines maintained a running count of each author's supports,
+         * opposes, comments and gap votes in a store persisted to the device.
+         * Nothing ever read it — the profile screens ask the server — so it was
+         * a second set of books that only this device could see, kept up to
+         * date for nobody.
+         *
+         * Worse than useless if anything had read it: it only counted what
+         * happened HERE, so the same author's numbers differed on every device
+         * that had ever looked at them.
+         */
 
         const newComment: TimelineComment = {
           id: `comment-${Date.now()}`,
@@ -594,36 +601,21 @@ export const useTimelineStore = create<TimelineState>()(
         const post = posts.find((p) => p.id === postId);
         if (!post) return;
 
-        const authorId = post.author.id;
         const currentVote = post.voteCounts?.userVote;
-        const profilesStore = useUserProfilesStore.getState();
 
-        // Update author profile stats
-        if (vote === 'support') {
-          if (currentVote === 'support') {
-            // Removing support vote
-            profilesStore.decrementSupportVote(authorId);
-          } else if (currentVote === 'oppose') {
-            // Switching from oppose to support
-            profilesStore.decrementOpposeVote(authorId);
-            profilesStore.incrementSupportVote(authorId);
-          } else {
-            // New support vote
-            profilesStore.incrementSupportVote(authorId);
-          }
-        } else if (vote === 'oppose') {
-          if (currentVote === 'oppose') {
-            // Removing oppose vote
-            profilesStore.decrementOpposeVote(authorId);
-          } else if (currentVote === 'support') {
-            // Switching from support to oppose
-            profilesStore.decrementSupportVote(authorId);
-            profilesStore.incrementOpposeVote(authorId);
-          } else {
-            // New oppose vote
-            profilesStore.incrementOpposeVote(authorId);
-          }
-        }
+        /*
+         * NO PER-AUTHOR TALLY KEPT ON THIS DEVICE.
+         *
+         * These lines maintained a running count of each author's supports,
+         * opposes, comments and gap votes in a store persisted to the device.
+         * Nothing ever read it — the profile screens ask the server — so it was
+         * a second set of books that only this device could see, kept up to
+         * date for nobody.
+         *
+         * Worse than useless if anything had read it: it only counted what
+         * happened HERE, so the same author's numbers differed on every device
+         * that had ever looked at them.
+         */
 
         set((state) => ({
           posts: state.posts.map((p) => {
@@ -746,14 +738,7 @@ export const useTimelineStore = create<TimelineState>()(
         const post = posts.find((p) => p.id === postId);
         if (!post || !post.representationGap) return;
 
-        const authorId = post.author.id;
         const previousVote = post.representationGap.userVoteId;
-        const profilesStore = useUserProfilesStore.getState();
-
-        // Only increment if this is a new vote (not changing existing vote)
-        if (!previousVote) {
-          profilesStore.incrementRepGapVote(authorId);
-        }
 
         set((state) => ({
           posts: state.posts.map((p) => {

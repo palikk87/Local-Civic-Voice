@@ -42,6 +42,18 @@ Before pushing: `bun run verify`. After: `bun run deploy-check`.
   say amend the constitution. never ever amend it without express direct
   permission from me." Rewriting the supreme document to make my own work
   compliant is the exact move the whole platform exists to make impossible.
+- **ONE PROFILE, EVERY DEVICE.** A device may store only what makes the app run
+  smoother or faster — a cache, a draft, a remembered scroll position. Anything
+  individual to a person lives on the server, tied to their profile.
+
+  Khalid's words: "if my badges are stored on my phone then I login to my
+  computer then I'm not having a singular experience. I might as well have
+  multiple profiles. Same goes for all aspects of the app."
+
+  The test for any piece of state: if signing in on a second device would show a
+  different answer, it is in the wrong place. This applies to everything —
+  score, badges, streak, votes, likes, history, messages, preferences — not
+  only to the thing being worked on today.
 - **Terms of Use / governing jurisdiction.** Closed. Leave the files alone and
   never raise the subject again.
 - **Vibecode.** No longer used for this project. Do not assume it, suggest it,

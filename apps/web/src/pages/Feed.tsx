@@ -64,13 +64,8 @@ import {
   type ScoredFeedItem,
   fisherYatesShuffle,
 } from "@/lib/mobile/feed-algorithm";
-import {
-  useGamificationStore,
-  selectCivicScore,
-  selectStreak,
-  CIVIC_LEVELS,
-} from "@/lib/mobile/gamification";
-import { useEngagementStore, selectUnreadCount } from "@/lib/mobile/engagement";
+import { CIVIC_LEVELS } from "@/lib/mobile/gamification";
+import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
 import { verifyBill, getTrustBadge } from "@/lib/mobile/trust-verification";
 import ShareModal from "@/components/mobile/ShareModal";
 import { BillOfRightsBadge } from "@/components/mobile/BillOfRightsBadge";
@@ -169,7 +164,9 @@ function CivicScoreHeader() {
    */
   const { data } = useCivicScore();
   const score = data?.score;
-  const unreadCount = useEngagementStore(selectUnreadCount) ?? 0;
+  // From the server. This used to count what THIS browser had seen, so reading
+  // a notification on a phone left the laptop still showing it.
+  const unreadCount = useUnreadNotifications();
   const navigate = useNavigate();
 
   // Zero until the server answers, rather than a remembered number from this
@@ -674,8 +671,7 @@ interface VoteButtonsProps {
 
 function VoteButtons({ bill }: VoteButtonsProps) {
   const navigate = useNavigate();
-  const recordVote = useGamificationStore((s) => s.recordVote);
-  const updateStreak = useGamificationStore((s) => s.updateStreak);
+  const queryClient = useQueryClient();
 
   // My standing vote on this law — same mirror every surface reads.
   const userVote = useVotingStore(selectUserVote(bill.id));
@@ -685,13 +681,25 @@ function VoteButtons({ bill }: VoteButtonsProps) {
     if (!requireAuth("Sign in to cast your vote.")) return;
     // One central vote per citizen per law — feed cards carry the law's
     // reference id, so this lands on the same record as every other surface.
-    void castReferenceVote(bill.id, yeaNayToPosition(vote)).catch(() => {
-      toast.error("Could not record your vote. Please try again.");
-    });
-
-    // Record in gamification
-    recordVote(bill.id, bill.category, vote);
-    updateStreak();
+    void castReferenceVote(bill.id, yeaNayToPosition(vote))
+      .then(() => {
+        /*
+         * THE SCORE IS RECOUNTED, NOT INCREMENTED.
+         *
+         * This used to call recordVote() and updateStreak() on a store held in
+         * this browser, which kept its own running total beside the server's.
+         * Two tallies for one person, and a vote cast on a phone never reached
+         * the one on the laptop.
+         *
+         * The vote itself is the only thing worth writing. The score and the
+         * streak are counted from the votes, so asking again is both simpler
+         * and the only way the answer can be the same everywhere.
+         */
+        void queryClient.invalidateQueries({ queryKey: ["civic-score"] });
+      })
+      .catch(() => {
+        toast.error("Could not record your vote. Please try again.");
+      });
   };
 
   const totalVotes = bill.communityVotes.totalVoters || 1;
@@ -1030,16 +1038,20 @@ export default function HomeScreen() {
   const addSeenBills = useSeenBillsStore(selectAddSeenBills);
   const clearSeenBills = useSeenBillsStore(selectClearSeenBills);
 
-  // Gamification
-  const updateStreak = useGamificationStore((s) => s.updateStreak);
-  const startSession = useEngagementStore((s) => s.startSession);
-
-  // Track session and streak on mount
-  useEffect(() => {
-    startSession();
-    updateStreak();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  /*
+   * NO "TRACK SESSION AND STREAK ON MOUNT".
+   *
+   * This called startSession() and updateStreak() on every mount, both writing
+   * to stores kept in this browser. Nothing reads those values — the score, the
+   * level and the streak on the plaque above all come from /api/me/civic-score
+   * — so they were writes to a record nobody would look at again, and one that
+   * a different device would never see.
+   *
+   * And the streak they kept measured the wrong thing. Opening the app is not
+   * turning up; the server counts a day from what you actually did on it — a
+   * vote, a post, a comment. A streak kept alive by launching the page is a
+   * streak that says nothing about anybody.
+   */
 
   // Live public feed — every user's timeline posts, cycled through the
   // backend feed algorithm (GET /api/feed). Refetches so the feed stays fresh.
