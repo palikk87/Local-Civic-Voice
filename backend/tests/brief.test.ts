@@ -796,7 +796,27 @@ describe("a law too long for one pass", () => {
 
     const row = await prisma.governmentReference.findUniqueOrThrow({ where: { id: law.id } });
     expect(row.citizenBriefJson).toBeNull();
-    expect(row.contentStatus).toBe("unavailable");
+
+    // AND THE LAW IS OFFERED AGAIN, rather than written off.
+    //
+    // This used to expect contentStatus "unavailable", and that expectation was
+    // encoding a bug. The section did not fail because nobody publishes the
+    // text — the stub returns the whole law happily. It failed because the
+    // model answered 503 on one pass. "unavailable" is read by briefState as a
+    // fact about the LAW: there is nothing to write from, permanently, with
+    // nothing that ages it out.
+    //
+    // A long bill has more sections, so it has more chances to catch one bad
+    // response, so the longest and most consequential laws were the most likely
+    // to be written off for good. On 2026-08-30 the live library had 57 of 60
+    // records holding their full text and telling every reader no brief was
+    // possible; this is one of the two paths that put them there.
+    //
+    // What the test is really about is unchanged and still asserted above: a
+    // partial read must not become a smaller brief, because a reader cannot
+    // tell a partial brief from a whole one. Nothing is written. The difference
+    // is only whether they may ask again, and they may.
+    expect(row.contentStatus).toBeNull();
     expect(row.contentStartedAt).toBeNull();
   });
 });

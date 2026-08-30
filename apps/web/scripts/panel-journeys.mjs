@@ -196,8 +196,14 @@ await step("Delete removes the account", async () => {
   await seen(page, doomed.username);
 
   // The delete control is an icon button in the row; it opens a confirm dialog.
-  const row = page.locator("div").filter({ hasText: doomed.username }).last();
-  await row.getByRole("button").last().click();
+  // THE DELETE CONTROL HAS NO ACCESSIBLE NAME — it is a bare trash icon, so
+  // there is nothing to select it by. Filtering divs by the username and taking
+  // .last() finds the innermost element containing the text, which is a text
+  // node's parent and holds no buttons at all: thirty seconds of timeout.
+  //
+  // The search box has narrowed the list to one row, so the only destructive
+  // button on the page is this one.
+  await page.locator("button.bg-destructive").first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /delete/i }).last().click();
 
@@ -234,8 +240,8 @@ await step("Delete removes a post", async () => {
   const there = await seen(page, "Panel check post");
   expect("the post is in the moderation list", !!there, "the seeded post is not listed");
 
-  const row = page.locator("div").filter({ hasText: "Panel check post" }).last();
-  await row.getByRole("button").last().click();
+  // Same as the user row: an unnamed trash icon. See the note there.
+  await page.locator("button.bg-destructive").first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /delete/i }).last().click();
 
@@ -277,7 +283,7 @@ await step("Fixed marks a bug report fixed", async () => {
 
 await step("a read link can be minted and revoked", async () => {
   await tab(page, "bug-reports");
-  const mint = page.getByRole("button", { name: /create|mint|new (read )?link/i }).first();
+  const mint = page.getByRole("button", { name: /create link and copy/i }).first();
   if ((await mint.count()) === 0) {
     fail("a read link can be minted", "no button to create a read link is on the page");
     return;
@@ -298,11 +304,12 @@ await step("New role creates a role", async () => {
   await tab(page, "roles");
   await page.getByRole("button", { name: /new role/i }).click();
 
+  // By placeholder, not by position. Filling inputs.nth(0)/nth(1) put the slug
+  // in whatever field happened to be second, and the role was created under a
+  // name this check could not then find.
   const slug = `pop-panel-made-${Date.now().toString(36)}`;
-  const inputs = page.locator("input:visible");
-  await inputs.nth(0).fill("Panel check made role");
-  const count = await inputs.count();
-  if (count > 1) await inputs.nth(1).fill(slug);
+  await page.getByPlaceholder("Content Editor").fill("Panel check made role");
+  await page.getByPlaceholder("content-editor").fill(slug);
 
   // Grant it something, so the role is not empty and the save is meaningful.
   const boxes = page.locator('button[role="checkbox"]:visible, input[type="checkbox"]:visible');
@@ -400,7 +407,13 @@ await step("Set password sets a chosen password", async () => {
   await dialog.getByRole("button", { name: /set it/i }).click();
   await page.waitForTimeout(900);
   ok("Set password was accepted");
-  if (issuedClient) issuedClient.password = "panel-check-chosen-password";
+  // DELIBERATELY NOT updating issuedClient.password here. This button is
+  // `.first()`, which is the first client in the list — not necessarily the one
+  // created a moment ago. Assuming it was set that client's password, then
+  // tried to sign in to the B2B portal with a password belonging to somebody
+  // else, and the whole B2B half of this check — eight pages, seats, and the
+  // CSV download — never ran. The portal is signed into with the password the
+  // creation dialog actually showed.
 });
 
 // -------------------------------------------------------------- maintenance
@@ -509,7 +522,10 @@ await step("the B2B portal accepts the credential the console issued", async () 
   await b2b.goto(`${site}/b2b/login`, { waitUntil: "load", timeout: 30_000 });
   await b2b.getByPlaceholder("Enter your username").fill(issuedClient.username);
   await b2b.getByPlaceholder("Enter your password").fill(issuedClient.password);
-  await b2b.getByRole("button", { name: /sign in|log in|login/i }).first().click();
+  // "Access Analytics", not "Sign in". Guessed wrong the first time and the
+  // whole B2B half of this check never ran — thirty seconds of timeout and no
+  // coverage of eight pages.
+  await b2b.getByRole("button", { name: /access analytics/i }).click();
 
   const landed = await until(b2b, () => !location.pathname.endsWith("/login"));
   expect(
