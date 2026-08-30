@@ -68,7 +68,19 @@ impeachmentsRouter.get("/rules", (c) =>
   })
 );
 
-function publicUser(user: { id: string; name: string; username: string | null; image: string | null }) {
+/**
+ * The filer, or null once they have closed their account.
+ *
+ * NULL IS A REAL ANSWER HERE, not a gap to paper over. Impeachment.filedById
+ * used to cascade, so a filer leaving deleted the whole proceeding and every
+ * elector's vote in it. It is SET NULL now: the case survives, and the screen
+ * has to say the filer is gone rather than invent a name or quietly imply the
+ * articles came from nobody. Knowing who brought a case is part of judging it.
+ */
+function publicUser(
+  user: { id: string; name: string; username: string | null; image: string | null } | null,
+) {
+  if (!user) return null;
   return { id: user.id, name: user.name, username: user.username, image: user.image };
 }
 

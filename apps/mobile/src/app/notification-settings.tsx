@@ -27,6 +27,7 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { ChangePassword } from '@/components/settings/ChangePassword';
+import { CloseAccount } from '@/components/settings/CloseAccount';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   useNotificationStore,
@@ -386,6 +387,11 @@ function NotificationSettingsContent() {
           {/* The account holder's own control over their credential. Web twin
               puts the same card at the top of Settings. */}
           <ChangePassword />
+
+          {/* Last, deliberately. It is the one thing on this screen that cannot
+              be undone, and it should not sit next to a toggle. Web twin puts
+              it at the bottom of Settings for the same reason. */}
+          <CloseAccount />
 
           {/* Quick actions */}
           <View className="flex-row mb-6">

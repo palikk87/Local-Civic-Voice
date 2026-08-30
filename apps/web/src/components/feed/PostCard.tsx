@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { Bookmark, Heart, MessageCircle, Repeat2, Share2 } from "lucide-react";
 import { PostComments } from "@/components/feed/PostComments";
+import { AttachedLaw } from "@/components/feed/AttachedLaw";
 import { toast } from "sonner";
 import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
@@ -179,8 +180,30 @@ export function PostCard({ post }: { post: Post }) {
         </div>
       </div>
 
-      {/* Reference chip */}
-      {post.referenceId && post.referenceTitle ? (
+      {/* Content comes BEFORE the law, because the person's words are the post
+          and the record is what they are about. The chip that used to sit above
+          this said only "on <title>" — see the law block below it. */}
+      <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">
+        {withHashtagLinks(post.content)}
+      </p>
+
+      {/*
+        THE LAW, DRAWN IN FULL.
+
+        This was a title chip: a pill reading "on Veterans Healthcare
+        Improvement Act" and nothing else — no status, no tally, no way to take
+        a position without leaving the page. The server has been sending the
+        whole record with every post the entire time, batch-loaded for the page,
+        and every card on the web ignored it.
+
+        Falls back to the chip when the server sent no record view — an older
+        deploy, or a post attached to something that has since been merged away.
+        A missing record is not a reason to drop the fact that the post is about
+        one.
+      */}
+      {post.reference ? (
+        <AttachedLaw reference={post.reference} stale={post.lawUpdatedSincePosting} />
+      ) : post.referenceId && post.referenceTitle ? (
         <Link
           to={`/reference/${post.referenceId}`}
           className="inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors hover:brightness-110"
@@ -194,11 +217,6 @@ export function PostCard({ post }: { post: Post }) {
           <span className="truncate">{post.referenceTitle}</span>
         </Link>
       ) : null}
-
-      {/* Content */}
-      <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-foreground">
-        {withHashtagLinks(post.content)}
-      </p>
 
       {post.repostOf ? (
         <div className="rounded-xl border border-border bg-background/50 p-3">

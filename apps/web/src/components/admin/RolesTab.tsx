@@ -213,6 +213,7 @@ export function RolesTab() {
                         className="text-destructive"
                         onClick={() => deleteMutation.mutate(role.slug)}
                         disabled={deleteMutation.isPending}
+                        aria-label={`Delete the ${role.name} role`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

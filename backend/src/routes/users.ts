@@ -18,6 +18,7 @@ import { MIN_COHORT, listDistricts } from "../services/jurisdiction";
 import { districtsForZip } from "../services/zip-districts";
 import { trustScore, WEIGHTS } from "../services/trust-score";
 import { publicHandle } from "../services/public-identity";
+import { deleteAccount } from "../services/account-deletion";
 
 type AuthVariables = {
   user: typeof auth.$Infer.Session.user | null;
@@ -1046,6 +1047,97 @@ usersRouter.delete("/me/jurisdiction", async (c) => {
   });
 
   return c.json({ success: true, districtId: null });
+});
+
+/**
+ * DELETE /api/users/me
+ *
+ * Close your own account, and take everything with you.
+ *
+ * THERE WAS NO WAY TO DO THIS. An account could only be removed by an
+ * administrator, which means leaving required asking permission from the people
+ * you were leaving. The owner's instruction: holding somebody's data to keep
+ * our own system tidy violates their sovereignty.
+ *
+ * TWO THINGS ARE ASKED FOR, and both are deliberate.
+ *
+ * The PASSWORD, because a session left open on an unattended laptop must not be
+ * enough to erase somebody's civic record. This is the most irreversible action
+ * in the product and the only one with no undo of any kind.
+ *
+ * The USERNAME, typed out. Not a checkbox — a checkbox is one absent-minded
+ * click, and this cannot be taken back by us or by anybody. Typing your own
+ * name is the smallest thing that cannot happen by accident.
+ *
+ * WHAT IT DOES NOT DO: soft-delete, anonymise, tombstone, or keep a copy
+ * anywhere. See services/account-deletion.ts.
+ */
+const deleteMeSchema = z.object({
+  password: z.string().min(1, "Your password is required."),
+  /**
+   * Their own username, typed. Compared case-insensitively.
+   *
+   * The EMAIL is accepted too, and that is not a convenience. Not every account
+   * carries a username — sign-up takes an email and a name, and a username is
+   * set later or never. Requiring one here meant an account without one could
+   * never be closed by the person it belongs to, which is the exact opposite of
+   * the point. Found by the test, not by reading the code.
+   */
+  confirmUsername: z.string().min(1, "Type your username to confirm."),
+});
+
+usersRouter.delete("/me", zValidator("json", deleteMeSchema), async (c) => {
+  const currentUser = c.get("user");
+  if (!currentUser) return c.json({ error: "Authentication required" }, 401);
+
+  const { password, confirmUsername } = c.req.valid("json");
+
+  const me = await prisma.user.findUnique({
+    where: { id: currentUser.id },
+    select: { id: true, username: true, email: true, name: true },
+  });
+  if (!me) return c.json({ error: "No such account." }, 404);
+
+  // The typed name first, because it is the cheap check and getting it wrong is
+  // the ordinary mistake — somebody who mistypes their own username has not
+  // proved anything about their password by doing so.
+  const typed = confirmUsername.trim().toLowerCase();
+  const accepted = [me.username, me.email]
+    .filter((value): value is string => !!value && value.length > 0)
+    .map((value) => value.toLowerCase());
+
+  if (!accepted.includes(typed)) {
+    return c.json(
+      {
+        error: me.username
+          ? "That is not your username. Type it exactly to confirm."
+          : "That is not your email address. Type it exactly to confirm.",
+      },
+      400,
+    );
+  }
+
+  // Better Auth keeps the hash on Account, not User.
+  const credential = await prisma.account.findFirst({
+    where: { userId: me.id, providerId: "credential" },
+    select: { password: true },
+  });
+
+  const ok = await verifyPasswordOrDummy(credential?.password ?? null, password, "user");
+  if (!ok) return c.json({ error: "That password is not right." }, 401);
+
+  const outcome = await deleteAccount(me.id);
+  if (!outcome.ok) {
+    return c.json({ error: outcome.message ?? "The account could not be closed." }, 500);
+  }
+
+  return c.json({
+    success: true,
+    // Said back, because these are consequences for other people that the
+    // person leaving asked about on the warning screen.
+    juriesRedrawn: outcome.juriesRedrawn,
+    ballotsPulled: outcome.ballotsPulled,
+  });
 });
 
 export { usersRouter };

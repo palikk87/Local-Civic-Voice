@@ -23,7 +23,7 @@ export interface ImpeachmentProceeding {
   grounds: string;
   evidence: string;
   leader: ArticleVPerson;
-  filedBy: ArticleVPerson;
+  filedBy: ArticleVPerson | null;
   openedAt: string;
   expiresAt: string;
   suspendedUntil: string | null;
@@ -47,7 +47,7 @@ export interface ImpeachmentRecordEntry {
   id: string;
   grounds: string;
   evidence: string;
-  filedBy: ArticleVPerson;
+  filedBy: ArticleVPerson | null;
   openedAt: string;
   decidedAt: string | null;
   suspendedUntil: string | null;
@@ -69,7 +69,7 @@ export interface LeaderArticleV {
     status: string;
     grounds: string;
     evidence: string;
-    filedBy: ArticleVPerson;
+    filedBy: ArticleVPerson | null;
     openedAt: string;
     expiresAt: string;
     votes: number;

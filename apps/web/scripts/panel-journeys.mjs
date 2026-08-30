@@ -50,11 +50,72 @@ function expect(what, condition, detail) {
  * independent; one that cannot complete should cost its own assertion and
  * nothing else.
  */
+/**
+ * The page these journeys drive. Assigned once the super admin has signed in;
+ * `step` needs it to clean up between journeys, which happens before any of
+ * them run.
+ */
+let sharedPage = null;
+
+/**
+ * Leave the console in a state the NEXT journey can start from.
+ *
+ * THE CASCADE THIS FIXES. A step that fails leaves whatever it left — most
+ * often a modal it opened and never closed. Every later click then lands on the
+ * overlay instead of the button, times out after thirty seconds, and is
+ * reported as its own failure. One broken selector became eight, and the ones
+ * downstream looked like broken product features rather than debris.
+ *
+ * That is how six admin outcomes ended up recorded as "unconfirmed" overnight:
+ * a single unnamed button upstream, and everything after it drowning.
+ *
+ * Escape rather than a close button, because it works on every dialog in the
+ * console and needs no per-dialog knowledge. Repeated, because a confirm can
+ * sit on top of a sheet.
+ */
+async function settle() {
+  if (!sharedPage) return;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const open = await sharedPage
+      .locator('[role="dialog"], [role="alertdialog"]')
+      .count()
+      .catch(() => 0);
+    if (open === 0) return;
+    await sharedPage.keyboard.press("Escape").catch(() => undefined);
+    await sharedPage.waitForTimeout(250);
+  }
+}
+
 async function step(what, fn) {
   try {
     await fn();
   } catch (error) {
-    fail(what, String(error.message ?? error).split("\n")[0].slice(0, 200));
+    // WHAT WAS ACTUALLY ON SCREEN. A bare "Timeout 30000ms exceeded" says a
+    // selector matched nothing and nothing else — so diagnosing it means
+    // another ten-minute run, and then another. The names of the controls that
+    // WERE there turn one round trip into an answer.
+    let visible = "";
+    try {
+      visible = await sharedPage.evaluate(() =>
+        [...document.querySelectorAll("button, a[href]")]
+          .filter((el) => el.offsetParent !== null)
+          .map((el) => (el.getAttribute("aria-label") || el.innerText || "").trim())
+          .filter(Boolean)
+          .slice(0, 30)
+          .join(" | "),
+      );
+    } catch {
+      // The page may be gone. The message below is still worth having.
+    }
+    fail(
+      what,
+      `${String(error.message ?? error).split("\n")[0].slice(0, 160)}` +
+        (visible ? `\n        on screen: ${visible}` : ""),
+    );
+  } finally {
+    // Always, not only on failure: a passing step can leave a dialog open too,
+    // and the next one is entitled to a clean console either way.
+    await settle();
   }
 }
 
@@ -122,6 +183,7 @@ const superAdmin = await openConsole(admin.username, admin.password);
 ok("an administrator signs in through the form", admin.username);
 
 const page = superAdmin.page;
+sharedPage = page;
 
 // --------------------------------------------------------------- dashboard
 
@@ -163,6 +225,12 @@ await step("Unban is offered once an account is banned", async () => {
 });
 
 await step("Role changes the role", async () => {
+  // Reloads the tab first, like every other journey. It used to inherit
+  // whatever the ban step left on screen — including that step's open dialog —
+  // and time out against the overlay.
+  await tab(page, "users");
+  await page.getByPlaceholder(/search by username/i).fill(victim.username);
+  await seen(page, victim.username);
   await page.getByRole("button", { name: /^Role$/ }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox").click();
@@ -195,15 +263,19 @@ await step("Delete removes the account", async () => {
   await page.getByPlaceholder(/search by username/i).fill(doomed.username);
   await seen(page, doomed.username);
 
-  // The delete control is an icon button in the row; it opens a confirm dialog.
-  // THE DELETE CONTROL HAS NO ACCESSIBLE NAME — it is a bare trash icon, so
-  // there is nothing to select it by. Filtering divs by the username and taking
-  // .last() finds the innermost element containing the text, which is a text
-  // node's parent and holds no buttons at all: thirty seconds of timeout.
+  // NAMED, AND NAMING WHO. These delete controls used to be bare trash icons
+  // with no accessible name at all — nothing to select them by, and nothing a
+  // screen reader could announce either. This check reached for
+  // `button.bg-destructive` and took the first one, which is targeting by
+  // paint colour: it works until a second red button appears anywhere on the
+  // tab, and then it deletes the wrong thing.
   //
-  // The search box has narrowed the list to one row, so the only destructive
-  // button on the page is this one.
-  await page.locator("button.bg-destructive").first().click();
+  // They carry `aria-label="Delete <who>"` now. That fixes the accessibility
+  // hole and gives the test the one thing it actually needs — a way to say
+  // WHICH row it means.
+  await page
+    .getByRole("button", { name: new RegExp(`^Delete ${doomed.name}$`, "i") })
+    .click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /delete/i }).last().click();
 
@@ -240,8 +312,11 @@ await step("Delete removes a post", async () => {
   const there = await seen(page, "Panel check post");
   expect("the post is in the moderation list", !!there, "the seeded post is not listed");
 
-  // Same as the user row: an unnamed trash icon. See the note there.
-  await page.locator("button.bg-destructive").first().click();
+  // Named after the person who wrote it. See the note on the user row.
+  await page
+    .getByRole("button", { name: /^Delete the post by /i })
+    .first()
+    .click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /delete/i }).last().click();
 
@@ -311,10 +386,12 @@ await step("New role creates a role", async () => {
   await page.getByPlaceholder("Content Editor").fill("Panel check made role");
   await page.getByPlaceholder("content-editor").fill(slug);
 
-  // Grant it something, so the role is not empty and the save is meaningful.
-  const boxes = page.locator('button[role="checkbox"]:visible, input[type="checkbox"]:visible');
-  if ((await boxes.count()) > 0) await boxes.first().click();
-
+  // NO CHECKBOX HERE. This used to tick "the first visible checkbox" to give
+  // the role a capability — but the create form deliberately has none. Its own
+  // words: "It starts with nothing. Create it, then tick what it may do." So
+  // the click landed on a capability belonging to an EXISTING role further up
+  // the page and saved that instead, which is why the activity log carried an
+  // update_role nobody asked for.
   await page.getByRole("button", { name: /^Create$/ }).click();
   const made = await seen(page, "Panel check made role");
   expect("the new role is listed", !!made, "the role does not appear after Create");
@@ -400,20 +477,79 @@ await step("New client issues credentials once", async () => {
   await page.getByRole("button", { name: /i have copied them/i }).click();
 });
 
+const CHOSEN_PASSWORD = "panel-check-chosen-password";
+
 await step("Set password sets a chosen password", async () => {
-  await page.getByRole("button", { name: /set password/i }).first().click();
+  /*
+   * SCOPED TO THE ROW, NOT `.first()`.
+   *
+   * This used to click the first "Set password" on the page, which is the first
+   * CLIENT in the list — not the one created a moment earlier. So it set a
+   * stranger's password, then tried to sign in to the B2B portal with it, and
+   * the entire B2B half of this check — eight pages, the seats, the CSV
+   * download — silently never ran. The comment that used to live here
+   * explained that and left it broken. Rule 4b: fix the obstacle, finish the
+   * work.
+   *
+   * The card carries the username, so the row is findable. And because the
+   * password is now chosen rather than generated, the outcome is checkable:
+   * the B2B sign-in below uses THIS value, so if the button set the wrong
+   * account's password the sign-in fails and says so.
+   */
+  const row = page
+    .locator("div.rounded-lg.border")
+    .filter({ hasText: issuedClient?.username ?? "" });
+
+  await row.getByRole("button", { name: /^set password$/i }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByPlaceholder(/at least 12 characters/i).fill("panel-check-chosen-password");
+  await dialog.getByPlaceholder(/at least 12 characters/i).fill(CHOSEN_PASSWORD);
   await dialog.getByRole("button", { name: /set it/i }).click();
   await page.waitForTimeout(900);
   ok("Set password was accepted");
-  // DELIBERATELY NOT updating issuedClient.password here. This button is
-  // `.first()`, which is the first client in the list — not necessarily the one
-  // created a moment ago. Assuming it was set that client's password, then
-  // tried to sign in to the B2B portal with a password belonging to somebody
-  // else, and the whole B2B half of this check — eight pages, seats, and the
-  // CSV download — never ran. The portal is signed into with the password the
-  // creation dialog actually showed.
+
+  // The whole point: the portal below signs in with this, so a wrong row here
+  // becomes a visible failure rather than a skipped half.
+  if (issuedClient) issuedClient.password = CHOSEN_PASSWORD;
+});
+
+await step("the row says when the password last changed", async () => {
+  /*
+   * The answer to "why did my password stop working", on the screen. It was in
+   * the activity log all along and nothing displayed it, so settling the
+   * owner's own locked-out login took a week of ruling things out.
+   *
+   * Never the password itself — that is a one-way hash and unreadable by
+   * anybody, us included. Only that it moved, and when.
+   */
+  const row = page
+    .locator("div.rounded-lg.border")
+    .filter({ hasText: issuedClient?.username ?? "" });
+
+  const text = await row.first().innerText();
+  expect(
+    "the client row reports the password change that just happened",
+    /password changed/i.test(text),
+    text.replace(/\n/g, " | ").slice(0, 200),
+  );
+  expect(
+    "…and never prints the password itself",
+    !text.includes(CHOSEN_PASSWORD),
+    "a password is on screen",
+  );
+});
+
+await step("there is no button that invents a password", async () => {
+  // The control that produced a password nobody chose is gone. Asserted on the
+  // screen as well as in the source, because a source test cannot see a button
+  // that arrives from a shared component somewhere else.
+  const rotate = await page
+    .getByRole("button", { name: /^password$/i })
+    .count();
+  expect(
+    "no 'Password' rotate button is on the B2B tab",
+    rotate === 0,
+    `${rotate} found — the generator is back`,
+  );
 });
 
 // -------------------------------------------------------------- maintenance

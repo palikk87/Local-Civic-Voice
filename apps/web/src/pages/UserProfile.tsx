@@ -35,7 +35,8 @@ import type { MyDelegation } from "@/lib/article-v";
 import { CivicRecord } from "@/components/record/CivicRecord";
 import { ReportDialog } from "@/components/safety/ReportDialog";
 import { useStartConversation } from "@/lib/api/messages";
-import { PostComments } from "@/components/feed/PostComments";
+import { PostCard } from "@/components/feed/PostCard";
+import type { Post } from "@/lib/civic";
 
 interface PublicUser {
   id: string;
@@ -53,27 +54,21 @@ interface PublicUser {
   isFriend?: boolean;
 }
 
-interface UserPost {
-  id: string;
-  content: string;
-  referenceType: string | null;
-  referenceId: string | null;
-  referenceTitle: string | null;
-  commentsCount: number;
-  likesCount: number;
-  createdAt: string;
-}
+/*
+ * THE POST TYPE IS THE SHARED ONE NOW.
+ *
+ * There used to be a local UserPost here with seven fields — content, a
+ * reference id and title, two counts and a date. /api/posts has always sent
+ * considerably more than that: the author block, the full record view with its
+ * live tally and the reader's own position, media, reposts, and whether you
+ * have already liked it. Declaring a narrow local type quietly threw all of it
+ * away, and the card below could then only draw what was left.
+ */
 
 // The delegation shape comes from lib/article-v, which is also what the
 // filing form takes. This file used to declare a narrower local copy with
 // three of its fields, which was fine until the same object had to be handed
 // to something that needed the rest of them.
-
-function referenceRoute(post: UserPost): string {
-  // One law, one page — see the note in Feed.tsx. The three branch-specific
-  // screens were ports of the phone app and are redirects now.
-  return `/reference/${post.referenceId ?? ""}`;
-}
 
 export default function UserProfile() {
   const { id = "" } = useParams();
@@ -85,7 +80,6 @@ export default function UserProfile() {
   const startConversation = useStartConversation();
   const [reporting, setReporting] = useState(false);
   /** One thread open at a time on a profile — a wall of open boxes is noise. */
-  const [openComments, setOpenComments] = useState<string | null>(null);
 
   const { data: profile, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["public-user", id],
@@ -112,7 +106,7 @@ export default function UserProfile() {
   const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ["public-user-posts", id],
     queryFn: () =>
-      api.get<{ posts: UserPost[] }>(`/api/posts?authorId=${encodeURIComponent(id)}&limit=30`),
+      api.get<{ posts: Post[] }>(`/api/posts?authorId=${encodeURIComponent(id)}&limit=30`),
     enabled: !!id,
   });
 
@@ -531,51 +525,25 @@ export default function UserProfile() {
               <p className="text-slate-400">No posts yet</p>
             </div>
           ) : (
-            posts.map((post) => (
-              <div
-                key={post.id}
-                className="mb-3 rounded-xl border border-slate-700/40 bg-slate-800/60 p-4"
-              >
-                <p className="whitespace-pre-wrap break-words text-slate-200">{post.content}</p>
-                {post.referenceTitle ? (
-                  <button
-                    onClick={() => navigate(referenceRoute(post))}
-                    className="mt-3 flex w-full items-center rounded-lg border border-slate-700/50 bg-slate-900/50 px-3 py-2 text-left transition-colors hover:bg-slate-900"
-                  >
-                    <FileText size={14} className="mr-2 shrink-0 text-amber-500" />
-                    <span className="min-w-0 flex-1 truncate text-sm text-slate-300">
-                      {post.referenceTitle}
-                    </span>
-                    <Badge variant="secondary" className="ml-2 shrink-0 text-[10px] capitalize">
-                      {(post.referenceType ?? "bill").replace(/_/g, " ")}
-                    </Badge>
-                  </button>
-                ) : null}
-                {/*
-                  THE COMMENT COUNT IS A DOOR NOW.
+            /*
+              ONE CARD, THE SAME ONE THE REST OF THE PLATFORM USES.
 
-                  It was a sentence. Somebody reading a profile could see that a
-                  post had eleven comments and had no way to read one, let alone
-                  add one, without hunting for the post somewhere else. Asked
-                  for as "keep people on the feed or profile pages or where ever
-                  they are that they see the post and still comment".
-                */}
-                <p className="mt-2 text-xs text-slate-500">
-                  {new Date(post.createdAt).toLocaleString()} · {post.likesCount} likes ·{" "}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setOpenComments((open) => (open === post.id ? null : post.id))
-                    }
-                    aria-expanded={openComments === post.id}
-                    className="underline underline-offset-2 hover:text-slate-300"
-                  >
-                    {post.commentsCount} comments
-                  </button>
-                </p>
-                {openComments === post.id ? <PostComments postId={post.id} autoFocus /> : null}
-              </div>
-            ))
+              This drew its own markup: the text, a title chip, and a line
+              reading "8/25/2026, 7:40:29 PM · 0 likes · 0 comments". No avatar,
+              no handle, no relative time, no attached law with its tally, and
+              no way to like, reply, repost or share without going somewhere
+              else to find the post again.
+
+              Reported plainly: "the posts and shares on their profile should
+              look the same as they do on feed and time line."
+
+              Everything it needed was already in the response. /api/posts sends
+              the author block, the full record view with the live tally and the
+              reader's own position, whether you have liked it, whether you have
+              passed it on — batch-loaded for the whole page. This file declared
+              a narrower local type with seven fields and dropped the rest.
+            */
+            posts.map((post) => <PostCard key={post.id} post={post} />)
           )}
         </div>
       </div>

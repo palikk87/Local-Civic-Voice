@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { BlockedAndMuted } from "@/components/settings/BlockedAndMuted";
 import { ChangePassword } from "@/components/settings/ChangePassword";
+import { CloseAccount } from "@/components/settings/CloseAccount";
 
 interface NotificationPreferences {
   likes: boolean;
@@ -135,6 +136,10 @@ export default function Settings() {
             <ChangePassword />
 
             <BlockedAndMuted />
+
+            {/* Last on the page, deliberately. It is the one thing here that
+                cannot be undone, and it should not sit next to a toggle. */}
+            <CloseAccount />
 
             <div className="rounded-lg border border-border bg-card p-6">
               <h2 className="font-semibold text-foreground">Notifications</h2>

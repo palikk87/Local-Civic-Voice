@@ -1137,7 +1137,13 @@ describe("admin deletion removes stored objects", () => {
 
     expect(response.status).toBe(500);
     expect(await prisma.user.findUnique({ where: { id: userId } })).not.toBeNull();
-    expect(await waitForLog("Refusing to delete user", logFrom)).toBe(true);
+    // "account", not "user". Both deletion doors — an administrator removing
+    // somebody, and a person closing their own — now go through
+    // services/account-deletion.ts, and it says "account" because that is what
+    // the person on the other end of the self-serve path is closing. The
+    // behaviour under test is unchanged: the store refused, nothing was
+    // deleted, and the row above is still there.
+    expect(await waitForLog("Refusing to delete account", logFrom)).toBe(true);
     expect(serverLog().slice(logFrom)).toContain(media.key);
 
     await rm(path, { recursive: true });

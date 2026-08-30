@@ -46,6 +46,10 @@ export interface Notification {
     commentId?: string;
     governmentReferenceId?: string;
     fromUserId?: string;
+    /** Article V. leaderId is what makes an impeachment notice a link — the
+     *  proceeding lives on the accused person's profile. */
+    impeachmentId?: string;
+    leaderId?: string;
   } | null;
   // Legacy shape, still read as a fallback so an older payload is not dropped.
   referenceId?: string;

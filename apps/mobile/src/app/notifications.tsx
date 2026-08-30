@@ -225,6 +225,16 @@ function NotificationsContent() {
       router.push(`/user/${data.fromUserId}`);
       return;
     }
+    // ARTICLE V. Every impeachment notice — proceedings opened, decided, served,
+    // and the filer deleting their profile — has carried impeachmentId and
+    // leaderId since it was written, and neither led anywhere: the reader was
+    // told a constitutional proceeding concerned them and then left to go and
+    // find it. The proceeding lives on the accused person's profile, which is
+    // where the vote is. Web twin does the same.
+    if (data?.leaderId) {
+      router.push(`/user/${data.leaderId}`);
+      return;
+    }
 
     // Older payloads, kept so nothing already stored is dropped.
     if (notification.referenceType === 'user' && notification.referenceId) {

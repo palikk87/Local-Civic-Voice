@@ -13,6 +13,10 @@ interface NotificationPayload {
   postId?: string;
   governmentReferenceId?: string;
   fromUserId?: string;
+  /** Article V. Every impeachment notice has carried these and none of them led
+   *  anywhere — see destinationOf. */
+  impeachmentId?: string;
+  leaderId?: string;
 }
 
 interface Notification {
@@ -92,6 +96,13 @@ function destinationOf(notification: Notification): string | null {
   // go and find whatever somebody had replied to.
   if (data.postId) return `/post/${data.postId}`;
   if (data.fromUserId) return `/user/${data.fromUserId}`;
+  // ARTICLE V. Every impeachment notice — proceedings opened, decided, served,
+  // and now the filer deleting their profile — has carried impeachmentId and
+  // leaderId since it was written, and none of them led anywhere: the reader
+  // was told a constitutional proceeding concerned them and then left to go and
+  // find it. The proceeding lives on the accused person's profile, which is
+  // where the vote is.
+  if (data.leaderId) return `/user/${data.leaderId}`;
   return null;
 }
 

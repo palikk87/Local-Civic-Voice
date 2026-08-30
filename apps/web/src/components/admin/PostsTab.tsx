@@ -134,6 +134,7 @@ export function PostsTab() {
                 variant="destructive"
                 className="shrink-0"
                 onClick={() => setDeleteTarget(post)}
+                aria-label={`Delete the post by ${post.author.displayName}`}
               >
                 <Trash2 className="h-4 w-4" />
               </Button>

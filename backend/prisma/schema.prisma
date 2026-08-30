@@ -1510,7 +1510,22 @@ model Impeachment {
   /// The person accused. Anyone holding at least one active delegation.
   leaderId  String
   /// Who brought it. Must have been delegating to the leader when they filed.
-  filedById String
+  ///
+  /// NULL ONCE THEY CLOSE THEIR ACCOUNT, and the proceeding carries on without
+  /// them. It used to cascade: the filer leaving deleted the articles, the
+  /// evidence, and every elector's vote in them — so one person walking away
+  /// erased other people's participation in a constitutional act they had
+  /// nothing to do with.
+  ///
+  /// The decision, from the owner: a proceeding may survive its filer, and
+  /// everyone entitled to vote in it is notified that the filer has closed
+  /// their account. Knowing who brought a case is part of judging it, so a
+  /// case that quietly loses its origin has to say so rather than read as
+  /// though it appeared from nowhere.
+  ///
+  /// SystemReset.filedById was already built this way — a bare column with no
+  /// relation, for the same reason, spelled out in its own comment.
+  filedById String?
 
   /// open | passed | expired
   ///
@@ -1542,7 +1557,7 @@ model Impeachment {
   suspendedUntil DateTime?
 
   leader   User                 @relation("ImpeachmentLeader", fields: [leaderId], references: [id], onDelete: Cascade)
-  filedBy  User                 @relation("ImpeachmentFiler", fields: [filedById], references: [id], onDelete: Cascade)
+  filedBy  User?                @relation("ImpeachmentFiler", fields: [filedById], references: [id], onDelete: SetNull)
   electors ImpeachmentElector[]
   /// The audit that ran when the articles were filed, so the accused and the
   /// electorate see the same numbers before anybody votes.

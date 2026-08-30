@@ -207,6 +207,40 @@ export interface PostAuthor {
   avatar: string | null;
 }
 
+/**
+ * The law under a post, as it stands NOW.
+ *
+ * Sent by GET /api/posts on every list — the profile, a timeline, the feed —
+ * batch-loaded server-side so a page of cards costs one query rather than one
+ * per card. See backend/src/services/post-reference-view.ts.
+ *
+ * It was going unused by every card on the web. The server did the work,
+ * computed the live tally and the caller's own position, and three separate
+ * card implementations threw it away and drew a title chip instead.
+ *
+ * Live rather than frozen at posting time on purpose: the record is shared, and
+ * the post only frames it. A tally copied into the post when it was written
+ * would be wrong by the next vote.
+ */
+export interface PostReference {
+  id: string;
+  masterReferenceId: string;
+  /** As printed — "H.R. 4836", "EO 14147". */
+  displayId: string;
+  referenceType: ReferenceType;
+  title: string;
+  shortTitle: string | null;
+  status: string;
+  category: string | null;
+  sourceUrl: string | null;
+  votes: Votes;
+  /** The reader's own standing position on this law, or null. */
+  userVote: VotePosition | null;
+  /** When the LAW last moved, not when the row was written. */
+  lawChangedAt: string | null;
+  lawVersion: number;
+}
+
 export interface Post {
   id: string;
   content: string;
@@ -214,6 +248,10 @@ export interface Post {
   referenceType: ReferenceType | null;
   referenceId: string | null;
   referenceTitle: string | null;
+  /** The law itself, live. Null when the post is not about one. */
+  reference?: PostReference | null;
+  /** The law under this post has moved since it was written. */
+  lawUpdatedSincePosting?: boolean;
   media: unknown[];
   commentsCount: number;
   likesCount: number;

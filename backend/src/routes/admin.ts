@@ -38,6 +38,7 @@ import {
   STORABLE_SECRETS,
 } from "../services/platform-secrets";
 import { purgeMediaObjects } from "../services/media-objects";
+import { deleteAccount } from "../services/account-deletion";
 import { mergeReferences, unmergeReferences } from "../services/deduplication-service";
 import { undoSystemReset } from "../services/system-reset";
 import { LOOK_ALIKE } from "../services/reference-lineage";
@@ -743,36 +744,23 @@ adminRouter.delete("/users/:id", zValidator("param", idParamSchema), async (c) =
       return c.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Everything this user ever uploaded, not just what they posted.
+    // ONE ROUTINE, SHARED WITH "DELETE MY ACCOUNT".
     //
-    // Media.userId is a bare column with NO relation and NO cascade — the only
-    // FK on Media is postId. So deleting a user cascades User -> Post -> Media
-    // for attached media and leaves the objects behind, while media that was
-    // uploaded and never posted is not reached at all: those rows survive the
-    // user entirely, pointing at objects that also survive. Someone who deletes
-    // their account was keeping every photo they ever uploaded, still publicly
-    // fetchable.
+    // This used to purge media and then call prisma.user.delete, which looked
+    // complete and was not: eleven tables hold a person's id as a plain column
+    // with no link back to the account, so nothing reached them. The worst was
+    // GovernmentReferenceVote — the vote row outlived the account, the Pulse
+    // went on counting it, and a deleted person kept voting forever.
     //
-    // Querying by userId catches both, which is why this is a findMany rather
-    // than a walk of the user's posts.
-    const media = await prisma.media.findMany({
-      where: { userId: id },
-      select: { id: true, url: true, thumbnailUrl: true },
-    });
-
-    const purge = await purgeMediaObjects(media, `user ${id}`);
-    if (!purge.ok) {
-      return c.json({ error: purge.message }, { status: 500 });
-    }
-
-    // Ban state lives on the row, so deleting the user takes it with them.
-    await prisma.user.delete({ where: { id } });
-
-    // The cascade removed the media rows attached to posts. The unattached ones
-    // have no relation to User, so nothing removed them — they would be left
-    // pointing at objects this request just deleted.
-    if (media.length > 0) {
-      await prisma.media.deleteMany({ where: { userId: id } });
+    // services/account-deletion.ts is now the only thing that removes an
+    // account, and both doors go through it, so an administrator's delete and a
+    // person's own cannot come to mean different things. It also handles the
+    // proceedings rule: an open jury draws a replacement juror, an open
+    // impeachment or reset loses the ballot, and a concluded one keeps its
+    // recorded outcome.
+    const outcome = await deleteAccount(id);
+    if (!outcome.ok) {
+      return c.json({ error: outcome.message ?? "The account could not be deleted." }, { status: 500 });
     }
 
     createActivityLog(

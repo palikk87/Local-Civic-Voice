@@ -80,7 +80,16 @@ export const api = {
     request<T>(url, { method: "POST", body: body ? JSON.stringify(body) : undefined }),
   put: <T>(url: string, body: unknown) =>
     request<T>(url, { method: "PUT", body: JSON.stringify(body) }),
-  delete: <T>(url: string) => request<T>(url, { method: "DELETE" }),
+  /**
+   * A body is optional and rarely right on a DELETE — but closing an account
+   * needs the password and the typed username travelling with the request, and
+   * they must not go in the URL where they would land in a log.
+   */
+  delete: <T>(url: string, body?: unknown) =>
+    request<T>(url, {
+      method: "DELETE",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
   patch: <T>(url: string, body: unknown) =>
     request<T>(url, { method: "PATCH", body: JSON.stringify(body) }),
 };

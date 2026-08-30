@@ -354,6 +354,7 @@ export function B2BClientsTab() {
                       }
                     }}
                     disabled={remove.isPending}
+                    aria-label={`Delete ${client.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

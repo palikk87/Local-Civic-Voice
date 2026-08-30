@@ -209,11 +209,47 @@ async function measure(page) {
     }
 
     offenders.sort((a, b) => b.right - a.right || b.width - a.width);
+
+    /**
+     * TEXT THAT IS CUT OFF INSIDE SOMETHING THAT FITS.
+     *
+     * The check above measures the page overflowing the viewport, which is the
+     * symptom people report as "it does not fit". It cannot see the other
+     * shape of the same problem: a label inside a `truncate` box, where the
+     * layout holds perfectly and the WORD is chopped. "Messa…" and "Govern…"
+     * in the bottom navigation, reported from a real phone.
+     *
+     * That trade is deliberate in the navigation — the label gives way before
+     * the layout does, because the alternative was Safari zooming the whole
+     * page out. Deliberate does not make it finished: a signpost you cannot
+     * read is not doing its job either.
+     *
+     * Only NAVIGATION and BUTTON labels. Truncating a headline or a law's title
+     * in a list is normal and correct; truncating the word that tells somebody
+     * where a control goes is not.
+     */
+    const clipped = [];
+    for (const el of document.querySelectorAll("nav a, nav button, [role='tablist'] a, [role='tablist'] button")) {
+      for (const node of [el, ...el.querySelectorAll("span")]) {
+        const style = getComputedStyle(node);
+        if (style.textOverflow !== "ellipsis" && style.overflow !== "hidden") continue;
+        if (node.scrollWidth <= node.clientWidth + 1) continue;
+        const text = (node.textContent || "").trim();
+        if (!text) continue;
+        clipped.push({
+          text: text.slice(0, 30),
+          shown: Math.round(node.clientWidth),
+          needs: Math.round(node.scrollWidth),
+        });
+      }
+    }
+
     return {
       viewport: width,
       scrollWidth: doc.scrollWidth,
       over: doc.scrollWidth - width,
       offenders: offenders.slice(0, 4),
+      clipped,
     };
   });
 }
@@ -221,6 +257,8 @@ async function measure(page) {
 const browser = await launchChromium();
 const paths = await routes();
 const failures = [];
+/** Cut-off navigation labels, deduplicated by phone and word. */
+const clippedLabels = new Map();
 let checks = 0;
 
 for (const phone of PHONES) {
@@ -290,6 +328,17 @@ for (const phone of PHONES) {
         `${phone} (${result.viewport}px) ${path}: over by ${result.over}px\n${named || "        (no single element named — check a negative margin or a grid track)"}`,
       );
     }
+
+    // A signpost you cannot read is not doing its job. Collected across every
+    // page and phone, then reported once at the end — the navigation is the
+    // same on all of them, so failing per page would print the same line
+    // fifty-five times.
+    for (const label of result.clipped) {
+      clippedLabels.set(
+        `${phone}|${label.text}`,
+        `${phone} (${result.viewport}px): "${label.text}" is cut off — ${label.shown}px shown, needs ${label.needs}px`,
+      );
+    }
   }
 
   await context.close();
@@ -297,6 +346,8 @@ for (const phone of PHONES) {
 
 await browser.close();
 server.close();
+
+for (const line of [...clippedLabels.values()].sort()) failures.push(line);
 
 if (fontsServed === 0) {
   console.error(

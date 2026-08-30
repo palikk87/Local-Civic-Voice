@@ -21,6 +21,13 @@ export const NotificationType = {
   IMPEACHMENT_DECIDED: "impeachment_decided",
   /// Articles of Impeachment have been filed against you. Served on the accused.
   IMPEACHMENT_SERVED: "impeachment_served",
+  /// The person who filed a proceeding you can vote in has closed their
+  /// account. The proceeding stands; this says the filer is gone.
+  ///
+  /// Cannot be turned off, like the rest of Article V. Who brought a case is
+  /// part of judging it, and an elector who is never told the origin vanished
+  /// is voting on a different thing than they think they are.
+  FILER_LEFT: "filer_left",
   /// A vote to restart the platform has opened. Sent to every account.
   SYSTEM_RESET_OPENED: "system_reset_opened",
   /// It passed, and runs in 48 hours. This is the disclosure notice.
@@ -596,6 +603,82 @@ export async function notifyLawUpdate(
       "A law you shared has been updated",
       `${displayTitle} has changed since you posted about it. Your post is unchanged \u2014 the law it points to has moved.`,
       { postId, governmentReferenceId, masterReferenceId }
+    );
+    if (result.created) notified += 1;
+  }
+
+  return { notified };
+}
+
+/**
+ * THE PERSON WHO FILED A PROCEEDING HAS DELETED THEIR PROFILE.
+ *
+ * WHY ANYBODY IS TOLD. Impeachment.filedById used to cascade from User, so a
+ * filer deleting their profile deleted the entire proceeding — the grounds, the
+ * evidence, and every elector's vote in it. One person leaving erased other
+ * people's participation in a constitutional act they had nothing to do with.
+ *
+ * The proceeding survives now. But surviving quietly is its own problem: an
+ * elector who read the articles, weighed who brought them, and voted, is
+ * entitled to know that the person who brought them is gone. Who filed a case
+ * is part of judging it. The decision, in the owner's words: "proceedings may
+ * survive but everyone that's got a right to vote in the proceedings is
+ * notified that the filer has deleted their profile."
+ *
+ * IT SAYS DELETED, NOT "left" OR "closed". Those are softer words for a
+ * different thing. Deleting a profile on this platform is irreversible and
+ * total, and an elector deciding what to make of it needs the accurate verb.
+ *
+ * AND IT NAMES THEM, WHEN THE FILING WAS PUBLIC. Article V's own rule, from
+ * routes/impeachments.ts: "THE ARTICLES ARE PUBLIC. A charge brought in secret,
+ * decided by a private electorate, is exactly the concentration of power
+ * Article V exists to break. The vote is restricted; the accusation is not."
+ * The electors could already see who filed. Withholding the name now would not
+ * protect anything — it would only make the notice harder to place against the
+ * articles they have been reading.
+ *
+ * Passed in by the caller rather than looked up here, because by the time this
+ * runs the account may already be gone. When there is no name to give — a
+ * filing that was never public — the notice says the filer without naming one.
+ *
+ * EVERYONE ENTITLED TO VOTE, not everyone who has voted. Somebody who has not
+ * voted yet is exactly who this matters most to: they still have the decision
+ * in front of them.
+ */
+export async function notifyFilerLeft(
+  proceeding: "impeachment" | "system_reset",
+  proceedingId: string,
+  electorIds: string[],
+  /** How the filer was publicly known, e.g. "@dwhitfield". Null if not public. */
+  filerLabel: string | null,
+  /** The accused, for an impeachment. Their profile is where the proceeding is. */
+  leaderId?: string | null,
+): Promise<{ notified: number }> {
+  const what =
+    proceeding === "impeachment"
+      ? "The impeachment you can vote in"
+      : "The system reset you can vote in";
+
+  const who = filerLabel ? `${filerLabel}, who filed it,` : "The person who filed it";
+  const title = filerLabel
+    ? `${filerLabel} deleted their profile`
+    : "The person who filed this deleted their profile";
+
+  let notified = 0;
+  for (const electorId of electorIds) {
+    const result = await createNotification(
+      electorId,
+      NotificationType.FILER_LEFT,
+      title,
+      `${what} is unchanged \u2014 the articles, the evidence and your vote all ` +
+        `stand. ${who} has deleted their profile, and it cannot be undone.`,
+      // leaderId is what makes the row a link: the proceeding lives on the
+      // accused person's profile. See destinationOf in the web Notifications
+      // page — every Article V notice carried impeachmentId alone and led
+      // nowhere.
+      proceeding === "impeachment"
+        ? { impeachmentId: proceedingId, ...(leaderId ? { leaderId } : {}) }
+        : { systemResetId: proceedingId },
     );
     if (result.created) notified += 1;
   }
