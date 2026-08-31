@@ -372,10 +372,23 @@ export function BugReporter() {
   clampRef.current = clamp;
   openPanel.current = () => setStage("writing");
 
-  // A window that got smaller can leave a saved spot off-screen.
+  /*
+   * A SAVED SPOT IS CHECKED WHEN IT IS USED, NOT ONLY WHEN THE WINDOW MOVES.
+   *
+   * The position survives in localStorage, and it was only ever brought back
+   * inside the screen on a RESIZE event. So a spot saved on a wide window put
+   * the button past the edge of a narrower one and left it there — present in
+   * the page, painted off-screen, and invisible until the window happened to
+   * be resized. Reported as "the bug report button is missing", which is
+   * exactly what it looks like from the outside.
+   *
+   * Clamping once on mount costs nothing and makes the button impossible to
+   * lose: wherever it was left, it comes back somewhere you can reach it.
+   */
   useEffect(() => {
     if (!spot) return;
     const onResize = () => setSpot((at) => (at ? clamp(at.x, at.y) : at));
+    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
     // eslint-disable-next-line react-hooks/exhaustive-deps

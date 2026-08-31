@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { AttachedLawCard } from "@/components/feed/AttachedLawCard";
+import { useTimelineStore } from "@/lib/mobile/timeline-store";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -97,6 +99,22 @@ export function ComposeCard() {
       setSelected(null);
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["algorithmic-feed"] });
+
+      /*
+       * THE TIMELINE DRAWS FROM SOMEWHERE ELSE, AND HAS TO BE TOLD.
+       *
+       * This card is rendered ON the timeline, but the timeline renders its
+       * posts from the store, loaded once when the page mounts — not from the
+       * query caches invalidated above. So a new post landed on the server,
+       * refreshed two caches nothing on that screen was reading, and left the
+       * page exactly as it was. Reloading appeared to "fix" it only because
+       * that re-mounts the page and runs the load again.
+       *
+       * Reported plainly: "when sharing new posts it takes a page refresh to
+       * display it."
+       */
+      void useTimelineStore.getState().loadFeed();
+
       toast.success("Posted");
     },
     onError: () => toast.error("Couldn't post. Try again."),
@@ -140,21 +158,12 @@ export function ComposeCard() {
 
           {/* Attached reference chip */}
           {selected ? (
-            <div className="flex items-center rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-              <FileText size={15} className="mr-2 shrink-0 text-primary" />
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                {selected.identifier ? `${selected.identifier} · ` : ""}
-                {selected.title}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="ml-2 shrink-0 rounded-full p-1 text-muted-foreground hover:bg-muted"
-                aria-label="Remove attached reference"
-              >
-                <X size={14} />
-              </button>
-            </div>
+            <AttachedLawCard
+              referenceId={selected.id}
+              fallbackTitle={selected.title}
+              fallbackIdentifier={selected.identifier}
+              onRemove={() => setSelected(null)}
+            />
           ) : null}
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
