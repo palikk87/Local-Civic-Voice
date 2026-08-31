@@ -17,12 +17,18 @@ import {
   DataFreshnessIndicator,
 } from "@/components/discover/GovernmentOverview";
 import { DataFreshness } from "@/components/civic/DataFreshness";
+import { ReferenceQuickView } from "@/components/civic/ReferenceQuickView";
 import { categoryLabels } from "@/lib/mobile/mock-data";
 import { fetchOfficials } from "@/lib/government-service";
 import { useQuery } from "@tanstack/react-query";
 import type { Bill, BillCategory, GovernmentBranch } from "@/lib/mobile/types";
 import { useBills as useApiBills, type ApiBill } from "@/lib/mobile/api-hooks";
-import { useTrendingReferences, useLatestReferences } from "@/hooks/use-government-references";
+import {
+  useTrendingReferences,
+  useLatestReferences,
+  useSearchReferences,
+} from "@/hooks/use-government-references";
+import { useDebounce } from "@/hooks/use-debounce";
 import {
   referenceToBill,
   referenceToExecutiveOrder,
@@ -120,6 +126,8 @@ function SectionState({
 export default function Discover() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState<string>("");
+  // Which search result is open in the quick view, if any.
+  const [quickViewId, setQuickViewId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DiscoverTab>("trending");
   const [expandedBranches, setExpandedBranches] = useState<Record<GovernmentBranch, boolean>>({
@@ -127,6 +135,20 @@ export default function Discover() {
     legislative: false,
     judicial: false,
   });
+
+  // WHAT THE SEARCH BOX ACTUALLY DOES.
+  //
+  // It asks the server, across all three branches, and its results replace the
+  // tabs entirely while there is a query — because a reader who typed something
+  // is looking for that thing, not for whichever tab they happened to be on.
+  const debouncedQuery = useDebounce(searchQuery, 350);
+  const searching = debouncedQuery.trim().length >= 2;
+  const {
+    data: searchData,
+    isLoading: searchLoading,
+    isError: searchError,
+  } = useSearchReferences(debouncedQuery);
+  const searchResults = searchData?.references ?? [];
 
   // API data - uses real backend
   const { data: apiBillsData, isLoading } = useApiBills();
@@ -173,19 +195,11 @@ export default function Discover() {
       return true;
     });
 
-    // Filter by category and search
-    return liveBills.filter((bill) => {
-      if (selectedCategory && bill.category !== selectedCategory) return false;
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        return (
-          bill.title.toLowerCase().includes(query) ||
-          bill.shortTitle.toLowerCase().includes(query)
-        );
-      }
-      return true;
-    });
-  }, [latestBillsData, billRefsData, apiBillsData, selectedCategory, searchQuery]);
+    // Category only. Searching is the server's job now — see searchResults.
+    return liveBills.filter(
+      (bill) => !selectedCategory || bill.category === selectedCategory,
+    );
+  }, [latestBillsData, billRefsData, apiBillsData, selectedCategory]);
 
   // 10 most popular bills in the legislative branch (live, daily-synced)
   const trendingBills = useMemo(() => {
@@ -251,12 +265,90 @@ export default function Discover() {
               placeholder="Search bills, cases, officials..."
               className="h-12 rounded-xl pl-11 pr-10 text-[15px]"
             />
-            {isLoading || billRefsLoading ? (
+            {searchLoading || isLoading || billRefsLoading ? (
               <Loader2 className="absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-amber-500" />
             ) : null}
           </div>
         </div>
 
+        {/* RESULTS, WHILE THERE IS SOMETHING TO SEARCH FOR. The tabs and their
+            trending lists are hidden — a reader who typed a query wants what
+            they asked for, not the tab they were standing on. */}
+        {searching ? (
+          <div className="pb-5" data-search-results>
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-lg font-semibold text-foreground">
+                {searchLoading ? "Searching…" : `${searchResults.length} result${searchResults.length === 1 ? "" : "s"}`}
+              </span>
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+
+            {searchError ? (
+              <p className="rounded-xl border border-border/40 bg-card/60 p-4 text-sm text-muted-foreground">
+                We could not reach the server to search. Try again in a moment.
+              </p>
+            ) : !searchLoading && searchResults.length === 0 ? (
+              <p className="rounded-xl border border-border/40 bg-card/60 p-4 text-sm text-muted-foreground">
+                Nothing matches “{debouncedQuery.trim()}”. We only search the laws we
+                hold — the archive starts in 1994 for executive orders.
+              </p>
+            ) : null}
+
+            {searchResults.map((ref, index) => (
+              <MotionDiv
+                key={ref.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(index, 8) * 0.04, type: "spring", stiffness: 260, damping: 24 }}
+                className="mb-3"
+              >
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/reference/${ref.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") navigate(`/reference/${ref.id}`);
+                  }}
+                  className="cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
+                      {ref.referenceType === "executive_order"
+                        ? "Executive order"
+                        : ref.referenceType === "scotus_case"
+                          ? "Supreme Court"
+                          : "Bill"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{ref.displayId}</span>
+                  </div>
+                  <p className="font-semibold text-foreground">{ref.title}</p>
+                  {ref.attribution ? (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {ref.attribution.role} {ref.attribution.name}
+                    </p>
+                  ) : null}
+                  <button
+                    onClick={(event) => {
+                      // The card itself navigates; this one opens the record
+                      // over the results so the search is not lost.
+                      event.stopPropagation();
+                      setQuickViewId(ref.id);
+                    }}
+                    className="mt-2 text-sm font-medium text-primary underline-offset-2 hover:underline"
+                  >
+                    See details
+                  </button>
+                </div>
+              </MotionDiv>
+            ))}
+          </div>
+        ) : (
+        <>
         {/* Tab Selector */}
         <DiscoverTabSelector activeTab={activeTab} onChangeTab={setActiveTab} />
 
@@ -577,7 +669,11 @@ export default function Discover() {
             )
           ) : null}
         </div>
+        </>
+        )}
       </div>
+
+      <ReferenceQuickView referenceId={quickViewId} onClose={() => setQuickViewId(null)} />
     </AppShell>
   );
 }

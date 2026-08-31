@@ -5,6 +5,7 @@ import { prisma } from "../prisma";
 import { attributionFor } from "../services/reference-attribution";
 import { benchOn, isDissenter } from "../services/court-composition";
 import { recordCompleteness } from "../services/record-completeness";
+import { ensureScotusFacts } from "../services/scotus-facts";
 import { ensurePortraitFor } from "../services/reference-attribution";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import { gapStatus, officialVoteRoll } from "../services/representation-gap";
@@ -914,6 +915,11 @@ governmentReferencesRouter.get("/:id", async (c) => {
    * face to all of them.
    */
   ensurePortraitFor(reference);
+  // A ruling with no decision date has no bench to show, and the bench is the
+  // only thing a ruling nobody signed can be attributed to. The date is on the
+  // CourtListener cluster this record already links to, so it is fetched once
+  // and kept — see services/scotus-facts.
+  ensureScotusFacts(reference);
 
   const attribution = attributionFor(reference);
   if (attribution?.perCuriam && reference.decidedDate) {

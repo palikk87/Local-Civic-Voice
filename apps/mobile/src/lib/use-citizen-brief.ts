@@ -95,6 +95,36 @@ export function useCitizenBrief(
     setIsRequesting(false);
   }, [referenceId, initialBrief, initialState, clearPoll]);
 
+  /**
+   * A BRIEF SOMEBODY ELSE STARTED STILL HAS TO ARRIVE.
+   *
+   * A reader can open a law while its brief is already being written — they
+   * shared it from the Library a minute ago, or another reader asked first. The
+   * server says "working", so this shows the working card, and then used to wait
+   * for a message that never came: the detail query holds its answer and
+   * refetches on nothing, so the finished brief sat on the server while the
+   * screen span.
+   *
+   * IT COSTS NOTHING. This re-reads the RECORD — a GET of a row that already
+   * exists. It never touches POST /:id/brief, so nobody is billed for watching.
+   * The request that pays is the button, and somebody already pressed it.
+   */
+  useEffect(() => {
+    if (!referenceId || state !== "working" || brief) return;
+
+    const giveUpAt = Date.now() + POLL_CEILING_MS;
+    const timer = setInterval(() => {
+      if (Date.now() > giveUpAt) {
+        clearInterval(timer);
+        setState("idle");
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: referenceKeys.detail(referenceId) });
+    }, POLL_MS);
+
+    return () => clearInterval(timer);
+  }, [referenceId, state, brief, queryClient]);
+
   const apply = useCallback(
     (response: BriefResponse, id: string) => {
       if (response.state === "ready") {

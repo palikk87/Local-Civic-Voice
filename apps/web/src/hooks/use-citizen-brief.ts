@@ -149,6 +149,42 @@ export function useCitizenBrief(
     setState((current) => (current === "ready" ? current : "ready"));
   }, [initialBrief]);
 
+  /**
+   * A BRIEF SOMEBODY ELSE STARTED STILL HAS TO ARRIVE.
+   *
+   * A reader can open a law while its brief is already being written — they
+   * shared it from the Library a minute ago, or another reader asked first. The
+   * server says "working", so this shows the working card. It then used to wait
+   * for a message that never came: the detail query holds its answer for a
+   * minute and refetches on nothing, so the finished brief sat on the server
+   * while the page span. Only a reload cleared it.
+   *
+   * So when this starts out working with nothing to show, it re-reads the
+   * RECORD until the brief lands. Reported plainly: "the brief still has not
+   * loaded. its just spinning."
+   *
+   * IT COSTS NOTHING. This is a GET of a row that already exists — it never
+   * touches POST /:id/brief, so no reader is ever billed for watching. The
+   * request that pays is the button, and somebody has already pressed it.
+   */
+  useEffect(() => {
+    if (!referenceId || state !== "working" || brief) return;
+
+    const giveUpAt = Date.now() + POLL_CEILING_MS;
+    const timer = setInterval(() => {
+      if (Date.now() > giveUpAt) {
+        clearInterval(timer);
+        // Out of patience, not out of hope — the work continues server-side,
+        // and the button coming back is the honest thing to offer.
+        setState("idle");
+        return;
+      }
+      void queryClient.invalidateQueries({ queryKey: referenceKeys.detail(referenceId) });
+    }, POLL_MS);
+
+    return () => clearInterval(timer);
+  }, [referenceId, state, brief, queryClient]);
+
   const apply = useCallback(
     (response: BriefResponse, id: string) => {
       if (response.state === "ready") {

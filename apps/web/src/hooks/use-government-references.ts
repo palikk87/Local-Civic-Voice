@@ -16,6 +16,8 @@ export const referenceKeys = {
   latest: (referenceType: ReferenceType | "all", limit: number) =>
     ["government-references", "latest", referenceType, limit] as const,
   detail: (id: string) => ["government-references", "detail", id] as const,
+  search: (query: string, limit: number) =>
+    ["government-references", "search", query, limit] as const,
 };
 
 /**
@@ -32,6 +34,28 @@ export function useTrendingReferences(referenceType?: ReferenceType, limit = 10)
     queryKey: referenceKeys.trending(referenceType ?? "all", limit),
     queryFn: () => civicApi.trending(limit, referenceType),
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * SEARCH ACROSS ALL THREE BRANCHES.
+ *
+ * The Discover search box used to filter, in the browser, the handful of bills
+ * that page had already loaded — and only on one of its five tabs. So typing
+ * did nothing at all on four of them, and on the fifth it could not find a law
+ * that was not already on screen, while the placeholder promised "bills, cases,
+ * officials". This asks the server, which searches every record it holds.
+ *
+ * Two characters is the floor: one letter matches most of the archive and the
+ * result is noise, not an answer.
+ */
+export function useSearchReferences(query: string, limit = 25) {
+  const trimmed = query.trim();
+  return useQuery({
+    queryKey: referenceKeys.search(trimmed, limit),
+    queryFn: () => civicApi.listReferences({ search: trimmed, limit }),
+    enabled: trimmed.length >= 2,
+    staleTime: 60 * 1000,
   });
 }
 
