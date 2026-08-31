@@ -747,6 +747,35 @@ function ProfileContent() {
             </Pressable>
           </View>
 
+          {/* Saved. The bookmark on every card called the server and the server
+              kept the list; there was simply no screen that ever asked for it
+              back, so saving on a phone put something into a drawer with no
+              handle. Web twin: /saved. */}
+          <View className="px-4 mb-6">
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/saved');
+              }}
+              className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/50"
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center flex-1">
+                  <View className="w-12 h-12 rounded-full bg-slate-700/60 items-center justify-center mr-3">
+                    <Bookmark size={24} color="#F59E0B" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-white font-semibold text-lg">Saved</Text>
+                    <Text className="text-slate-400 text-sm">
+                      Everything you bookmarked, waiting for you
+                    </Text>
+                  </View>
+                </View>
+                <ChevronRight size={20} color="#F59E0B" />
+              </View>
+            </Pressable>
+          </View>
+
           {/* Liquid Democracy Card */}
           <View className="px-4 mb-6">
             <Pressable

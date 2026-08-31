@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import {
   ArrowLeft,
   Shield,
+  Bug,
   Users,
   FileText,
   BarChart3,
@@ -285,6 +286,19 @@ export default function AdminDashboardScreen() {
             icon={<Users size={24} color="#3B82F6" />}
             onPress={() => router.push('/admin/users')}
             badge={stats?.bannedUsers}
+          />
+        ) : null}
+
+        {/* THE QUEUE, not just the reporter. The bug reporter has always been
+            on every phone screen; the queue that reads what it files was web
+            only, so an admin on a phone could file a report and never read
+            one. Same capability the web gates its tab with. */}
+        {adminCan(session, 'bugReports.manage') ? (
+          <MenuItem
+            title="Bug Reports"
+            subtitle="What people have reported, and where"
+            icon={<Bug size={24} color="#F59E0B" />}
+            onPress={() => router.push('/admin/bug-reports')}
           />
         ) : null}
 
