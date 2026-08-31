@@ -98,13 +98,19 @@ jobs:
             //                 another project. Not optional, ever.
             const GUARDS = ['backend', 'no db push'];
 
-            // THIRTY MINUTES, because the suite it is waiting for takes about
-            // sixteen on a runner. Fifteen was set when the suite was smaller,
-            // and it had stopped being a guard and started being a coin toss:
-            // the tests would pass and the deploy would refuse anyway, saying
-            // they "did not finish". Waiting longer weakens nothing — it still
-            // requires every guard to complete and still refuses on a failure.
-            const deadline = Date.now() + 30 * 60 * 1000;
+            // TEN MINUTES, AND THEN IT ASKS.
+            //
+            // The suite this waits for takes about sixteen minutes on a runner,
+            // so this window will usually run out before the answer is in. That
+            // is deliberate: Khalid's instruction is that nothing waits silently
+            // for half an hour — it comes back at ten and a person decides
+            // whether to keep waiting.
+            //
+            // Running out is therefore NOT a verdict on the tests. It means the
+            // answer is not in yet, and the message below says so. Re-running
+            // this job once CI has finished picks up the real result — which is
+            // still a refusal if any guard failed.
+            const deadline = Date.now() + 10 * 60 * 1000;
             while (Date.now() < deadline) {
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner: context.repo.owner,
@@ -142,7 +148,11 @@ jobs:
 
               await new Promise((r) => setTimeout(r, 20000));
             }
-            core.setFailed('The backend guards did not finish within 30 minutes. Not deploying.');
+            core.setFailed(
+              'Stopped after 10 minutes: the backend guards have not finished, ' +
+                'so nothing is known about them yet. This is not a test failure. ' +
+                'Re-run this job when CI is done and it will read the real result.',
+            );
 
       - uses: oven-sh/setup-bun@v2
         if: steps.token.outputs.configured == 'true'
