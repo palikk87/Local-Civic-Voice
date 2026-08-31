@@ -769,6 +769,42 @@ describe("media keys", () => {
     expect(new Uint8Array(await fetched.arrayBuffer())).toEqual(new Uint8Array(ONE_PIXEL_PNG));
   });
 
+  test("A LAW ON ITS OWN IS A POST — no words required", async () => {
+    // Sharing a law with nothing added used to be refused: the rule wanted text
+    // or media. That is wrong here — putting a law in front of people IS the
+    // act. Khalid: "allow posts with out adding text to it from all places."
+    const cookie = await signedInCookie();
+    const reference = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: `hr-${5900 + Math.floor(Math.random() * 90)}-119`,
+        referenceType: "bill",
+        title: "A bill shared with nothing added",
+        status: "proposed",
+        category: "healthcare",
+      },
+    });
+
+    const created = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "", governmentReferenceId: reference.id }),
+    });
+    expect(created.status).toBe(201);
+
+    // And it is a real post, readable like any other.
+    const { post } = (await created.json()) as { post: { id: string } };
+    const detail = await fetch(`${BASE_URL}/api/posts/${post.id}`, { headers: { cookie } });
+    expect(detail.status).toBe(200);
+
+    // A post with NO law is still refused — that is the rule that remains.
+    const empty = await fetch(`${BASE_URL}/api/posts`, {
+      method: "POST",
+      headers: { cookie, "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "" }),
+    });
+    expect(empty.status).toBe(400);
+  });
+
   test("a new upload gets an unguessable key with no timestamp and no filename", async () => {
     const form = new FormData();
     form.append(

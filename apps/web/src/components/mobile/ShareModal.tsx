@@ -47,16 +47,37 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
 
   const shareType = post ? post.contentType : content?.type ?? "text";
 
-  const handleShareToTimeline = () => {
-    if (!requireAuth("Sign in to share to your timeline.")) return;
-    if (post) {
-      sharePost(post.id, opinion || undefined);
-    } else if (content) {
-      shareContent(content.type, content.id, content.title, opinion || undefined);
-    }
+  const [sharing, setSharing] = useState(false);
 
-    setOpinion("");
-    onClose();
+  /**
+   * SHARING THAT FAILS HAS TO SAY SO.
+   *
+   * This fired the share and closed the panel in the same breath, without ever
+   * waiting for the answer — so a share that the server refused closed the
+   * panel, posted nothing, and told nobody. Reported as "the share from the
+   * library doesn't reach the timeline"; it never left.
+   *
+   * Now it waits, and the panel only closes when the post actually exists.
+   * Words are optional — putting a law in front of people is the act.
+   */
+  const handleShareToTimeline = async () => {
+    if (!requireAuth("Sign in to share to your timeline.")) return;
+
+    setSharing(true);
+    try {
+      if (post) {
+        await sharePost(post.id, opinion.trim() || undefined);
+      } else if (content) {
+        await shareContent(content.type, content.id, content.title, opinion.trim() || undefined);
+      }
+      setOpinion("");
+      onClose();
+      toast.success("Shared to your timeline");
+    } catch {
+      toast.error("That didn't post. Try again in a moment.");
+    } finally {
+      setSharing(false);
+    }
   };
 
   /**
@@ -246,7 +267,10 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
 
               <button
                 onClick={handleShareToTimeline}
-                className="mt-4 w-full bg-amber-500 py-4 rounded-xl flex items-center justify-center hover:bg-amber-400 transition-colors"
+                // One press, one post: the panel stays open until the server
+                // has answered, so a second press cannot post it twice.
+                disabled={sharing}
+                className="mt-4 w-full bg-amber-500 py-4 rounded-xl flex items-center justify-center hover:bg-amber-400 transition-colors disabled:opacity-60"
               >
                 <Share2 size={20} color="#0F172A" />
                 <span className="text-slate-900 font-semibold text-lg ml-2">Share to Timeline</span>

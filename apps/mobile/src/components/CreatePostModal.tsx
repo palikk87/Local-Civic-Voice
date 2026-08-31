@@ -283,7 +283,8 @@ export default function CreatePostModal({
 
   const handlePost = async () => {
     if (!selectedReference) return;
-    if (!content.trim() && mediaItems.length === 0) return;
+    // No guard on empty words: the attached law IS the post. See canPost.
+    if (!selectedReference) return;
 
     setIsPosting(true);
     setPostError(null);
@@ -354,7 +355,10 @@ export default function CreatePostModal({
     onClose();
   };
 
-  const canPost = selectedReference && (content.trim().length > 0 || mediaItems.length > 0);
+  // A LAW ON ITS OWN IS A POST. Words and media are welcome, not required —
+  // putting a law in front of people is the act. Khalid: "allow posts with out
+  // adding text to it from all places."
+  const canPost = Boolean(selectedReference);
 
   const getReferenceIcon = (type: ReferenceType) => {
     switch (type) {

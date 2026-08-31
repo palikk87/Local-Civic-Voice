@@ -225,7 +225,8 @@ export default function CreatePostModal({
 
   const handlePost = async () => {
     if (!selectedReference) return;
-    if (!content.trim() && mediaItems.length === 0) return;
+    // No guard on empty words: the attached law is the post. See canPost.
+    if (!selectedReference) return;
 
     setIsPosting(true);
     setPostError(null);
@@ -308,7 +309,8 @@ export default function CreatePostModal({
     onClose();
   };
 
-  const canPost = Boolean(selectedReference) && (content.trim().length > 0 || mediaItems.length > 0);
+  // The law is what a post must have; text and media are both optional.
+  const canPost = Boolean(selectedReference);
 
   const getReferenceIcon = (type: ReferenceType) => {
     switch (type) {

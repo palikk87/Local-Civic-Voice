@@ -137,7 +137,10 @@ export function ComposeCard() {
   }
 
   const initials = initialsOf(user?.name, user?.email);
-  const canPost = content.trim().length > 0 && !!selected && !createMutation.isPending;
+  // A LAW ON ITS OWN IS A POST. Words are welcome, not required: putting a
+  // law in front of people is the act, and the attached record is never empty.
+  // Khalid: "allow posts with out adding text to it from all places."
+  const canPost = !!selected && !createMutation.isPending;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4">

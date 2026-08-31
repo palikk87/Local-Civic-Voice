@@ -59,12 +59,24 @@ const createPostSchema = z
     message: "governmentReferenceId is required",
     path: ["governmentReferenceId"],
   })
-  // A post needs something in it. The composers allow text or media, so accept
-  // either — but never both empty.
-  .refine((data) => data.content.trim().length > 0 || (data.mediaIds?.length ?? 0) > 0, {
-    message: "Post must have text or media",
-    path: ["content"],
-  });
+  /*
+   * A POST NEEDS SOMETHING IN IT — AND THE LAW COUNTS.
+   *
+   * This required text or media, so sharing a law with no comment was refused.
+   * That is wrong for this platform: putting a law in front of people, with
+   * nothing added, IS the act. Khalid: "allow posts with out adding text to it
+   * from all places."
+   *
+   * Every post here carries a government reference — the rule above makes that
+   * mandatory — so a post is never empty. It is a law, with or without words.
+   */
+  .refine(
+    (data) =>
+      data.content.trim().length > 0 ||
+      (data.mediaIds?.length ?? 0) > 0 ||
+      Boolean(data.governmentReferenceId ?? data.referenceId),
+    { message: "Post must have text, media, or a law", path: ["content"] },
+  );
 
 const paginationSchema = z.object({
   limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
