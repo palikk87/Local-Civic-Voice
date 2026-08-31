@@ -98,7 +98,13 @@ jobs:
             //                 another project. Not optional, ever.
             const GUARDS = ['backend', 'no db push'];
 
-            const deadline = Date.now() + 15 * 60 * 1000;
+            // THIRTY MINUTES, because the suite it is waiting for takes about
+            // sixteen on a runner. Fifteen was set when the suite was smaller,
+            // and it had stopped being a guard and started being a coin toss:
+            // the tests would pass and the deploy would refuse anyway, saying
+            // they "did not finish". Waiting longer weakens nothing — it still
+            // requires every guard to complete and still refuses on a failure.
+            const deadline = Date.now() + 30 * 60 * 1000;
             while (Date.now() < deadline) {
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner: context.repo.owner,
@@ -136,7 +142,7 @@ jobs:
 
               await new Promise((r) => setTimeout(r, 20000));
             }
-            core.setFailed('The backend guards did not finish within 15 minutes. Not deploying.');
+            core.setFailed('The backend guards did not finish within 30 minutes. Not deploying.');
 
       - uses: oven-sh/setup-bun@v2
         if: steps.token.outputs.configured == 'true'
