@@ -36,6 +36,7 @@ import { useTimelineStore, type TaggedUser } from '@/lib/timeline-store';
 import type { User } from '@/lib/types';
 import { cn } from '@/lib/cn';
 import { uploadMedia } from '@/lib/api/api';
+import { AttachedLawCard } from '@/components/AttachedLawCard';
 import ReferenceSearchModal, {
   type GovernmentReference,
   type ReferenceType,
@@ -360,28 +361,6 @@ export default function CreatePostModal({
   // adding text to it from all places."
   const canPost = Boolean(selectedReference);
 
-  const getReferenceIcon = (type: ReferenceType) => {
-    switch (type) {
-      case 'bill':
-        return <FileText size={18} color="#F59E0B" />;
-      case 'executive_order':
-        return <Scale size={18} color="#F59E0B" />;
-      case 'scotus_case':
-        return <Gavel size={18} color="#F59E0B" />;
-    }
-  };
-
-  const getReferenceTypeBadge = (type: ReferenceType) => {
-    switch (type) {
-      case 'bill':
-        return { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Bill' };
-      case 'executive_order':
-        return { bg: 'bg-purple-500/20', text: 'text-purple-400', label: 'Executive Order' };
-      case 'scotus_case':
-        return { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'SCOTUS Case' };
-    }
-  };
-
   const renderReferenceStep = () => (
     <Animated.View entering={FadeIn} exiting={FadeOut} className="flex-1">
       <View className="px-4 py-6">
@@ -447,48 +426,19 @@ export default function CreatePostModal({
   );
 
   const renderComposeStep = () => {
-    const badge = selectedReference ? getReferenceTypeBadge(selectedReference.type) : null;
-
     return (
       <Animated.View entering={SlideInUp} className="flex-1">
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           className="flex-1"
         >
-          {/* Selected Reference Preview */}
+          {/* THE LAW, AS A LAW — not one truncated line. See AttachedLawCard. */}
           {selectedReference && (
-            <Pressable
-              onPress={() => {
-                if (!shareMode) {
-                  setCurrentStep('reference');
-                }
-              }}
-              className="mx-4 mt-4 p-3 bg-slate-800/60 rounded-xl border border-slate-700/50 active:bg-slate-700/60"
-            >
-              <View className="flex-row items-start">
-                <View className="w-10 h-10 rounded-full bg-slate-700 items-center justify-center mr-3">
-                  {getReferenceIcon(selectedReference.type)}
-                </View>
-                <View className="flex-1">
-                  <Text className="text-slate-400 text-xs mb-1">Referencing</Text>
-                  <Text className="text-white font-medium" numberOfLines={2}>
-                    {selectedReference.title}
-                  </Text>
-                  {badge && (
-                    <View className="flex-row items-center mt-2">
-                      <View className={cn('px-2 py-0.5 rounded-full', badge.bg)}>
-                        <Text className={cn('text-xs font-medium', badge.text)}>
-                          {badge.label}
-                        </Text>
-                      </View>
-                      {!shareMode && (
-                        <Text className="text-slate-500 text-xs ml-2">Tap to change</Text>
-                      )}
-                    </View>
-                  )}
-                </View>
-              </View>
-            </Pressable>
+            <AttachedLawCard
+              referenceId={selectedReference.id}
+              fallbackTitle={selectedReference.title}
+              {...(shareMode ? {} : { onPress: () => setCurrentStep('reference') })}
+            />
           )}
 
           {/* Author */}

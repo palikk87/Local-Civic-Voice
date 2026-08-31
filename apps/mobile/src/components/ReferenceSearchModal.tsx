@@ -15,6 +15,7 @@ import { X, Search, FileText, Scale, Gavel, AlertCircle, RefreshCw } from 'lucid
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { cn } from '@/lib/cn';
+import { ReferenceQuickView } from '@/components/ReferenceQuickView';
 
 export type ReferenceType = 'bill' | 'executive_order' | 'scotus_case';
 
@@ -45,6 +46,7 @@ export default function ReferenceSearchModal({
 }: ReferenceSearchModalProps) {
   const [activeTab, setActiveTab] = useState<ReferenceType>('bill');
   const [searchQuery, setSearchQuery] = useState('');
+  const [quickViewId, setQuickViewId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [references, setReferences] = useState<GovernmentReference[]>([]);
   const [hasError, setHasError] = useState(false);
@@ -200,6 +202,20 @@ export default function ReferenceSearchModal({
               </Text>
             </View>
           </View>
+
+          {/*
+            A TITLE AND A NUMBER IS NOT ENOUGH TO PICK A LAW BY. This opens the
+            record over the results and leaves the search underneath it, so a
+            reader can look and go back to looking. Its own press target, so
+            reading about a law is not the same gesture as attaching it.
+          */}
+          <Pressable
+            onPress={() => setQuickViewId(item.id)}
+            hitSlop={6}
+            className="self-start mt-2"
+          >
+            <Text className="text-amber-500 text-xs font-medium">See details</Text>
+          </Pressable>
         </View>
       </View>
     </Pressable>
@@ -334,6 +350,16 @@ export default function ReferenceSearchModal({
             </Animated.View>
           )}
         </SafeAreaView>
+
+        {/*
+          OVER the picker, not instead of it. The search and its results stay
+          mounted underneath, so closing this puts the reader back exactly where
+          they were rather than at the top of a fresh list.
+        */}
+        <ReferenceQuickView
+          referenceId={quickViewId}
+          onClose={() => setQuickViewId(null)}
+        />
       </View>
     </Modal>
   );

@@ -39,7 +39,7 @@ import {
 } from 'lucide-react-native';
 import Animated, { FadeInRight, FadeInDown, FadeIn } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { mockUsers, categoryColors, categoryLabels, branchColors, branchLabels } from '@/lib/mock-data';
+import { categoryColors, categoryLabels, branchColors, branchLabels } from '@/lib/mock-data';
 import type { ExecutiveOrder, SupremeCourtCase } from '@/lib/types';
 import { useQuery } from '@tanstack/react-query';
 import {

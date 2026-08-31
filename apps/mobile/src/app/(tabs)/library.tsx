@@ -54,7 +54,7 @@ import {
 import { useLibraryBrief } from '@/lib/use-library-brief';
 import { CitizensBriefCard } from '@/components/CitizensBrief';
 import { useResponsive } from '@/lib/useResponsive';
-import CreatePostModal from '@/components/CreatePostModal';
+import ShareModal from '@/components/ShareModal';
 import type {
   GovernmentReference,
   ReferenceType,
@@ -571,12 +571,12 @@ function SlideOverPreview({
               >
                 <Share2 size={18} color="#000" />
                 <Text className="text-slate-900 font-bold text-base ml-2">
-                  Share to My Voice
+                  Share
                 </Text>
               </Pressable>
               <Text className="text-slate-500 text-xs text-center mt-2">
                 {canShare
-                  ? 'Opens the composer with this law attached. The words are yours.'
+                  ? 'Post it, send it to someone, or copy a link. The words are yours.'
                   : 'Identifying this document at its official source…'}
               </Text>
             </View>
@@ -873,20 +873,25 @@ export default function LibraryScreen() {
         </>
       )}
 
-      {/* The composer, with the law already attached and nothing written. */}
-      <CreatePostModal
-        visible={!!shareTarget}
-        onClose={() => setShareTarget(null)}
-        {...(shareTarget
-          ? {
-              shareMode: {
-                type: shareTarget.type,
-                id: shareTarget.id,
-                title: shareTarget.title,
-              },
-            }
-          : {})}
-      />
+      {/*
+        THE SAME SHEET SHARING FROM THE FEED OPENS.
+        Khalid: "the law shared from library should bring the same pop up that
+        clicking share does from the feed page ... that way it makes sense when
+        the pop up show up to share the law with the same options as if you
+        were sharing from the feed." The button above says one word, Share, so
+        the sheet that follows is not a surprise. Web twin does the same.
+      */}
+      {shareTarget ? (
+        <ShareModal
+          visible
+          onClose={() => setShareTarget(null)}
+          content={{
+            type: shareTarget.type,
+            id: shareTarget.id,
+            title: shareTarget.title,
+          }}
+        />
+      ) : null}
     </View>
   );
 }
