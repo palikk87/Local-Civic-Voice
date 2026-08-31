@@ -29,7 +29,7 @@
  */
 
 import { prisma } from "../prisma";
-import { storedPortrait } from "../data/portraits";
+import { justicePortraitOn, storedPortrait } from "../data/portraits";
 import { lookupPortrait } from "./reference-attribution";
 
 export interface JusticeTenure {
@@ -325,7 +325,10 @@ export async function benchOn(when: Date): Promise<SeatedJustice[]> {
        * The stored column still wins where somebody filled it, because that is
        * a fact about this record; the shelf is what answers for everyone else.
        */
-      photoUrl: row.photoUrl ?? storedPortrait(row.name),
+      // The DAY first, because it separates the two Chases and the two
+      // Marshalls where a surname and an initial cannot; the plain lookup is
+      // the fallback for a name the shelf holds exactly one of.
+      photoUrl: row.photoUrl ?? justicePortraitOn(row.name, when) ?? storedPortrait(row.name),
     }));
 
   // Only somebody the shelf does not hold — a justice sworn in since this was

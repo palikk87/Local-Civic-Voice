@@ -193,6 +193,58 @@ export function presidentOn(when: Date | string | null | undefined): PresidentPo
 }
 
 /**
+ * THE PORTRAIT OF THE JUSTICE WHO WAS SITTING ON THIS DAY.
+ *
+ * A surname and a first initial cannot separate Samuel Chase (1796) from
+ * Salmon Portland Chase (1864), so `storedPortrait` refuses both rather than
+ * guess — right, but it costs two real men their faces on a bench we hold both
+ * photographs for. Marbury v. Madison rendered with five faces and a gap.
+ *
+ * The bench knows something the name does not: the DAY. A justice's term is
+ * the thing that tells the two Chases apart, and the two Marshalls, and the
+ * two Harlans. Where a date is known, this uses it and the ambiguity is gone.
+ *
+ * Still refuses rather than guesses: if a surname somehow matched two people
+ * who BOTH sat that day, nobody is returned.
+ */
+export function justicePortraitOn(
+  name: string | null | undefined,
+  servedOn: Date | string | null | undefined,
+): string | null {
+  const surname = name ? surnameOf(name) : null;
+  if (!surname || !servedOn) return null;
+
+  const day =
+    typeof servedOn === "string" ? servedOn.slice(0, 10) : servedOn.toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+
+  const sitting = JUSTICE_PORTRAITS.filter(
+    (j) => surnameOf(j.name) === surname && j.oath <= day && (!j.end || j.end >= day),
+  );
+  if (sitting.length !== 1) return null;
+
+  /*
+   * THE DATE NARROWS; IT DOES NOT OVERRULE.
+   *
+   * Asked for "Samuel Chase" on a day in 1870, the surname and the date alone
+   * would hand back SALMON Chase — the only Chase sitting — which is a wrong
+   * face, and a wrong face is worse than none. In the bench this cannot
+   * happen, because the name and the day come off the same row; it can happen
+   * to anyone else who calls this. So the given name has to agree too.
+   */
+  const given = (full: string) =>
+    (/^[A-Za-z]+/.exec(full.trim())?.[0] ?? "").toLowerCase();
+  const asked = given(name!);
+  const found = given(sitting[0]!.name);
+  // An initial is not enough: Samuel and Salmon Chase share one. Compared as
+  // whole names, allowing one to be a shortening of the other ("Ben" for
+  // "Benjamin"), which is how sources differ about the same man.
+  if (asked && found && !asked.startsWith(found) && !found.startsWith(asked)) return null;
+
+  return sitting[0]!.photoUrl;
+}
+
+/**
  * The stored portrait for a president or a justice, or null if we do not hold
  * one — in which case the caller may go and look, once, and add them.
  */
