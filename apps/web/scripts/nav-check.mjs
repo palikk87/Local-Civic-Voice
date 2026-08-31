@@ -171,7 +171,7 @@ async function firstVisit(path = "/feed", { accept = true } = {}) {
 const DESTINATIONS = [
   ["My Voice", "/timeline"],
   ["Library", "/library"],
-  ["Discover", "/discover"],
+  ["The Docket", "/discover"],
   ["Citizens", "/people"],
   ["Messages", "/messages"],
   ["Government", "/government"],

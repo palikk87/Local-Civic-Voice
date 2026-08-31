@@ -62,7 +62,7 @@ const NAV: NavItem[] = [
   { to: "/feed", label: "Public Square", shortLabel: "Square", icon: Home },
   { to: "/timeline", label: "My Voice", icon: Newspaper, capability: "viewTimeline" },
   { to: "/library", label: "Library", icon: BookOpen },
-  { to: "/discover", label: "Discover", icon: Compass },
+  { to: "/discover", label: "The Docket", shortLabel: "Docket", icon: Compass },
   { to: "/people", label: "Citizens", icon: Users },
   {
     to: "/messages",

@@ -909,7 +909,7 @@ export default function DiscoverScreen() {
       <SafeAreaView edges={['top']} className="flex-1">
         {/* Header */}
         <View className="px-4 py-3">
-          <Text className="text-2xl font-bold text-white mb-1">Discover</Text>
+          <Text className="text-2xl font-bold text-white mb-1">The Docket</Text>
           <Text className="text-slate-400 text-sm mb-3">
             Explore all 3 branches of government
           </Text>

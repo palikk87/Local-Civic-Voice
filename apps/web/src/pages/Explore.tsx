@@ -61,7 +61,7 @@ export default function Explore() {
     <AppShell>
       <div className="space-y-4 max-w-2xl">
         <div>
-          <h1 className="text-3xl font-bold text-white">Discover</h1>
+          <h1 className="text-3xl font-bold text-white">The Docket</h1>
           <p className="text-slate-400 text-sm mt-1">
             Explore bills, executive orders, and judicial decisions shaping our government
           </p>

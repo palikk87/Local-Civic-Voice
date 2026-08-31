@@ -250,7 +250,7 @@ export default function Discover() {
         {/* Header */}
         <div className="py-3">
           <h1 className="mb-1 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Discover
+            The Docket
           </h1>
           <p className="mb-3 text-sm text-muted-foreground">
             Explore all 3 branches of government

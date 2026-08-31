@@ -1233,7 +1233,7 @@ export default function HomeScreen() {
                   onPress={() => router.push('/(tabs)/discover')}
                   className="mt-4 bg-blue-600 px-5 py-2.5 rounded-xl"
                 >
-                  <Text className="text-white text-sm font-medium">Browse Discover</Text>
+                  <Text className="text-white text-sm font-medium">Browse the Docket</Text>
                 </Pressable>
               </View>
             )
