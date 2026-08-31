@@ -388,7 +388,7 @@ function FeedTypeTabs({
       */}
       <div
         role="tablist"
-        aria-label="Feed"
+        aria-label="Public Square"
         className="flex items-center overflow-x-auto scrollbar-none px-3"
         style={{ height: 36 }}
       >

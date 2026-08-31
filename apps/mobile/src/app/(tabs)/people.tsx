@@ -242,7 +242,7 @@ export default function PeopleScreen() {
   return (
     <SafeAreaView className="flex-1 bg-slate-900" edges={['top']}>
       <View className="px-4 pt-2 pb-4">
-        <Text className="text-white text-2xl font-bold mb-4">Discover People</Text>
+        <Text className="text-white text-2xl font-bold mb-4">Discover Citizens</Text>
 
         {/* Search Bar */}
         <View className="bg-slate-800 rounded-xl flex-row items-center px-4 py-3">
@@ -315,7 +315,7 @@ export default function PeopleScreen() {
             <SectionHeader
               icon={<UserPlus size={18} color="#F59E0B" strokeWidth={2} />}
               title="Suggested For You"
-              subtitle="People you might know"
+              subtitle="Citizens you might know"
             />
             {suggestedLoading ? (
               <View className="py-6 items-center">

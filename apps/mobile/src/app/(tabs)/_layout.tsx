@@ -46,7 +46,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Feed',
+          title: 'Square',
           tabBarIcon: ({ color, size }) => (
             <Home size={size} color={color} strokeWidth={2} />
           ),
@@ -83,7 +83,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="people"
         options={{
-          title: 'People',
+          title: 'Citizens',
           tabBarIcon: ({ color, size }) => (
             <UsersRound size={size} color={color} strokeWidth={2} />
           ),

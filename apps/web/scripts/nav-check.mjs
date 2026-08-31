@@ -172,7 +172,7 @@ const DESTINATIONS = [
   ["Timeline", "/timeline"],
   ["Library", "/library"],
   ["Discover", "/discover"],
-  ["People", "/people"],
+  ["Citizens", "/people"],
   ["Messages", "/messages"],
   ["Government", "/government"],
   ["Profile", "/profile"],

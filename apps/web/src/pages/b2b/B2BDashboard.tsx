@@ -194,7 +194,7 @@ export default function B2BDashboard() {
             oppose={sentimentOverview?.byBranch?.executive?.oppose ?? 0}
           />
           <SentimentBar
-            label="Judicial"
+            label="SCOTUS"
             support={sentimentOverview?.byBranch?.judicial?.support ?? 0}
             oppose={sentimentOverview?.byBranch?.judicial?.oppose ?? 0}
           />

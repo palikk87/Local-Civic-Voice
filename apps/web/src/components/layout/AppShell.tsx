@@ -59,11 +59,11 @@ interface NavItem {
  * which is a five-tab nav, which is why it passed for as long as it existed.
  */
 const NAV: NavItem[] = [
-  { to: "/feed", label: "Feed", icon: Home },
+  { to: "/feed", label: "Public Square", shortLabel: "Square", icon: Home },
   { to: "/timeline", label: "Timeline", icon: Newspaper, capability: "viewTimeline" },
   { to: "/library", label: "Library", icon: BookOpen },
   { to: "/discover", label: "Discover", icon: Compass },
-  { to: "/people", label: "People", icon: Users },
+  { to: "/people", label: "Citizens", icon: Users },
   {
     to: "/messages",
     label: "Messages",

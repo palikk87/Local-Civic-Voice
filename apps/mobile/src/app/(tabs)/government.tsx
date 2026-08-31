@@ -54,7 +54,7 @@ type Section = 'congress' | 'executive' | 'judicial' | 'leadership';
 const SECTIONS: Array<{ key: Section; label: string; icon: typeof Landmark }> = [
   { key: 'congress', label: 'Congress', icon: Landmark },
   { key: 'executive', label: 'Executive', icon: Crown },
-  { key: 'judicial', label: 'Judicial', icon: Scale },
+  { key: 'judicial', label: 'SCOTUS', icon: Scale },
   { key: 'leadership', label: 'Leadership', icon: ListOrdered },
 ];
 

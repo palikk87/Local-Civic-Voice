@@ -24,7 +24,7 @@ const TABS: TabConfig[] = [
   { type: "trending", label: "Trending", icon: TrendingUp },
   { type: "bills", label: "Congress", icon: Building2, referenceType: "bill" },
   { type: "executive", label: "Executive", icon: FileText, referenceType: "executive_order" },
-  { type: "judicial", label: "Judicial", icon: Scale, referenceType: "scotus_case" },
+  { type: "judicial", label: "SCOTUS", icon: Scale, referenceType: "scotus_case" },
 ];
 
 function ReferenceSkeleton() {

@@ -99,7 +99,7 @@ function LibraryTabSelector({
     { id: 'all', label: 'All', color: '#F59E0B', icon: 'layers' },
     { id: 'legislative', label: 'Congress', color: '#3B82F6', icon: 'landmark' },
     { id: 'executive', label: 'Executive', color: '#F59E0B', icon: 'file' },
-    { id: 'judicial', label: 'Judicial', color: '#8B5CF6', icon: 'scale' },
+    { id: 'judicial', label: 'SCOTUS', color: '#8B5CF6', icon: 'scale' },
   ];
 
   return (

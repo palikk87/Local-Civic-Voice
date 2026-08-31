@@ -346,7 +346,7 @@ export const BRANCHES: {
   { key: "all", label: "All Branches", short: "All", colorVar: "hsl(var(--primary))", description: "Every bill, order, and ruling" },
   { key: "bill", label: "Legislative", short: "Bills", colorVar: "hsl(var(--legislative))", description: "Bills moving through Congress" },
   { key: "executive_order", label: "Executive", short: "Orders", colorVar: "hsl(var(--executive))", description: "Presidential executive orders" },
-  { key: "scotus_case", label: "Judicial", short: "SCOTUS", colorVar: "hsl(var(--judicial))", description: "Supreme Court cases" },
+  { key: "scotus_case", label: "SCOTUS", short: "SCOTUS", colorVar: "hsl(var(--judicial))", description: "Supreme Court cases" },
 ];
 
 export function branchOf(type: ReferenceType) {

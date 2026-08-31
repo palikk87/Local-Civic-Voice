@@ -62,7 +62,7 @@ const branchConfig: Record<
 > = {
   executive: { color: "#F59E0B", icon: <FileText size={20} color="#F59E0B" />, label: "Executive Branch" },
   legislative: { color: "#3B82F6", icon: <Landmark size={20} color="#3B82F6" />, label: "Legislative Branch" },
-  judicial: { color: "#8B5CF6", icon: <Scale size={20} color="#8B5CF6" />, label: "Judicial Branch" },
+  judicial: { color: "#8B5CF6", icon: <Scale size={20} color="#8B5CF6" />, label: "SCOTUS" },
 };
 
 export function GovernmentBranchSection({

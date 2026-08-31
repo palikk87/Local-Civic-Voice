@@ -8,7 +8,7 @@ const tabs: { id: DiscoverTab; label: string; color: string }[] = [
   { id: "trending", label: "Trending", color: "#F59E0B" },
   { id: "legislative", label: "Congress", color: "#3B82F6" },
   { id: "executive", label: "Executive", color: "#F59E0B" },
-  { id: "judicial", label: "Judicial", color: "#8B5CF6" },
+  { id: "judicial", label: "SCOTUS", color: "#8B5CF6" },
   { id: "government", label: "Gov Map", color: "#3B82F6" },
 ];
 

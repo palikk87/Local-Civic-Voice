@@ -103,21 +103,49 @@ export function ReferenceQuickViewBody({ referenceId }: { referenceId: string | 
               </div>
             ) : null}
 
+            {/*
+              * THE BENCH, WITH FACES — the same thing the record page shows.
+              *
+              * This listed the justices as plain text chips, so a ruling nobody
+              * signed opened with nine names and not one face: "doesnt show the
+              * pictures here but only for scotus". A bill or an order has one
+              * person and got their portrait; the Court has nine and got none,
+              * which is exactly backwards for the branch that needed it most.
+              *
+              * Every justice since 1789 is held locally, so these cost nothing.
+              */}
             {reference.attribution?.panel?.length ? (
-              <div>
-                <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">
+              <div className="rounded-xl border border-border bg-card p-3">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   {reference.attribution.panelLabel}
                 </p>
-                <div className="flex flex-wrap gap-2">
+                <ul className="mt-3 flex flex-wrap gap-3">
                   {reference.attribution.panel.map((justice) => (
-                    <span
-                      key={justice.name}
-                      className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {justice.name}
-                    </span>
+                    <li key={justice.name} className="flex w-16 flex-col items-center gap-1">
+                      {justice.photoUrl ? (
+                        <img
+                          src={justice.photoUrl}
+                          alt=""
+                          className="h-10 w-10 rounded-full object-cover"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+                          {justice.name
+                            .split(/\s+/)
+                            .map((part) => part[0])
+                            .slice(0, 2)
+                            .join("")}
+                        </span>
+                      )}
+                      <span className="text-center text-[10px] leading-tight text-muted-foreground">
+                        {justice.name}
+                      </span>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             ) : null}
 

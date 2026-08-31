@@ -82,7 +82,7 @@ export default function People() {
       <div className="mx-auto max-w-2xl">
         <div className="pb-4 pt-2">
           <h1 className="mb-4 font-display text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Discover People
+            Discover Citizens
           </h1>
 
           {/* Search Bar */}
@@ -144,7 +144,7 @@ export default function People() {
               <SectionHeader
                 icon={<UserPlus size={18} color="#F59E0B" strokeWidth={2} />}
                 title="Suggested For You"
-                subtitle="People you might know"
+                subtitle="Citizens you might know"
               />
               {suggestedLoading ? (
                 <LoadingBlock />

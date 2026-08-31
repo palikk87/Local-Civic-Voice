@@ -22,7 +22,7 @@ export const BRANCH_TABS: BranchMeta[] = [
   { key: "all", label: "All", icon: Layers, color: "hsl(var(--accent))" },
   { key: "congress", label: "Congress", icon: Landmark, color: "hsl(var(--legislative))" },
   { key: "executive", label: "Executive", icon: FileText, color: "hsl(var(--executive))" },
-  { key: "judicial", label: "Judicial", icon: Scale, color: "hsl(var(--judicial))" },
+  { key: "judicial", label: "SCOTUS", icon: Scale, color: "hsl(var(--judicial))" },
 ];
 
 export function BranchTabs({

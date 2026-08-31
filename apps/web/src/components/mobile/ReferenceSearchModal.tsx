@@ -208,7 +208,7 @@ export default function ReferenceSearchModal({
         </div>
 
         {/* Tab Selector */}
-        <div className="flex px-4 pb-3 shrink-0">
+        <div data-law-picker-tabs className="flex px-4 pb-3 shrink-0">
           {TABS.map((tab) => (
             <button
               key={tab.type}

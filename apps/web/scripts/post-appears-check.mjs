@@ -47,6 +47,7 @@ const PASSWORD = "test-population-password-not-a-real-one";
 const REF_PREFIX = "postnow";
 const LAW = "An Act to prove a post appears at once";
 const EO = "An order to prove the composer shows a law card";
+const RULING = "A ruling to prove the bench has faces";
 // Distinctive enough that finding it on the page cannot be a coincidence.
 const WORDS = `This is the post that must appear without a reload ${Date.now()}`;
 
@@ -137,6 +138,33 @@ try {
       signedDate: new Date("2014-07-01T00:00:00Z"),
     }});
     console.log(row.id);
+  `);
+
+  // A ruling nobody signed, decided on a day we know the Court for. Its bench
+  // is the thing that must arrive with faces, not just names.
+  const rulingId = db(`
+    const row = await prisma.governmentReference.create({ data: {
+      masterReferenceId: "${REF_PREFIX}-scotus-1", referenceType: "scotus_case", status: "decided",
+      title: ${JSON.stringify(RULING)}, category: "civil-rights", lawVersion: 1,
+      decidedDate: new Date("1971-06-30T00:00:00Z"),
+    }});
+    console.log(row.id);
+  `);
+
+  // The bench of 1971, so the ruling above has somebody to show. Parsed from
+  // the Court's own recorded page rather than typed here — a hand-written
+  // bench could not fail the check it exists to make. This is a lookup table
+  // the app fills for itself, so it is seeded idempotently and left alone.
+  db(`
+    const { parseJusticeRoster } = require("./src/services/court-composition.ts");
+    const html = require("fs").readFileSync("./tests/fixtures/scotus-justices.html", "utf8");
+    await prisma.justice.createMany({
+      data: parseJusticeRoster(html).map((j) => ({
+        name: j.name, startDate: j.startDate, endDate: j.endDate,
+        appointedBy: j.appointedBy, isChief: j.isChief,
+      })),
+      skipDuplicates: true,
+    });
   `);
 
   server = createServer(async (req, res) => {
@@ -285,6 +313,33 @@ try {
     page.url().includes("/timeline"), page.url());
   check("…with the picker's search still underneath it",
     (await page.locator('input[placeholder*="executive orders"]').count()) > 0);
+
+  // ------------------------------------------- the bench arrives with FACES
+  // Reported plainly, on this very pop-up: "doesnt show the pictures here but
+  // only for scotus." The server was sending nine justices and nine portraits;
+  // the pop-up drew their NAMES as text and threw the pictures away. The full
+  // record page had always drawn them, which is exactly why nobody caught it.
+  // Close the pop-up that is still open over the picker before reaching for
+  // the tabs underneath it.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(1_000);
+  await page.locator("[data-law-picker-tabs] button", { hasText: "SCOTUS" }).first().click();
+  await page.waitForTimeout(800);
+  await pickerSearch.fill("prove the bench has faces");
+  await page.waitForTimeout(2_500);
+  await page.locator("[data-law-picker]").getByRole("button", { name: "See details" }).first().click();
+  await page.waitForTimeout(3_000);
+
+  const benchPopup = await page.evaluate(
+    () => document.querySelector('[role="dialog"]')?.innerText ?? "",
+  );
+  check("THE POP-UP SHOWS THE BENCH THAT SAT THAT DAY",
+    /the court as it sat on june 30, 1971/i.test(benchPopup) && /warren earl burger/i.test(benchPopup),
+    benchPopup.slice(0, 200).replace(/\n/g, " | "));
+  const benchFaces = await page
+    .locator('[role="dialog"] img[src*="/api/portraits/"]').count();
+  check("…and every one of them has a FACE, not just a name",
+    benchFaces >= 5, `${benchFaces} portraits in the pop-up`);
 
   await context.close();
 } catch (error) {
