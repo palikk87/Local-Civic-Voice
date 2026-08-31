@@ -71,7 +71,8 @@ function convertToDigestBill(
     title: bill.title,
     short_title: bill.shortTitle,
     status: dbStatus,
-    chamber: bill.chamber,
+    // Null when it cannot be known — an order and a ruling have no chamber.
+    chamber: bill.chamber ?? null,
     sponsor_id: bill.sponsor?.id || null,
     // Null rather than a stand-in. Both used to be the moment our row was
     // written, which made every record look like it dated from the sync.

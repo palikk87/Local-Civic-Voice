@@ -4,6 +4,8 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { attributionFor } from "../services/reference-attribution";
 import { benchOn, isDissenter } from "../services/court-composition";
+import { recordCompleteness } from "../services/record-completeness";
+import { ensurePortraitFor } from "../services/reference-attribution";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import { gapStatus, officialVoteRoll } from "../services/representation-gap";
 import { publicUrlFor } from "../services/storage";
@@ -265,6 +267,15 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
       // an executive order's President by name with no portrait while the
       // record's own page showed both — the same law, two different answers.
       sponsorPhotoUrl: true,
+      // What the completeness badge is worked out from. Same reason: a card
+      // and the record it links to must not disagree about our own work.
+      fullText: true,
+      fullTextSource: true,
+      sourceCheckedAt: true,
+      citizenBriefJson: true,
+      citizenBriefVersion: true,
+      lawVersion: true,
+      rollCalls: { select: { id: true }, take: 1 },
       sponsorParty: true,
       sponsorState: true,
       supportVotes: true,
@@ -291,53 +302,78 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
   );
 
   return c.json({
-    references: results.map((ref) => ({
-      id: ref.id,
-      masterReferenceId: ref.masterReferenceId,
-      // The id as printed ("H.R. 4836"), so every picker shows the same spelling
-      // that referenceIdSearchVariants() can match back.
-      displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
-      referenceType: ref.referenceType,
-      title: ref.title,
-      shortTitle: ref.shortTitle,
-      status: ref.status,
-      category: ref.category,
-      chamber: ref.chamber,
-      congress: ref.congress,
-      introducedDate: ref.introducedDate?.toISOString() ?? null,
-      lastActionDate: ref.lastActionDate?.toISOString() ?? null,
-      lastActionText: ref.lastActionText ?? null,
-      sponsor: ref.sponsorName
-        ? {
-            bioguideId: ref.sponsorBioguideId,
-            name: ref.sponsorName,
-            party: ref.sponsorParty,
-            state: ref.sponsorState,
-          }
-        : null,
-      /**
-       * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
-       * was, because other screens read it; this is the thing a card draws —
-       * a name, what they did, and a face. The rules for all three branches
-       * live in one place, in services/reference-attribution.
+    references: results.map((ref) => {
+      /*
+       * A LAW CARD IS LOADING, so find the face of whoever is behind it — for
+       * whoever sees this card next.
+       *
+       * Part of the card's own load rather than a sweep over the archive: most
+       * of the 1,532 executive orders held will never be looked at, so paying
+       * for all of them to serve the few that are read is backwards.
+       *
+       * Costs this request nothing: not awaited, one ask per person per
+       * process, queued behind a single worker, and one answer fills every
+       * record that person is behind.
        */
-      attribution: attributionFor(ref),
-      sourceUrl: ref.sourceUrl,
-      signedDate: ref.signedDate?.toISOString() ?? null,
-      decidedDate: ref.decidedDate?.toISOString() ?? null,
-      votes: {
-        support: ref.supportVotes,
-        oppose: ref.opposeVotes,
-        total: ref.supportVotes + ref.opposeVotes,
-      },
-      userVote: userVotesByRef.get(ref.id) ?? null,
-      engagement: {
-        comments: ref.totalComments,
-        shares: ref.totalShares,
-        posts: ref._count.posts,
-      },
-      createdAt: ref.createdAt.toISOString(),
-    })),
+      ensurePortraitFor(ref);
+
+      return {
+        id: ref.id,
+        masterReferenceId: ref.masterReferenceId,
+        // The id as printed ("H.R. 4836"), so every picker shows the same spelling
+        // that referenceIdSearchVariants() can match back.
+        displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
+        referenceType: ref.referenceType,
+        title: ref.title,
+        shortTitle: ref.shortTitle,
+        status: ref.status,
+        category: ref.category,
+        chamber: ref.chamber,
+        congress: ref.congress,
+        introducedDate: ref.introducedDate?.toISOString() ?? null,
+        lastActionDate: ref.lastActionDate?.toISOString() ?? null,
+        lastActionText: ref.lastActionText ?? null,
+        sponsor: ref.sponsorName
+          ? {
+              bioguideId: ref.sponsorBioguideId,
+              name: ref.sponsorName,
+              party: ref.sponsorParty,
+              state: ref.sponsorState,
+            }
+          : null,
+        /**
+         * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
+         * was, because other screens read it; this is the thing a card draws —
+         * a name, what they did, and a face. The rules for all three branches
+         * live in one place, in services/reference-attribution.
+         */
+        attribution: attributionFor(ref),
+        /**
+         * HOW COMPLETE OUR RECORD OF THIS LAW IS. The platform rating its own
+         * work, checklist and all — see services/record-completeness.ts.
+         *
+         */
+        completeness: recordCompleteness({
+          ...ref,
+          hasRollCall: ref.rollCalls.length > 0,
+        }),
+        sourceUrl: ref.sourceUrl,
+        signedDate: ref.signedDate?.toISOString() ?? null,
+        decidedDate: ref.decidedDate?.toISOString() ?? null,
+        votes: {
+          support: ref.supportVotes,
+          oppose: ref.opposeVotes,
+          total: ref.supportVotes + ref.opposeVotes,
+        },
+        userVote: userVotesByRef.get(ref.id) ?? null,
+        engagement: {
+          comments: ref.totalComments,
+          shares: ref.totalShares,
+          posts: ref._count.posts,
+        },
+        createdAt: ref.createdAt.toISOString(),
+      };
+    }),
     nextCursor,
     hasMore,
   });
@@ -589,6 +625,15 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       // an executive order's President by name with no portrait while the
       // record's own page showed both — the same law, two different answers.
       sponsorPhotoUrl: true,
+      // What the completeness badge is worked out from. Same reason: a card
+      // and the record it links to must not disagree about our own work.
+      fullText: true,
+      fullTextSource: true,
+      sourceCheckedAt: true,
+      citizenBriefJson: true,
+      citizenBriefVersion: true,
+      lawVersion: true,
+      rollCalls: { select: { id: true }, take: 1 },
       sponsorParty: true,
       sponsorState: true,
       supportVotes: true,
@@ -639,57 +684,82 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
   );
 
   return c.json({
-    references: topReferences.map((ref) => ({
-      id: ref.id,
-      masterReferenceId: ref.masterReferenceId,
-      // The id as printed ("H.R. 4836", "S.Res. 829"). Sent from here so both
-      // clients render one spelling instead of each deriving its own from the
-      // raw id — which is how "sres-829-119" reached a card as "SRES.829".
-      displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
-      referenceType: ref.referenceType,
-      title: ref.title,
-      shortTitle: ref.shortTitle,
-      status: ref.status,
-      category: ref.category,
-      chamber: ref.chamber,
-      congress: ref.congress,
-      introducedDate: ref.introducedDate?.toISOString() ?? null,
-      lastActionDate: ref.lastActionDate?.toISOString() ?? null,
-      lastActionText: ref.lastActionText ?? null,
-      sponsor: ref.sponsorName
-        ? {
-            bioguideId: ref.sponsorBioguideId,
-            name: ref.sponsorName,
-            party: ref.sponsorParty,
-            state: ref.sponsorState,
-          }
-        : null,
-      /**
-       * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
-       * was, because other screens read it; this is the thing a card draws —
-       * a name, what they did, and a face. The rules for all three branches
-       * live in one place, in services/reference-attribution.
+    references: topReferences.map((ref) => {
+      /*
+       * A LAW CARD IS LOADING, so find the face of whoever is behind it — for
+       * whoever sees this card next.
+       *
+       * Part of the card's own load rather than a sweep over the archive: most
+       * of the 1,532 executive orders held will never be looked at, so paying
+       * for all of them to serve the few that are read is backwards.
+       *
+       * Costs this request nothing: not awaited, one ask per person per
+       * process, queued behind a single worker, and one answer fills every
+       * record that person is behind.
        */
-      attribution: attributionFor(ref),
-      sourceUrl: ref.sourceUrl,
-      description: ref.description,
-      citizenBrief: ref.citizenBrief,
-      signedDate: ref.signedDate?.toISOString() ?? null,
-      decidedDate: ref.decidedDate?.toISOString() ?? null,
-      votes: {
-        support: ref.supportVotes,
-        oppose: ref.opposeVotes,
-        total: ref.supportVotes + ref.opposeVotes,
-      },
-      userVote: userVotesByRef.get(ref.id) ?? null,
-      engagement: {
-        comments: ref.totalComments,
-        shares: ref.totalShares,
-        posts: ref._count.posts,
-      },
-      trendingScore: ref.trendingScore,
-      createdAt: ref.createdAt.toISOString(),
-    })),
+      ensurePortraitFor(ref);
+
+      return {
+        id: ref.id,
+        masterReferenceId: ref.masterReferenceId,
+        // The id as printed ("H.R. 4836", "S.Res. 829"). Sent from here so both
+        // clients render one spelling instead of each deriving its own from the
+        // raw id — which is how "sres-829-119" reached a card as "SRES.829".
+        displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
+        referenceType: ref.referenceType,
+        title: ref.title,
+        shortTitle: ref.shortTitle,
+        status: ref.status,
+        category: ref.category,
+        chamber: ref.chamber,
+        congress: ref.congress,
+        introducedDate: ref.introducedDate?.toISOString() ?? null,
+        lastActionDate: ref.lastActionDate?.toISOString() ?? null,
+        lastActionText: ref.lastActionText ?? null,
+        sponsor: ref.sponsorName
+          ? {
+              bioguideId: ref.sponsorBioguideId,
+              name: ref.sponsorName,
+              party: ref.sponsorParty,
+              state: ref.sponsorState,
+            }
+          : null,
+        /**
+         * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
+         * was, because other screens read it; this is the thing a card draws —
+         * a name, what they did, and a face. The rules for all three branches
+         * live in one place, in services/reference-attribution.
+         */
+        attribution: attributionFor(ref),
+        /**
+         * HOW COMPLETE OUR RECORD OF THIS LAW IS. The platform rating its own
+         * work, checklist and all — see services/record-completeness.ts.
+         *
+         */
+        completeness: recordCompleteness({
+          ...ref,
+          hasRollCall: ref.rollCalls.length > 0,
+        }),
+        sourceUrl: ref.sourceUrl,
+        description: ref.description,
+        citizenBrief: ref.citizenBrief,
+        signedDate: ref.signedDate?.toISOString() ?? null,
+        decidedDate: ref.decidedDate?.toISOString() ?? null,
+        votes: {
+          support: ref.supportVotes,
+          oppose: ref.opposeVotes,
+          total: ref.supportVotes + ref.opposeVotes,
+        },
+        userVote: userVotesByRef.get(ref.id) ?? null,
+        engagement: {
+          comments: ref.totalComments,
+          shares: ref.totalShares,
+          posts: ref._count.posts,
+        },
+        trendingScore: ref.trendingScore,
+        createdAt: ref.createdAt.toISOString(),
+      };
+    }),
   });
 });
 
@@ -823,6 +893,28 @@ governmentReferencesRouter.get("/:id", async (c) => {
    * Detail only. A list card does not need a bench, and asking for one there
    * would be a query per row.
    */
+  /**
+   * HOW COMPLETE OUR RECORD OF THIS LAW IS — the same answer the feed card
+   * gives, from the same function, so the two can never disagree about our own
+   * work. `latestRollCall` is already loaded above, so this costs no query.
+   */
+  const completeness = recordCompleteness({
+    ...reference,
+    hasRollCall: latestRollCall !== null,
+  });
+
+  /*
+   * SOMEBODY IS OPENING THIS LAW, so find the face of whoever is behind it —
+   * for the reader after this one.
+   *
+   * Deliberately NOT awaited. The lookup is a Wikipedia round trip and a
+   * portrait is not worth a second of anybody's page load; this reader sees the
+   * name, and the next sees the name and the face. One answer fills every
+   * record that person is behind, so opening one order Obama signed gives a
+   * face to all of them.
+   */
+  ensurePortraitFor(reference);
+
   const attribution = attributionFor(reference);
   if (attribution?.perCuriam && reference.decidedDate) {
     const bench = await benchOn(reference.decidedDate);
@@ -881,6 +973,7 @@ governmentReferencesRouter.get("/:id", async (c) => {
        * answerable for it. See detailAttribution above.
        */
       attribution,
+      completeness,
       status: reference.status,
       category: reference.category,
       description: reference.description,

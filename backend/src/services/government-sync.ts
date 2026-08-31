@@ -668,3 +668,88 @@ export async function syncGovernmentData(trigger: string = "manual"): Promise<Go
   console.log(`[GovSync] Done — bills: ${bills}, executive orders: ${executiveOrders}, SCOTUS cases: ${scotusCases}`);
   return { bills, executiveOrders, scotusCases, skipped: false };
 }
+
+/**
+ * FILL IN WHO SIGNED THE ORDERS ALREADY HELD.
+ *
+ * THE HOLE THIS CLOSES. The signer's name was added to the executive-order
+ * sync, but 1,532 orders were already in the archive by then and the sync never
+ * revisits a record it has: the forward pass covers what is new, the archive
+ * sweep walks backwards from the OLDEST order held. Nothing was ever going to
+ * come back for the middle. Measured against production: 58 of 60 orders had no
+ * signer stored, so the law page showed no "Signed by" line and there was no
+ * name to look a portrait up with.
+ *
+ * WHY THIS IS A SWEEP WHEN PORTRAITS ARE NOT. Khalid: "1500 EO orders are easy
+ * to download... thousands and thousands of SCOTUS ruling or bills and
+ * legislation on the other hand is a different story." This is the cheap case.
+ * The Federal Register hands back the president alongside 100 documents per
+ * request, so the whole archive is about sixteen requests — and once every
+ * order has a name this does nothing at all, forever.
+ *
+ * NOTHING IS INFERRED. The name comes from the same government source as the
+ * order itself. Deriving a president from a signing date would be a guess
+ * dressed as a fact, and a wrong name on a law is worse than no name.
+ */
+export async function fillExecutiveOrderSigners(maxPages = 20): Promise<{
+  asked: number;
+  named: number;
+}> {
+  const missing = await prisma.governmentReference.count({
+    where: { referenceType: "executive_order", sponsorName: null, mergedIntoId: null },
+  });
+  // Already complete. This is the state it stays in.
+  if (missing === 0) return { asked: 0, named: 0 };
+
+  /** Signer name to the source URLs of every order they signed. */
+  const byPresident = new Map<string, string[]>();
+  let asked = 0;
+
+  for (let page = 1; page <= maxPages; page++) {
+    const url = new URL("https://www.federalregister.gov/api/v1/documents.json");
+    url.searchParams.set("conditions[presidential_document_type]", "executive_order");
+    url.searchParams.append("conditions[type][]", "PRESDOCU");
+    url.searchParams.set("order", "newest");
+    url.searchParams.set("per_page", String(EO_PAGE_SIZE));
+    url.searchParams.set("page", String(page));
+    // Two fields only. The text and the abstract are already stored; this is
+    // the cheapest request that answers the one question left.
+    for (const field of ["html_url", "president"]) {
+      url.searchParams.append("fields[]", field);
+    }
+
+    const data = await fetchJson<FederalRegisterListResponse>(url.toString());
+    if (!data?.results || data.results.length === 0) break;
+    asked += data.results.length;
+
+    for (const doc of data.results) {
+      const name = doc.president?.name?.trim();
+      if (!name || !doc.html_url) continue;
+      const urls = byPresident.get(name) ?? [];
+      urls.push(doc.html_url);
+      byPresident.set(name, urls);
+    }
+  }
+
+  // One write per president, not per order — there are about eight of them
+  // across the whole archive.
+  let named = 0;
+  for (const [name, urls] of byPresident) {
+    const written = await prisma.governmentReference.updateMany({
+      where: {
+        referenceType: "executive_order",
+        sourceUrl: { in: urls },
+        sponsorName: null,
+        mergedIntoId: null,
+      },
+      data: { sponsorName: name },
+    });
+    named += written.count;
+  }
+
+  console.log(
+    `[GovSync] Executive order signers: ${missing} were missing one, ` +
+      `${asked} documents read, ${named} given a name`,
+  );
+  return { asked, named };
+}

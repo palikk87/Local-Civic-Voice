@@ -16,6 +16,8 @@
 import { prisma } from "../prisma";
 import type { PostReference } from "../types";
 import { formatReferenceDisplayId } from "./reference-id";
+import { recordCompleteness } from "./record-completeness";
+import { ensurePortraitFor } from "./reference-attribution";
 
 /**
  * @param referenceIds GovernmentReference ids collected from a page of posts.
@@ -46,6 +48,23 @@ export async function loadPostReferenceViews(
         opposeVotes: true,
         lawChangedAt: true,
         lawVersion: true,
+        // What the completeness badge is worked out from. Selected here rather
+        // than fetched per card so a feed page stays one query — see
+        // services/record-completeness.ts.
+        fullText: true,
+        fullTextSource: true,
+        sourceCheckedAt: true,
+        introducedDate: true,
+        signedDate: true,
+        decidedDate: true,
+        sponsorName: true,
+        sponsorBioguideId: true,
+        sponsorPhotoUrl: true,
+        citizenBriefJson: true,
+        citizenBriefVersion: true,
+        // Existence only. The tally itself belongs to the law page; all the
+        // badge asks is whether a recorded vote is stored at all.
+        rollCalls: { select: { id: true }, take: 1 },
       },
     }),
     userId
@@ -59,6 +78,20 @@ export async function loadPostReferenceViews(
   const voteByReference = new Map(votes.map((v) => [v.governmentReferenceId, v.position]));
 
   for (const reference of references) {
+    /*
+     * A LAW CARD IS LOADING, so find the face of whoever is behind it — for
+     * whoever sees this card next.
+     *
+     * Part of the card's own load rather than a sweep over the archive: 1,532
+     * executive orders are held and most will never be looked at, so paying for
+     * all of them to serve the few that are read is backwards.
+     *
+     * Costs this request nothing. It is not awaited, a person is only ever
+     * asked about once per process, the lookups queue behind a single worker,
+     * and one answer fills every record that person is behind.
+     */
+    ensurePortraitFor(reference);
+
     const position = voteByReference.get(reference.id);
     views.set(reference.id, {
       id: reference.id,
@@ -78,6 +111,13 @@ export async function loadPostReferenceViews(
         total: reference.supportVotes + reference.opposeVotes,
       },
       userVote: position === "support" || position === "oppose" ? position : null,
+      // HOW COMPLETE OUR RECORD OF THIS LAW IS, and what is still outstanding.
+      // The same answer the law's own page gives — one function, so a feed card
+      // and the record it links to can never disagree about our own work.
+      completeness: recordCompleteness({
+        ...reference,
+        hasRollCall: reference.rollCalls.length > 0,
+      }),
       // When the LAW last moved — not when the row was last written. A post
       // older than this is showing a law that has changed since its author
       // wrote about it, which is what the badge on the card is for.

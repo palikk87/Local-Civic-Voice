@@ -6,6 +6,7 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import type {
   Bill,
+  BillChamber,
   Representative,
   Profile,
   Vote as UserVote,
@@ -139,12 +140,19 @@ export interface DailyDigestBill
     Bill,
     | 'cosponsor_count'
     | 'amendment_count'
+    | 'chamber'
     | 'introduced_date'
     | 'last_action_date'
     | 'created_at'
     | 'updated_at'
   > {
   weight_score: number
+  /**
+   * NULLABLE for the same reason as the counts above. An executive order and a
+   * Supreme Court ruling have no chamber, and the feed card used to hardcode
+   * "house" for every record — which put a House chip on court cases.
+   */
+  chamber: BillChamber | null
   representatives?: Representative | null
   /**
    * NULLABLE, because these are facts about the legislation and we may not

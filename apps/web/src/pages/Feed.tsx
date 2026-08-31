@@ -1,5 +1,6 @@
 // Web port of mobile/src/app/(tabs)/index.tsx (Home screen)
 import React, { useState, useCallback, useMemo, useEffect } from "react";
+import { RecordBadge } from "@/components/civic/RecordBadge";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Heart,
@@ -66,7 +67,6 @@ import {
 } from "@/lib/mobile/feed-algorithm";
 import { CIVIC_LEVELS } from "@/lib/mobile/gamification";
 import { useUnreadNotifications } from "@/hooks/use-unread-notifications";
-import { verifyBill, getTrustBadge } from "@/lib/mobile/trust-verification";
 import ShareModal from "@/components/mobile/ShareModal";
 import { BillOfRightsBadge } from "@/components/mobile/BillOfRightsBadge";
 import { PulseGapBadge } from "@/components/mobile/PulseGap";
@@ -640,28 +640,6 @@ function BranchBadge({ branch }: { branch?: GovernmentBranch }) {
 }
 
 // ==========================================
-// TRUST BADGE
-// ==========================================
-
-function TrustBadge({ bill }: { bill: Bill }) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const verification = useMemo(() => verifyBill(bill), [bill.id]);
-  const badge = getTrustBadge(verification.overallTrustScore);
-
-  return (
-    <button
-      className="flex items-center px-2 py-0.5 rounded-full shrink-0"
-      style={{ backgroundColor: `${badge.color}20` }}
-    >
-      <Shield size={10} color={badge.color} />
-      <span className="text-xs font-medium ml-1" style={{ color: badge.color }}>
-        {badge.icon} {badge.label}
-      </span>
-    </button>
-  );
-}
-
-// ==========================================
 // VOTE BUTTONS
 // ==========================================
 
@@ -916,7 +894,12 @@ function FeedCard({ item, index, onShare }: FeedCardProps) {
                 </span>
               ) : null}
             </div>
-            <TrustBadge bill={item.bill} />
+            {/*
+              HOW COMPLETE OUR RECORD OF THIS LAW IS — and clicking it says why.
+              The server works it out (services/record-completeness.ts) so this
+              card and the law's own page can never disagree about our own work.
+            */}
+            <RecordBadge completeness={item.bill.completeness} title={item.bill.shortTitle} />
           </div>
 
           <p className="mb-1 font-display text-lg font-extrabold text-foreground">{item.bill.shortTitle}</p>

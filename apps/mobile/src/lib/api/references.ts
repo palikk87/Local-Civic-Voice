@@ -79,6 +79,20 @@ export interface GovReference {
     panel?: Array<{ name: string; photoUrl: string | null }>;
     panelLabel?: string;
   } | null;
+  /**
+   * HOW COMPLETE OUR RECORD OF THIS LAW IS — the checklist behind the card's
+   * badge, misses included.
+   *
+   * This is the platform rating its own work, not the law. Optional only
+   * because an older server may not send it; the badge simply does not render.
+   */
+  completeness?: {
+    level: "verified" | "confirmed" | "unconfirmed" | "unverified";
+    label: string;
+    met: number;
+    applicable: number;
+    checks: Array<{ id: string; label: string; met: boolean; detail: string | null }>;
+  } | null;
   decidedDate: string | null;
   votes: { support: number; oppose: number; total: number };
   engagement: { comments: number; shares: number; posts: number };

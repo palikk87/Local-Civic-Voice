@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { RecordBadge } from '@/components/civic/RecordBadge';
 import {
   View,
   Text,
@@ -61,7 +62,6 @@ import { api } from '@/lib/api/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCivicScore } from '@/lib/use-civic-score';
 import { useUnreadNotifications } from '@/lib/use-unread-notifications';
-import { verifyBill, getTrustBadge } from '@/lib/trust-verification';
 import ShareModal from '@/components/ShareModal';
 import { BillOfRightsBadge } from '@/components/BillOfRightsBadge';
 import { PulseGapBadge } from '@/components/PulseGap';
@@ -521,27 +521,6 @@ function BranchBadge({ branch }: { branch?: GovernmentBranch }) {
 }
 
 // ==========================================
-// TRUST BADGE
-// ==========================================
-
-function TrustBadge({ bill }: { bill: Bill }) {
-  const verification = useMemo(() => verifyBill(bill), [bill.id]);
-  const badge = getTrustBadge(verification.overallTrustScore);
-
-  return (
-    <Pressable
-      className="flex-row items-center px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: `${badge.color}20` }}
-    >
-      <Shield size={10} color={badge.color} />
-      <Text className="text-xs font-medium ml-1" style={{ color: badge.color }}>
-        {badge.icon} {badge.label}
-      </Text>
-    </Pressable>
-  );
-}
-
-// ==========================================
 // VOTE BUTTONS
 // ==========================================
 
@@ -841,7 +820,12 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
                 </View>
               )}
             </View>
-            <TrustBadge bill={item.bill} />
+            {/*
+                HOW COMPLETE OUR RECORD OF THIS LAW IS — and tapping it says why.
+                The server works it out, so this card and the law's own page can
+                never disagree about our own work.
+              */}
+              <RecordBadge completeness={item.bill.completeness} title={item.bill.shortTitle} />
           </View>
 
           <Text className="text-white font-semibold text-base mb-1">

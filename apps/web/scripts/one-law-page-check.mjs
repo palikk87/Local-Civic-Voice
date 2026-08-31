@@ -179,6 +179,13 @@ try {
         sponsorName: ${JSON.stringify(SPONSOR)},
         sponsorParty: "D",
         sponsorState: "AZ",
+        sponsorBioguideId: "L000174",
+        // Everything except the brief, so the badge reads "Confirmed" and the
+        // panel has exactly one outstanding line to name.
+        fullText: "Be it enacted by the Senate and House of Representatives...",
+        fullTextSource: "congress.gov",
+        sourceCheckedAt: new Date(),
+        sourceUrl: "https://www.congress.gov/bill/119th-congress/house-bill/1",
         introducedDate: new Date("2007-11-01T00:00:00Z"),
         lastActionDate: new Date("2007-11-02T00:00:00Z"),
       },
@@ -356,6 +363,37 @@ try {
 
     // The old screens are gone, not hiding behind a different label.
     check("nothing on it is the retired screen", !/Community Vote/.test(text));
+
+    // ---------------------------------------- the badge rates our own record
+    //
+    // This chip used to be scored by arithmetic whose ceiling was ten points
+    // below its own top badge, so it read "? Unverified" in red on every law on
+    // every screen. It now reports what we actually hold.
+    check("THE BADGE SAYS WHAT WE HOLD, NOT THAT THE LAW IS DOUBTFUL",
+      /Confirmed/.test(text) && !/Unverified/.test(text),
+      text.slice(0, 300).replace(/\n/g, " | "));
+
+    // And the checklist is the whole point: a bare badge makes somebody wary,
+    // the reason turns that into understanding.
+    await page.getByRole("button", { name: /Our record:/i }).first().click();
+    await page.waitForTimeout(600);
+    const panel = await page.evaluate(() => document.body.innerText);
+    check("…and clicking it opens the checklist",
+      /Our record of this law/i.test(panel),
+      panel.slice(0, 200).replace(/\n/g, " | "));
+    check("…which names what is outstanding, and why",
+      /Citizen's Brief written/i.test(panel) && /nobody has asked for one yet/i.test(panel),
+      panel.slice(0, 400).replace(/\n/g, " | "));
+    check("…shows the real value behind what we DO hold",
+      /from congress\.gov/i.test(panel) && /checked/i.test(panel),
+      panel.slice(0, 400).replace(/\n/g, " | "));
+    check("…and explains all four badges",
+      /Verified/.test(panel) && /Confirmed/.test(panel)
+        && /Unconfirmed/.test(panel) && /Unverified/.test(panel),
+      panel.slice(0, 400).replace(/\n/g, " | "));
+    check("…said plainly as us rating ourselves, not the law",
+      /not whether the law is real/i.test(panel),
+      panel.slice(0, 400).replace(/\n/g, " | "));
 
     // A bill's sponsor portrait is built by the client from their bioguide id.
     // This record has no bioguide id, so there is nothing to draw — and that is

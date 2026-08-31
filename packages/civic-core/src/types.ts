@@ -8,7 +8,13 @@ export interface Bill {
   title: string;
   shortTitle: string;
   status: 'introduced' | 'in_committee' | 'passed_house' | 'passed_senate' | 'enacted' | 'vetoed' | 'signed_into_law';
-  chamber: 'house' | 'senate';
+  /**
+   * Optional because it cannot be known for every record. An executive order
+   * and a Supreme Court ruling have no chamber, and the card used to hardcode
+   * "house" for both — which is where a House chip on a court case came from.
+   * Undefined renders no chip.
+   */
+  chamber?: 'house' | 'senate';
   /**
    * OPTIONAL, BECAUSE A SPONSOR WE HAVE NOT FETCHED IS NOT A SPONSOR.
    *
@@ -52,6 +58,19 @@ export interface Bill {
    */
   officialVotes?: OfficialVoteTally;
   citizensBrief?: CitizensBrief; // AI-generated brief
+  /**
+   * HOW COMPLETE OUR RECORD OF THIS LAW IS — the checklist behind the card's
+   * badge. Worked out on the server so a feed card and the law's own page can
+   * never disagree about our own work. Absent from an older server, in which
+   * case no badge renders.
+   */
+  completeness?: {
+    level: 'verified' | 'confirmed' | 'unconfirmed' | 'unverified';
+    label: string;
+    met: number;
+    applicable: number;
+    checks: Array<{ id: string; label: string; met: boolean; detail: string | null }>;
+  } | null;
   branch?: GovernmentBranch; // Default to 'legislative'
 }
 

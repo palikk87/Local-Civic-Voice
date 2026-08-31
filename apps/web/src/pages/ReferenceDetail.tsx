@@ -37,6 +37,7 @@ import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import { useIsWide } from "@/hooks/use-is-wide";
 import { useLoadOrder } from "@/hooks/use-load-order";
 import { memberPhotoUrl } from "@/lib/member-photo";
+import { RecordBadge } from "@/components/civic/RecordBadge";
 
 /**
  * Send this law to one person.
@@ -288,6 +289,13 @@ export default function ReferenceDetail() {
                 <ReferenceTypeBadge type={reference.referenceType} />
                 <CategoryBadge category={reference.category} />
                 <StatusBadge status={reference.status} />
+                {/*
+                  HOW COMPLETE OUR RECORD OF THIS LAW IS. The same chip the feed
+                  card carries, from the same server answer — a reader who taps
+                  it on a card and then opens the law must not be told two
+                  different things about our own work.
+                */}
+                <RecordBadge completeness={reference.completeness} title={reference.shortTitle ?? reference.title} />
               </div>
 
               <h1 className="mt-4 font-display text-3xl font-semibold leading-tight tracking-tight text-foreground text-balance sm:text-4xl">

@@ -31,6 +31,7 @@
  */
 
 import { prisma } from "../prisma";
+import { presidentOn, storedPortrait } from "../data/portraits";
 
 export interface Attribution {
   name: string;
@@ -56,15 +57,24 @@ export interface Attribution {
 /**
  * The President who signed an executive order.
  *
- * The Federal Register names them and that name is stored on the record; the
- * portrait is resolved once, separately, and kept on the row. There is no
- * roster lookup here on purpose — a list of current office-holders is wrong
- * the day somebody leaves, and this platform carries fifty years of law.
+ * EVERY ORDER WAS SIGNED BY SOMEBODY, and every order carries the date it was
+ * signed. Khalid: "each one was signed by a president. so they have a name on
+ * them." So where the Federal Register gave us a name we keep it, and where it
+ * did not — which is all 1,532 orders in the archive today — the date answers.
+ *
+ * The stored name still wins. It is what the government itself printed on the
+ * document; the date is how we work it out when nobody told us.
  */
-export function presidentAttribution(name: string | null | undefined): Attribution | null {
+export function presidentAttribution(
+  name: string | null | undefined,
+  signedDate?: Date | string | null,
+): Attribution | null {
   const trimmed = name?.trim();
-  if (!trimmed) return null;
-  return { name: trimmed, role: "Signed by", photoUrl: null };
+  if (trimmed) return { name: trimmed, role: "Signed by", photoUrl: null };
+
+  const term = presidentOn(signedDate);
+  if (!term) return null;
+  return { name: term.name, role: "Signed by", photoUrl: term.photoUrl };
 }
 
 /**
@@ -94,6 +104,32 @@ export function justiceAttribution(name: string | null | undefined): Attribution
   }
 
   return { name: trimmed, role: "Majority opinion by", photoUrl: null };
+}
+
+/**
+ * A RULING NOBODY IS NAMED ON — decided by the Court as it sat that day.
+ *
+ * Khalid, on the executive orders: "the date they were signed tells you who was
+ * in the role." For an order that names one person, because the office has one
+ * holder. The Court has nine, so the same date tells you who SAT, not who
+ * WROTE — and putting one of their faces on it would be inventing the fact the
+ * record is missing.
+ *
+ * So the date answers the question it can answer. The bench is who is
+ * answerable for what the Court issued, which is the same ground the per curiam
+ * panel already stands on; the difference is only in what we say. A per curiam
+ * ruling is unsigned BY CHOICE and says so. This one is a ruling whose author
+ * we do not hold, and it says that instead.
+ */
+export function unattributedCourt(): Attribution {
+  return {
+    name: "The Supreme Court",
+    role: "Decided by",
+    photoUrl: null,
+    // Same flag, same meaning it has always had: no one face goes on this, and
+    // the bench that sat is looked up from the decision date.
+    perCuriam: true,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +268,18 @@ export async function resolvePortrait(input: {
 
   const name = input.name?.trim();
   if (!name) return null;
+
+  /*
+   * ALREADY IN HAND. Every president and every justice since 1789 is held in
+   * data/portraits.ts — the set of people who can sign an order or write an
+   * opinion is closed and small, so it was downloaded once rather than looked
+   * up forever. No network, no rate limit, no waiting.
+   */
+  const held = storedPortrait(name);
+  if (held) return held;
+
+  // Not on the list, which in practice means somebody who has just taken
+  // office. Ask once, and the answer is stored on the record from here.
   return lookupPortrait(name);
 }
 
@@ -242,6 +290,8 @@ export async function resolvePortrait(input: {
 /** The columns of a GovernmentReference this needs. Nothing more is read. */
 export interface AttributableReference {
   referenceType: string;
+  /** An executive order's signing date — who held the office that day. */
+  signedDate?: Date | string | null;
   sponsorName: string | null;
   sponsorBioguideId?: string | null;
   sponsorPhotoUrl?: string | null;
@@ -272,13 +322,12 @@ export interface AttributableReference {
  */
 export function attributionFor(ref: AttributableReference): Attribution | null {
   if (ref.referenceType === "executive_order") {
-    const base = presidentAttribution(ref.sponsorName);
+    const base = presidentAttribution(ref.sponsorName, ref.signedDate);
     return base && { ...base, photoUrl: base.photoUrl ?? ref.sponsorPhotoUrl ?? null };
   }
 
   if (ref.referenceType === "scotus_case") {
-    const base = justiceAttribution(ref.sponsorName);
-    if (!base) return null;
+    const base = justiceAttribution(ref.sponsorName) ?? unattributedCourt();
     // A PER CURIAM RULING TAKES NO PORTRAIT. A stored photo on such a record
     // can only be somebody the sync guessed at, and putting one face on an
     // opinion the Court deliberately issued unsigned is exactly the false
@@ -300,106 +349,117 @@ export function attributionFor(ref: AttributableReference): Attribution | null {
 }
 
 // ---------------------------------------------------------------------------
-// THE PASS THAT FINDS THE FACES
+// FACES ARE FOUND WHEN SOMEBODY OPENS THE LAW, NOT BEFORE
 // ---------------------------------------------------------------------------
+//
+// THE SWEEP THIS REPLACES walked the archive filling portraits nobody had asked
+// to see. 1,532 executive orders are held; most will never be opened by anyone,
+// and paying Wikipedia for all of them to serve the handful that are read is
+// backwards. Khalid: "rather than forcing it to backfil why not fill it as
+// things are opened. that way we aren't filling stuff that never need it."
+//
+// So it works the way the Citizen's Brief already does — nothing starts by
+// itself, the first reader triggers it, and everybody after gets the stored
+// answer for free.
+//
+// AND ONE ANSWER FILLS MANY RECORDS. The lookup is by PERSON, so opening a
+// single Obama order writes the portrait onto every order he signed. The
+// archive fills itself along the paths people actually walk.
+//
+// NEVER ON THE CRITICAL PATH. The reader who triggers it does not wait for it —
+// their page renders with the name and no face, and the next view has both. A
+// portrait is not worth a second of somebody's page load.
 
-export interface PortraitFillResult {
-  considered: number;
-  filled: number;
-  skipped: number;
+/**
+ * People already asked about in this process, so one unfindable name does not
+ * cost a request on every card that shows them.
+ *
+ * In memory on purpose: it resets on restart, which is the behaviour we want —
+ * a name that failed because Wikipedia was briefly unreachable gets another go
+ * tomorrow, rather than being written off in the database forever.
+ */
+const attempted = new Set<string>();
+
+/**
+ * ONE AT A TIME, SPACED.
+ *
+ * A feed page is twenty law cards, and each one wants a face. Firing twenty
+ * lookups at once would be the fastest way to get this platform rate-limited by
+ * Wikimedia, so they queue behind a single worker instead. Nobody is waiting on
+ * any of it — the card that triggered a lookup renders the name immediately and
+ * the face appears for the next reader.
+ */
+const queue: Array<{ name: string; bioguideId: string | null }> = [];
+let draining = false;
+
+async function drain(): Promise<void> {
+  if (draining) return;
+  draining = true;
+  try {
+    while (queue.length > 0) {
+      const person = queue.shift()!;
+      try {
+        const photoUrl = await resolvePortrait({
+          name: person.name,
+          bioguideId: person.bioguideId,
+        });
+        // Nothing found, or the page failed the office guard. Nothing is
+        // written: a wrong face is worse than no face, and the card shows the
+        // name alone, which is true.
+        if (!photoUrl) continue;
+
+        // EVERY record this person is behind, in one write. Opening one order
+        // Obama signed gives a face to all three hundred of them.
+        const written = await prisma.governmentReference.updateMany({
+          where: {
+            sponsorName: person.name,
+            sponsorBioguideId: person.bioguideId,
+            sponsorPhotoUrl: null,
+            mergedIntoId: null,
+          },
+          data: { sponsorPhotoUrl: photoUrl },
+        });
+        if (written.count > 0) {
+          console.log(`[Portraits] ${person.name}: ${written.count} record(s) given a face`);
+        }
+      } catch (error) {
+        console.warn(`[Portraits] could not resolve ${person.name}:`, error);
+      }
+      // Wikimedia asks automated clients to be gentle, and nobody is waiting.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  } finally {
+    draining = false;
+  }
 }
 
 /**
- * Find the portrait of whoever is behind each record that has none yet.
+ * A law card is loading — make sure its person has a face, for the next reader.
  *
- * ONE PASS FOR ALL THREE BRANCHES, which is the point. A bill's sponsor, the
- * President who signed an order, the justice who wrote a majority — the same
- * question, asked the same way, and the answer stored on the row so a page view
- * never causes a lookup.
- *
- * `limit` is small and the requests are spaced, because Wikimedia rate-limits
- * and a client that ignores that gets the platform blocked outright. Nothing
- * waits on this: a card with no portrait shows the name, which is true.
+ * Returns immediately and never throws. Safe to call for every card on a page:
+ * a person is only ever asked about once per process, and one answer fills
+ * every record they are behind.
  */
-export async function fillReferencePortraits(limit = 25): Promise<PortraitFillResult> {
-  const pending = await prisma.governmentReference.findMany({
-    where: {
-      mergedIntoId: null,
-      sponsorPhotoUrl: null,
-      NOT: { sponsorName: null },
-    },
-    select: { id: true, sponsorName: true, sponsorBioguideId: true },
-    orderBy: { createdAt: "desc" },
-    take: limit,
-  });
+export function ensurePortraitFor(ref: {
+  sponsorName: string | null;
+  sponsorBioguideId?: string | null;
+  sponsorPhotoUrl: string | null;
+}): void {
+  const name = ref.sponsorName?.trim();
+  // Already has one, has no person, or we have already asked this run.
+  if (!name || ref.sponsorPhotoUrl) return;
 
-  let filled = 0;
-  let skipped = 0;
+  const bioguideId = ref.sponsorBioguideId ?? null;
+  const key = `${name}|${bioguideId ?? ""}`;
+  if (attempted.has(key)) return;
+  attempted.add(key);
 
-  for (const ref of pending) {
-    const photoUrl = await resolvePortrait({
-      name: ref.sponsorName,
-      bioguideId: ref.sponsorBioguideId,
-    });
-
-    if (!photoUrl) {
-      // Nothing found, or the page failed the office guard. Nothing is written:
-      // a wrong face is worse than no face, and the card shows the name alone.
-      skipped++;
-      continue;
-    }
-
-    await prisma.governmentReference.update({
-      where: { id: ref.id },
-      data: { sponsorPhotoUrl: photoUrl },
-    });
-    filled++;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-
-  if (pending.length > 0) {
-    console.log(
-      `[Portraits] ${filled} filled, ${skipped} skipped, of ${pending.length} records missing the face of whoever decided them`,
-    );
-  }
-
-  return { considered: pending.length, filled, skipped };
+  queue.push({ name, bioguideId });
+  void drain();
 }
 
-/**
- * The same, for the justices themselves.
- *
- * Separate from the records because a justice's face is not a property of any
- * one ruling — Scalia wrote hundreds, and sat on thousands more as part of a
- * per curiam bench. Resolved once per person, reused by every case they touched.
- */
-export async function fillJusticePortraits(limit = 20): Promise<PortraitFillResult> {
-  const pending = await prisma.justice.findMany({
-    where: { photoUrl: null },
-    select: { id: true, name: true },
-    // Newest service first: the justices most likely to appear on a record
-    // somebody is reading today.
-    orderBy: { startDate: "desc" },
-    take: limit,
-  });
-
-  let filled = 0;
-  let skipped = 0;
-
-  for (const justice of pending) {
-    const photoUrl = await lookupPortrait(justice.name);
-    if (!photoUrl) {
-      skipped++;
-      continue;
-    }
-    await prisma.justice.update({ where: { id: justice.id }, data: { photoUrl } });
-    filled++;
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-
-  if (pending.length > 0) {
-    console.log(`[Portraits] ${filled} of ${pending.length} justices given a face`);
-  }
-
-  return { considered: pending.length, filled, skipped };
+/** Test seam: forget what has been attempted, so a case can run twice. */
+export function resetPortraitAttempts(): void {
+  attempted.clear();
+  queue.length = 0;
 }

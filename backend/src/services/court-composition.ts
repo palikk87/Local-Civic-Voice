@@ -29,6 +29,7 @@
  */
 
 import { prisma } from "../prisma";
+import { lookupPortrait } from "./reference-attribution";
 
 export interface JusticeTenure {
   /** As the Court prints it, reordered to how a person is addressed. */
@@ -242,6 +243,52 @@ export interface SeatedJustice {
 }
 
 /**
+ * Names already attempted this run, so an unfindable justice does not cost a
+ * request on every view of every ruling they sat on.
+ */
+const attemptedJustices = new Set<string>();
+
+/**
+ * Find faces for the bench somebody is looking at right now.
+ *
+ * SAME RULE AS THE RECORDS: nothing is fetched before anybody asks. A bench is
+ * nine people and the Court has had 121 — filling all of them up front pays for
+ * justices nobody on this platform will ever read about. Opening one per curiam
+ * ruling fills that bench, and every other ruling those nine sat on gets them
+ * for free.
+ *
+ * Returns immediately; the reader never waits on it.
+ */
+function ensureBenchPortraits(bench: SeatedJustice[]): void {
+  const missing = bench.filter((j) => !j.photoUrl && !attemptedJustices.has(j.name));
+  if (missing.length === 0) return;
+  for (const justice of missing) attemptedJustices.add(justice.name);
+
+  void (async () => {
+    for (const justice of missing) {
+      try {
+        const photoUrl = await lookupPortrait(justice.name);
+        if (photoUrl) {
+          await prisma.justice.updateMany({
+            where: { name: justice.name, photoUrl: null },
+            data: { photoUrl },
+          });
+        }
+      } catch {
+        // A portrait is never worth failing a page over.
+      }
+      // Wikimedia asks automated clients to be gentle, and nobody is waiting.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  })();
+}
+
+/** Test seam: forget what has been attempted, so a case can run twice. */
+export function resetJusticePortraitAttempts(): void {
+  attemptedJustices.clear();
+}
+
+/**
  * The bench on the day a ruling came down, with faces, from the database.
  *
  * Empty when the roster has not been fetched yet, which renders as no panel —
@@ -259,9 +306,13 @@ export async function benchOn(when: Date): Promise<SeatedJustice[]> {
   });
 
   const seen = new Set<string>();
-  return rows
+  const bench = rows
     .filter((row) => !seen.has(row.name) && seen.add(row.name))
     .map((row) => ({ name: row.name, photoUrl: row.photoUrl }));
+
+  // Whoever reads this next gets the faces. This reader does not wait.
+  ensureBenchPortraits(bench);
+  return bench;
 }
 
 // ---------------------------------------------------------------------------

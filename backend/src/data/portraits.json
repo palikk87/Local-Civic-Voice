@@ -1,0 +1,1140 @@
+{
+  "justices": [
+    {
+      "name": "James Wilson",
+      "oath": "1789-10-05",
+      "end": "1798-08-21",
+      "qid": "Q365181",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/JusticeJamesWilson.jpg"
+    },
+    {
+      "name": "John Jay",
+      "oath": "1789-10-19",
+      "end": "1795-06-29",
+      "qid": "Q310847",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Jay%20%28Gilbert%20Stuart%20portrait%29.jpg"
+    },
+    {
+      "name": "William Cushing",
+      "oath": "1790-02-02",
+      "end": "1810-09-13",
+      "qid": "Q2063381",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/WilliamCushing.jpg"
+    },
+    {
+      "name": "John Blair",
+      "oath": "1790-02-02",
+      "end": "1795-10-25",
+      "qid": "Q778866",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John_Blair_%28page_82_crop%29.jpg"
+    },
+    {
+      "name": "John Rutledge",
+      "oath": "1790-02-15",
+      "end": "1791-03-05",
+      "qid": "Q370781",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Rutledge%20color%20painting.jpg"
+    },
+    {
+      "name": "James Iredell",
+      "oath": "1790-05-12",
+      "end": "1799-10-20",
+      "qid": "Q956007",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/JamesIredell.jpg"
+    },
+    {
+      "name": "Thomas Johnson",
+      "oath": "1791-09-19",
+      "end": "1793-01-16",
+      "qid": "Q5889298",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Thomas%20Johnson%20%28governor%29.jpeg"
+    },
+    {
+      "name": "William Paterson",
+      "oath": "1793-03-11",
+      "end": "1806-09-09",
+      "qid": "Q729054",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Williampaterson.jpg"
+    },
+    {
+      "name": "Samuel Chase",
+      "oath": "1796-02-04",
+      "end": "1811-06-19",
+      "qid": "Q285521",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Wesley%20Jarvis%20-%20Samuel%20Chase%20-%20NPG.67.2%20-%20National%20Portrait%20Gallery.jpg"
+    },
+    {
+      "name": "Oliver Ellsworth",
+      "oath": "1796-03-08",
+      "end": "1800-12-15",
+      "qid": "Q515858",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/OliverEllsworth.jpg"
+    },
+    {
+      "name": "Bushrod Washington",
+      "oath": "1798-11-09",
+      "end": "1829-11-26",
+      "qid": "Q166436",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/BushrodWashington.jpg"
+    },
+    {
+      "name": "Alfred Moore",
+      "oath": "1800-04-21",
+      "end": "1804-01-26",
+      "qid": "Q2622090",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/AlfredMoore.jpg"
+    },
+    {
+      "name": "John Marshall",
+      "oath": "1801-02-04",
+      "end": "1835-07-06",
+      "qid": "Q310829",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Marshall%20by%20Henry%20Inman%2C%201832.jpg"
+    },
+    {
+      "name": "William Johnson",
+      "oath": "1804-05-07",
+      "end": "1834-08-04",
+      "qid": "Q1427073",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/WilliamJohnson.jpg"
+    },
+    {
+      "name": "Brockholst Livingston",
+      "oath": "1807-01-20",
+      "end": "1823-03-18",
+      "qid": "Q1606548",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Henry%20Brockholst%20Livingston.jpg"
+    },
+    {
+      "name": "Thomas Todd",
+      "oath": "1807-05-04",
+      "end": "1826-02-07",
+      "qid": "Q2427667",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Thomas%20Todd%20SCOTUS.jpg"
+    },
+    {
+      "name": "Gabriel Duvall",
+      "oath": "1811-11-23",
+      "end": "1835-01-14",
+      "qid": "Q1489164",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/GabrielDuvall.jpg"
+    },
+    {
+      "name": "Joseph Story",
+      "oath": "1812-02-03",
+      "end": "1845-09-10",
+      "qid": "Q1368374",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Daguerreotype%20of%20Joseph%20Story%2C%201844%20%28edit%29.jpg"
+    },
+    {
+      "name": "Smith Thompson",
+      "oath": "1823-09-01",
+      "end": "1843-12-18",
+      "qid": "Q1261880",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/SmithThompson.jpg"
+    },
+    {
+      "name": "Robert Trimble",
+      "oath": "1826-06-16",
+      "end": "1828-08-25",
+      "qid": "Q1714230",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/RobertTrimble.jpg"
+    },
+    {
+      "name": "John McLean",
+      "oath": "1829-03-12",
+      "end": "1861-04-04",
+      "qid": "Q1371498",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/JohnMcLean.jpg"
+    },
+    {
+      "name": "Henry Baldwin",
+      "oath": "1830-01-18",
+      "end": "1844-04-21",
+      "qid": "Q915480",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Henry%20baldwin%20%28justice%29.jpg"
+    },
+    {
+      "name": "James Moore Wayne",
+      "oath": "1835-01-14",
+      "end": "1867-07-05",
+      "qid": "Q1250079",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/James%20Moore%20Wayne%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Roger Brooke Taney",
+      "oath": "1836-03-28",
+      "end": "1864-10-12",
+      "qid": "Q359470",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/TANEY%2C%20Roger%20B-Treasury%20%28BEP%20engraved%20portrait%29.jpg"
+    },
+    {
+      "name": "Philip Pendleton Barbour",
+      "oath": "1836-05-12",
+      "end": "1841-02-25",
+      "qid": "Q726427",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/PPBarbour.jpg"
+    },
+    {
+      "name": "John Catron",
+      "oath": "1837-05-01",
+      "end": "1865-05-30",
+      "qid": "Q1699569",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Catron%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "John McKinley",
+      "oath": "1838-01-09",
+      "end": "1852-07-19",
+      "qid": "Q926834",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20McKinley.jpg"
+    },
+    {
+      "name": "Peter Vivian Daniel",
+      "oath": "1842-01-10",
+      "end": "1860-05-31",
+      "qid": "Q1238208",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/PVDaniel.jpg"
+    },
+    {
+      "name": "Samuel Nelson",
+      "oath": "1845-02-27",
+      "end": "1872-11-28",
+      "qid": "Q1717971",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Samuel%20Nelson%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Levi Woodbury",
+      "oath": "1845-09-23",
+      "end": "1851-09-04",
+      "qid": "Q579228",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Levi%20Woodbury.jpg"
+    },
+    {
+      "name": "Robert Cooper Grier",
+      "oath": "1846-08-10",
+      "end": "1870-01-31",
+      "qid": "Q1648806",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Robert%20Cooper%20Grier%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Benjamin Robbins Curtis",
+      "oath": "1851-10-10",
+      "end": "1857-09-30",
+      "qid": "Q202276",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/BRCurtis.jpg"
+    },
+    {
+      "name": "John Archibald Campbell",
+      "oath": "1853-04-11",
+      "end": "1861-04-30",
+      "qid": "Q1699162",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Archibald%20Campbell%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Nathan Clifford",
+      "oath": "1858-01-21",
+      "end": "1881-07-25",
+      "qid": "Q724329",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/NClifford.jpg"
+    },
+    {
+      "name": "Noah Haynes Swayne",
+      "oath": "1862-01-27",
+      "end": "1881-01-24",
+      "qid": "Q1521765",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Noah%20Haynes%20Swayne%2C%20photo%2C%20head%20and%20shoulders%2C%20seated.jpg"
+    },
+    {
+      "name": "Samuel Freeman Miller",
+      "oath": "1862-07-21",
+      "end": "1890-10-13",
+      "qid": "Q2218270",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Samuel%20Freeman%20Miller%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "David Davis",
+      "oath": "1862-12-10",
+      "end": "1877-03-04",
+      "qid": "Q374427",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/DDavis.jpg"
+    },
+    {
+      "name": "Stephen Johnson Field",
+      "oath": "1863-05-20",
+      "end": "1897-12-01",
+      "qid": "Q1234235",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Stephen%20Johnson%20Field%2C%20photo%20half%20length%20seated%2C%201875.jpg"
+    },
+    {
+      "name": "Salmon Portland Chase",
+      "oath": "1864-12-15",
+      "end": "1873-05-07",
+      "qid": "Q433051",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Mathew%20Brady%2C%20Portrait%20of%20Secretary%20of%20the%20Treasury%20Salmon%20P.%20Chase%2C%20officer%20of%20the%20United%20States%20government%20%281860%E2%80%931865%2C%20full%20version%29%20%281%29.jpg"
+    },
+    {
+      "name": "William Strong",
+      "oath": "1870-03-14",
+      "end": "1880-12-14",
+      "qid": "Q2580679",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/William%20Strong%20judge%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Joseph P. Bradley",
+      "oath": "1870-03-23",
+      "end": "1892-01-22",
+      "qid": "Q1587475",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Joseph%20Philo%20Bradley%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Ward Hunt",
+      "oath": "1873-01-09",
+      "end": "1882-01-27",
+      "qid": "Q2545208",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Ward%20Hunt%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Morrison Remick Waite",
+      "oath": "1874-03-04",
+      "end": "1888-03-23",
+      "qid": "Q1349419",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Chief%20Justice%20Morrison%20Waite.jpg"
+    },
+    {
+      "name": "William Burnham Woods",
+      "oath": "1881-01-05",
+      "end": "1887-05-14",
+      "qid": "Q2578164",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/William%20Burnham%20Woods.jpg"
+    },
+    {
+      "name": "Stanley Matthews",
+      "oath": "1881-05-17",
+      "end": "1889-03-22",
+      "qid": "Q507075",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Thomas%20Stanley%20Matthews%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Horace Gray",
+      "oath": "1882-01-09",
+      "end": "1902-09-15",
+      "qid": "Q1627868",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Horacegrayphoto.jpg"
+    },
+    {
+      "name": "Samuel Blatchford",
+      "oath": "1882-04-03",
+      "end": "1893-07-07",
+      "qid": "Q2218019",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Samuel%20Blatchford.jpg"
+    },
+    {
+      "name": "Lucius Quintus C. Lamar",
+      "oath": "1888-01-18",
+      "end": "1893-01-23",
+      "qid": "Q1549250",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Lucius%20Quintus%20Cincinnatus%20Lamar%20II%20-%20Brady-Handy.jpg"
+    },
+    {
+      "name": "Melville Weston Fuller",
+      "oath": "1888-10-08",
+      "end": "1910-07-04",
+      "qid": "Q943046",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Melville%20Weston%20Fuller%20Chief%20Justice%201908.jpg"
+    },
+    {
+      "name": "David Josiah Brewer",
+      "oath": "1890-01-06",
+      "end": "1910-03-28",
+      "qid": "Q5235764",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/DavidBrewer.jpg"
+    },
+    {
+      "name": "Henry Billings Brown",
+      "oath": "1891-01-05",
+      "end": "1906-05-28",
+      "qid": "Q1606519",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Portrait%20of%20Henry%20Billings%20Brown.jpg"
+    },
+    {
+      "name": "George Shiras Jr.",
+      "oath": "1892-10-10",
+      "end": "1903-02-23",
+      "qid": "Q1508251",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/George_Shiras_Jr.jpg"
+    },
+    {
+      "name": "Howell Edmunds Jackson",
+      "oath": "1893-03-04",
+      "end": "1895-08-08",
+      "qid": "Q654559",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20Howell%20Jackson2.jpg"
+    },
+    {
+      "name": "Edward Douglass White",
+      "oath": "1894-03-12",
+      "end": "1910-12-18",
+      "qid": "Q958904",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20White%20Official.jpg"
+    },
+    {
+      "name": "Rufus Wheeler Peckham",
+      "oath": "1896-01-06",
+      "end": "1909-10-24",
+      "qid": "Q2174811",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Rufus%20W.%20Peckham%20cph.3b30513.jpg"
+    },
+    {
+      "name": "Joseph McKenna",
+      "oath": "1898-01-26",
+      "end": "1925-01-05",
+      "qid": "Q724941",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Joseph%20McKenna%20%28assoc%20justice%29.jpg"
+    },
+    {
+      "name": "Oliver Wendell Holmes",
+      "oath": "1902-12-08",
+      "end": "1932-01-12",
+      "qid": "Q360574",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Oliver%20Wendell%20Holmes%20Jr%20circa%201930.jpg"
+    },
+    {
+      "name": "William Rufus Day",
+      "oath": "1903-03-02",
+      "end": "1922-11-13",
+      "qid": "Q707528",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/William%20Rufus%20Day%20cph.3b31004.jpg"
+    },
+    {
+      "name": "William Henry Moody",
+      "oath": "1906-12-17",
+      "end": "1910-11-20",
+      "qid": "Q724503",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/WHMoody.jpg"
+    },
+    {
+      "name": "Horace Harmon Lurton",
+      "oath": "1910-01-03",
+      "end": "1914-07-12",
+      "qid": "Q1627872",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/HoraceHarmonLurton.jpg"
+    },
+    {
+      "name": "Charles Evans Hughes",
+      "oath": "1910-10-10",
+      "end": "1916-06-10",
+      "qid": "Q313252",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Charles%20Evans%20Hughes%20cph.3b15401%20%283x4a%29.jpg"
+    },
+    {
+      "name": "Joseph Rucker Lamar",
+      "oath": "1911-01-03",
+      "end": "1916-01-02",
+      "qid": "Q1707930",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Joseph%20Lamar.jpg"
+    },
+    {
+      "name": "Willis Van Devanter",
+      "oath": "1911-01-03",
+      "end": "1937-06-02",
+      "qid": "Q1404270",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Willis_Van_Devanter.jpg"
+    },
+    {
+      "name": "Mahlon Pitney",
+      "oath": "1912-03-18",
+      "end": "1922-12-31",
+      "qid": "Q186278",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Mahlon%20Pitney%20cph.3b30300.jpg"
+    },
+    {
+      "name": "James Clark McReynolds",
+      "oath": "1914-10-12",
+      "end": "1941-01-31",
+      "qid": "Q724204",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Jamescmcreynolds.jpg"
+    },
+    {
+      "name": "Louis Dembitz Brandeis",
+      "oath": "1916-06-05",
+      "end": "1939-02-13",
+      "qid": "Q520840",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Brandeisl%20%281%29.jpg"
+    },
+    {
+      "name": "John Hessin Clarke",
+      "oath": "1916-10-09",
+      "end": "1922-09-18",
+      "qid": "Q1700452",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/JohnHessinClarke.jpg"
+    },
+    {
+      "name": "William Howard Taft",
+      "oath": "1921-07-11",
+      "end": "1930-02-03",
+      "qid": "Q35648",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Cabinet%20card%20of%20William%20Howard%20Taft%20by%20Pach%20Brothers%20-%20Cropped%20to%20image.jpg"
+    },
+    {
+      "name": "George Sutherland",
+      "oath": "1922-10-02",
+      "end": "1938-01-17",
+      "qid": "Q1508314",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20George%20Sutherland%205.jpg"
+    },
+    {
+      "name": "Pierce Butler",
+      "oath": "1923-01-02",
+      "end": "1939-11-16",
+      "qid": "Q1395635",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Pierce%20Butler.jpg"
+    },
+    {
+      "name": "Edward Terry Sanford",
+      "oath": "1923-02-19",
+      "end": "1930-03-08",
+      "qid": "Q1293854",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20Edward%20Terry%20Sanford.jpg"
+    },
+    {
+      "name": "Harlan Fiske Stone",
+      "oath": "1925-03-02",
+      "end": "1941-07-02",
+      "qid": "Q942386",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Chief%20Justice%20Harlan%20Fiske%20Stone%20photograph%20circa%201927-1932.jpg"
+    },
+    {
+      "name": "Owen Josephus Roberts",
+      "oath": "1930-06-02",
+      "end": "1945-07-31",
+      "qid": "Q703968",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Owen%20J.%20Roberts%20cph.3b11988.jpg"
+    },
+    {
+      "name": "Benjamin Nathan Cardozo",
+      "oath": "1932-03-14",
+      "end": "1938-07-09",
+      "qid": "Q817637",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Benjamin%20Cardozo.jpg"
+    },
+    {
+      "name": "Hugo Lafayette Black",
+      "oath": "1937-08-19",
+      "end": "1971-09-17",
+      "qid": "Q459752",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/HugoLaFayetteBlack.jpg"
+    },
+    {
+      "name": "Stanley Forman Reed",
+      "oath": "1938-01-31",
+      "end": "1957-02-25",
+      "qid": "Q1771524",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Stanley%20Reed.jpg"
+    },
+    {
+      "name": "Felix Frankfurter",
+      "oath": "1939-01-30",
+      "end": "1962-08-28",
+      "qid": "Q1403472",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Frankfurter-Felix-LOC.jpg"
+    },
+    {
+      "name": "William Orville Douglas",
+      "oath": "1939-04-17",
+      "end": "1975-11-12",
+      "qid": "Q1391996",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/1939%20William%20Orville%20Douglas%20%28cropped%29.jpg"
+    },
+    {
+      "name": "Frank Murphy",
+      "oath": "1940-02-05",
+      "end": "1949-07-19",
+      "qid": "Q887724",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20Frank%20Murphy.jpg"
+    },
+    {
+      "name": "James Francis Byrnes",
+      "oath": "1941-07-08",
+      "end": "1942-10-03",
+      "qid": "Q432726",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/James%20Francis%20Byrnes%2C%20at%20his%20desk%2C%201943.jpg"
+    },
+    {
+      "name": "Robert Houghwout Jackson",
+      "oath": "1941-07-11",
+      "end": "1954-10-09",
+      "qid": "Q505450",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Roberthjackson.jpg"
+    },
+    {
+      "name": "Wiley Blount Rutledge",
+      "oath": "1943-02-15",
+      "end": "1949-09-10",
+      "qid": "Q1626713",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Wiley%20Rutledge.jpg"
+    },
+    {
+      "name": "Harold Hitz Burton",
+      "oath": "1945-10-01",
+      "end": "1958-10-13",
+      "qid": "Q507177",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Harold%20Burton.jpg"
+    },
+    {
+      "name": "Fred Moore Vinson",
+      "oath": "1946-06-24",
+      "end": "1953-09-08",
+      "qid": "Q460151",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Fred%20m%20vinson.jpg"
+    },
+    {
+      "name": "Tom Campbell Clark",
+      "oath": "1949-08-24",
+      "end": "1967-06-12",
+      "qid": "Q724116",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Official%20portrait%20of%20Associate%20Justice%20Tom%20C.%20Clark%2C%20Supreme%20Court%20of%20the%20United%20States%20%28cropped%29.jpg"
+    },
+    {
+      "name": "Sherman Minton",
+      "oath": "1949-10-12",
+      "end": "1956-10-15",
+      "qid": "Q1849894",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Sherman%20Minton%27s%20official%20United%20States%20Supreme%20Court%20photograph.jpg"
+    },
+    {
+      "name": "Earl Warren",
+      "oath": "1953-10-05",
+      "end": "1969-06-23",
+      "qid": "Q311197",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/EarlWarren.jpg"
+    },
+    {
+      "name": "John Marshall Harlan",
+      "oath": "1955-03-28",
+      "end": "1971-09-23",
+      "qid": "Q1700972",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Marshall%20Harlan-LC-DIG-cwpbh-03603.jpg"
+    },
+    {
+      "name": "William J. Brennan Jr.",
+      "oath": "1956-10-16",
+      "end": "1990-07-20",
+      "qid": "Q717401",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/US%20Supreme%20Court%20Justice%20William%20Brennan%20-%201972%20official%20portrait.jpg"
+    },
+    {
+      "name": "Charles Evans Whittaker",
+      "oath": "1957-03-25",
+      "end": "1962-03-31",
+      "qid": "Q1064300",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Charles%20Whittaker.jpg"
+    },
+    {
+      "name": "Potter Stewart",
+      "oath": "1958-10-14",
+      "end": "1981-07-03",
+      "qid": "Q1359993",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/US%20Supreme%20Court%20Justice%20Potter%20Stewart%20-%201976%20official%20portrait.jpg"
+    },
+    {
+      "name": "Byron Raymond White",
+      "oath": "1962-04-16",
+      "end": "1993-06-28",
+      "qid": "Q958904",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20White%20Official.jpg"
+    },
+    {
+      "name": "Arthur Joseph Goldberg",
+      "oath": "1962-10-01",
+      "end": "1965-07-25",
+      "qid": "Q709513",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20Arthur%20Goldberg%20-%201965%20-%20A720-5.jpg"
+    },
+    {
+      "name": "Abe Fortas",
+      "oath": "1965-10-04",
+      "end": "1969-05-14",
+      "qid": "Q318143",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/SCOTUS%20Justice%20Abe%20Fortas.jpeg"
+    },
+    {
+      "name": "Thurgood Marshall",
+      "oath": "1967-10-02",
+      "end": "1991-10-01",
+      "qid": "Q312348",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Thurgood-marshall-2.jpg"
+    },
+    {
+      "name": "Warren Earl Burger",
+      "oath": "1969-06-23",
+      "end": "1986-09-26",
+      "qid": "Q346685",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Warren%20e%20burger%20photo.jpeg"
+    },
+    {
+      "name": "Harry A. Blackmun",
+      "oath": "1970-06-09",
+      "end": "1994-08-03",
+      "qid": "Q1323255",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20Blackmun%20Official.jpg"
+    },
+    {
+      "name": "William H. Rehnquist",
+      "oath": "1972-01-07",
+      "end": "1986-09-26",
+      "qid": "Q311562",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/William%20Rehnquist.jpg"
+    },
+    {
+      "name": "Lewis F. Powell Jr.",
+      "oath": "1972-01-07",
+      "end": "1987-06-26",
+      "qid": "Q252739",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/US_Supreme_Court_Justice_Lewis_Powell_-_1976_official_portrait.jpg"
+    },
+    {
+      "name": "John Paul Stevens",
+      "oath": "1975-12-19",
+      "end": "2010-06-29",
+      "qid": "Q11109",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Paul%20Stevens%2C%20SCOTUS%20photo%20portrait.jpg"
+    },
+    {
+      "name": "Sandra Day O'Connor",
+      "oath": "1981-09-25",
+      "end": "2006-01-31",
+      "qid": "Q11132",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Sandra%20Day%20O%27Connor%20crop.jpg"
+    },
+    {
+      "name": "Antonin Scalia",
+      "oath": "1986-09-26",
+      "end": "2016-02-13",
+      "qid": "Q11156",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Antonin%20Scalia%20Official%20SCOTUS%20Portrait%20crop.jpg"
+    },
+    {
+      "name": "Anthony M. Kennedy",
+      "oath": "1988-02-18",
+      "end": "2018-07-31",
+      "qid": "Q11171",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Anthony%20Kennedy%20official%20SCOTUS%20portrait.jpg"
+    },
+    {
+      "name": "David H. Souter",
+      "oath": "1990-10-09",
+      "end": "2009-06-29",
+      "qid": "Q472547",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/DavidSouter.jpg"
+    },
+    {
+      "name": "Clarence Thomas",
+      "oath": "1991-10-23",
+      "end": null,
+      "qid": "Q11142",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Clarence%20Thomas%20official%20SCOTUS%20portrait.jpg"
+    },
+    {
+      "name": "Ruth Bader Ginsburg",
+      "oath": "1993-08-10",
+      "end": "2020-09-18",
+      "qid": "Q11116",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Ruth%20Bader%20Ginsburg%20official%20SCOTUS%20portrait%20%28cropped%29.jpg"
+    },
+    {
+      "name": "Stephen G. Breyer",
+      "oath": "1994-08-03",
+      "end": "2022-06-30",
+      "qid": "Q11124",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Stephen%20Breyer%2C%20SCOTUS%20photo%20portrait.jpg"
+    },
+    {
+      "name": "John G. Roberts Jr.",
+      "oath": "2005-09-29",
+      "end": null,
+      "qid": "Q11153",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Official%20roberts%20CJ.jpg"
+    },
+    {
+      "name": "Samuel A. Alito Jr.",
+      "oath": "2006-01-31",
+      "end": null,
+      "qid": "Q11138",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Justice%20Alito%20official.jpg"
+    },
+    {
+      "name": "Sonia Sotomayor",
+      "oath": "2009-08-08",
+      "end": null,
+      "qid": "Q11107",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Sonia%20Sotomayor%207%20in%20robe%2C%202009.jpg"
+    },
+    {
+      "name": "Elena Kagan",
+      "oath": "2010-08-07",
+      "end": null,
+      "qid": "Q11105",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Elena%20Kagan%20Official%20SCOTUS%20Portrait%20%282013%29.jpg"
+    },
+    {
+      "name": "Neil M. Gorsuch",
+      "oath": "2017-04-10",
+      "end": null,
+      "qid": "Q15488345",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Associate%20Justice%20Neil%20Gorsuch%20Official%20Portrait.jpg"
+    },
+    {
+      "name": "Brett M. Kavanaugh",
+      "oath": "2018-10-06",
+      "end": null,
+      "qid": "Q4962244",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Associate%20Justice%20Brett%20Kavanaugh%20Official%20Portrait.jpg"
+    },
+    {
+      "name": "Amy Coney Barrett",
+      "oath": "2020-10-27",
+      "end": null,
+      "qid": "Q29863844",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Amy%20Coney%20Barrett%20official%20portrait.jpg"
+    },
+    {
+      "name": "Ketanji Brown Jackson",
+      "oath": "2022-06-30",
+      "end": null,
+      "qid": "Q6395324",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Ketanji%20Brown%20Jackson%202020.jpeg"
+    }
+  ],
+  "presidents": [
+    {
+      "ordinal": 1,
+      "name": "George Washington",
+      "qid": "Q23",
+      "start": "1789-04-30",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Gilbert%20Stuart%20Williamstown%20Portrait%20of%20George%20Washington.jpg"
+    },
+    {
+      "ordinal": 2,
+      "name": "John Adams",
+      "qid": "Q11806",
+      "start": "1797-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Adams%20A18236.jpg"
+    },
+    {
+      "ordinal": 3,
+      "name": "Thomas Jefferson",
+      "qid": "Q11812",
+      "start": "1801-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Official%20Presidential%20portrait%20of%20Thomas%20Jefferson%20%28by%20Rembrandt%20Peale%2C%201800%29%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 4,
+      "name": "James Madison",
+      "qid": "Q11813",
+      "start": "1809-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/James%20Madison.jpg"
+    },
+    {
+      "ordinal": 5,
+      "name": "James Monroe",
+      "qid": "Q11815",
+      "start": "1817-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/James%20Monroe%20by%20Gilbert%20Stuart%20c1817.jpg"
+    },
+    {
+      "ordinal": 6,
+      "name": "John Quincy Adams",
+      "qid": "Q11816",
+      "start": "1825-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20Q.%20Adams-edit.jpg"
+    },
+    {
+      "ordinal": 7,
+      "name": "Andrew Jackson",
+      "qid": "Q11817",
+      "start": "1829-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Andrew%20jackson%20head.jpg"
+    },
+    {
+      "ordinal": 8,
+      "name": "Martin Van Buren",
+      "qid": "Q11820",
+      "start": "1837-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Martin%20Van%20Buren%20by%20Mathew%20Brady%20c1855-58%20sepia%20original%20restored.jpg"
+    },
+    {
+      "ordinal": 9,
+      "name": "William Henry Harrison",
+      "qid": "Q11869",
+      "start": "1841-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/William%20Henry%20Harrison%20by%20James%20Reid%20Lambdin%2C%201835.jpg"
+    },
+    {
+      "ordinal": 10,
+      "name": "John Tyler",
+      "qid": "Q11881",
+      "start": "1841-04-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/WHOportTyler.jpg"
+    },
+    {
+      "ordinal": 11,
+      "name": "James K. Polk",
+      "qid": "Q11891",
+      "start": "1845-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/JamesKnoxPolk.jpg"
+    },
+    {
+      "ordinal": 12,
+      "name": "Zachary Taylor",
+      "qid": "Q11896",
+      "start": "1849-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Zachary%20Taylor%202.jpg"
+    },
+    {
+      "ordinal": 13,
+      "name": "Millard Fillmore",
+      "qid": "Q12306",
+      "start": "1850-07-09",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Millard%20Fillmore.jpg"
+    },
+    {
+      "ordinal": 14,
+      "name": "Franklin Pierce",
+      "qid": "Q12312",
+      "start": "1853-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Franklin%20Pierce.jpg"
+    },
+    {
+      "ordinal": 15,
+      "name": "James Buchanan",
+      "qid": "Q12325",
+      "start": "1857-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/James%20Buchanan%20%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 16,
+      "name": "Abraham Lincoln",
+      "qid": "Q91",
+      "start": "1861-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Abraham%20Lincoln%20O-77%20matte%20collodion%20print.jpg"
+    },
+    {
+      "ordinal": 17,
+      "name": "Andrew Johnson",
+      "qid": "Q8612",
+      "start": "1865-04-15",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/President%20Andrew%20Johnson.jpg"
+    },
+    {
+      "ordinal": 18,
+      "name": "Ulysses S. Grant",
+      "qid": "Q34836",
+      "start": "1869-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Ulysses%20S.%20Grant%201870-1880.jpg"
+    },
+    {
+      "ordinal": 19,
+      "name": "Rutherford B. Hayes",
+      "qid": "Q35686",
+      "start": "1877-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/President%20Rutherford%20Hayes%201870%20-%201880%20Restored.jpg"
+    },
+    {
+      "ordinal": 20,
+      "name": "James A. Garfield",
+      "qid": "Q34597",
+      "start": "1881-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/James%20Abram%20Garfield%2C%20photo%20portrait%20seated.jpg"
+    },
+    {
+      "ordinal": 21,
+      "name": "Chester A. Arthur",
+      "qid": "Q35498",
+      "start": "1881-09-19",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Chester%20A.%20Arthur%20by%20Abraham%20Bogardus.jpg"
+    },
+    {
+      "ordinal": 22,
+      "name": "Grover Cleveland",
+      "qid": "Q35171",
+      "start": "1885-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Grover%20Cleveland%20-%20NARA%20-%20518139%20%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 23,
+      "name": "Benjamin Harrison",
+      "qid": "Q35678",
+      "start": "1889-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Benjamin%20Harrison%2C%20head%20and%20shoulders%20bw%20photo%2C%201896.jpg"
+    },
+    {
+      "ordinal": 24,
+      "name": "Grover Cleveland",
+      "qid": "Q35171",
+      "start": "1893-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Grover%20Cleveland%20-%20NARA%20-%20518139%20%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 25,
+      "name": "William McKinley",
+      "qid": "Q35041",
+      "start": "1897-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/William%20mckinley.jpg"
+    },
+    {
+      "ordinal": 26,
+      "name": "Theodore Roosevelt",
+      "qid": "Q33866",
+      "start": "1901-09-14",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Theodore%20Roosevelt%20by%20the%20Pach%20Bros.jpg"
+    },
+    {
+      "ordinal": 27,
+      "name": "William Howard Taft",
+      "qid": "Q35648",
+      "start": "1909-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Cabinet%20card%20of%20William%20Howard%20Taft%20by%20Pach%20Brothers%20-%20Cropped%20to%20image.jpg"
+    },
+    {
+      "ordinal": 28,
+      "name": "Woodrow Wilson",
+      "qid": "Q34296",
+      "start": "1913-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Thomas%20Woodrow%20Wilson%2C%20Harris%20%26%20Ewing%20bw%20photo%20portrait%2C%201919.jpg"
+    },
+    {
+      "ordinal": 29,
+      "name": "Warren G. Harding",
+      "qid": "Q35286",
+      "start": "1921-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Warren%20G%20Harding%20portrait%20as%20senator%20June%201920.jpg"
+    },
+    {
+      "ordinal": 30,
+      "name": "Calvin Coolidge",
+      "qid": "Q36023",
+      "start": "1923-08-02",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/President%20Calvin%20Coolidge%2C%201924%20portrait%20photograph%20%283x4%20cropped%29.jpeg"
+    },
+    {
+      "ordinal": 31,
+      "name": "Herbert Hoover",
+      "qid": "Q35236",
+      "start": "1929-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/President%20Hoover%20portrait.jpg"
+    },
+    {
+      "ordinal": 32,
+      "name": "Franklin Delano Roosevelt",
+      "qid": "Q8007",
+      "start": "1933-03-04",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/FDR%201944%20Color%20Portrait.jpg"
+    },
+    {
+      "ordinal": 33,
+      "name": "Harry S. Truman",
+      "qid": "Q11613",
+      "start": "1945-04-12",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/TRUMAN%2058-766-06%20%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 34,
+      "name": "Dwight D. Eisenhower",
+      "qid": "Q9916",
+      "start": "1953-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Dwight%20D.%20Eisenhower%2C%20official%20photo%20portrait%2C%20May%2029%2C%201959.jpg"
+    },
+    {
+      "ordinal": 35,
+      "name": "John F. Kennedy",
+      "qid": "Q9696",
+      "start": "1961-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/John%20F.%20Kennedy%2C%20White%20House%20color%20photo%20portrait.jpg"
+    },
+    {
+      "ordinal": 36,
+      "name": "Lyndon B. Johnson",
+      "qid": "Q9640",
+      "start": "1963-11-22",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Lyndon%20B.%20Johnson%2C%20photo%20portrait%2C%20leaning%20on%20chair%2C%20color%20cropped.jpg"
+    },
+    {
+      "ordinal": 37,
+      "name": "Richard Nixon",
+      "qid": "Q9588",
+      "start": "1969-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Richard%20Nixon%20presidential%20portrait.jpg"
+    },
+    {
+      "ordinal": 38,
+      "name": "Gerald Ford",
+      "qid": "Q9582",
+      "start": "1974-08-09",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Gerald%20Ford%20presidential%20portrait%20%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 39,
+      "name": "Jimmy Carter",
+      "qid": "Q23685",
+      "start": "1977-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/JimmyCarterPortrait2.jpg"
+    },
+    {
+      "ordinal": 40,
+      "name": "Ronald Reagan",
+      "qid": "Q9960",
+      "start": "1981-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Ronald%20Reagan%201981%20presidential%20portrait.jpg"
+    },
+    {
+      "ordinal": 41,
+      "name": "George H. W. Bush",
+      "qid": "Q23505",
+      "start": "1989-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/George%20H.%20W.%20Bush%20presidential%20portrait%20%28cropped%29.jpg"
+    },
+    {
+      "ordinal": 42,
+      "name": "Bill Clinton",
+      "qid": "Q1124",
+      "start": "1993-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Bill%20Clinton.jpg"
+    },
+    {
+      "ordinal": 43,
+      "name": "George W. Bush",
+      "qid": "Q207",
+      "start": "2001-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/George-W-Bush.jpeg"
+    },
+    {
+      "ordinal": 44,
+      "name": "Barack Obama",
+      "qid": "Q76",
+      "start": "2009-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/President%20Barack%20Obama.jpg"
+    },
+    {
+      "ordinal": 45,
+      "name": "Donald Trump",
+      "qid": "Q22686",
+      "start": "2017-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Official%20Presidential%20Portrait%20of%20President%20Donald%20J.%20Trump%20%282025%29%20%28cropped%29%282%29.jpg"
+    },
+    {
+      "ordinal": 46,
+      "name": "Joe Biden",
+      "qid": "Q6279",
+      "start": "2021-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Joe%20Biden%20presidential%20portrait.jpg"
+    },
+    {
+      "ordinal": 47,
+      "name": "Donald Trump",
+      "qid": "Q22686",
+      "start": "2025-01-20",
+      "photoUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Official%20Presidential%20Portrait%20of%20President%20Donald%20J.%20Trump%20%282025%29%20%28cropped%29%282%29.jpg"
+    }
+  ]
+}

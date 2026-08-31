@@ -76,6 +76,22 @@ function authorToUser(post: AlgorithmicFeedPost): User {
   };
 }
 
+/**
+ * Which chamber a bill number belongs to, from the printed id.
+ *
+ * "H.R. 4836" and "H.Res. 1498" are the House; "S. 5383" and "S.Res." the
+ * Senate. Undefined when it cannot be told, which renders as no chip — the
+ * hardcoded "house" this replaces put a House badge on every executive order
+ * and Supreme Court ruling in the feed.
+ */
+function chamberOf(displayId: string | null | undefined): "house" | "senate" | undefined {
+  const id = displayId?.trim().toUpperCase();
+  if (!id) return undefined;
+  if (id.startsWith("H")) return "house";
+  if (id.startsWith("S")) return "senate";
+  return undefined;
+}
+
 /** Bill card for the attached reference; detail pages resolve the id. */
 function referenceToFeedBill(post: AlgorithmicFeedPost): Bill {
   const reference = post.reference;
@@ -90,16 +106,15 @@ function referenceToFeedBill(post: AlgorithmicFeedPost): Bill {
     id: post.referenceId ?? post.governmentReferenceId ?? post.bill?.id ?? post.id,
     title,
     shortTitle: title.length > 60 ? `${title.slice(0, 57)}...` : title,
-    status: "introduced",
-    chamber: "house",
-    sponsor: {
-      id: "unknown",
-      name: "U.S. Government",
-      party: "I",
-      state: "US",
-      chamber: "house",
-      imageUrl: "",
-    },
+    // REAL, NOT ASSUMED. These three were hardcoded — every card claimed to be
+    // an introduced House bill, including executive orders and court rulings,
+    // which is where the "House" chip on a Supreme Court case came from.
+    status: (reference?.status as Bill["status"]) ?? "introduced",
+    chamber: reference?.referenceType === "bill" ? chamberOf(reference.displayId) : undefined,
+    // The sponsor used to be a literal "U.S. Government", which contradicted
+    // the real attribution the law page shows. Absent is honest; invented is
+    // not, and the card renders nothing rather than a stand-in for a person.
+    sponsor: undefined,
     introducedDate: post.createdAt,
     lastActionDate: post.createdAt,
     category: ((reference?.category ?? post.bill?.category) as Bill["category"]) ?? "economy",
@@ -115,6 +130,8 @@ function referenceToFeedBill(post: AlgorithmicFeedPost): Bill {
           totalVoters: reference.votes.total,
         }
       : { yea: 0, nay: 0, totalVoters: 0 },
+    // Our own record's completeness, straight from the server.
+    completeness: reference?.completeness ?? null,
     branch,
   };
 }

@@ -17,6 +17,7 @@ import { feedRouter } from "./routes/feed";
 import { notificationsRouter } from "./routes/notifications";
 import { mediaRouter } from "./routes/media";
 import { governmentReferencesRouter } from "./routes/government-references";
+import { portraitsRouter } from "./routes/portraits";
 import { loginRouter } from "./routes/login";
 import { safetyRouter } from "./routes/safety";
 import { onboardingRouter } from "./routes/onboarding";
@@ -61,7 +62,6 @@ import {
   startPlatformSecretRefresh,
 } from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
-import { fillReferencePortraits, fillJusticePortraits } from "./services/reference-attribution";
 import { refreshJusticeRoster, fillScotusDissents } from "./services/court-composition";
 import { runContentSelfHeal } from "./services/content-self-heal";
 import { ensureBuiltInRoles } from "./services/admin-permissions";
@@ -415,6 +415,7 @@ app.route("/api/feed", feedRouter);
 app.route("/api/notifications", notificationsRouter);
 app.route("/api/media", mediaRouter);
 app.route("/api/government-references", governmentReferencesRouter);
+app.route("/api/portraits", portraitsRouter);
 app.route("/api/login", loginRouter);
 app.route("/api/representatives", representativesRouter);
 app.route("/api/delegations", delegationsRouter);
@@ -757,33 +758,24 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   });
 }
 
-// The face of whoever decided a law. A bill's sponsor comes free from their
-// bioguide id and a sitting President or Justice is already on the roster, so
-// what this converges on is the historical remainder: an order Obama signed, an
-// opinion Scalia wrote. One Wikipedia call per record, spaced, and a card with
-// no portrait shows the name alone rather than a stand-in for a human being.
-const PORTRAIT_INTERVAL_MS = 12 * 60 * 60 * 1000;
-if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  schedule({
-    name: "Portraits",
-    firstRunAfterMs: FIRST_RUN.portraits,
-    everyMs: PORTRAIT_INTERVAL_MS,
-    run: () => fillReferencePortraits(25),
-  });
+// FACES ARE NOT SWEPT FOR. They are found when somebody opens the law, in
+// services/reference-attribution.ts — 1,532 executive orders are held and most
+// will never be read, so paying for all of them to serve the few that are is
+// backwards. The record sweep above is different and stays: that corpus is
+// small, finite, and having it complete is what makes the platform fast for a
+// reader. One is a fixed archive worth finishing; the other is a per-person
+// lookup only worth making when somebody is actually looking.
 
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   // The bench, for rulings the Court issued with no author on them. The roster
-  // is one page from supremecourt.gov and changes once every few years; the
-  // faces are one lookup per justice, done once and reused by every case they
-  // sat on. Both are cheap after the first convergence, and nothing waits on
-  // either — a ruling with no faces yet shows the ruling.
+  // is one page from supremecourt.gov and changes once every few years, so this
+  // is a cheap daily read. The FACES are not fetched here — those are found
+  // when somebody opens a ruling, for the nine on that bench only.
   schedule({
     name: "CourtRoster",
     firstRunAfterMs: FIRST_RUN.courtRoster,
     everyMs: 24 * 60 * 60 * 1000,
-    run: async () => {
-      await refreshJusticeRoster();
-      return fillJusticePortraits(20);
-    },
+    run: () => refreshJusticeRoster(),
   });
 
   // Who dissented from a per curiam ruling, so its card can narrow from the

@@ -62,6 +62,24 @@ export type CongressSearchResponse = z.infer<typeof congressSearchResponseSchema
 // timeline cards render that attachment as a law card with live vote tallies,
 // so the posts endpoints ship this object alongside each post.
 
+export const completenessCheckSchema = z.object({
+  /** Stable key, so clients and tests never match on prose. */
+  id: z.string(),
+  label: z.string(),
+  met: z.boolean(),
+  /** The real value behind the tick — "from congress.gov, checked 2 days ago". */
+  detail: z.string().nullable(),
+});
+
+export const completenessSchema = z.object({
+  level: z.enum(["verified", "confirmed", "unconfirmed", "unverified"]),
+  label: z.string(),
+  met: z.number(),
+  /** How many checks apply here. A court ruling has no floor vote to hold. */
+  applicable: z.number(),
+  checks: z.array(completenessCheckSchema),
+});
+
 export const postReferenceSchema = z.object({
   id: z.string(),
   masterReferenceId: z.string(),
@@ -92,6 +110,16 @@ export const postReferenceSchema = z.object({
   lawChangedAt: z.string().nullable(),
   /** Increments with lawChangedAt. One citizen brief per version. */
   lawVersion: z.number(),
+  /**
+   * HOW COMPLETE OUR RECORD OF THIS LAW IS — the checklist behind the card's
+   * badge, misses included.
+   *
+   * This is the platform rating its own work, not the law. Every line is a fact
+   * we hold or do not, and the card shows the list on demand so "Unconfirmed"
+   * arrives with a reason instead of leaving somebody uneasy about a law that
+   * is perfectly real. See services/record-completeness.ts.
+   */
+  completeness: completenessSchema,
 });
 
 export type PostReference = z.infer<typeof postReferenceSchema>;
