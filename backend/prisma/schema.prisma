@@ -840,6 +840,40 @@ model GovernmentReference {
   /// Bioguide id, so the sponsor joins the roster the Delegates screen uses.
   sponsorBioguideId String?
   sponsorName       String?
+
+  /// THEIR PORTRAIT, RESOLVED ONCE AND KEPT.
+  ///
+  /// A member of Congress needs no column — their photo comes from their
+  /// bioguide id, and the Biographical Directory covers everyone who ever
+  /// served. A President or a Justice has no such id, and the roster in
+  /// data/federal-government only holds whoever is in office today: it has
+  /// nothing for Obama, or for Scalia, or for a justice not yet appointed.
+  ///
+  /// Wikipedia has all of them, but it rate-limits and must not be asked on
+  /// every page view. So the lookup happens once, when the record is first
+  /// synced, and the answer lives here.
+  ///
+  /// Null means nobody has been found yet, or there is genuinely no portrait.
+  /// The card shows the name without a face rather than a placeholder.
+  sponsorPhotoUrl   String?
+
+  /// WHO DISSENTED, for a Supreme Court ruling.
+  ///
+  /// A per curiam opinion is unsigned, so the only way to say who is
+  /// answerable for it is the bench that sat — minus whoever put their name to
+  /// a dissent. CourtListener records separate opinions with a type; this is
+  /// the authors and joiners of the ones typed as dissents.
+  ///
+  /// EMPTY IS NOT "UNANIMOUS". It means no dissent was recorded, which could
+  /// equally mean none was filed or none was digitised. The two are
+  /// indistinguishable from here, so an empty list widens the card back to the
+  /// whole bench rather than claiming agreement nobody stated.
+  dissentedBy String[] @default([])
+
+  /// When the dissents were last looked for. Separate from the list because
+  /// "asked, found none" and "never asked" are different states, and only the
+  /// second is worth spending a request on again.
+  dissentCheckedAt DateTime?
   /// "D", "R", "I" — the letter the roster uses.
   sponsorParty      String?
   /// Two-letter state.
@@ -2016,4 +2050,49 @@ model BugReportReadLink {
   useCount   Int       @default(0)
 
   @@index([createdAt])
+}
+
+/// EVERY PERSON WHO HAS EVER SAT ON THE SUPREME COURT.
+///
+/// WHY A TABLE AND NOT A LIST IN THE CODE. A per curiam ruling has no author —
+/// it is the Court speaking as one body — so the only way to say who is
+/// answerable for it is to know who was on the bench the day it came down. A
+/// hardcoded list of justices is wrong the moment somebody is confirmed and
+/// nobody notices until a card lies about a Court.
+///
+/// Filled from supremecourt.gov's own "Justices 1789 to Present" table by
+/// services/court-composition.ts, and refreshed on a schedule. 121 rows today.
+model Justice {
+  id String @id @default(cuid())
+
+  /// As a person is addressed: "John G. Roberts Jr.", not "Roberts, John G., Jr."
+  name String
+
+  /// The day they took the judicial oath.
+  startDate DateTime
+
+  /// The day their service ended. NULL means still sitting, and must stay null
+  /// rather than becoming today — otherwise tomorrow's rulings would show a
+  /// Court that has already left.
+  endDate DateTime?
+
+  /// The President who appointed them, as the Court's own table gives it.
+  appointedBy String?
+
+  /// Chief Justice for this span. The Court's page marks it only by which of
+  /// its two tables a person sits in. A bench is listed Chief first.
+  isChief Boolean @default(false)
+
+  /// Their portrait, resolved once and kept. Null renders as a name with no
+  /// face, which is honest; a placeholder standing in for a real person is not.
+  photoUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// A justice elevated from Associate to Chief appears twice in the Court's
+  /// table, once per office, and both spans are real. The person plus the day
+  /// they were sworn into that office is what is unique.
+  @@unique([name, startDate], name: "name_startDate")
+  @@index([startDate, endDate])
 }

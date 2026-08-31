@@ -426,7 +426,21 @@ if (looks && !looks.missing) {
    * 74-79ms stagger, nowhere near either edge.
    */
   const anchor = when(/\/vote-details$/);
-  const STAGGER_MS = 30;
+  /*
+   * FAR ENOUGH APART TO BE A SEPARATE WAVE, not far enough to measure jitter.
+   *
+   * This was 30ms and flaked: three runs of the same build gave 27ms, and two
+   * passes. Nothing about the page had changed — that is the browser's frame
+   * scheduler, and a check that fails on it teaches people to re-run rather
+   * than to look.
+   *
+   * What "one burst" actually looks like, from the dumps: every request in a
+   * wave carries the SAME millisecond (…/posts@54ms, …/vote-details@54ms,
+   * …/preferences@54ms). Before the load-order fix all eight went out inside an
+   * 11ms window. So a regression to one burst shows single-digit gaps, and 15ms
+   * still catches it with room to spare while sitting clear of the noise.
+   */
+  const STAGGER_MS = 15;
 
   check("the vote panel is asked for", anchor !== null, summary);
 

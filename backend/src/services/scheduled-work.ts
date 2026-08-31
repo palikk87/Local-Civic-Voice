@@ -103,6 +103,20 @@ export const FIRST_RUN = {
   /** The heaviest courtesy cost: a few hundred spaced requests. */
   rollCall: 5 * 60_000,
   /**
+   * After the roll call, because it is the same courtesy problem and a smaller
+   * one: a handful of spaced Wikipedia calls, finding the face of a President
+   * or a Justice who has since left office. Nothing waits on it — a card
+   * without a portrait shows the name, which is true.
+   */
+  portraits: 5 * 60_000 + 30_000,
+  /**
+   * The Supreme Court's own roster of itself, so a per curiam ruling can name
+   * who was on the bench. One page, and it changes maybe once every few years —
+   * but it must be fetched rather than typed into the repo, or it is wrong the
+   * day somebody is confirmed and nobody notices until a card lies.
+   */
+  courtRoster: 2 * 60_000,
+  /**
    * Last, because it is the only one with a finish line — everything else has
    * to be responsive, this only has to arrive.
    */

@@ -36,6 +36,7 @@ import { ShareToTimeline, type ShareBranch } from "@/components/civic/ShareToTim
 import { useCitizenBrief } from "@/hooks/use-citizen-brief";
 import { useIsWide } from "@/hooks/use-is-wide";
 import { useLoadOrder } from "@/hooks/use-load-order";
+import { memberPhotoUrl } from "@/lib/member-photo";
 
 /**
  * Send this law to one person.
@@ -204,6 +205,17 @@ export default function ReferenceDetail() {
     initialState: reference?.briefState ?? "idle",
   });
 
+  // WHO DECIDED THIS LAW, and the face to put beside their name.
+  //
+  // The server has already worked out who it is and what to call what they did,
+  // for all three branches. The one thing left to the client is a member of
+  // Congress's portrait, because that is a pure function of their bioguide id
+  // and the URL pattern is already here for the Delegates screen — a President
+  // or a Justice arrives with their photoUrl resolved.
+  const attribution = reference?.attribution ?? null;
+  const attributionPhoto =
+    attribution?.photoUrl ?? memberPhotoUrl(attribution?.bioguideId) ?? undefined;
+
   // A brief written for an earlier text of this law. Worth reading and worth
   // labelling; both numbers come from the server.
   const briefIsStale =
@@ -288,19 +300,29 @@ export default function ReferenceDetail() {
               ) : null}
 
               {/*
-                SPONSOR — a member, or nothing at all.
+                WHO DECIDED THIS, with their face.
 
-                This block lived only on /bill/:id, the older screen, and this
-                page is the one everything now opens. A bill is sponsored by a
-                person and congress.gov names them; until the provenance pass
-                has reached this record the field is absent and nothing renders
-                rather than a placeholder standing in for a human being.
+                "The photo personifies the page, otherwise it just feels bland."
+                A law is a decision somebody made, and every branch has that
+                somebody: a bill has its sponsor, an executive order the
+                President who signed it, a Supreme Court case the justice who
+                wrote the majority. This used to render for bills only, so two
+                thirds of the platform's records were a title and a status.
+
+                The server decides who it is and what to call what they did —
+                services/reference-attribution.ts — because three endpoints
+                return records and they should all say the same thing.
+
+                NOTHING RENDERS WHEN NOBODY IS KNOWN. A per curiam opinion has
+                no author, and a bill the provenance pass has not reached has no
+                sponsor yet. Both show no card rather than a placeholder
+                standing in for a human being.
               */}
-              {reference.sponsor ? (
+              {attribution ? (
                 <div className="mt-5 flex items-center gap-3 rounded-xl border border-border bg-card p-4">
-                  {reference.sponsor.bioguideId ? (
+                  {attributionPhoto ? (
                     <img
-                      src={`https://www.congress.gov/img/member/${reference.sponsor.bioguideId.toLowerCase()}_200.jpg`}
+                      src={attributionPhoto}
                       alt=""
                       className="h-11 w-11 shrink-0 rounded-full object-cover"
                       // A portrait that 404s leaves a broken-image icon, which
@@ -312,17 +334,71 @@ export default function ReferenceDetail() {
                   ) : null}
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-foreground">
-                      Sponsored by {reference.sponsor.name}
+                      {attribution.role} {attribution.name}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      {reference.sponsor.party === "D"
-                        ? "Democrat"
-                        : reference.sponsor.party === "R"
-                          ? "Republican"
-                          : "Independent"}
-                      {reference.sponsor.state ? ` — ${reference.sponsor.state}` : ""}
-                    </p>
+                    {attribution.party ? (
+                      <p className="text-sm text-muted-foreground">
+                        {attribution.party === "D"
+                          ? "Democrat"
+                          : attribution.party === "R"
+                            ? "Republican"
+                            : "Independent"}
+                        {attribution.state ? ` — ${attribution.state}` : ""}
+                      </p>
+                    ) : null}
                   </div>
+                </div>
+              ) : null}
+
+              {/*
+                THE BENCH, for a ruling the Court issued with no author on it.
+
+                A per curiam opinion is the Supreme Court speaking as one body.
+                For decades of them this page showed a docket number and nobody
+                — and the platform is about accountability, so nobody is the
+                wrong answer. Every justice sitting that day is answerable for
+                what the Court put out in their name.
+
+                THE LABEL SAYS "AS IT SAT", NOT "DECIDED BY". Justices do
+                dissent from per curiam rulings. Naming these nine as having
+                agreed would be a claim about individuals the record does not
+                support; naming them as the Court that day is simply true.
+              */}
+              {attribution?.panel?.length ? (
+                <div className="mt-3 rounded-xl border border-border bg-card p-4">
+                  <p className="text-sm text-muted-foreground">{attribution.panelLabel}</p>
+                  <ul className="mt-3 flex flex-wrap gap-4">
+                    {attribution.panel.map((justice) => (
+                      <li key={justice.name} className="flex w-20 flex-col items-center gap-1.5">
+                        {justice.photoUrl ? (
+                          <img
+                            src={justice.photoUrl}
+                            alt=""
+                            className="h-12 w-12 rounded-full object-cover"
+                            onError={(event) => {
+                              event.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          // No portrait found yet. The initials keep the row
+                          // aligned and, more to the point, keep the person on
+                          // the page — dropping them would quietly shrink the
+                          // bench, which is the one thing this must not do.
+                          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-sm font-medium text-muted-foreground">
+                            {justice.name
+                              .split(/\s+/)
+                              .filter((part) => /^[A-Za-z]/.test(part))
+                              .slice(0, 2)
+                              .map((part) => part[0])
+                              .join("")}
+                          </span>
+                        )}
+                        <span className="text-center text-xs leading-tight text-muted-foreground">
+                          {justice.name}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
 

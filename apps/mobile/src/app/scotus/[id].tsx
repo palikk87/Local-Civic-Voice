@@ -7,6 +7,7 @@ import {
   Share,
   Linking,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -424,6 +425,91 @@ export default function SupremeCourtDetailScreen() {
                   </View>
                 )}
               </View>
+
+              {/*
+                WHO WROTE THE MAJORITY, with their face.
+
+                A ruling is a decision a person made and signed their name to.
+                CourtListener has always named that justice and nothing read it,
+                so every case on this platform was a docket number and an
+                outcome.
+
+                NOTHING RENDERS FOR A PER CURIAM DECISION. That is the Court
+                issuing an opinion as one body, with no individual author —
+                naming somebody would invent a fact about who decided a case.
+              */}
+              {scotusCase.majorityAuthor && (
+                <View className="flex-row items-center mt-3 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                  {scotusCase.majorityAuthorPhotoUrl ? (
+                    <Image
+                      source={{ uri: scotusCase.majorityAuthorPhotoUrl }}
+                      className="w-10 h-10 rounded-full"
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View className="w-10 h-10 rounded-full bg-purple-500/20 items-center justify-center">
+                      <Scale size={20} color="#8B5CF6" />
+                    </View>
+                  )}
+                  <View className="ml-3 flex-1">
+                    <Text className="text-white font-medium">
+                      Majority opinion by {scotusCase.majorityAuthor}
+                    </Text>
+                    <Text className="text-slate-400 text-sm">
+                      Supreme Court of the United States
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/*
+                THE BENCH, for a ruling the Court issued with no author on it.
+
+                A per curiam opinion is the Supreme Court speaking as one body,
+                so no one justice is named — and this platform is about
+                accountability, so nobody is the wrong answer. Every justice
+                sitting that day is answerable for what the Court put out in
+                their name.
+
+                "AS IT SAT", NOT "DECIDED BY". Justices do dissent from per
+                curiam rulings, so naming these nine as having agreed would be
+                a claim the record does not support.
+              */}
+              {scotusCase.bench && scotusCase.bench.length > 0 && (
+                <View className="mt-3 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
+                  <Text className="text-slate-400 text-sm">{scotusCase.benchLabel}</Text>
+                  <View className="flex-row flex-wrap mt-3">
+                    {scotusCase.bench.map((justice) => (
+                      <View key={justice.name} className="w-1/3 items-center mb-3 px-1">
+                        {justice.photoUrl ? (
+                          <Image
+                            source={{ uri: justice.photoUrl }}
+                            className="w-12 h-12 rounded-full"
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          // No portrait found yet. Initials keep the person on
+                          // the page — dropping them would quietly shrink the
+                          // bench, which is the one thing this must not do.
+                          <View className="w-12 h-12 rounded-full bg-slate-700 items-center justify-center">
+                            <Text className="text-slate-300 text-sm font-medium">
+                              {justice.name
+                                .split(/\s+/)
+                                .filter((part) => /^[A-Za-z]/.test(part))
+                                .slice(0, 2)
+                                .map((part) => part[0])
+                                .join('')}
+                            </Text>
+                          </View>
+                        )}
+                        <Text className="text-slate-400 text-xs text-center mt-1.5" numberOfLines={2}>
+                          {justice.name}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
 
               {/* Dates */}
               <View className="flex-row mt-3 flex-wrap">

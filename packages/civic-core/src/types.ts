@@ -62,6 +62,14 @@ export interface ExecutiveOrder {
   title: string;
   shortTitle: string;
   president: string;
+  /**
+   * The President's portrait, when one is known.
+   *
+   * Resolved on the server — the roster of current officials first, Wikipedia
+   * once at sync time for whoever has left. Optional because a card with no
+   * face is a finished state: it shows the name, which is true.
+   */
+  presidentPhotoUrl?: string;
   signedDate: string;
   publishedDate: string;
   status: 'active' | 'revoked' | 'superseded' | 'expired' | 'partially_revoked';
@@ -100,6 +108,25 @@ export interface SupremeCourtCase {
   respondent: string;
   questionPresented: string;
   simplifiedQuestion: string;
+  /**
+   * WHO WROTE THE MAJORITY, and their portrait.
+   *
+   * Absent for a per curiam decision, which is the Court speaking as one body
+   * with no individual author — naming somebody there would invent a fact
+   * about who decided a case.
+   */
+  majorityAuthor?: string;
+  majorityAuthorPhotoUrl?: string;
+  /**
+   * THE BENCH, for a ruling the Court issued with no author on it.
+   *
+   * A per curiam opinion is the Supreme Court speaking as one body, so there
+   * is no one person to name — but there are nine people answerable for it.
+   * Labelled as the Court AS IT SAT rather than as having agreed, because
+   * justices do dissent from per curiam rulings.
+   */
+  bench?: Array<{ name: string; photoUrl: string | null }>;
+  benchLabel?: string;
   majorityOpinion?: string;
   dissentOpinion?: string;
   realWorldImpact: string;

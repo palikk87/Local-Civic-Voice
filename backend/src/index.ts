@@ -61,6 +61,8 @@ import {
   startPlatformSecretRefresh,
 } from "./services/platform-secrets";
 import { fillBillProvenance } from "./services/bill-provenance";
+import { fillReferencePortraits, fillJusticePortraits } from "./services/reference-attribution";
+import { refreshJusticeRoster, fillScotusDissents } from "./services/court-composition";
 import { runContentSelfHeal } from "./services/content-self-heal";
 import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
@@ -752,6 +754,51 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
     firstRunAfterMs: FIRST_RUN.provenance,
     everyMs: PROVENANCE_INTERVAL_MS,
     run: () => fillBillProvenance(25),
+  });
+}
+
+// The face of whoever decided a law. A bill's sponsor comes free from their
+// bioguide id and a sitting President or Justice is already on the roster, so
+// what this converges on is the historical remainder: an order Obama signed, an
+// opinion Scalia wrote. One Wikipedia call per record, spaced, and a card with
+// no portrait shows the name alone rather than a stand-in for a human being.
+const PORTRAIT_INTERVAL_MS = 12 * 60 * 60 * 1000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  schedule({
+    name: "Portraits",
+    firstRunAfterMs: FIRST_RUN.portraits,
+    everyMs: PORTRAIT_INTERVAL_MS,
+    run: () => fillReferencePortraits(25),
+  });
+
+  // The bench, for rulings the Court issued with no author on them. The roster
+  // is one page from supremecourt.gov and changes once every few years; the
+  // faces are one lookup per justice, done once and reused by every case they
+  // sat on. Both are cheap after the first convergence, and nothing waits on
+  // either — a ruling with no faces yet shows the ruling.
+  schedule({
+    name: "CourtRoster",
+    firstRunAfterMs: FIRST_RUN.courtRoster,
+    everyMs: 24 * 60 * 60 * 1000,
+    run: async () => {
+      await refreshJusticeRoster();
+      return fillJusticePortraits(20);
+    },
+  });
+
+  // Who dissented from a per curiam ruling, so its card can narrow from the
+  // bench that sat to the justices in the majority.
+  //
+  // THREE AT A TIME, HOURLY, and that is deliberate. CourtListener allows five
+  // requests a minute across the whole platform — a reader searching twice can
+  // hit that ceiling on their own — so this takes the smallest slice it can and
+  // still converges. Nothing waits on it: until a ruling has been asked about,
+  // its card shows the whole bench under a label that only claims who sat.
+  schedule({
+    name: "Dissents",
+    firstRunAfterMs: FIRST_RUN.courtRoster + 60_000,
+    everyMs: 60 * 60 * 1000,
+    run: () => fillScotusDissents(3),
   });
 }
 

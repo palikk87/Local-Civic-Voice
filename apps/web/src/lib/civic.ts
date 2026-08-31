@@ -54,6 +54,33 @@ export interface GovReference {
     party: string | null;
     state: string | null;
   } | null;
+  /**
+   * WHO IS BEHIND THIS RECORD, in one shape for all three branches.
+   *
+   * `sponsor` above is the legislative-only field several screens already read
+   * and it stays exactly as it was. This is the one a card draws from: a name,
+   * what that person did, and a face.
+   *
+   *   bill             "Sponsored by"        portrait built from bioguideId
+   *   executive order  "Signed by"           portrait resolved server-side
+   *   scotus case      "Majority opinion by" portrait resolved server-side
+   *
+   * Null is a real answer. A per curiam opinion has no author — that is the
+   * Court speaking as one body, not an omission — and a bill whose provenance
+   * pass has not run has no sponsor yet.
+   */
+  attribution?: {
+    name: string;
+    role: string;
+    photoUrl: string | null;
+    bioguideId?: string | null;
+    party?: string | null;
+    state?: string | null;
+    perCuriam?: boolean;
+    /** The bench, when the Court issued a ruling with no author on it. */
+    panel?: Array<{ name: string; photoUrl: string | null }>;
+    panelLabel?: string;
+  } | null;
   /** Present on /trending and /:id responses; absent from the list endpoint. */
   description?: string | null;
   citizenBrief?: string | null;

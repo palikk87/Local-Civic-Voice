@@ -15,6 +15,7 @@
 // gone. Do not reintroduce a client-side search path.
 
 import { api } from '@/lib/api';
+import { memberPhotoUrl } from "@/lib/member-photo";
 
 // ===========================================
 // TYPES
@@ -409,9 +410,7 @@ export async function fetchBillSponsor(sourceUrl: string): Promise<SponsorInfo |
       state: sponsor.state ?? '',
       district: sponsor.district,
       bioguideId: sponsor.bioguideId,
-      imageUrl: sponsor.bioguideId
-        ? `https://www.congress.gov/img/member/${sponsor.bioguideId.toLowerCase()}_200.jpg`
-        : undefined,
+      imageUrl: memberPhotoUrl(sponsor.bioguideId) ?? undefined,
     };
   } catch (error) {
     console.error('Error fetching bill sponsor:', error);

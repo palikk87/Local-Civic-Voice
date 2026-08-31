@@ -50,9 +50,23 @@ if (!/population/i.test(new URL(POPULATION_URL).pathname)) {
 
 const API_PORT = Number(process.env.ONELAW_CHECK_PORT ?? 3986);
 const API = `http://127.0.0.1:${API_PORT}`;
+const BACKEND_ESC = BACKEND.replace(/\\/g, "/");
 const REF_PREFIX = "onelaw";
 const TITLE = "An Act to prove one law has one page";
 const SPONSOR = "Jane Q. Lawmaker";
+
+// THE OTHER TWO BRANCHES, which had no person on them at all.
+//
+// "why isn't there a photo of the rep in every law card?" — and they were
+// right that some had one and some did not. A bill carried its sponsor's face;
+// an executive order and a Supreme Court ruling carried a title and a status,
+// because nothing on either record named a human being.
+//
+// These two are people who have LEFT office, which is the case the roster of
+// current officials cannot answer and the stored portrait exists for.
+const PRESIDENT = "Barack Obama";
+const JUSTICE = "Antonin Scalia";
+const PORTRAIT = "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/portrait.jpg";
 
 const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html",
                 ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json",
@@ -122,6 +136,7 @@ function removeTheRecord() {
     await prisma.governmentReferenceVote.deleteMany({ where: { governmentReferenceId: { in: ids } } });
     await prisma.positionEvent.deleteMany({ where: { governmentReferenceId: { in: ids } } });
     await prisma.governmentReference.deleteMany({ where: { id: { in: ids } } });
+    await prisma.justice.deleteMany({});
   `);
 }
 
@@ -137,7 +152,7 @@ async function cleanup() {
       console.log(JSON.stringify({ r, u }));
     `);
     const state = JSON.parse(left);
-    check("the record this check created is gone", state.r === 0, left);
+    check("the records this check created are gone", state.r === 0, left);
     check("…and all thousand citizens still there", state.u >= 1000, left);
   } catch (error) {
     console.error(`Could not clean up: ${error.message}`);
@@ -166,6 +181,96 @@ try {
         sponsorState: "AZ",
         introducedDate: new Date("2007-11-01T00:00:00Z"),
         lastActionDate: new Date("2007-11-02T00:00:00Z"),
+      },
+    });
+    console.log(row.id);
+  `);
+
+  // An executive order and two rulings, so the page can be opened for each of
+  // the three branches rather than for bills alone.
+  const eoId = db(`
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: "${REF_PREFIX}-eo",
+        referenceType: "executive_order",
+        title: "An order to prove an order has a face",
+        status: "active",
+        lawVersion: 1,
+        sponsorName: ${JSON.stringify(PRESIDENT)},
+        sponsorPhotoUrl: ${JSON.stringify(PORTRAIT)},
+        signedDate: new Date("2014-06-01T00:00:00Z"),
+      },
+    });
+    console.log(row.id);
+  `);
+
+  const scotusId = db(`
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: "${REF_PREFIX}-scotus",
+        referenceType: "scotus_case",
+        title: "Proof v. Blankness",
+        status: "decided",
+        lawVersion: 1,
+        sponsorName: ${JSON.stringify(JUSTICE)},
+        sponsorPhotoUrl: ${JSON.stringify(PORTRAIT)},
+        decidedDate: new Date("2015-06-01T00:00:00Z"),
+      },
+    });
+    console.log(row.id);
+  `);
+
+  // The bench of 1971, so the per curiam ruling below has somebody to name.
+  // Parsed from the Court's own recorded page rather than typed here — a
+  // hand-written bench could not fail the check it exists to make.
+  db(`
+    const { parseJusticeRoster } = require("${BACKEND_ESC}/src/services/court-composition.ts");
+    const html = require("fs").readFileSync("${BACKEND_ESC}/tests/fixtures/scotus-justices.html", "utf8");
+    await prisma.justice.deleteMany({ where: { name: { contains: " " } } });
+    await prisma.justice.createMany({
+      data: parseJusticeRoster(html).map((j) => ({
+        name: j.name, startDate: j.startDate, endDate: j.endDate,
+        appointedBy: j.appointedBy, isChief: j.isChief,
+      })),
+      skipDuplicates: true,
+    });
+    console.log("court seeded");
+  `);
+
+  // The Court speaking as one body, with no individual author. Nothing may be
+  // attributed here, and a stored portrait must not rescue it.
+  const perCuriamId = db(`
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: "${REF_PREFIX}-percuriam",
+        referenceType: "scotus_case",
+        title: "Anonymous v. Court",
+        status: "decided",
+        lawVersion: 1,
+        sponsorName: "Per Curiam",
+        sponsorPhotoUrl: ${JSON.stringify(PORTRAIT)},
+        // The Pentagon Papers date. That ruling was itself per curiam, which
+        // is the case this whole path exists for.
+        decidedDate: new Date("1971-06-30T00:00:00Z"),
+      },
+    });
+    console.log(row.id);
+  `);
+
+  // The same ruling, but with a dissent on record. The row of faces must
+  // narrow to the majority, and the dissenters must still be named.
+  const narrowedId = db(`
+    const row = await prisma.governmentReference.create({
+      data: {
+        masterReferenceId: "${REF_PREFIX}-narrowed",
+        referenceType: "scotus_case",
+        title: "Majority v. Dissent",
+        status: "decided",
+        lawVersion: 1,
+        sponsorName: "Per Curiam",
+        dissentedBy: ["Burger", "Harlan", "Blackmun"],
+        dissentCheckedAt: new Date(),
+        decidedDate: new Date("1971-06-30T00:00:00Z"),
       },
     });
     console.log(row.id);
@@ -251,12 +356,87 @@ try {
 
     // The old screens are gone, not hiding behind a different label.
     check("nothing on it is the retired screen", !/Community Vote/.test(text));
+
+    // A bill's sponsor portrait is built by the client from their bioguide id.
+    // This record has no bioguide id, so there is nothing to draw — and that is
+    // a finished state, not a bug: the name is there, which is true.
+    await context.close();
+  }
+
+  // ------------------- THE OTHER TWO BRANCHES CARRY A FACE, WHICH IS THE POINT
+  //
+  // Not "an attribution field is in the response". The reader's complaint was
+  // about the page, so this asks the page: is the person named, is the role
+  // right, and is there an <img> of them actually on screen.
+  {
+    const { context, page } = await open(`/reference/${eoId}`);
+    const text = await screen(page);
+    check("AN EXECUTIVE ORDER NAMES THE PRESIDENT WHO SIGNED IT",
+      text.includes(`Signed by ${PRESIDENT}`), text.slice(0, 200).replace(/\n/g, " | "));
+    check("…and his portrait is on the page",
+      (await page.locator(`img[src="${PORTRAIT}"]`).count()) > 0);
+    await context.close();
+  }
+
+  {
+    const { context, page } = await open(`/reference/${scotusId}`);
+    const text = await screen(page);
+    check("A RULING NAMES THE JUSTICE WHO WROTE THE MAJORITY",
+      text.includes(`Majority opinion by ${JUSTICE}`), text.slice(0, 200).replace(/\n/g, " | "));
+    check("…and their portrait is on the page",
+      (await page.locator(`img[src="${PORTRAIT}"]`).count()) > 0);
+    await context.close();
+  }
+
+  {
+    const { context, page } = await open(`/reference/${perCuriamId}`);
+    const text = await screen(page);
+    // A per curiam decision has no author. Naming one would invent a fact
+    // about who decided a case, and the stored portrait must not leak a face
+    // onto it either.
+    check("A PER CURIAM DECISION NAMES NO JUSTICE AS ITS AUTHOR",
+      !/Majority opinion by|Signed by|Sponsored by/.test(text),
+      text.slice(0, 200).replace(/\n/g, " | "));
+    check("…and the stored portrait is not used as its face",
+      (await page.locator(`img[src="${PORTRAIT}"]`).count()) === 0);
+
+    // "The app is about accountability so not posting the photo is not very
+    // fair." No author does not mean nobody: nine people answered for it.
+    check("BUT THE BENCH THAT SAT THAT DAY IS ON THE PAGE",
+      /Warren Earl Burger/.test(text) && /Thurgood Marshall/.test(text) && /Harry A. Blackmun/.test(text),
+      text.slice(0, 300).replace(/\n/g, " | "));
+    check("…led by the Chief Justice",
+      text.indexOf("Warren Earl Burger") < text.indexOf("Hugo Lafayette Black"));
+    check("…labelled as the Court AS IT SAT, never as having agreed",
+      /Court as it sat on June 30, 1971/.test(text) && !/decided by|all agreed/i.test(text),
+      text.slice(0, 300).replace(/\n/g, " | "));
+    await context.close();
+  }
+
+  // ------------------------------- and once the dissent is on record, it narrows
+  {
+    const { context, page } = await open(`/reference/${narrowedId}`);
+    const text = await screen(page);
+    check("A RECORDED DISSENT NARROWS THE ROW TO THE MAJORITY",
+      /In the majority on June 30, 1971/.test(text) && /Hugo Lafayette Black/.test(text),
+      text.slice(0, 300).replace(/\n/g, " | "));
+    check("…and the dissenters are not on the page at all",
+      !/Warren Earl Burger/.test(text) && !/Harry A. Blackmun/.test(text) && !/Dissenting/i.test(text),
+      text.slice(0, 400).replace(/\n/g, " | "));
     await context.close();
   }
 } catch (error) {
   console.error(`\nThe check could not run: ${error.message}`);
   failures.push("the check ran");
 } finally {
+  // ONELAW_DUMP_API=1 prints the spawned backend's own output on a failure.
+  // Added after a run where every assertion failed with "We couldn't load this
+  // reference" — which looks like a broken page and was actually an API that
+  // could not be reached, because something else was saturating the machine.
+  // The page's error text cannot tell those two apart; the backend log can.
+  if (failures.length > 0 && process.env.ONELAW_DUMP_API) {
+    console.error("\n---- backend log ----\n" + apiLog.slice(-4000));
+  }
   await cleanup();
 }
 

@@ -7,6 +7,7 @@ import {
   Share,
   Linking,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -339,9 +340,29 @@ export default function ExecutiveOrderDetailScreen() {
 
               {/* President Info */}
               <View className="flex-row items-center mt-4 bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-                <View className="w-10 h-10 rounded-full bg-amber-500/20 items-center justify-center">
-                  <FileText size={20} color="#F59E0B" />
-                </View>
+                {/*
+                  THE FACE OF WHOEVER SIGNED IT.
+
+                  "The photo personifies the page, otherwise it just feels
+                  bland." The portrait is resolved on the server — the roster of
+                  current officials first, Wikipedia once at sync time for a
+                  President who has left — so this screen only draws it.
+
+                  The icon stays as the fallback. A record whose portrait has
+                  not been found yet keeps the same layout rather than
+                  collapsing, and no stand-in face is ever shown.
+                */}
+                {eo.presidentPhotoUrl ? (
+                  <Image
+                    source={{ uri: eo.presidentPhotoUrl }}
+                    className="w-10 h-10 rounded-full"
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View className="w-10 h-10 rounded-full bg-amber-500/20 items-center justify-center">
+                    <FileText size={20} color="#F59E0B" />
+                  </View>
+                )}
                 <View className="ml-3 flex-1">
                   <Text className="text-white font-medium">
                     Signed by {eo.president}

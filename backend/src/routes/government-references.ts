@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { prisma } from "../prisma";
+import { attributionFor } from "../services/reference-attribution";
+import { benchOn, isDissenter } from "../services/court-composition";
 import { isVerified, VERIFICATION_REQUIRED } from "../services/verification";
 import { gapStatus, officialVoteRoll } from "../services/representation-gap";
 import { publicUrlFor } from "../services/storage";
@@ -259,6 +261,10 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
       lastActionText: true,
       sponsorBioguideId: true,
       sponsorName: true,
+      // The face of whoever decided it. Missing here meant a list card showed
+      // an executive order's President by name with no portrait while the
+      // record's own page showed both — the same law, two different answers.
+      sponsorPhotoUrl: true,
       sponsorParty: true,
       sponsorState: true,
       supportVotes: true,
@@ -309,6 +315,13 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
             state: ref.sponsorState,
           }
         : null,
+      /**
+       * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
+       * was, because other screens read it; this is the thing a card draws —
+       * a name, what they did, and a face. The rules for all three branches
+       * live in one place, in services/reference-attribution.
+       */
+      attribution: attributionFor(ref),
       sourceUrl: ref.sourceUrl,
       signedDate: ref.signedDate?.toISOString() ?? null,
       decidedDate: ref.decidedDate?.toISOString() ?? null,
@@ -572,6 +585,10 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       lastActionText: true,
       sponsorBioguideId: true,
       sponsorName: true,
+      // The face of whoever decided it. Missing here meant a list card showed
+      // an executive order's President by name with no portrait while the
+      // record's own page showed both — the same law, two different answers.
+      sponsorPhotoUrl: true,
       sponsorParty: true,
       sponsorState: true,
       supportVotes: true,
@@ -647,6 +664,13 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
             state: ref.sponsorState,
           }
         : null,
+      /**
+       * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
+       * was, because other screens read it; this is the thing a card draws —
+       * a name, what they did, and a face. The rules for all three branches
+       * live in one place, in services/reference-attribution.
+       */
+      attribution: attributionFor(ref),
       sourceUrl: ref.sourceUrl,
       description: ref.description,
       citizenBrief: ref.citizenBrief,
@@ -775,6 +799,53 @@ governmentReferencesRouter.get("/:id", async (c) => {
     orderBy: { votedAt: "desc" },
   });
 
+  /**
+   * WHO IS ANSWERABLE FOR THIS RULING.
+   *
+   * A per curiam opinion has no author — the Supreme Court issues it as one
+   * body — so for decades of them this platform showed a docket number and
+   * nobody. "The app is about accountability so not posting the photo is not
+   * very fair": the bench that sat is who answers for it.
+   *
+   * NARROWED TO THE MAJORITY WHERE THE RECORD SAYS SO. A justice who wrote "I
+   * dissent" must not appear under a heading that reads as agreement, so
+   * anyone named on a dissent comes out of the row of faces.
+   *
+   * AN EMPTY DISSENT LIST IS NOT UNANIMITY. It means none was recorded, which
+   * could equally mean none was filed or none was digitised. Those are
+   * indistinguishable from here, so the card widens back to the whole bench
+   * under a label that only claims who SAT — never that they agreed.
+   *
+   * DISSENTERS ARE NOT SHOWN. They come out of the row and nothing replaces
+   * them: the panel answers "who is behind this ruling", and somebody who
+   * dissented from it is not. Listing them put two rosters on one page.
+   *
+   * Detail only. A list card does not need a bench, and asking for one there
+   * would be a query per row.
+   */
+  const attribution = attributionFor(reference);
+  if (attribution?.perCuriam && reference.decidedDate) {
+    const bench = await benchOn(reference.decidedDate);
+    const dissenting = bench.filter((j) => isDissenter(j.name, reference.dissentedBy ?? []));
+    // Only narrow when a recorded dissent actually matched somebody on the
+    // bench. A name we cannot place is not grounds to shrink the panel.
+    const narrowed = dissenting.length > 0;
+    const majority = narrowed ? bench.filter((j) => !dissenting.includes(j)) : bench;
+    const sat = reference.decidedDate.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+
+    if (majority.length > 0) {
+      attribution.panel = majority;
+      attribution.panelLabel = narrowed
+        ? `In the majority on ${sat}`
+        : `The Court as it sat on ${sat}`;
+    }
+  }
+
   return c.json({
     reference: {
       id: reference.id,
@@ -799,6 +870,17 @@ governmentReferencesRouter.get("/:id", async (c) => {
             state: reference.sponsorState,
           }
         : null,
+      /**
+       * THE PERSON BEHIND THIS RECORD. `sponsor` above stays exactly as it
+       * was, because other screens read it; this is the thing the page draws —
+       * a name, what they did, and a face. The rules for all three branches
+       * live in one place, in services/reference-attribution.
+       *
+       * A per curiam ruling arrives here with a bench instead of one face:
+       * the Court issued it as one body, and every justice sitting that day is
+       * answerable for it. See detailAttribution above.
+       */
+      attribution,
       status: reference.status,
       category: reference.category,
       description: reference.description,

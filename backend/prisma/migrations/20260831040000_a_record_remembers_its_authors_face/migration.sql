@@ -1,0 +1,13 @@
+-- The portrait of whoever is behind a record, resolved once and kept.
+--
+-- A member of Congress needs no column: their photo comes from their bioguide
+-- id, and the Biographical Directory covers everyone who ever served. A
+-- President or a Supreme Court justice has no such id, and the roster of
+-- current officials holds only whoever is in office today — nothing for Obama,
+-- nothing for Scalia, nothing for a justice not yet appointed.
+--
+-- Wikipedia has all of them and rate-limits, so it is asked once when a record
+-- is synced rather than on every page view, and the answer is stored here.
+--
+-- Additive and idempotent. This database is shared with another project.
+ALTER TABLE "GovernmentReference" ADD COLUMN IF NOT EXISTS "sponsorPhotoUrl" TEXT;

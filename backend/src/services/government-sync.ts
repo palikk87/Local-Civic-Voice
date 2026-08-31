@@ -149,6 +149,16 @@ interface UpsertData {
    */
   lastActionDate?: Date;
   lastActionText?: string;
+  /**
+   * WHO IS BEHIND THIS RECORD, for the branches that come with a name attached.
+   *
+   * A bill's sponsor arrives later, from a detail call per bill — see
+   * bill-provenance.ts. An executive order and a Supreme Court opinion both
+   * name their person in the LIST response, so they can be stored on the way
+   * past: the Federal Register gives the President, CourtListener gives the
+   * justice who wrote the majority.
+   */
+  sponsorName?: string;
 }
 
 /**
@@ -216,6 +226,9 @@ async function upsertReference(data: UpsertData): Promise<void> {
         ...(fields.decidedDate ? { decidedDate: fields.decidedDate } : {}),
         ...(fields.lastActionDate ? { lastActionDate: fields.lastActionDate } : {}),
         ...(fields.lastActionText ? { lastActionText: fields.lastActionText } : {}),
+        // The person behind it. Only ever written when the source named one,
+        // so a sync that omits it never blanks a name already stored.
+        ...(fields.sponsorName ? { sponsorName: fields.sponsorName } : {}),
         ...(lawMoved
           ? { lawChangedAt: new Date(), lawVersion: { increment: 1 } }
           : {}),
@@ -527,6 +540,12 @@ export async function syncExecutiveOrdersDetailed(
         sourceUrl: doc.html_url,
         description: descriptionParts.length > 0 ? descriptionParts.join(" ") : undefined,
         fullText: fullText ?? undefined,
+        // THE PRESIDENT WHO SIGNED IT, stored rather than only mentioned.
+        //
+        // This name was already fetched and spent on one sentence of the
+        // description. Kept as a field, the record can carry a face the way a
+        // bill carries its sponsor's — see services/reference-attribution.ts.
+        sponsorName: presidentName ?? undefined,
         signedDate: doc.signing_date ? new Date(doc.signing_date) : doc.publication_date ? new Date(doc.publication_date) : undefined,
       });
       synced++;
@@ -555,6 +574,13 @@ interface CourtListenerSearchResponse {
     dateArgued?: string | null;
     absolute_url: string;
     status?: string;
+    /**
+     * WHO WROTE THE MAJORITY OPINION, or "Per Curiam" when the Court issued it
+     * as one body with no individual author. CourtListener has always returned
+     * this; nothing read it. Verified live: "John G. Roberts", "Brett
+     * Kavanaugh", "Per Curiam".
+     */
+    judge?: string | null;
     opinions?: Array<{ snippet?: string | null }>;
   }>;
 }
@@ -608,6 +634,11 @@ async function syncScotusCases(): Promise<number> {
         category: categorize(opinion.caseName + " " + (snippet ?? "")),
         sourceUrl: `https://www.courtlistener.com${opinion.absolute_url}`,
         description: snippet ? (snippet.length > 500 ? `${snippet.slice(0, 497)}...` : snippet) : undefined,
+        // WHO WROTE IT. CourtListener has always sent this and nothing read it.
+        // "Per Curiam" is left to reference-attribution.ts to reject: it is the
+        // Court speaking as one body, not a person, and attributing it to
+        // somebody would invent a fact about who decided a case.
+        sponsorName: opinion.judge?.trim() || undefined,
         decidedDate: opinion.dateFiled ? new Date(opinion.dateFiled) : undefined,
       });
       synced++;

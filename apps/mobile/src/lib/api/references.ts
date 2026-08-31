@@ -10,6 +10,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./api";
 import type { Bill, ExecutiveOrder, SupremeCourtCase, BillCategory } from "@/lib/types";
+import { memberPhotoUrl } from "@/lib/member-photo";
 
 export type ReferenceType = "bill" | "executive_order" | "scotus_case";
 
@@ -50,6 +51,33 @@ export interface GovReference {
     name: string;
     party: string | null;
     state: string | null;
+  } | null;
+  /**
+   * WHO IS BEHIND THIS RECORD, in one shape for all three branches.
+   *
+   * `sponsor` above is the legislative-only field several screens already read
+   * and it stays exactly as it was. This is the one a card draws from: a name,
+   * what that person did, and a face.
+   *
+   *   bill             "Sponsored by"        portrait built from bioguideId
+   *   executive order  "Signed by"           portrait resolved server-side
+   *   scotus case      "Majority opinion by" portrait resolved server-side
+   *
+   * Null is a real answer. A per curiam opinion has no author — that is the
+   * Court speaking as one body, not an omission — and a bill whose provenance
+   * pass has not run has no sponsor yet.
+   */
+  attribution?: {
+    name: string;
+    role: string;
+    photoUrl: string | null;
+    bioguideId?: string | null;
+    party?: string | null;
+    state?: string | null;
+    perCuriam?: boolean;
+    /** The bench, when the Court issued a ruling with no author on it. */
+    panel?: Array<{ name: string; photoUrl: string | null }>;
+    panelLabel?: string;
   } | null;
   decidedDate: string | null;
   votes: { support: number; oppose: number; total: number };
@@ -352,9 +380,7 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
             party: (ref.sponsor.party ?? "I") as "D" | "R" | "I",
             state: ref.sponsor.state ?? "",
             chamber,
-            imageUrl: ref.sponsor.bioguideId
-              ? `https://www.congress.gov/img/member/${ref.sponsor.bioguideId.toLowerCase()}_200.jpg`
-              : "",
+            imageUrl: memberPhotoUrl(ref.sponsor.bioguideId) ?? "",
           }
         : undefined,
     /**
@@ -414,7 +440,14 @@ export function referenceToExecutiveOrder(ref: GovReference | GovReferenceDetail
     eoNumber: ref.displayId ?? `EO ${ref.masterReferenceId.replace(/^eo-/i, "").toUpperCase()}`,
     title: ref.title,
     shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
-    president: presidentAtDate(ref.signedDate),
+    // THE PRESIDENT WHO SIGNED IT — the Federal Register's own answer when the
+    // server has it, and only then the date-range guess below as a fallback.
+    // The guess bottoms out at "the President" for anything before 2009, which
+    // is the whole executive archive before Obama.
+    president: ref.attribution?.name ?? presidentAtDate(ref.signedDate),
+    // Their portrait, when one has been resolved. Absent renders as no face,
+    // never as a placeholder standing in for a human being.
+    presidentPhotoUrl: ref.attribution?.photoUrl ?? undefined,
     signedDate: ref.signedDate ?? ref.createdAt,
     publishedDate: ref.signedDate ?? ref.createdAt,
     status: statusMap[ref.status] ?? "active",
@@ -461,6 +494,15 @@ export function referenceToScotusCase(ref: GovReference | GovReferenceDetail): S
     simplifiedQuestion: question,
     realWorldImpact: ref.description ?? "",
     communityVotes: toVoteTally(ref.votes),
+    // WHO WROTE THE MAJORITY. CourtListener names them and nothing read it
+    // until now. Absent for a per curiam decision — the Court speaking as one
+    // body — and the screen shows no author rather than guessing one.
+    // Absent for a per curiam: that ruling has no author, and the bench below
+    // is who answers for it instead.
+    majorityAuthor: ref.attribution?.perCuriam ? undefined : ref.attribution?.name,
+    majorityAuthorPhotoUrl: ref.attribution?.photoUrl ?? undefined,
+    bench: ref.attribution?.panel,
+    benchLabel: ref.attribution?.panelLabel,
     courtListenerUrl: ref.sourceUrl ?? undefined,
     branch: "judicial",
   };
