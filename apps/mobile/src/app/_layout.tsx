@@ -11,6 +11,7 @@ import { AuthUIProvider } from '@/lib/auth/use-civic-auth';
 import { AuthSheet } from '@/components/auth/AuthSheet';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { BugReporter } from '@/components/support/BugReporter';
+import { BetaWelcomeGate } from '@/components/BetaWelcomeGate';
 import { VoteAnonymityDialog } from '@/components/VoteAnonymityDialog';
 import { JuryGate } from '@/components/JuryGate';
 
@@ -89,6 +90,10 @@ function RootLayoutNav({ colorScheme }: { colorScheme: 'light' | 'dark' | null |
           question is the vote pipeline rather than any one screen — every
           surface in the app votes through the same function. */}
       <VoteAnonymityDialog />
+
+      {/* The consent gate. Last in the list on purpose: it is the only one of
+          these that must be answered before anything else is asked. */}
+      <BetaWelcomeGate />
     </ThemeProvider>
   );
 }

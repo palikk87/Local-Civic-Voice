@@ -50,6 +50,7 @@ import { cn } from '@/lib/cn';
 import type { ExecutiveOrder } from '@/lib/types';
 import { useRequireAuth } from '@/lib/auth/use-civic-auth';
 import { CitizensBriefCard } from '@/components/CitizensBrief';
+import { RecordPanels } from '@/components/RecordPanels';
 import {
   useGovernmentReference,
   referenceToExecutiveOrder,
@@ -540,6 +541,16 @@ export default function ExecutiveOrderDetailScreen() {
                 </View>
               )}
             </Animated.View>
+
+            {/*
+              THE PANELS THIS SCREEN NEVER HAD. Turning points, the other side,
+              the pulse history, the Integrity Audit and the conversation. The
+              web has been one page for all three branches since "One law page",
+              so a ruling and an order have always carried these there; on the
+              phone only the bill screen mounted them. Same component, same
+              props, all three screens.
+            */}
+            <RecordPanels referenceId={refData?.reference?.id} />
           </ScrollView>
 
           {/* Fixed Vote Buttons */}

@@ -54,7 +54,7 @@ import {
   yeaNayToPosition,
 } from '@/lib/reference-votes';
 import { cn } from '@/lib/cn';
-import { IntegrityAuditPanel } from '@/components/IntegrityAuditPanel';
+import { RecordPanels } from '@/components/RecordPanels';
 import {
   generateBillExplanation,
   askAboutBill,
@@ -63,11 +63,6 @@ import {
 import { calculateRepresentationGap } from '@/lib/representation-gap';
 import { PulseGap } from '@/components/PulseGap';
 import { CitizensBriefCard } from '@/components/CitizensBrief';
-import {
-  TurningPointsPanel,
-  OtherSidePanel,
-  PulseHistoryPanel,
-} from '@/components/CivicPanels';
 import { TransparencyIndicator, ArticleBadge } from '@/components/BillOfRightsBadge';
 import type { Bill, Representative } from '@/lib/types';
 import { useTimelineStore } from '@/lib/timeline-store';
@@ -825,28 +820,10 @@ export default function BillDetailScreen() {
               </Text>
             </Animated.View>
 
-            {/* The three things only this platform can show: who crossed
-                sides and why, what the other side actually wrote, and when
-                opinion moved relative to the text moving. Web parity. */}
-            <Animated.View
-              entering={FadeInDown.delay(127).springify()}
-              className="px-4"
-            >
-              <TurningPointsPanel referenceId={billRefData?.reference?.id} />
-              <OtherSidePanel referenceId={billRefData?.reference?.id} />
-              <PulseHistoryPanel referenceId={billRefData?.reference?.id} />
-
-              {/* ARTICLE III §2. The tally above is the platform's claim; this
-                  is where anybody can make it prove itself. */}
-              {billRefData?.reference?.id ? (
-                <IntegrityAuditPanel
-                  subjectType="reference"
-                  subjectId={billRefData.reference.id}
-                  title="Integrity Audit of this vote"
-                  what="the votes on this record, as totals and timings"
-                />
-              ) : null}
-            </Animated.View>
+            {/* Turning points, the other side, the pulse, the audit and the
+                conversation — one component, mounted the same way on all three
+                law screens, so they cannot drift apart again. */}
+            <RecordPanels referenceId={billRefData?.reference?.id} />
 
             {/* Vote Transparency - Article III Compliance */}
             <Animated.View

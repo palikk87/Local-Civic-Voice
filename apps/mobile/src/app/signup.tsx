@@ -85,8 +85,11 @@ export default function SignUpScreen() {
                   they think before it shows them anybody. */}
               <AuthForm mode="signup" onSuccess={() => router.replace('/start')} />
 
-              {/* Consent by action, the standard mobile pattern: creating an
-                  account is agreement, and the Terms are one tap away. */}
+              {/* Both documents named, and both reachable. The gate that
+                  records the acceptance is BetaWelcomeGate; this line is the
+                  notice, not the consent. Naming only the Terms while the
+                  Privacy Policy governs what we keep would be a notice that
+                  is not true. */}
               <Text className="text-slate-500 text-xs text-center mt-4">
                 By creating an account you agree to our{' '}
                 <Text
@@ -94,6 +97,13 @@ export default function SignUpScreen() {
                   onPress={() => router.push('/terms')}
                 >
                   Terms of Use
+                </Text>{' '}
+                and{' '}
+                <Text
+                  className="text-amber-400 underline"
+                  onPress={() => router.push('/privacy')}
+                >
+                  Privacy Policy
                 </Text>
                 .
               </Text>
