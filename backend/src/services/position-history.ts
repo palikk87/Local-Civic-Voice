@@ -160,13 +160,20 @@ export async function positionHistory(
 }
 
 export interface PositionSummary {
+  /** Laws they hold a position on right now. Always support + oppose. */
   total: number;
+  /** Laws they stand Aye on right now. */
   support: number;
+  /** Laws they stand Nay on right now. */
   oppose: number;
+  /** Laws they voted on and then withdrew from, leaving no position. */
   withdrawn: number;
-  /** How many times they took a different position than they had before. */
+  /**
+   * How many times they took a different position than they had before.
+   * Counted over the whole ledger, not per law — this one is a count of acts.
+   */
   changesOfMind: number;
-  /** Positions taken on a version of a law that has since moved on. */
+  /** Positions they hold now on a version of a law that has since moved on. */
   standingOnOldText: number;
 }
 
@@ -192,7 +199,12 @@ export async function positionSummary(
   // what they were — which is the fact Article IV is protecting.
   const rows = await prisma.positionEvent.findMany({
     where: { userId, ...(isOwner ? {} : { isAnonymous: false }) },
+    // Newest first, so the first row seen for a law is where they stand on it.
+    // The id breaks a tie when two acts share a timestamp, so the answer is the
+    // same every time it is asked.
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
+      governmentReferenceId: true,
       position: true,
       isChange: true,
       lawVersion: true,
@@ -200,13 +212,48 @@ export async function positionSummary(
     },
   });
 
+  /*
+   * ONE LAW, ONE POSITION.
+   *
+   * Reported plainly: "if I go from aye to nah on something it subtracts from
+   * one and ads to the other."
+   *
+   * The ledger is append-only — every act is kept, because a person having
+   * changed their mind is a fact about them and not an embarrassment to be
+   * overwritten. Counting those rows, though, counted the same law twice: an
+   * Aye you have since abandoned stayed in the Aye column forever, and the
+   * total climbed every time somebody reconsidered. Seventeen "positions" on
+   * seven laws.
+   *
+   * So the four counters describe WHERE SOMEBODY STANDS NOW — the latest act
+   * on each law, one vote each. Aye plus Nay is the total, and crossing over
+   * moves you between the columns instead of adding to both.
+   *
+   * "Changed my mind" is the one counter that still reads the whole ledger,
+   * because it is a count of acts, not of laws — reconsidering twice on the
+   * same bill is two changes of mind, and that is the point of showing it.
+   */
+  // A STRANGER SEES THE LATEST POSITION THEY ARE ALLOWED TO SEE, which is not
+  // always the latest one taken — an anonymous vote is filtered out above, so
+  // a public Aye followed by an anonymous Nay still reads as Aye to them. That
+  // is exactly what the list on the same page already shows, so it reveals
+  // nothing new; the alternative, hiding the law entirely, would tell them a
+  // hidden position exists. Article IV withholds the vote, not the person.
+  const standing = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    if (!standing.has(row.governmentReferenceId)) standing.set(row.governmentReferenceId, row);
+  }
+  const now = [...standing.values()];
+  // Withdrawing leaves you holding no position, so it is not one.
+  const held = now.filter((r) => r.position !== "withdrawn");
+
   return {
-    total: rows.length,
-    support: rows.filter((r) => r.position === "support").length,
-    oppose: rows.filter((r) => r.position === "oppose").length,
-    withdrawn: rows.filter((r) => r.position === "withdrawn").length,
+    total: held.length,
+    support: held.filter((r) => r.position === "support").length,
+    oppose: held.filter((r) => r.position === "oppose").length,
+    withdrawn: now.filter((r) => r.position === "withdrawn").length,
     changesOfMind: rows.filter((r) => r.isChange).length,
-    standingOnOldText: rows.filter((r) => r.governmentReference.lawVersion > r.lawVersion).length,
+    standingOnOldText: held.filter((r) => r.governmentReference.lawVersion > r.lawVersion).length,
   };
 }
 

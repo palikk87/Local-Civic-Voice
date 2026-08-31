@@ -135,6 +135,67 @@ describe("a citizen's record", () => {
     });
     expect(mine.results[1]).toMatchObject({ position: "support", isChange: false });
     expect(mine.summary.changesOfMind).toBe(1);
+
+    // AND THE COUNTERS MOVE RATHER THAN PILE UP. Reported plainly: "if I go
+    // from aye to nah on something it subtracts from one and ads to the
+    // other." One law is one position however many times you reconsider it,
+    // so the total holds still and the Aye they abandoned does not linger.
+    expect(mine.summary).toMatchObject({ total: 1, support: 0, oppose: 1 });
+  });
+
+  test("crossing back and forth still leaves one position", async () => {
+    const person = await citizen("person");
+    const bill = await law();
+
+    await vote(person.cookie, bill.id, "support");
+    await vote(person.cookie, bill.id, "oppose");
+    await vote(person.cookie, bill.id, "support");
+
+    const mine = await settled(person.cookie, person.userId, 3);
+    // Three acts on the record, two crossings, one position — the one they
+    // hold now. Changes of mind counts acts, which is why it is 2 and not 1.
+    expect(mine.results).toHaveLength(3);
+    expect(mine.summary).toMatchObject({
+      total: 1, support: 1, oppose: 0, changesOfMind: 2,
+    });
+  });
+
+  test("Aye and Nay always add up to the total", async () => {
+    const person = await citizen("person");
+    const kept = await law("A bill they stay with");
+    const flipped = await law("A bill they turn on");
+    const twice = await law("A bill they turn on and back");
+
+    await vote(person.cookie, kept.id, "support");
+    await vote(person.cookie, flipped.id, "support");
+    await vote(person.cookie, flipped.id, "oppose");
+    await vote(person.cookie, twice.id, "oppose");
+    await vote(person.cookie, twice.id, "support");
+    await vote(person.cookie, twice.id, "oppose");
+
+    const mine = await settled(person.cookie, person.userId, 6);
+    const { total, support, oppose } = mine.summary;
+    expect(support + oppose).toBe(total);
+    expect(mine.summary).toMatchObject({ total: 3, support: 1, oppose: 2 });
+  });
+
+  test("the same is true of everybody, not just the person reading", async () => {
+    // "make sure this is true for all user." One function answers for every
+    // profile, so two people who each changed their mind must each read as
+    // one position — and neither one's record may bleed into the other's.
+    const one = await citizen("one");
+    const two = await citizen("two");
+    const bill = await law("A bill they both turn on");
+
+    await vote(one.cookie, bill.id, "support");
+    await vote(one.cookie, bill.id, "oppose");
+    await vote(two.cookie, bill.id, "oppose");
+    await vote(two.cookie, bill.id, "support");
+
+    const first = await settled(one.cookie, one.userId, 2);
+    const second = await settled(two.cookie, two.userId, 2);
+    expect(first.summary).toMatchObject({ total: 1, support: 0, oppose: 1, changesOfMind: 1 });
+    expect(second.summary).toMatchObject({ total: 1, support: 1, oppose: 0, changesOfMind: 1 });
   });
 
   test("voting the same way twice is not a change of mind", async () => {
@@ -161,7 +222,10 @@ describe("a citizen's record", () => {
 
     const mine = await settled(person.cookie, person.userId, 2);
     expect(mine.results[0]!.position).toBe("withdrawn");
-    expect(mine.summary.support).toBe(1);
+    // The Aye is still on the record — the ledger keeps every act. But they
+    // hold no position on this bill any more, so nothing counts it as one.
+    expect(mine.results[1]!.position).toBe("support");
+    expect(mine.summary).toMatchObject({ total: 0, support: 0, oppose: 0, withdrawn: 1 });
   });
 
   test("a reason is kept when given and never demanded", async () => {
