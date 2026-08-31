@@ -1,6 +1,6 @@
 // Web port of mobile/src/components/ReferenceSearchModal.tsx
 import { useState, useCallback, useEffect } from "react";
-import { ReferenceQuickViewBody } from "@/components/civic/ReferenceQuickView";
+import { ReferenceQuickView } from "@/components/civic/ReferenceQuickView";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X, Search, FileText, Scale, Gavel, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
@@ -177,23 +177,15 @@ export default function ReferenceSearchModal({
 
   // The picker itself. Identical either way — only the frame around it differs.
   /*
-   * READING A LAW REPLACES THE LIST, IT DOES NOT COVER IT.
+   * READING A LAW IS A POP-UP OVER THE LIST, NOT A PAGE INSTEAD OF IT.
    *
-   * This picker is already a dialog on its own screen and an inline panel
-   * inside the composer, so the details go WHERE THE LIST IS, with a way back.
-   * The search and everything typed into it are untouched underneath.
+   * Khalid: "keep the see details as a pop up rather than opening the law card
+   * on a new page it maintains continuity." You are in the middle of writing a
+   * post; checking which law you have got should not move you anywhere. The
+   * search, the results and the draft all stay exactly where they were, behind
+   * it, and closing puts you back with nothing to redo.
    */
-  const panel = quickViewId ? (
-    <div className="flex-1 overflow-y-auto p-4">
-      <button
-        onClick={() => setQuickViewId(null)}
-        className="mb-3 text-sm font-medium text-amber-400 underline-offset-2 hover:underline"
-      >
-        ← Back to results
-      </button>
-      <ReferenceQuickViewBody referenceId={quickViewId} />
-    </div>
-  ) : (
+  const panel = (
     <>
         {/* Search Input */}
         <div className="px-4 py-3 shrink-0">
@@ -295,7 +287,7 @@ export default function ReferenceSearchModal({
                  * A button cannot contain a button, so the row is a container
                  * and each act is its own control.
                  */
-                <div key={item.id} className="border-b border-slate-800">
+                <div key={item.id} className="border-b border-slate-800" data-law-picker>
                 <button
                   onClick={() => handleSelectReference(item)}
                   className="w-full p-4 pb-2 hover:bg-slate-800/50 transition-colors text-left"
@@ -334,6 +326,7 @@ export default function ReferenceSearchModal({
                 </button>
                 <div className="px-4 pb-3">
                   <button
+                    type="button"
                     onClick={() => setQuickViewId(item.id)}
                     className="text-sm font-medium text-amber-400 underline-offset-2 hover:underline"
                   >
@@ -348,9 +341,15 @@ export default function ReferenceSearchModal({
     </>
   );
 
+  /** The details pop-up, mounted the same way whichever framing is used. */
+  const detailsPopup = (
+    <ReferenceQuickView referenceId={quickViewId} onClose={() => setQuickViewId(null)} />
+  );
+
   if (inline) {
     if (!visible) return null;
     return (
+      <>
       <div className="mt-3 flex max-h-[420px] flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-2">
           <span className="text-sm font-semibold text-white">Attach a law</span>
@@ -365,6 +364,8 @@ export default function ReferenceSearchModal({
         </div>
         {panel}
       </div>
+      {detailsPopup}
+      </>
     );
   }
 
@@ -383,6 +384,8 @@ export default function ReferenceSearchModal({
         </div>
         {panel}
       </DialogContent>
+
+      {detailsPopup}
     </Dialog>
   );
 }

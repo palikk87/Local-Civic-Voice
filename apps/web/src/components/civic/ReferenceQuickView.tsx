@@ -70,7 +70,7 @@ export function ReferenceQuickViewBody({ referenceId }: { referenceId: string | 
           </p>
         ) : (
           <>
-            <DialogHeader>
+            <div className="space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
                   {typeLabel}
@@ -80,10 +80,10 @@ export function ReferenceQuickViewBody({ referenceId }: { referenceId: string | 
                   <RecordBadge completeness={reference.completeness} />
                 ) : null}
               </div>
-              <DialogTitle className="text-left text-xl leading-snug">
+              <h2 className="text-left text-xl font-semibold leading-snug text-foreground">
                 {reference.title}
-              </DialogTitle>
-            </DialogHeader>
+              </h2>
+            </div>
 
             {reference.attribution ? (
               <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
@@ -179,6 +179,19 @@ export function ReferenceQuickView({
   return (
     <Dialog open={!!referenceId} onOpenChange={(open) => (open ? undefined : onClose())}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        {/*
+          * The dialog needs a title of its own for assistive technology, and the
+          * body cannot supply one: the body is also rendered INLINE, inside the
+          * composer's law picker, where there is no Dialog to be a child of. A
+          * DialogTitle there throws and takes the page down with it — which is
+          * exactly what "when you click see details the page fails" was.
+          *
+          * So the accessible title lives here, with the dialog, and the visible
+          * heading lives in the body, where both framings can use it.
+          */}
+        <DialogHeader className="sr-only">
+          <DialogTitle>Record details</DialogTitle>
+        </DialogHeader>
         <ReferenceQuickViewBody referenceId={referenceId} />
       </DialogContent>
     </Dialog>

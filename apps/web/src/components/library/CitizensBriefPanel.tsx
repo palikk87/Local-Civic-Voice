@@ -5,7 +5,9 @@
 // the master reference, once, when a reader asks for it. This panel offers the
 // button and displays the result. When no official source has the text, it says
 // so — it never shows a guess.
+import { useState } from "react";
 import { X, ExternalLink, Share2 } from "lucide-react";
+import ShareModal from "@/components/mobile/ShareModal";
 import { MotionDiv } from "@/components/civic/Motion";
 import { CitizensBriefCard } from "@/components/civic/CitizensBriefCard";
 import { useLibraryBrief } from "@/hooks/use-library-brief";
@@ -46,6 +48,12 @@ export function CitizensBriefPanel({
     isUnidentifiable,
     request,
   } = useLibraryBrief(result);
+
+  // Sharing from here opens the SAME panel as sharing from the feed, so the
+  // choices are the same wherever a law is found — timeline, a person, or a
+  // link. Khalid: "that way it makes sense when the pop up show up to share
+  // the law with the same options as if you were sharing from the feed."
+  const [shareOpen, setShareOpen] = useState(false);
 
   /*
    * SHARING NO LONGER WAITS FOR A BRIEF.
@@ -181,7 +189,7 @@ export function CitizensBriefPanel({
           <button
             type="button"
             onClick={() => {
-              if (referenceId) onShare(referenceId);
+              if (referenceId) setShareOpen(true);
             }}
             disabled={!canShare}
             className={cn(
@@ -190,15 +198,32 @@ export function CitizensBriefPanel({
             )}
           >
             <Share2 className="h-[18px] w-[18px]" />
-            Share to my timeline
+            Share
           </button>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             {canShare
-              ? "Opens the composer with this law attached. The words are yours."
+              ? "Post it, send it to someone, or copy a link. The words are yours."
               : "Identifying this document at its official source…"}
           </p>
         </div>
       </MotionDiv>
+
+      {referenceId ? (
+        <ShareModal
+          visible={shareOpen}
+          onClose={() => setShareOpen(false)}
+          content={{
+            type:
+              result.branch === "executive"
+                ? "executive_order"
+                : result.branch === "judicial"
+                  ? "scotus_case"
+                  : "bill",
+            id: referenceId,
+            title: result.shortTitle || result.title,
+          }}
+        />
+      ) : null}
     </>
   );
 }

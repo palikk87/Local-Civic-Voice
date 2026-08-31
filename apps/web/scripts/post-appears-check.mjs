@@ -234,6 +234,58 @@ try {
   check("…and the date it was signed",
     /Signed Jul 1, 2014/.test(composer), composer.slice(0, 300));
 
+  // ------------------------------- See details inside the composer's picker
+  //
+  // Shipped without a check and it broke the page: the details body used a
+  // dialog-only title, and the picker inside the composer is an inline panel
+  // with no dialog above it. Reported as "when you click see details the page
+  // fails". A crash here takes the whole app down, so the assertion is that
+  // the page is still THERE afterwards, not merely that something rendered.
+  await page.goto(`${base}/timeline`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#root", { timeout: 25_000 });
+  await page.waitForTimeout(2_000);
+
+  const crashes = [];
+  page.on("pageerror", (error) => crashes.push(String(error)));
+
+  // The attach control is a BUTTON, not an input — it says one of two things
+  // depending on whether a law is already on the post.
+  const attach = page
+    .getByRole("button", { name: /to attach|different document/i })
+    .first();
+  check("the composer offers a way to attach a law", (await attach.count()) > 0);
+  await attach.click();
+  await page.waitForTimeout(1_500);
+  const pickerSearch = page.locator('input[placeholder*="executive orders"]').first();
+  // The picker opens on the Bills tab, so search for the BILL. Asking it for an
+  // executive order here gets an honest "No bills found" and proves nothing.
+  await pickerSearch.fill("prove a post appears");
+  await page.waitForTimeout(2_500);
+
+  // Scoped to the picker: the timeline's own post cards ALSO offer "See
+  // details", and theirs navigates to the full record. Clicking the wrong one
+  // proves nothing about the picker.
+  const seeDetails = page.locator("[data-law-picker]").getByRole("button", { name: "See details" }).first();
+  check("THE PICKER OFFERS SEE DETAILS", (await seeDetails.count()) > 0);
+  await seeDetails.click();
+  await page.waitForTimeout(2_500);
+
+  const after = await screen();
+  check("…AND THE PAGE SURVIVES THE CLICK", after.trim().length > 0 && crashes.length === 0,
+    crashes[0] ?? `${after.length} chars on screen`);
+  // A POP-UP OVER THE SEARCH, not a page instead of it. Khalid: "keep the see
+  // details as a pop up rather than opening the law card on a new page it
+  // maintains continuity." So the dialog must be there AND the search must
+  // still be underneath it, untouched.
+  const dialogText = await page.evaluate(
+    () => document.querySelector('[role="dialog"]')?.innerText ?? "",
+  );
+  check("…as a POP-UP, showing that law", dialogText.includes(LAW), dialogText.slice(0, 200));
+  check("…and it did not navigate away from the timeline",
+    page.url().includes("/timeline"), page.url());
+  check("…with the picker's search still underneath it",
+    (await page.locator('input[placeholder*="executive orders"]').count()) > 0);
+
   await context.close();
 } catch (error) {
   console.error("\n" + (error?.stack ?? error));

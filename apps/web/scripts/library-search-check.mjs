@@ -237,7 +237,13 @@ await page.getByText('Result for "healthcare"').waitFor({ timeout: 15_000 });
 await page.getByText('Result for "healthcare"').click();
 await page.waitForTimeout(1500);
 
-const shareButton = page.getByRole("button", { name: /Share to my timeline/i });
+// The button is called "Share", and it opens the same panel the feed opens.
+// It used to be "Share to my timeline" and it navigated to the composer, which
+// made the Library the one place where sharing meant one thing only. Khalid:
+// "change the language of the share button from the library that says share to
+// time line to just the word share… so it makes sense when the pop up show up
+// to share the law with the same options as if you were sharing from the feed."
+const shareButton = page.getByRole("button", { name: /^Share$/i });
 check(
   "sharing is offered without waiting for a brief",
   (await shareButton.count()) > 0 && (await shareButton.first().isEnabled()),
@@ -245,13 +251,17 @@ check(
 );
 
 await shareButton.first().click();
-await page.waitForTimeout(1200);
+await page.waitForTimeout(1500);
 
+const sharePanel = await page.evaluate(() => document.body.innerText);
 check(
-  "and it opens the composer instead of posting",
-  page.url().includes("/timeline?share="),
-  `url=${page.url()}`,
+  "and it opens the same share panel the feed opens",
+  /share to (your )?timeline/i.test(sharePanel) && /send|message|copy/i.test(sharePanel),
+  sharePanel.slice(0, 200).replace(/\n/g, " | "),
 );
+// THE POINT THAT HAS NOT CHANGED. Opening a way to share is not sharing, and
+// nothing may be published until the reader chooses to. The Library once
+// posted the AI's summary over the reader's name; that must stay impossible.
 check(
   "with nothing published on the reader's behalf",
   posts.length === 0,
