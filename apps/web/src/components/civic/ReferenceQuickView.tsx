@@ -26,13 +26,15 @@ import { useGovernmentReference } from "@/hooks/use-government-references";
  * that has not been is not commissioned from here — that is a button on the
  * full page, and a decision a person makes.
  */
-export function ReferenceQuickView({
-  referenceId,
-  onClose,
-}: {
-  referenceId: string | null;
-  onClose: () => void;
-}) {
+/**
+ * The same content, without a dialog around it.
+ *
+ * The law picker inside the composer is ALREADY a dialog, and stacking one on
+ * another is how this platform got "two modals stack and the top one is inert".
+ * So the picker renders this in place, over its own list, and Discover — which
+ * has no dialog of its own — wraps it in one. One body, two frames, no stack.
+ */
+export function ReferenceQuickViewBody({ referenceId }: { referenceId: string | null }) {
   const { data, isLoading, isError } = useGovernmentReference(
     referenceId ?? undefined,
     !!referenceId,
@@ -56,8 +58,7 @@ export function ReferenceQuickView({
     : [];
 
   return (
-    <Dialog open={!!referenceId} onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+    <>
         {isLoading ? (
           <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -163,6 +164,22 @@ export function ReferenceQuickView({
             </Link>
           </>
         )}
+    </>
+  );
+}
+
+/** The same thing in a dialog, for a screen that does not already have one. */
+export function ReferenceQuickView({
+  referenceId,
+  onClose,
+}: {
+  referenceId: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open={!!referenceId} onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <ReferenceQuickViewBody referenceId={referenceId} />
       </DialogContent>
     </Dialog>
   );

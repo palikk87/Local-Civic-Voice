@@ -312,10 +312,14 @@ export default function BillDetailScreen() {
   // Asked for, never automatic. Writing a brief means reading the whole
   // document, so it is a choice the reader makes rather than a cost of
   // opening the screen.
-  const citizenBrief = useCitizenBrief(billRefData?.reference?.id, {
-    initialBrief: billRefData?.reference?.citizenBriefSections ?? null,
-    initialState: billRefData?.reference?.briefState ?? 'idle',
-  });
+  /*
+   * THE BUTTON IS ALWAYS THE WAY IN, even when the brief is already written.
+   * Seeding this from the record made a law somebody had already asked about
+   * open with its brief on screen, which reads as the page fetching it and
+   * removes the moment a reader decides to ask. Pressing the button on a brief
+   * we already hold returns it immediately and costs nothing.
+   */
+  const citizenBrief = useCitizenBrief(billRefData?.reference?.id);
   if (!bill && billRefData?.reference?.referenceType === 'bill') {
     bill = referenceToBill(billRefData.reference);
   }

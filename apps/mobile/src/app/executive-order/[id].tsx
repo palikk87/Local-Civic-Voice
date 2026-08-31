@@ -150,10 +150,14 @@ export default function ExecutiveOrderDetailScreen() {
   // Asked for, never automatic. Writing a brief means reading the whole
   // document, so it is a choice the reader makes rather than a cost of
   // opening the screen.
-  const citizenBrief = useCitizenBrief(refData?.reference?.id, {
-    initialBrief: refData?.reference?.citizenBriefSections ?? null,
-    initialState: refData?.reference?.briefState ?? 'idle',
-  });
+  /*
+   * THE BUTTON IS ALWAYS THE WAY IN, even when the brief is already written.
+   * Seeding this from the record made a law somebody had already asked about
+   * open with its brief on screen, which reads as the page fetching it and
+   * removes the moment a reader decides to ask. Pressing the button on a brief
+   * we already hold returns it immediately and costs nothing.
+   */
+  const citizenBrief = useCitizenBrief(refData?.reference?.id);
 
   // Mirror the server's record of my vote so every card for this law agrees.
   const serverUserVote = refData?.reference?.userVote;

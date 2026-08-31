@@ -1691,6 +1691,28 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
   const row = await briefOwner(requestedId);
   if (!row) return c.json({ error: "Reference not found" }, 404);
 
+  /*
+   * WHO ASKED FOR THIS BRIEF.
+   *
+   * This is the only route in the platform that can spend money on a model, and
+   * "it started by itself" is a claim nobody could check: a page that REPORTS a
+   * brief being written looks exactly like a page that STARTED one. Reported as
+   * "its auto fetching the citizen brief", and reading the code could only
+   * establish that nothing in it does that — which is not the same as proof.
+   *
+   * So every arrival here says so, in the log, with enough to settle it: which
+   * record, whether a signed-in person or an anonymous reader, where the click
+   * came from, and whether this call could actually cause a write. No names,
+   * no addresses — a user id that the admin log already carries, and nothing
+   * more. It costs nothing and it turns an argument into a fact.
+   */
+  console.log(
+    `[Brief] asked for ${row.id}` +
+      ` by ${c.get("user")?.id ?? "an anonymous reader"}` +
+      ` from ${c.req.header("referer") ?? "an unnamed page"}` +
+      ` (force=${c.req.query("force") === "true"})`,
+  );
+
   // Everything below writes to and reads from the surviving record, so two
   // filings of one law share one brief and one model call.
   const referenceId = row.id;

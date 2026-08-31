@@ -29,6 +29,7 @@
  */
 
 import { prisma } from "../prisma";
+import { storedPortrait } from "../data/portraits";
 import { lookupPortrait } from "./reference-attribution";
 
 export interface JusticeTenure {
@@ -308,9 +309,27 @@ export async function benchOn(when: Date): Promise<SeatedJustice[]> {
   const seen = new Set<string>();
   const bench = rows
     .filter((row) => !seen.has(row.name) && seen.add(row.name))
-    .map((row) => ({ name: row.name, photoUrl: row.photoUrl }));
+    .map((row) => ({
+      name: row.name,
+      /*
+       * THE FACE COMES FROM THE SHELF, NOT FROM THE NETWORK.
+       *
+       * This used to read the column alone, and that column was filled by a
+       * Wikipedia lookup — the same lookup that gets rate-limited. So the
+       * column stayed null and the bench rendered as a row of initials on
+       * every per curiam ruling: "why aren't photos actually appearing on
+       * SCOTUS rulings?"
+       *
+       * Every justice since 1789 is now held in data/portraits, so a name is
+       * answered from memory with no request and nothing to be throttled by.
+       * The stored column still wins where somebody filled it, because that is
+       * a fact about this record; the shelf is what answers for everyone else.
+       */
+      photoUrl: row.photoUrl ?? storedPortrait(row.name),
+    }));
 
-  // Whoever reads this next gets the faces. This reader does not wait.
+  // Only somebody the shelf does not hold — a justice sworn in since this was
+  // built — is ever looked up, and the reader never waits for it.
   ensureBenchPortraits(bench);
   return bench;
 }

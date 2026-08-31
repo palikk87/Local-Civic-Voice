@@ -1,5 +1,6 @@
 // Web port of mobile/src/components/ReferenceSearchModal.tsx
 import { useState, useCallback, useEffect } from "react";
+import { ReferenceQuickViewBody } from "@/components/civic/ReferenceQuickView";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { X, Search, FileText, Scale, Gavel, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
@@ -48,6 +49,8 @@ export default function ReferenceSearchModal({
 }: ReferenceSearchModalProps) {
   const [activeTab, setActiveTab] = useState<ReferenceType>("bill");
   const [searchQuery, setSearchQuery] = useState("");
+  // Which result is open in the quick view, if any.
+  const [quickViewId, setQuickViewId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [references, setReferences] = useState<GovernmentReference[]>([]);
   const [hasError, setHasError] = useState(false);
@@ -173,7 +176,24 @@ export default function ReferenceSearchModal({
   };
 
   // The picker itself. Identical either way — only the frame around it differs.
-  const panel = (
+  /*
+   * READING A LAW REPLACES THE LIST, IT DOES NOT COVER IT.
+   *
+   * This picker is already a dialog on its own screen and an inline panel
+   * inside the composer, so the details go WHERE THE LIST IS, with a way back.
+   * The search and everything typed into it are untouched underneath.
+   */
+  const panel = quickViewId ? (
+    <div className="flex-1 overflow-y-auto p-4">
+      <button
+        onClick={() => setQuickViewId(null)}
+        className="mb-3 text-sm font-medium text-amber-400 underline-offset-2 hover:underline"
+      >
+        ← Back to results
+      </button>
+      <ReferenceQuickViewBody referenceId={quickViewId} />
+    </div>
+  ) : (
     <>
         {/* Search Input */}
         <div className="px-4 py-3 shrink-0">
@@ -267,10 +287,18 @@ export default function ReferenceSearchModal({
           ) : (
             <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-5">
               {references.map((item) => (
+                /*
+                 * TWO THINGS TO DO WITH A RESULT, so it cannot be one button.
+                 *
+                 * Attaching a law to a post and reading the law are different
+                 * acts, and picking the wrong one used to cost you the search.
+                 * A button cannot contain a button, so the row is a container
+                 * and each act is its own control.
+                 */
+                <div key={item.id} className="border-b border-slate-800">
                 <button
-                  key={item.id}
                   onClick={() => handleSelectReference(item)}
-                  className="w-full p-4 border-b border-slate-800 hover:bg-slate-800/50 transition-colors text-left"
+                  className="w-full p-4 pb-2 hover:bg-slate-800/50 transition-colors text-left"
                 >
                   <div className="flex items-start">
                     <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mr-3 shrink-0">
@@ -304,6 +332,15 @@ export default function ReferenceSearchModal({
                     </div>
                   </div>
                 </button>
+                <div className="px-4 pb-3">
+                  <button
+                    onClick={() => setQuickViewId(item.id)}
+                    className="text-sm font-medium text-amber-400 underline-offset-2 hover:underline"
+                  >
+                    See details
+                  </button>
+                </div>
+                </div>
               ))}
             </MotionDiv>
           )}

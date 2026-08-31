@@ -45,9 +45,9 @@ export function useLibraryBrief(
   });
 
   const referenceId = resolve.data?.reference?.id ?? null;
-  const brief = useCitizenBrief(referenceId, {
-    initialState: resolve.data?.reference?.briefState ?? "idle",
-  });
+  // Idle, always. The button is the way in here too — see ReferenceDetail for
+  // why, and note that a brief already written comes back instantly and free.
+  const brief = useCitizenBrief(referenceId);
 
   return {
     ...brief,

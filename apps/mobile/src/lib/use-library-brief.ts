@@ -56,9 +56,14 @@ export function useLibraryBrief(
   });
 
   const referenceId = resolve.data?.reference?.id ?? null;
-  const brief = useCitizenBrief(referenceId, {
-    initialState: resolve.data?.reference?.briefState ?? "idle",
-  });
+  /*
+   * THE BUTTON IS ALWAYS THE WAY IN, even when the brief is already written.
+   * Seeding this from the record made a law somebody had already asked about
+   * open with its brief on screen, which reads as the page fetching it and
+   * removes the moment a reader decides to ask. Pressing the button on a brief
+   * we already hold returns it immediately and costs nothing.
+   */
+  const brief = useCitizenBrief(referenceId);
 
   return {
     ...brief,

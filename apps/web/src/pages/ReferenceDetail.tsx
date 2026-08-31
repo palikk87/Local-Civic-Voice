@@ -198,13 +198,25 @@ export default function ReferenceDetail() {
 
   const reference = data?.reference;
 
-  // The brief is asked for, not started by opening the page. Seeded with
-  // whatever the record already holds, so a law somebody has already asked
-  // about shows its brief immediately and costs nothing.
-  const citizenBrief = useCitizenBrief(reference?.id, {
-    initialBrief: reference?.citizenBriefSections ?? null,
-    initialState: reference?.briefState ?? "idle",
-  });
+  /*
+   * THE BUTTON IS ALWAYS THE WAY IN, EVEN WHEN THE BRIEF IS ALREADY WRITTEN.
+   *
+   * This used to be seeded with whatever the record held, so a law somebody had
+   * already asked about opened with its brief on the screen. That reads as the
+   * page having fetched it — "anything that I open that's already on the server
+   * wants to auto display the brief" — and it quietly removes the one moment
+   * where a reader decides to ask.
+   *
+   * Khalid: "the interactive nature of clicking the button is very valuable to
+   * the user experience. so whether we have the brief or not that button always
+   * has to be clicked before loading."
+   *
+   * So the card always starts idle. Pressing the button on a law we already
+   * hold a brief for returns it from the record immediately and costs nothing —
+   * the server writes one only when there is none. Nobody pays twice, and
+   * nobody is handed something they did not ask for.
+   */
+  const citizenBrief = useCitizenBrief(reference?.id);
 
   // WHO DECIDED THIS LAW, and the face to put beside their name.
   //

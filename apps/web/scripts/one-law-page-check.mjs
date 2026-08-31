@@ -411,8 +411,14 @@ try {
     const text = await screen(page);
     check("AN EXECUTIVE ORDER NAMES THE PRESIDENT WHO SIGNED IT",
       text.includes(`Signed by ${PRESIDENT}`), text.slice(0, 200).replace(/\n/g, " | "));
-    check("…and his portrait is on the page",
-      (await page.locator(`img[src="${PORTRAIT}"]`).count()) > 0);
+    // OUR copy of the face, not the one stored on the row. Every President is
+    // held locally, and a stored Wikimedia URL sends each reader's browser to a
+    // host that rate-limits us — so the shelf wins. The seeded PORTRAIT below
+    // is what the row carries; what must be ON THE PAGE is ours.
+    check("…and his portrait is on the page, served by us",
+      (await page.locator('img[src*="/api/portraits/"]').count()) > 0,
+      await page.locator("img").evaluateAll((els) =>
+        els.map((e) => e.getAttribute("src")).filter(Boolean).join(" , ").slice(0, 200)));
     await context.close();
   }
 
