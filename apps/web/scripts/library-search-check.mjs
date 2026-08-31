@@ -256,7 +256,7 @@ await page.waitForTimeout(1500);
 const sharePanel = await page.evaluate(() => document.body.innerText);
 check(
   "and it opens the same share panel the feed opens",
-  /share to (your )?timeline/i.test(sharePanel) && /send|message|copy/i.test(sharePanel),
+  /share to (your timeline|my voice)/i.test(sharePanel) && /send|message|copy/i.test(sharePanel),
   sharePanel.slice(0, 200).replace(/\n/g, " | "),
 );
 // THE POINT THAT HAS NOT CHANGED. Opening a way to share is not sharing, and

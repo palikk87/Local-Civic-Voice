@@ -818,7 +818,7 @@ export default function TimelineScreen() {
       <div className="max-w-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-1 py-3 mb-2">
-          <h1 className="text-2xl font-bold text-white">Timeline</h1>
+          <h1 className="text-2xl font-bold text-white">My Voice</h1>
           <div className="flex items-center gap-2">
             {/* Global Pulse */}
             <button

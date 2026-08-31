@@ -95,7 +95,7 @@ export function ShareToTimeline({
     }
 
     if (!isAuthenticated) {
-      openAuth("Sign in to share this to your timeline");
+      openAuth("Sign in to share this to My Voice");
       return;
     }
 
@@ -138,7 +138,7 @@ export function ShareToTimeline({
       type="button"
       onClick={share}
       disabled={resolving}
-      aria-label={`Share ${target.title} to your timeline`}
+      aria-label={`Share ${target.title} to My Voice`}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
         "text-muted-foreground transition-colors hover:bg-accent/15 hover:text-accent",

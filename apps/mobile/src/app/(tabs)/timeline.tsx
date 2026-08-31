@@ -972,7 +972,7 @@ function TimelineFeed() {
       <SafeAreaView edges={['top']} className="flex-1">
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3">
-          <Text className="text-2xl font-bold text-white">Timeline</Text>
+          <Text className="text-2xl font-bold text-white">My Voice</Text>
           <View className="flex-row items-center">
             {/* Global Pulse */}
             <Pressable

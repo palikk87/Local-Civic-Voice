@@ -76,7 +76,7 @@ export default function ShareModal({
     : content?.type ?? 'text';
 
   const handleShareToTimeline = async () => {
-    if (!requireAuth('Sign in to share to your timeline.')) return;
+    if (!requireAuth('Sign in to share to My Voice.')) return;
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShareError(null);
@@ -203,7 +203,7 @@ export default function ShareModal({
                   shareTarget === 'timeline' ? 'text-amber-500' : 'text-slate-400'
                 )}
               >
-                Timeline
+                My Voice
               </Text>
             </Pressable>
 
@@ -290,7 +290,7 @@ export default function ShareModal({
                     isSharing ? 'text-slate-400' : 'text-slate-900'
                   )}
                 >
-                  {isSharing ? 'Sharing…' : 'Share to Timeline'}
+                  {isSharing ? 'Sharing…' : 'Share to My Voice'}
                 </Text>
               </Pressable>
             </Animated.View>

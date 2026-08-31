@@ -61,7 +61,7 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
    * Words are optional — putting a law in front of people is the act.
    */
   const handleShareToTimeline = async () => {
-    if (!requireAuth("Sign in to share to your timeline.")) return;
+    if (!requireAuth("Sign in to share to My Voice.")) return;
 
     setSharing(true);
     try {
@@ -72,7 +72,7 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
       }
       setOpinion("");
       onClose();
-      toast.success("Shared to your timeline");
+      toast.success("Shared to My Voice");
     } catch {
       toast.error("That didn't post. Try again in a moment.");
     } finally {
@@ -217,7 +217,7 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
                   shareTarget === "timeline" ? "text-amber-500" : "text-slate-400"
                 )}
               >
-                Timeline
+                My Voice
               </span>
             </button>
 
@@ -273,7 +273,7 @@ export default function ShareModal({ visible, onClose, post, content }: ShareMod
                 className="mt-4 w-full bg-amber-500 py-4 rounded-xl flex items-center justify-center hover:bg-amber-400 transition-colors disabled:opacity-60"
               >
                 <Share2 size={20} color="#0F172A" />
-                <span className="text-slate-900 font-semibold text-lg ml-2">Share to Timeline</span>
+                <span className="text-slate-900 font-semibold text-lg ml-2">Share to My Voice</span>
               </button>
             </div>
           ) : null}

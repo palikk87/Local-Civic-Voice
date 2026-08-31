@@ -824,7 +824,7 @@ export default function BillDetailScreen() {
               >
                 <Share2 size={18} color="#0F172A" />
                 <Text className="text-slate-900 font-bold text-base ml-2">
-                  Share to my timeline
+                  Share to My Voice
                 </Text>
               </Pressable>
               <Text className="text-slate-500 text-xs text-center mt-2">

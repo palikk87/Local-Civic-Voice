@@ -169,7 +169,7 @@ async function firstVisit(path = "/feed", { accept = true } = {}) {
 // profile could be read end to end without seeing a single position.
 
 const DESTINATIONS = [
-  ["Timeline", "/timeline"],
+  ["My Voice", "/timeline"],
   ["Library", "/library"],
   ["Discover", "/discover"],
   ["Citizens", "/people"],

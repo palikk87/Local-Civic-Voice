@@ -481,7 +481,7 @@ export default function ReferenceDetail() {
                     masterReferenceId: reference.masterReferenceId,
                     sourceUrl: reference.sourceUrl ?? undefined,
                   }}
-                  label="Share to your timeline"
+                  label="Share to My Voice"
                   className="!bg-accent !px-4 !py-2 !text-sm !font-semibold !text-slate-900 hover:!bg-accent/90 hover:!text-slate-900"
                 />
                 <SendToSomeone reference={reference} />

@@ -336,7 +336,7 @@ try {
     check("…with their party and state", /Democrat — AZ/.test(text));
     check("THE DATES CAME ACROSS", /Introduced .*2007/.test(text) && /Last action .*2007/.test(text));
     check("THE GAP CAME ACROSS", /Gap|Congress has not voted|not enough people/i.test(text));
-    check("SHARING TO YOUR TIMELINE CAME ACROSS", /Share to your timeline/i.test(text));
+    check("SHARING TO MY VOICE CAME ACROSS", /Share to My Voice/i.test(text));
 
     // And the page's own furniture, which is why it is the one being kept.
     check("the Citizen's Brief is still here", /Citizen's Brief|Brief/i.test(text));

@@ -55,7 +55,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="timeline"
         options={{
-          title: 'Timeline',
+          title: 'My Voice',
           tabBarItemStyle: showTimeline ? undefined : { display: 'none' },
           tabBarIcon: ({ color, size }) => (
             <Newspaper size={size} color={color} strokeWidth={2} />
