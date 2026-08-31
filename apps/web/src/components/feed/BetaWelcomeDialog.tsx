@@ -3,8 +3,9 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TERMS_VERSION } from "@/lib/legal/terms";
+import { PRIVACY_VERSION } from "@/lib/legal/privacy";
 import { api } from "@/lib/api";
-import { useCurrentUser } from "@/hooks/use-civic-auth";
+import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
 
 /**
  * What version this BROWSER has accepted — for signed-out visitors only.
@@ -52,6 +53,33 @@ export function BetaWelcomeDialog() {
 
   const { isAuthenticated, isLoading } = useCurrentUser();
 
+  /**
+   * NEVER WHILE THE SIGN-IN DIALOG IS OPEN.
+   *
+   * THE BUG THIS FIXES, and it dead-ended sign-up on the live site: after the
+   * basic-information step this modal appeared ON TOP of the email-verification
+   * modal, and nothing on it worked — the checkbox would not tick, the button
+   * would not press. A new account could not get in at all.
+   *
+   * Two causes, and both are fixed here.
+   *
+   * WHY IT APPEARED. Terms acceptance moved from the browser onto the profile,
+   * so this now asks the server "has this person accepted?". A brand-new
+   * account has not, so it fired the instant sign-up created the session —
+   * while verification was still on screen. Reading localStorage hid this
+   * before, because the browser already had the key.
+   *
+   * WHY IT WAS DEAD. AuthDialog is a Radix Dialog, which is modal: it sets
+   * `pointer-events: none` on <body> and restores them only inside its own
+   * portal. This was a hand-rolled fixed div OUTSIDE that portal, so it painted
+   * on top and received nothing. Raising the z-index would not have helped —
+   * the events were never coming.
+   *
+   * So: it does not render while auth is open, full stop. Not a delay, not a
+   * z-index — there is simply never a second modal to collide with.
+   */
+  const { open: authOpen } = useAuthUI();
+
   useEffect(() => {
     // Wait for the session before deciding. Asking a signed-in person to accept
     // again, because their session had not resolved yet, is the exact "two
@@ -61,9 +89,17 @@ export function BetaWelcomeDialog() {
 
     if (isAuthenticated) {
       api
-        .get<{ acceptedVersion: string | null }>("/api/users/me/terms")
+        .get<{ acceptedVersion: string | null; privacyVersion: string | null }>(
+          "/api/users/me/terms",
+        )
         .then((answer) => {
-          if (!cancelled) setShow(answer?.acceptedVersion !== TERMS_VERSION);
+          // Either being out of date brings this back. They are recorded
+          // separately so a change to one does not silently re-ask for both,
+          // but a person who has not accepted the current pair is asked.
+          const stale =
+            answer?.acceptedVersion !== TERMS_VERSION ||
+            answer?.privacyVersion !== PRIVACY_VERSION;
+          if (!cancelled) setShow(stale);
         })
         // Unreachable server: ask rather than assume. Accepting twice costs a
         // click; assuming an agreement nobody gave costs more than that.
@@ -100,7 +136,12 @@ export function BetaWelcomeDialog() {
       // ON THE PROFILE, so it follows them to every device they ever use.
       // Fire and forget: the modal closes now either way, and a failed write
       // means they are asked once more rather than silently recorded.
-      void api.post("/api/users/me/terms", { version: TERMS_VERSION }).catch(() => undefined);
+      void api
+        .post("/api/users/me/terms", {
+          version: TERMS_VERSION,
+          privacyVersion: PRIVACY_VERSION,
+        })
+        .catch(() => undefined);
     } else {
       // No account to record it against yet.
       try {
@@ -112,6 +153,9 @@ export function BetaWelcomeDialog() {
     setShow(false);
   };
 
+  // Ordered deliberately: the auth check first, so no amount of state above can
+  // put this on screen alongside the sign-in dialog.
+  if (authOpen) return null;
   if (!show) return null;
 
   return (
@@ -159,7 +203,7 @@ export function BetaWelcomeDialog() {
             checked={agreed}
             onCheckedChange={(v) => setAgreed(v === true)}
             className="mt-0.5"
-            aria-label="I have read and agree to the Terms of Use"
+            aria-label="I have read and agree to the Terms of Use and the Privacy Policy"
           />
           <span className="text-sm text-muted-foreground">
             I have read and agree to the{" "}
@@ -170,8 +214,17 @@ export function BetaWelcomeDialog() {
               className="font-medium text-accent underline underline-offset-2"
             >
               Terms of Use
+            </a>{" "}
+            and the{" "}
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-accent underline underline-offset-2"
+            >
+              Privacy Policy
             </a>
-            .
+            , including that my information is stored in the United States.
           </span>
         </label>
 

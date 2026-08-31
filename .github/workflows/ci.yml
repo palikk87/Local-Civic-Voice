@@ -256,6 +256,18 @@ jobs:
       # The bug reporter is reachable from every page. It is how the owner
       # hands work over, so a page it cannot reach is a page nobody can report.
       - run: bun run bug-reporter-reach-check
+
+      # SIGNING UP WORKS, AND ASKS ONCE.
+      #
+      # This exists because sign-up dead-ended on the live site: the welcome
+      # dialog appeared on top of the verification step and took no clicks, so
+      # nobody could join. It is written against the geometry — never more than
+      # one full-bleed layer — so any future second modal over a modal fails
+      # here, whichever component draws it.
+      #
+      # It also pins the consent gate: the box is in the form, it names both
+      # documents, and /privacy actually says what the law requires it to.
+      - run: bun run signup-consent-check
         working-directory: apps/web
 
       # The built site must be able to say which commit it is. Without the

@@ -86,6 +86,16 @@ model User {
   termsAcceptedVersion String?
   termsAcceptedAt      DateTime?
 
+  /// THE PRIVACY POLICY, RECORDED SEPARATELY FROM THE TERMS.
+  ///
+  /// Two documents, two records, on purpose. Jordan's Personal Data Protection
+  /// Law No. 24 of 2023 requires consent to be specific to a purpose — one
+  /// combined yes cannot later say which document it was answering, and the
+  /// privacy notice is the one that will be revised most often as the platform
+  /// adds or drops a processor.
+  privacyAcceptedVersion String?
+  privacyAcceptedAt      DateTime?
+
   /// WHEN THEY ASKED TO BE GONE, if they are not gone yet.
   ///
   /// Closing an account is normally immediate and total. It is held only when

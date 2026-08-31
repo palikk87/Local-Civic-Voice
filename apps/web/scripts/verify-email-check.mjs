@@ -24,6 +24,11 @@
  *      another code" reports the refusal instead of claiming success.
  */
 import { launchChromium, routeApiToLocal, acceptTermsBeforeLoad } from "./chromium.mjs";
+// Read from the app's own modules so this stub cannot answer with a version
+// the app no longer considers current — which would show the dialog again and
+// look like a product bug rather than a stale fixture.
+import { TERMS_VERSION } from "../src/lib/legal/terms.ts";
+import { PRIVACY_VERSION } from "../src/lib/legal/privacy.ts";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -89,6 +94,24 @@ const server = createServer(async (req, res) => {
   if (path.startsWith("/api/auth/get-session")) {
     return json({ user: USER, session: { id: "s1" } });
   }
+  /*
+   * THIS ACCOUNT HAS ALREADY ACCEPTED, so the consent dialog stays away.
+   *
+   * Acceptance moved from the browser to the profile, so a stubbed signed-in
+   * session with no terms record makes the welcome dialog fire — and it covers
+   * the viewport, which stopped every click in this check. The person this
+   * check is about is an existing member who has not verified their EMAIL;
+   * they accepted the Terms long ago.
+   */
+  if (path === "/api/users/me/terms") {
+    return json({
+      acceptedVersion: TERMS_VERSION,
+      acceptedAt: "2026-08-27T00:00:00.000Z",
+      privacyVersion: PRIVACY_VERSION,
+      privacyAcceptedAt: "2026-08-31T00:00:00.000Z",
+    });
+  }
+
   if (path.startsWith("/api/")) return json({ results: [], bills: [], posts: [] });
 
   let file = join(DIST, path === "/" ? "index.html" : path);
@@ -125,9 +148,22 @@ const codeBox = (page) => page.getByPlaceholder("6-digit code");
  * would be measuring the overlay rather than the banner.
  */
 async function dismissWelcome(page) {
+  // "Got it" was the old wording. The dialog asks for consent now, so it has a
+  // checkbox and an "Agree & continue" — a helper still hunting for the old
+  // label silently does nothing and leaves the overlay eating every click.
+  // Both are tried, so this keeps working whichever is on screen.
   const gotIt = page.getByRole("button", { name: "Got it" });
   if ((await gotIt.count()) > 0) {
     await gotIt.first().click();
+    await page.waitForTimeout(400);
+    return;
+  }
+
+  const agree = page.getByRole("button", { name: /agree & continue/i });
+  if ((await agree.count()) > 0) {
+    const box = page.getByRole("checkbox").first();
+    if ((await box.count()) > 0) await box.click();
+    await agree.first().click();
     await page.waitForTimeout(400);
   }
 }

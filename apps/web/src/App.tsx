@@ -26,6 +26,7 @@ const Constitution = lazy(() => import("./pages/Constitution"));
 const BillOfRights = lazy(() => import("./pages/BillOfRights"));
 const ArticleV = lazy(() => import("./pages/ArticleV"));
 const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Auth = lazy(() => import("./pages/Auth"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -119,6 +120,7 @@ const App = () => (
               {/* Article IV. Reachable signed out too: a decided case is public. */}
               <Route path="/jury/:id" element={<JuryCasePage />} />
               <Route path="/terms" element={<Terms />} />
+              <Route path="/privacy" element={<Privacy />} />
               <Route path="/trending" element={<Trending />} />
               <Route path="/search" element={<Search />} />
 

@@ -49,6 +49,15 @@ async function acceptTerms(cookie: string, version: string) {
   });
 }
 
+/** Whatever the caller passes, verbatim — including nothing at all. */
+async function accept(cookie: string, body: Record<string, unknown>) {
+  return fetch(`${BASE_URL}/api/users/me/terms`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Cookie: cookie, ...freshClientHeaders() },
+    body: JSON.stringify(body),
+  });
+}
+
 beforeAll(async () => {
   await startServer();
 });
@@ -163,5 +172,81 @@ describe("who may write it", () => {
     const person = await citizen();
     const response = await acceptTerms(person.cookie, "");
     expect(response.status).toBe(400);
+  });
+});
+
+describe("the privacy policy is recorded separately", () => {
+  /*
+   * TWO DOCUMENTS, TWO RECORDS. Jordan's Personal Data Protection Law No. 24 of
+   * 2023 wants consent specific to a purpose, and a single combined yes cannot
+   * say afterwards which document it answered. The privacy notice is also the
+   * one that will change most often, as processors are added or dropped, so it
+   * has to be able to re-prompt on its own.
+   */
+  test("BOTH ARE WRITTEN when sign-up sends both", async () => {
+    const person = await citizen();
+
+    const response = await accept(person.cookie, {
+      version: "2026-08-28",
+      privacyVersion: "2026-08-31.1",
+    });
+    expect(response.status).toBe(200);
+
+    const row = await prisma.user.findUniqueOrThrow({
+      where: { id: person.userId },
+      select: {
+        termsAcceptedVersion: true,
+        termsAcceptedAt: true,
+        privacyAcceptedVersion: true,
+        privacyAcceptedAt: true,
+      },
+    });
+    expect(row.termsAcceptedVersion).toBe("2026-08-28");
+    expect(row.privacyAcceptedVersion).toBe("2026-08-31.1");
+    expect(row.termsAcceptedAt).not.toBeNull();
+    expect(row.privacyAcceptedAt).not.toBeNull();
+  });
+
+  test("and both read back", async () => {
+    const person = await citizen();
+    await accept(person.cookie, { version: "2026-08-28", privacyVersion: "2026-08-31.1" });
+
+    const { body } = await readTerms(person.cookie);
+    expect(body.acceptedVersion).toBe("2026-08-28");
+    expect(body.privacyVersion).toBe("2026-08-31.1");
+  });
+
+  test("RECORDING ONE DOES NOT BLANK THE OTHER", async () => {
+    /*
+     * The bug an unconditional write would cause: accepting a revised privacy
+     * notice would silently erase the record of the Terms this person had
+     * already agreed to, and nothing on screen would say so.
+     */
+    const person = await citizen();
+    await accept(person.cookie, { version: "2026-08-28", privacyVersion: "2026-08-31.1" });
+
+    await accept(person.cookie, { privacyVersion: "2027-02-01" });
+
+    const row = await prisma.user.findUniqueOrThrow({
+      where: { id: person.userId },
+      select: { termsAcceptedVersion: true, privacyAcceptedVersion: true },
+    });
+    expect(row.privacyAcceptedVersion).toBe("2027-02-01");
+    expect(row.termsAcceptedVersion).toBe("2026-08-28");
+  });
+
+  test("a body naming neither document is refused", async () => {
+    // A caller that has lost track of what it is recording. Writing nothing and
+    // returning success would look exactly like having recorded something.
+    const person = await citizen();
+    const response = await accept(person.cookie, {});
+    expect(response.status).toBe(400);
+  });
+
+  test("a new account has accepted neither", async () => {
+    const person = await citizen();
+    const { body } = await readTerms(person.cookie);
+    expect(body.acceptedVersion).toBeNull();
+    expect(body.privacyVersion).toBeNull();
   });
 });

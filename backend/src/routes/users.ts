@@ -1182,34 +1182,64 @@ usersRouter.get("/me/terms", async (c) => {
 
   const me = await prisma.user.findUnique({
     where: { id: currentUser.id },
-    select: { termsAcceptedVersion: true, termsAcceptedAt: true },
+    select: {
+      termsAcceptedVersion: true,
+      termsAcceptedAt: true,
+      privacyAcceptedVersion: true,
+      privacyAcceptedAt: true,
+    },
   });
 
   return c.json({
     acceptedVersion: me?.termsAcceptedVersion ?? null,
     acceptedAt: me?.termsAcceptedAt?.toISOString() ?? null,
+    privacyVersion: me?.privacyAcceptedVersion ?? null,
+    privacyAcceptedAt: me?.privacyAcceptedAt?.toISOString() ?? null,
   });
 });
 
-const acceptTermsSchema = z.object({
-  /** The version string the client displayed. Recorded verbatim. */
-  version: z.string().min(1).max(64),
-});
+const acceptTermsSchema = z
+  .object({
+    /** The Terms version the client displayed. Recorded verbatim. */
+    version: z.string().min(1).max(64).optional(),
+    /** The privacy policy version, if one was shown alongside it. */
+    privacyVersion: z.string().min(1).max(64).optional(),
+  })
+  // One of them, at least. An empty body is a caller that has lost track of
+  // what it is recording, and silently writing nothing would look like success.
+  .refine((data) => Boolean(data.version || data.privacyVersion), {
+    message: "Send the version of at least one document being accepted.",
+    path: ["version"],
+  });
 
 usersRouter.post("/me/terms", zValidator("json", acceptTermsSchema), async (c) => {
   const currentUser = c.get("user");
   if (!currentUser) return c.json({ error: "Authentication required" }, 401);
 
-  const { version } = c.req.valid("json");
+  const { version, privacyVersion } = c.req.valid("json");
+  const now = new Date();
 
   await prisma.user.update({
     where: { id: currentUser.id },
+    // Only what was actually sent. A caller recording one document must not
+    // silently blank the other's date, which is what an unconditional write
+    // would do.
+    //
     // The time is set fresh on every acceptance. Somebody agreeing to a new
     // version agreed to it today, not on the day they agreed to the last one.
-    data: { termsAcceptedVersion: version, termsAcceptedAt: new Date() },
+    data: {
+      ...(version ? { termsAcceptedVersion: version, termsAcceptedAt: now } : {}),
+      ...(privacyVersion
+        ? { privacyAcceptedVersion: privacyVersion, privacyAcceptedAt: now }
+        : {}),
+    },
   });
 
-  return c.json({ success: true, acceptedVersion: version });
+  return c.json({
+    success: true,
+    acceptedVersion: version ?? null,
+    privacyVersion: privacyVersion ?? null,
+  });
 });
 
 /**

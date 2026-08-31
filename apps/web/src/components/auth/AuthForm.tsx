@@ -21,6 +21,9 @@ import { HumanCheck, useHumanCheck } from "@/components/auth/HumanCheck";
 import { VerifyEmailStep } from "./VerifyEmailStep";
 import { DistrictStep } from "./DistrictStep";
 import { api } from "@/lib/api";
+import { Checkbox } from "@/components/ui/checkbox";
+import { TERMS_VERSION } from "@/lib/legal/terms";
+import { PRIVACY_VERSION } from "@/lib/legal/privacy";
 import { isUnreachable } from "@/lib/request-failure";
 
 type Mode = "signin" | "signup";
@@ -65,6 +68,16 @@ export function AuthForm({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  /**
+   * AGREEMENT IS GIVEN HERE, ONCE, AS PART OF JOINING.
+   *
+   * It used to be asked on the next screen, in a modal, after the account
+   * already existed — which meant somebody had created an account before being
+   * asked, and the modal landed on top of the verification step and could not
+   * be clicked at all. Asking in the form is both the fix and the honest order:
+   * you agree, and THEN the account is made.
+   */
+  const [agreedToLegal, setAgreedToLegal] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -97,6 +110,8 @@ export function AuthForm({
     if (!password) return "Please enter your password.";
     if (isSignup && password !== confirmPassword)
       return "Passwords do not match.";
+    if (isSignup && !agreedToLegal)
+      return "Please read and agree to the Terms of Use and Privacy Policy.";
     return null;
   }
 
@@ -140,6 +155,26 @@ export function AuthForm({
     } catch (e) {
       usernameError =
         e instanceof Error ? e.message : "That username is taken.";
+    }
+
+    // WHAT THEY AGREED TO, ON THEIR PROFILE, WITH THE VERSIONS.
+    //
+    // Recorded against the account rather than the browser, so it follows them
+    // to a new device instead of being asked again — and so a record exists at
+    // all, which is what an agreement is for. Both documents, separately, so a
+    // later change to one can re-prompt without re-opening the other.
+    //
+    // The account exists and is signed in by this point, so a failure here is
+    // worth surfacing rather than swallowing: it means the agreement they just
+    // gave was not written down.
+    try {
+      await api.post("/api/users/me/terms", {
+        version: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+      });
+    } catch {
+      // Not fatal to the sign-up — the account is made and they are in. The
+      // consent modal will ask once more next time rather than assume.
     }
 
     await queryClient.invalidateQueries();
@@ -413,6 +448,47 @@ export function AuthForm({
 
         {isSignup && showFoundingDocs ? (
           <div className="border-t border-border/60 pt-4">
+            {/*
+              THE CONSENT GATE, in the form rather than in a modal afterwards.
+
+              Two documents named separately even though one tick covers both,
+              because a person is entitled to know they are agreeing to two
+              things. The versions of both are recorded on the account when it
+              is created — see handleSignUp.
+
+              Opens in a new tab so reading them does not lose the half-filled
+              form behind it.
+            */}
+            <label className="mb-4 flex cursor-pointer items-start gap-3">
+              <Checkbox
+                checked={agreedToLegal}
+                onCheckedChange={(v) => setAgreedToLegal(v === true)}
+                className="mt-0.5"
+                aria-label="I have read and agree to the Terms of Use and the Privacy Policy"
+              />
+              <span className="text-xs leading-relaxed text-muted-foreground">
+                I have read and agree to the{" "}
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-accent underline underline-offset-2"
+                >
+                  Terms of Use
+                </a>{" "}
+                and the{" "}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-accent underline underline-offset-2"
+                >
+                  Privacy Policy
+                </a>
+                , including that my information is stored in the United States.
+              </span>
+            </label>
+
             <p className="mb-3 text-center text-xs text-muted-foreground">
               By joining, you agree to operate under our
             </p>
