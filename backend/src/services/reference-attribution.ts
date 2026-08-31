@@ -31,7 +31,7 @@
  */
 
 import { prisma } from "../prisma";
-import { presidentOn, storedPortrait } from "../data/portraits";
+import { presidentOn, storedPortrait, surnameOf } from "../data/portraits";
 
 export interface Attribution {
   name: string;
@@ -69,12 +69,33 @@ export function presidentAttribution(
   name: string | null | undefined,
   signedDate?: Date | string | null,
 ): Attribution | null {
-  const trimmed = name?.trim();
-  if (trimmed) return { name: trimmed, role: "Signed by", photoUrl: null };
-
   const term = presidentOn(signedDate);
-  if (!term) return null;
-  return { name: term.name, role: "Signed by", photoUrl: term.photoUrl };
+  const trimmed = name?.trim();
+  if (!trimmed) {
+    return term ? { name: term.name, role: "Signed by", photoUrl: term.photoUrl } : null;
+  }
+
+  /*
+   * THE NAME AND THE FACE COME FROM DIFFERENT PLACES, ON PURPOSE.
+   *
+   * A stored name is what the government itself printed on the document, so it
+   * is what we print. But it is not always the name our list files him under:
+   * the Federal Register says "William J. Clinton" where the portrait list says
+   * "Bill Clinton", and those are one man.
+   *
+   * The date already told us WHO held the office that day, and that is a
+   * stronger identifier than either spelling. So when the stored name and the
+   * term agree on a surname, the term supplies the face — which is how "William
+   * J. Clinton" gets Bill Clinton's portrait without either name matching the
+   * other. Where they disagree, we do not reconcile them: a name lookup is
+   * tried, and failing that the record shows a name with no face.
+   */
+  const sameMan = term && surnameOf(trimmed) === surnameOf(term.name);
+  return {
+    name: trimmed,
+    role: "Signed by",
+    photoUrl: (sameMan ? term.photoUrl : null) ?? storedPortrait(trimmed),
+  };
 }
 
 /**

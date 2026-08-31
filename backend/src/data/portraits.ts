@@ -128,6 +128,15 @@ export const PRESIDENT_PORTRAITS: PresidentPortrait[] = portraits.presidents.map
  * the Court's own roster says "John G. Roberts Jr.". Surname plus first initial
  * survives all three.
  */
+export function surnameOf(full: string): string | null {
+  const cleaned = full
+    .replace(/\b(jr|sr|ii|iii|iv)\b\.?/gi, "")
+    .replace(/[^A-Za-z\s]/g, " ")
+    .trim();
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1]!.toLowerCase() : null;
+}
+
 function key(full: string): string | null {
   const cleaned = full
     .replace(/\b(jr|sr|ii|iii|iv)\b\.?/gi, "")

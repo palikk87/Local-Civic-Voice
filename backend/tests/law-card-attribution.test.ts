@@ -131,36 +131,53 @@ async function listAttribution(id: string): Promise<Attribution | null | undefin
 }
 
 describe("an executive order names the President who signed it", () => {
-  test("with the portrait resolved at sync time", async () => {
+  test("with the portrait we hold, in preference to one stored from the web", async () => {
     const id = await record({
       id: "eo-test-obama",
       referenceType: "executive_order",
       sponsorName: "Barack Obama",
-      // What the background pass stored, once, from Wikipedia. A President who
-      // has left office is not on the roster of current officials.
+      // What an earlier background pass stored, once, from Wikipedia.
       sponsorPhotoUrl: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/obama.jpg",
     });
 
     const attribution = await detailAttribution(id);
     expect(attribution?.name).toBe("Barack Obama");
     expect(attribution?.role).toBe("Signed by");
-    expect(attribution?.photoUrl).toBe(
-      "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/obama.jpg",
-    );
+    // OUR copy wins. The stored URL sends every reader's browser to Wikimedia,
+    // which is the traffic that got this platform rate-limited; the file we
+    // hold is the same man and costs an outside request nothing.
+    expect(attribution?.photoUrl).toContain("/api/portraits/");
 
     // The same answer through the list, because a reader can arrive either way.
     expect(await listAttribution(id)).toEqual(attribution!);
   });
 
-  test("and shows the name alone when no portrait has been found", async () => {
+  test("every President has a face, including one who left office in 1885", async () => {
     const id = await record({
-      id: "eo-test-unknown",
+      id: "eo-test-arthur",
       referenceType: "executive_order",
       sponsorName: "Chester A. Arthur",
     });
 
     const attribution = await detailAttribution(id);
     expect(attribution?.name).toBe("Chester A. Arthur");
+    expect(attribution?.role).toBe("Signed by");
+    // The set of people who can ever sign an order is closed and small, and
+    // all of them are held, so "we could not find a portrait" is not an answer
+    // this path gives for anybody who actually held the office.
+    expect(attribution?.photoUrl).toContain("/api/portraits/");
+  });
+
+  test("and shows the name alone for somebody who never held the office", async () => {
+    const id = await record({
+      id: "eo-test-unknown",
+      referenceType: "executive_order",
+      // Burr was Vice President and never President, so he is not in the list.
+      sponsorName: "Aaron Burr",
+    });
+
+    const attribution = await detailAttribution(id);
+    expect(attribution?.name).toBe("Aaron Burr");
     expect(attribution?.role).toBe("Signed by");
     // Null, not a placeholder standing in for a human being.
     expect(attribution?.photoUrl).toBeNull();

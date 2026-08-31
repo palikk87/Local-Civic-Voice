@@ -96,19 +96,38 @@ describe("nothing is invented when the person is not known", () => {
     expect(justiceAttribution(undefined)).toBeNull();
   });
 
-  test("the portrait is never built here — it is looked up once and stored", () => {
-    // There is deliberately no roster lookup in this file any more. A list of
-    // current office-holders is wrong the day somebody leaves, and this
-    // platform carries fifty years of law.
+  test("a face we already hold is answered from memory, never fetched", () => {
+    // There is still no roster of CURRENT office-holders here — that is wrong
+    // the day somebody leaves, and this platform carries fifty years of law.
+    // What there is instead is every president and every justice since 1789,
+    // downloaded once, so a face costs nothing and no reader waits for it.
+    const ford = presidentAttribution("Gerald R. Ford");
+    expect(ford?.name).toBe("Gerald R. Ford");
+    expect(ford?.role).toBe("Signed by");
+    expect(ford?.photoUrl).toContain("/api/portraits/");
+  });
+
+  test("somebody we do not hold gets a name and no face, never a guess", () => {
+    // Learned Hand sat on the Second Circuit and never on the Supreme Court,
+    // so he is not in the list and nothing is invented for him.
     expect(justiceAttribution("Learned Hand")).toEqual({
       name: "Learned Hand",
       role: "Majority opinion by",
       photoUrl: null,
     });
-    expect(presidentAttribution("Gerald R. Ford")).toEqual({
-      name: "Gerald R. Ford",
-      role: "Signed by",
-      photoUrl: null,
-    });
+  });
+
+  test("a spelling the portrait list does not use still finds the right man", () => {
+    // The Federal Register prints "William J. Clinton"; the portrait list files
+    // him as "Bill Clinton". The signing date says who held the office, and
+    // that is a better identifier than either spelling.
+    const stored = presidentAttribution("William J. Clinton", "1994-01-15");
+    expect(stored?.name).toBe("William J. Clinton");
+    expect(stored?.photoUrl).toContain("/api/portraits/");
+    // But a name that disagrees with the date keeps its OWN face, not the
+    // date's — we show what we were given rather than swapping a man out.
+    const wrong = presidentAttribution("Abraham Lincoln", "1994-01-15");
+    expect(wrong?.name).toBe("Abraham Lincoln");
+    expect(wrong?.photoUrl).not.toBe(stored?.photoUrl);
   });
 });
