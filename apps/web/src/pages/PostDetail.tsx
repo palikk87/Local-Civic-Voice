@@ -227,7 +227,7 @@ export default function PostDetail() {
             onClick={() => (failure.canRetry ? refetch() : navigate("/timeline"))}
             className="mt-4 text-sm font-medium text-amber-500 hover:underline"
           >
-            {failure.canRetry ? "Try again" : "Back to the timeline"}
+            {failure.canRetry ? "Try again" : "Back to My Voice"}
           </button>
         </div>
       </AppShell>

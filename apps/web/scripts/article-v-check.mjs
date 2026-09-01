@@ -498,7 +498,22 @@ try {
 
   {
     const { context, page } = await open(ELECTOR);
-    const text = await screen(page);
+
+    // WAIT FOR THE FILING, DO NOT ASSUME open()'s 1.5 SECONDS WAS ENOUGH.
+    //
+    // The proceedings arrive from a fetch after the page has already rendered
+    // its tabs, so open()'s fixed pause is a guess about how fast the runner
+    // is. On a loaded CI machine it ran out, the block below had not appeared,
+    // and this read as "the Articles of Impeachment are missing from the page".
+    const articles = page.locator('[data-testid="articles-of-impeachment"]');
+    await articles.first().waitFor({ timeout: 25_000 });
+
+    // AND READ THE BLOCK ITSELF, NOT THE WHOLE PAGE. The words "Articles of
+    // Impeachment" also appear in the constitutional text further down, so a
+    // page-wide search passed even when no filing was rendered at all — which
+    // is how the weaker half of this group went on agreeing while the stronger
+    // half failed.
+    const text = await articles.first().innerText();
 
     check(
       "the filing is headed as Articles of Impeachment",
@@ -512,7 +527,7 @@ try {
     );
     check(
       "…as one block, not two loose paragraphs",
-      (await page.locator('[data-testid="articles-of-impeachment"]').count()) === 1,
+      (await articles.count()) === 1,
     );
     await context.close();
   }

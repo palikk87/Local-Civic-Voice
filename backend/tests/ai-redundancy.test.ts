@@ -111,6 +111,41 @@ async function generate() {
 }
 
 const listIncidents = async () => (await incidents()).listIncidents();
+
+/**
+ * WAIT FOR THE RECORD, DO NOT GUESS HOW LONG IT TAKES.
+ *
+ * Incidents are written fire-and-forget, on purpose: a reader waiting on a
+ * brief must never also wait on the bookkeeping. These tests used to sleep 300
+ * milliseconds and then look, which held on a laptop and failed on a loaded CI
+ * runner — and failed in the worst way, by finding the PREVIOUS test's incident
+ * still sitting there. A write that escaped its own test arrived after the
+ * afterEach cleanup, so the row said "rate limited" while the test asked about
+ * a 404, and the failure read like a bug in the code being tested.
+ *
+ * So: poll until the record says what it should, with a deadline. The
+ * assertions below are unchanged; only the waiting is honest now.
+ */
+type Incident = Awaited<ReturnType<IncidentModule["listIncidents"]>>[number];
+
+async function waitForIncident(
+  matches: (incident: Incident) => boolean,
+  what: string,
+  timeoutMs = 15_000,
+): Promise<Incident> {
+  const deadline = Date.now() + timeoutMs;
+  let seen: Incident[] = [];
+  while (Date.now() < deadline) {
+    seen = await listIncidents();
+    const found = seen.find(matches);
+    if (found) return found;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(
+    `No incident matching ${what} was recorded within ${timeoutMs}ms. ` +
+      `What was there: ${JSON.stringify(seen.map((i) => `${i.subject}: ${i.detail}`))}`,
+  );
+}
 const reportIncident: IncidentModule["reportIncident"] = async (report) =>
   (await incidents()).reportIncident(report);
 const modelAvailability = async () => (await ai()).modelAvailability();
@@ -181,16 +216,14 @@ describe("a dead model does not take the platform down", () => {
     const result = await generate();
     expect(result.ok).toBe(true);
 
-    // The write is fire-and-forget so the reader is never made to wait for it.
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    const dead = await waitForIncident(
+      (i) => i.subject === "gemini-3.6-flash" && i.detail.includes("not found"),
+      'gemini-3.6-flash saying "not found"',
+    );
 
-    const incidents = await listIncidents();
-    const dead = incidents.find((i) => i.subject === "gemini-3.6-flash");
-
-    expect(dead).toBeDefined();
-    expect(dead?.kind).toBe(INCIDENT_AI_MODEL);
-    expect(dead?.acknowledgedAt).toBeNull();
-    expect(dead?.detail).toContain("not found");
+    expect(dead.kind).toBe(INCIDENT_AI_MODEL);
+    expect(dead.acknowledgedAt).toBeNull();
+    expect(dead.detail).toContain("not found");
   });
 });
 
@@ -209,11 +242,12 @@ describe("no failure is invisible, whatever shape it takes", () => {
     const result = await generate();
     expect(result.ok).toBe(false);
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const named = (await listIncidents()).map((i) => i.subject);
     // The FIRST model in the chain is named, not just the roll-up.
-    expect(named).toContain("gemini-3.6-flash");
+    const named = await waitForIncident(
+      (i) => i.subject === "gemini-3.6-flash",
+      "gemini-3.6-flash, the model at the head of the chain",
+    );
+    expect(named.subject).toBe("gemini-3.6-flash");
   });
 
   test("a 400 is recorded with what was sent", async () => {
@@ -227,12 +261,13 @@ describe("no failure is invisible, whatever shape it takes", () => {
     });
 
     await generate();
-    await new Promise((resolve) => setTimeout(resolve, 300));
 
-    const row = (await listIncidents()).find((i) => i.subject === "gemini-3.6-flash");
-    expect(row).toBeDefined();
-    expect(row?.detail).toContain("400");
-    expect(row?.detail).toContain("sent generationConfig");
+    const row = await waitForIncident(
+      (i) => i.subject === "gemini-3.6-flash" && i.detail.includes("400"),
+      "gemini-3.6-flash carrying the 400",
+    );
+    expect(row.detail).toContain("400");
+    expect(row.detail).toContain("sent generationConfig");
   });
 
   test("the sampling knobs Gemini 3.x rejects are not sent", async () => {
@@ -422,9 +457,10 @@ describe("an incident stays in front of somebody until they clear it", () => {
     const result = await generate();
     expect(result.ok).toBe(false);
 
-    await new Promise((resolve) => setTimeout(resolve, 300));
-
-    const incidents = await listIncidents();
-    expect(incidents.some((i) => i.subject === "every configured model")).toBe(true);
+    const rollUp = await waitForIncident(
+      (i) => i.subject === "every configured model",
+      "the every-configured-model roll-up",
+    );
+    expect(rollUp.subject).toBe("every configured model");
   });
 });

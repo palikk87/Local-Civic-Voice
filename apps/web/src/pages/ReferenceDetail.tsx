@@ -107,7 +107,7 @@ function Conversation({ referenceId, ready }: { referenceId: string; ready: bool
     <section id="conversation" className="mt-8 scroll-mt-20">
       <h2 className="mb-1 text-lg font-bold text-foreground">What people are saying</h2>
       <p className="mb-4 text-sm text-muted-foreground">
-        Posts about this law. Reply to one, or share the law to your timeline to start your own.
+        Posts about this law. Reply to one, or share the law to My Voice to start your own.
       </p>
 
       {isLoading ? (
@@ -121,7 +121,7 @@ function Conversation({ referenceId, ready }: { referenceId: string; ready: bool
         <div className="rounded-2xl border border-border bg-secondary/30 p-6 text-center">
           <MessageSquare className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            Nobody has written about this one yet. Share it to your timeline and you will be first.
+            Nobody has written about this one yet. Share it to My Voice and you will be first.
           </p>
         </div>
       ) : (

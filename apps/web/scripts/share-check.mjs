@@ -1,5 +1,6 @@
 /**
- * Proves you can share a law to your own timeline from where you found it.
+ * Proves you can share a law to My Voice — your own timeline, which is what the
+ * route is still called — from wherever you found it.
  *
  *   bun run share-check          (after `bun run build`)
  *
@@ -208,7 +209,7 @@ await routeApiToLocal(page, base);
 await page.goto(`${base}/reference/${REFERENCE_ID}`, { waitUntil: "networkidle" });
 await page.waitForTimeout(900);
 
-const shareButton = page.getByRole("button", { name: /share .* to your timeline/i }).first();
+const shareButton = page.getByRole("button", { name: /share .* to my voice/i }).first();
 if ((await shareButton.count()) === 0 && process.env.SHARE_CHECK_DEBUG) {
   console.log("PAGE TEXT:", (await page.evaluate(() => document.body.innerText)).slice(0, 600));
   console.log("ERRORS:", pageErrors.filter((e) => !/display=swap|ERR_CONNECTION_RESET/.test(e)).slice(0, 8));
@@ -300,7 +301,7 @@ await page.waitForTimeout(900);
 
 const looks = await page.evaluate(() => {
   const share = [...document.querySelectorAll("button")].find((b) =>
-    /to your timeline/i.test(b.getAttribute("aria-label") ?? ""),
+    /to my voice/i.test(b.getAttribute("aria-label") ?? ""),
   );
   if (!share) return { missing: "share" };
 
