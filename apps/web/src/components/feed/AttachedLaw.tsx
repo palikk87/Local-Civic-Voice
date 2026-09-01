@@ -21,6 +21,7 @@
  */
 import { ChevronRight, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { recordPath } from "@/lib/record-url";
 import { toast } from "sonner";
 import { useVote } from "@/hooks/use-vote";
 import { useCurrentUser, useAuthUI } from "@/hooks/use-civic-auth";
@@ -99,14 +100,15 @@ export function AttachedLaw({
             ? "No positions taken yet"
             : `${total.toLocaleString()} community ${total === 1 ? "vote" : "votes"}`}
         </span>
-        <button
-          type="button"
-          onClick={() => navigate(`/reference/${reference.id}`)}
+        {/* A link, for the same reason as the one on the feed card: a crawler
+            follows hrefs and does not click buttons. */}
+        <Link
+          to={recordPath(reference)}
           className="inline-flex shrink-0 items-center rounded-full bg-accent/20 px-3 py-1.5 text-xs font-medium text-accent"
         >
           See details
           <ChevronRight className="ml-1 h-3 w-3" />
-        </button>
+        </Link>
       </div>
 
       {/* The bar only means something once somebody has voted. Empty rather

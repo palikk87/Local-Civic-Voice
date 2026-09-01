@@ -72,10 +72,24 @@ export interface Bill {
     checks: Array<{ id: string; label: string; met: boolean; detail: string | null }>;
   } | null;
   branch?: GovernmentBranch; // Default to 'legislative'
+  /**
+   * The readable address this record lives at: hr-10184-119, eo-14421,
+   * fuld-v-palestine-liberation-organization.
+   *
+   * Optional because a record that arrived seconds ago may not have one yet,
+   * and because it is a web concern — the phone app builds no URLs. Absent, the
+   * web falls back to /reference/<id>, which is where everything lived before.
+   */
+  slug?: string | null;
 }
 
 // Executive Order types
 export interface ExecutiveOrder {
+  /**
+   * The readable address this record lives at. Web only — the phone app builds
+   * no URLs. Absent on a record the slug backfill has not reached.
+   */
+  slug?: string | null;
   id: string;
   eoNumber: string; // e.g., "EO 14147"
   title: string;
@@ -107,6 +121,11 @@ export interface ExecutiveOrder {
 
 // Supreme Court Case types
 export interface SupremeCourtCase {
+  /**
+   * The readable address this record lives at. Web only — the phone app builds
+   * no URLs. Absent on a record the slug backfill has not reached.
+   */
+  slug?: string | null;
   id: string;
   docketNumber: string; // e.g., "22-451"
   caseName: string;

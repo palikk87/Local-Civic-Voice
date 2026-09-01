@@ -12,3 +12,9 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+# The list of pages we are asking to have indexed. Served live rather than
+# written here, so a record that earns its place at three in the morning is in
+# it at three in the morning. What earns a place is one rule, in the backend's
+# services/findable.ts.
+Sitemap: https://ayeandnay.com/sitemap.xml

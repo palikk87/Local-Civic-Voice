@@ -10,6 +10,10 @@
       "destination": "https://local-civic-voice-production.up.railway.app/api/:path*"
     },
     {
+      "source": "/sitemap.xml",
+      "destination": "https://local-civic-voice-production.up.railway.app/api/sitemap"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

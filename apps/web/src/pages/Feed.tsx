@@ -1,7 +1,8 @@
 // Web port of mobile/src/app/(tabs)/index.tsx (Home screen)
 import React, { useState, useCallback, useMemo, useEffect } from "react";
 import { RecordBadge } from "@/components/civic/RecordBadge";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { recordPath } from "@/lib/record-url";
 import {
   Heart,
   MessageCircle,
@@ -100,7 +101,9 @@ function getDetailRoute(bill: Bill): string {
   // comments, was reachable only from a profile's record. Every id here is a
   // government reference id, which is exactly what /reference/:id takes, so
   // the fork was never buying anything.
-  return `/reference/${bill.id}`;
+  // The readable address when the record has one, the cuid when it does not.
+  // One function decides this for the whole app — see lib/record-url.ts.
+  return recordPath({ id: bill.id, slug: bill.slug, branch: bill.branch });
 }
 
 function formatTimeAgo(timestamp: string): string {
@@ -690,13 +693,19 @@ function VoteButtons({ bill }: VoteButtonsProps) {
         <span className="text-xs text-slate-400">
           {bill.communityVotes.totalVoters.toLocaleString()} community votes
         </span>
-        <button
-          onClick={() => navigate(getDetailRoute(bill))}
+        {/*
+          A LINK, NOT A BUTTON. This navigated correctly for a person and was
+          invisible to a crawler, which does not click things — so no law on
+          this platform had a single followable path to it and Google had one
+          page for the whole site. Same appearance, same behaviour, real href.
+        */}
+        <Link
+          to={getDetailRoute(bill)}
           className="flex items-center bg-amber-500/20 px-3 py-1.5 rounded-full"
         >
           <span className="text-xs text-amber-500 font-medium mr-1">See details</span>
           <ChevronRight size={12} color="#F59E0B" />
-        </button>
+        </Link>
       </div>
 
       {/* Vote Progress Bar */}

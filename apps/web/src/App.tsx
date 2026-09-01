@@ -67,12 +67,13 @@ const Search = lazy(() => import("./pages/Search"));
  * carousel read `mockNewsReels`, a hand-written list of invented clips with
  * fake video URLs. It is not a feature, and it is not coming with us.
  *
- * The routes live on as redirects, in LawRedirect, because links to them exist
- * in notifications and in posts people have already shared.
+ * Those three routes are the CANONICAL ones now — /executive-order/eo-14421 is
+ * what a person types and what a search engine indexes, while /reference/<cuid>
+ * matched no query anybody ever entered. Both serve this same page; the branch
+ * URL is named canonical, so the two do not compete.
  */
 const UserProfile = lazy(() => import("./pages/UserProfile"));
 const PersonRecord = lazy(() => import("./pages/PersonRecord"));
-const LawRedirect = lazy(() => import("./pages/LawRedirect"));
 const PostDetail = lazy(() => import("./pages/PostDetail"));
 const StartHere = lazy(() => import("./pages/StartHere"));
 const HashtagPage = lazy(() => import("./pages/HashtagPage"));
@@ -249,15 +250,26 @@ const App = () => (
               <Route path="/hashtag/:tag" element={<HashtagPage />} />
               <Route path="/record" element={<MyRecord />} />
               <Route path="/record/review" element={<PositionReview />} />
-              {/* One law, one page. These three were ports of the phone app,
-                  one per branch, and between them they were what almost every
-                  link in the app opened — while the page with the brief, the
-                  audit, the gap and the comments sat behind a profile's record.
-                  Kept as redirects because links to them exist in notifications
-                  and in posts people have already shared. See LawRedirect. */}
-              <Route path="/bill/:id" element={<LawRedirect />} />
-              <Route path="/executive-order/:id" element={<LawRedirect />} />
-              <Route path="/scotus/:id" element={<LawRedirect />} />
+              {/*
+                ONE LAW, ONE PAGE — AND THESE ARE ITS CANONICAL ADDRESSES.
+
+                These three were ports of the phone app, one per branch, and
+                between them they were what almost every link in the app opened,
+                while the page with the brief, the audit, the gap and the
+                comments sat behind a profile's record. They became redirects
+                into /reference/:id, which was right for the product and exactly
+                backwards for being found: the keyword-bearing address was the
+                one redirecting away.
+                /executive-order/eo-14421 is what somebody types and what a
+                search engine indexes; /reference/<cuid> matched no query ever
+                entered. Both serve the same page — a redirect would mean a
+                flash on every open and a lookup before we knew where to send
+                anybody — and ReferenceDetail names the branch URL as canonical,
+                which is how the two stop competing with each other.
+              */}
+              <Route path="/bill/:id" element={<ReferenceDetail />} />
+              <Route path="/executive-order/:id" element={<ReferenceDetail />} />
+              <Route path="/scotus/:id" element={<ReferenceDetail />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

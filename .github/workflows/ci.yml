@@ -414,6 +414,14 @@ jobs:
       - run: bun run one-law-page-check
         working-directory: apps/web
 
+      # A law can be found, followed, previewed and read WITHOUT JavaScript.
+      # Every failure this guards against compiles and typechecks perfectly —
+      # a <button> that navigates, a site-wide <title>, an SPA shell served to
+      # a crawler — so the only way to catch them is to look at what is
+      # actually handed over with scripting switched off.
+      - run: bun run findable-check
+        working-directory: apps/web
+
   mobile:
     name: mobile
     runs-on: ubuntu-latest

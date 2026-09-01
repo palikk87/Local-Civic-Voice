@@ -19,6 +19,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { VotePanel } from "@/components/civic/VotePanel";
 import { IntegrityAuditPanel } from "@/components/audit/IntegrityAuditPanel";
+import { PageMeta } from "@/components/civic/PageMeta";
+import { recordUrl } from "@/lib/record-url";
 import { OtherSide } from "@/components/civic/OtherSide";
 import { PulseHistory } from "@/components/civic/PulseHistory";
 import { TurningPoints } from "@/components/civic/TurningPoints";
@@ -235,8 +237,37 @@ export default function ReferenceDetail() {
     !!reference?.citizenBriefSections &&
     reference.citizenBriefVersion !== reference.lawVersion;
 
+  /*
+   * WHAT THIS PAGE IS, IN THE TAB AND IN A SHARED LINK.
+   *
+   * Every path on this site served the same title and the same description,
+   * written into index.html — so a law shared to a group chat showed the site's
+   * banner rather than the law's name. The title is written as the query
+   * somebody would type, not as branding.
+   *
+   * THE CANONICAL IS ALWAYS THE BRANCH ADDRESS. This page answers on both
+   * /executive-order/eo-14421 and /reference/<cuid>, because every link ever
+   * shared uses the second. Naming one of them canonical is what stops the two
+   * competing as duplicates.
+   */
+  const pageTitle = reference
+    ? `${reference.displayId ? `${reference.displayId}: ` : ""}${reference.title} — AYE & NAY`
+    : "Loading a record — AYE & NAY";
+  const pageDescription = reference
+    ? reference.citizenBriefSections?.summary ||
+      reference.description ||
+      `What ${reference.displayId || reference.title} does, who is behind it, and where the public stands on it.`
+    : undefined;
+
   return (
     <AppShell wide>
+      {reference ? (
+        <PageMeta
+          title={pageTitle}
+          description={pageDescription?.slice(0, 300)}
+          canonical={recordUrl(reference)}
+        />
+      ) : null}
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         {/* BACK MEANS BACK. This said "Back to Explore" and went to /explore
             no matter where the reader came from — the feed, their timeline, a

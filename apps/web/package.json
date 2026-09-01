@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "start": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/prerender.mjs dist",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -40,7 +40,9 @@
     "dialog-fits-check": "node scripts/dialog-fits-check.mjs dist",
     "bug-reporter-reach-check": "node scripts/bug-reporter-reach-check.mjs dist",
     "zip-district-check": "node scripts/zip-district-check.mjs dist",
-    "signup-consent-check": "node scripts/signup-consent-check.mjs"
+    "signup-consent-check": "node scripts/signup-consent-check.mjs",
+    "prerender": "node scripts/prerender.mjs dist",
+    "findable-check": "node scripts/findable-check.mjs dist"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

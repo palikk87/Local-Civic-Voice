@@ -1,7 +1,8 @@
 // Web port of ExecutiveOrderCard in webapp/mobile/src/app/(tabs)/discover.tsx
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ThumbsUp, ChevronRight } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { recordPath } from "@/lib/record-url";
 import { ShareToTimeline } from "@/components/civic/ShareToTimeline";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
 import type { ExecutiveOrder } from "@/lib/mobile/types";
@@ -20,7 +21,6 @@ export function ExecutiveOrderCard({
   eo: ExecutiveOrder;
   index: number;
 }) {
-  const navigate = useNavigate();
   const categoryColor = categoryColors[eo.category] ?? "#64748B";
 
   const status = statusColors[eo.status] || statusColors.active;
@@ -34,14 +34,18 @@ export function ExecutiveOrderCard({
       transition={{ delay: index * 0.06, type: "spring", stiffness: 260, damping: 24 }}
       className="mb-3"
     >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => navigate(`/reference/${eo.id}`)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") navigate(`/reference/${eo.id}`);
-        }}
-        className="cursor-pointer rounded-xl border border-amber-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
+      {/*
+        A LINK, NOT A DIV THAT LISTENS FOR CLICKS.
+        This was role="button" with an onClick, which navigates for a person
+        and is invisible to a crawler — a crawler follows hrefs and clicks
+        nothing. Discover is the public index of every record we hold, so a
+        card that cannot be followed means none of them can be reached. It also
+        gets the keyboard and "open in new tab" for free, which the hand-rolled
+        version had to reimplement and only half did.
+      */}
+      <Link
+        to={recordPath(eo)}
+        className="block cursor-pointer rounded-xl border border-amber-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
       >
         <div className="mb-2 flex items-start justify-between">
           <div className="flex flex-1 flex-wrap items-center">
@@ -85,7 +89,7 @@ export function ExecutiveOrderCard({
             <ChevronRight size={18} color="#64748B" />
           </div>
         </div>
-      </div>
+      </Link>
     </MotionDiv>
   );
 }

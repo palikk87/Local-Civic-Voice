@@ -313,12 +313,19 @@ try {
 
   const screen = (page) => page.evaluate(() => document.getElementById("root")?.innerText ?? "");
 
-  // ------------------------- the three retired paths still take people somewhere
+  // ---------------------- every address a record has ever had serves the page
+  //
+  // These three used to REDIRECT into /reference/:id. They are the canonical
+  // addresses now — /executive-order/eo-14421 is what a person types and what
+  // a search engine indexes, and the address that redirects away is the one
+  // that cannot be indexed. So the assertion moved from "it redirects" to the
+  // thing that actually matters and always did: a link somebody was sent still
+  // shows them the law.
   for (const old of [`/bill/${id}`, `/executive-order/${id}`, `/scotus/${id}`]) {
     const { context, page } = await open(old);
     check(
       `${old.split("/")[1]} links people have already been sent still work`,
-      page.url().endsWith(`/reference/${id}`),
+      (await screen(page)).includes(TITLE),
       page.url().replace(base, ""),
     );
     await context.close();

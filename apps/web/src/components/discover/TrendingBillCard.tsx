@@ -1,7 +1,8 @@
 // Web port of TrendingBillCard in webapp/mobile/src/app/(tabs)/discover.tsx
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Flame, ThumbsUp, Users } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { recordPath } from "@/lib/record-url";
 import { ShareToTimeline } from "@/components/civic/ShareToTimeline";
 import { useVotingStore, selectUserVote } from "@/lib/mobile/voting-store";
 import { categoryColors, categoryLabels } from "@/lib/mobile/mock-data";
@@ -9,7 +10,6 @@ import type { Bill } from "@/lib/mobile/types";
 import { cn } from "@/lib/utils";
 
 export function TrendingBillCard({ bill, index }: { bill: Bill; index: number }) {
-  const navigate = useNavigate();
   const userVote = useVotingStore(selectUserVote(bill.id));
   const categoryColor = categoryColors[bill.category] ?? "#64748B";
 
@@ -23,14 +23,18 @@ export function TrendingBillCard({ bill, index }: { bill: Bill; index: number })
       transition={{ delay: index * 0.08, type: "spring", stiffness: 260, damping: 24 }}
       className="shrink-0"
     >
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => navigate(`/reference/${bill.id}`)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
-        }}
-        className="mr-3 w-[280px] cursor-pointer rounded-xl border border-border/50 bg-card/70 p-4 transition-colors hover:bg-card"
+      {/*
+        A LINK, NOT A DIV THAT LISTENS FOR CLICKS.
+        This was role="button" with an onClick, which navigates for a person
+        and is invisible to a crawler — a crawler follows hrefs and clicks
+        nothing. Discover is the public index of every record we hold, so a
+        card that cannot be followed means none of them can be reached. It also
+        gets the keyboard and "open in new tab" for free, which the hand-rolled
+        version had to reimplement and only half did.
+      */}
+      <Link
+        to={recordPath(bill)}
+        className="block mr-3 w-[280px] cursor-pointer rounded-xl border border-border/50 bg-card/70 p-4 transition-colors hover:bg-card"
       >
         <div className="mb-2 flex items-center justify-between">
           <div className="flex items-center">
@@ -86,7 +90,7 @@ export function TrendingBillCard({ bill, index }: { bill: Bill; index: number })
             />
           </div>
         </div>
-      </div>
+      </Link>
     </MotionDiv>
   );
 }

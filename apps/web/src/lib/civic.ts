@@ -18,6 +18,8 @@ export interface Engagement {
 }
 
 export interface GovReference {
+  /** The readable address the server assigned. Null until it has one. */
+  slug?: string | null;
   id: string;
   masterReferenceId: string;
   /**

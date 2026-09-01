@@ -58,6 +58,8 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
 
   return {
     id: ref.id,
+    // The readable address, carried through so cards can link to it.
+    slug: ref.slug ?? null,
     title: ref.title,
     shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
     status: statusMap[ref.status] ?? "introduced",
@@ -136,6 +138,8 @@ export function referenceToExecutiveOrder(ref: GovReference | GovReferenceDetail
 
   return {
     id: ref.id,
+    // The readable address, carried through so cards can link to it.
+    slug: ref.slug ?? null,
     // Server-formatted, same as bills. An unnumbered order carries a Federal
     // Register document number instead, and the server knows which is which.
     eoNumber: ref.displayId ?? `EO ${ref.masterReferenceId.replace(/^eo-/i, "").toUpperCase()}`,
@@ -180,6 +184,8 @@ export function referenceToScotusCase(ref: GovReference | GovReferenceDetail): S
 
   return {
     id: ref.id,
+    // The readable address, carried through so cards can link to it.
+    slug: ref.slug ?? null,
     docketNumber:
       ref.displayId ?? ref.masterReferenceId.replace(/^scotus-/i, "").toUpperCase(),
     caseName: ref.title,
