@@ -51,6 +51,11 @@ const askedFor = [];
 const REFERENCE = {
   id: REFERENCE_ID,
   masterReferenceId: "hr-4836-119",
+  // The readable address the server mints at ingest. A real record has one, and
+  // without it here the copy-link assertion below could only ever see the
+  // /reference/<id> fallback — which is the correct behaviour for a record that
+  // has no slug yet, and proves nothing about the case that matters.
+  slug: "hr-4836-119",
   displayId: "H.R. 4836",
   referenceType: "bill",
   title: "Veterans Healthcare Improvement Act",
@@ -182,6 +187,10 @@ function check(label, condition, detail) {
 }
 
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+// Reading the clipboard needs permission; without it the copy-link assertion
+// below can only prove a button exists, which is the class of test this whole
+// file was rewritten to stop writing.
+await page.context().grantPermissions(["clipboard-read", "clipboard-write"]).catch(() => undefined);
 const pageErrors = [];
 page.on("pageerror", (e) => pageErrors.push(String(e.message).slice(0, 200)));
 page.on("requestfailed", (r) => pageErrors.push(`failed: ${r.url().slice(-70)} ${r.failure()?.errorText}`));
@@ -490,6 +499,34 @@ const toSomeone = await page
   .getByRole("button", { name: /^send .+ to someone$/i })
   .count();
 check("the law can also be sent to a person, not only to a timeline", toSomeone > 0, `matches=${toSomeone}`);
+
+// --------------------------------------------- and a link anybody can take away
+//
+// THE GAP THIS CLOSES. The two controls above both keep a reader inside the
+// platform — one posts to their own page, the other messages a member. Between
+// them there was no way to get a link to the law at all, so the only route out
+// was copying the address bar. That hands somebody /reference/<id> when the law
+// has a readable address, and it is the reason a link pasted into a text looked
+// like nothing.
+await page.goto(`${base}/reference/${REFERENCE_ID}`, { waitUntil: "networkidle" });
+await page.waitForTimeout(900);
+
+const copyLink = page.getByRole("button", { name: /copy the link to/i }).first();
+check("THE LAW PAGE HANDS YOU A LINK", (await copyLink.count()) > 0, "no copy-link control");
+
+if ((await copyLink.count()) > 0) {
+  await copyLink.click();
+  await page.waitForTimeout(400);
+  const copied = await page.evaluate(() => navigator.clipboard.readText().catch(() => ""));
+  check("…and what it copied is the readable address, not the raw id",
+    /\/(bill|executive-order|scotus)\//.test(copied) && !copied.includes("/reference/"),
+    copied || "(clipboard empty)");
+  // It writes nothing, so it must not demand an account. Signed out is the
+  // state this whole page is being read in by anybody who was sent a link.
+  check("…without asking anybody to sign in",
+    !/sign in|sign up/i.test(await page.evaluate(() => document.body.innerText)),
+    "a sign-in prompt appeared over a public link");
+}
 
 // The composer, reached the way a share arrives: with a law already resolved.
 await page.goto(`${base}/timeline?share=${REFERENCE_ID}`, { waitUntil: "networkidle" });

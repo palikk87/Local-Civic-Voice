@@ -40,6 +40,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { shareMessage } from '@/lib/config';
+import { recordPath } from '@civic/core/record-url';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
   castReferenceVote,
@@ -241,12 +242,21 @@ export default function ExecutiveOrderDetailScreen() {
     // Saving to the library isn't wired up yet — signed-in users see no change.
   };
 
+  /**
+   * THE PUBLIC LINK IS PUBLIC. No sign-in on this one: it hands somebody a URL
+   * and writes nothing. Sharing to My Voice and sending to a member both still
+   * require an account, because both of those create something on the
+   * platform. Gating the plain link stopped a signed-out reader passing a law
+   * to anybody, which is the one thing that spreads this.
+   *
+   * And it sends the READABLE address. This shared /reference/<id> while the
+   * web linked to /scotus/<case-name>, so the same law reached two people as
+   * two different-looking links. Both work; only one can be read aloud.
+   */
   const handleShare = async () => {
-    if (!requireAuth('Sign in to share this executive order.')) return;
-
     try {
       await Share.share({
-        message: shareMessage(eo.title, `/reference/${eo.id}`),
+        message: shareMessage(eo.title, recordPath(eo)),
       });
     } catch (error) {
       console.log('Error sharing:', error);

@@ -42,6 +42,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { justices } from '@/lib/government-data';
 import { shareMessage } from '@/lib/config';
+import { recordPath } from '@civic/core/record-url';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
@@ -307,12 +308,21 @@ export default function SupremeCourtDetailScreen() {
     // Saving to the library isn't wired up yet — signed-in users see no change.
   };
 
+  /**
+   * THE PUBLIC LINK IS PUBLIC. No sign-in on this one: it hands somebody a URL
+   * and writes nothing. Sharing to My Voice and sending to a member both still
+   * require an account, because both of those create something on the
+   * platform. Gating the plain link stopped a signed-out reader passing a law
+   * to anybody, which is the one thing that spreads this.
+   *
+   * And it sends the READABLE address. This shared /reference/<id> while the
+   * web linked to /scotus/<case-name>, so the same law reached two people as
+   * two different-looking links. Both work; only one can be read aloud.
+   */
   const handleShare = async () => {
-    if (!requireAuth('Sign in to share this case.')) return;
-
     try {
       await Share.share({
-        message: shareMessage(scotusCase.caseName, `/reference/${scotusCase.id}`),
+        message: shareMessage(scotusCase.caseName, recordPath(scotusCase)),
       });
     } catch (error) {
       console.log('Error sharing:', error);

@@ -18,6 +18,13 @@ export interface GovReference {
   id: string;
   masterReferenceId: string;
   /**
+   * The readable address — hr-10184-119, eo-14421,
+   * fuld-v-palestine-liberation-organization. The server has sent this for a
+   * while; nothing here read it, so every link this app shared was the raw id
+   * form. Absent on a record the slug backfill has not reached.
+   */
+  slug?: string | null;
+  /**
    * The id as printed — "H.R. 4836", "S.Res. 829", "EO 14147", "No. 22-451".
    *
    * Computed on the server from the canonical id. Deriving it here instead is
@@ -372,6 +379,8 @@ export function referenceToBill(ref: GovReference | GovReferenceDetail): Bill {
 
   return {
     id: ref.id,
+    // The readable address, carried through so a shared link is one.
+    slug: ref.slug ?? null,
     title: ref.title,
     shortTitle: ref.shortTitle ?? (ref.title.length > 60 ? `${ref.title.slice(0, 57)}...` : ref.title),
     status: statusMap[ref.status] ?? "introduced",
@@ -449,6 +458,8 @@ export function referenceToExecutiveOrder(ref: GovReference | GovReferenceDetail
 
   return {
     id: ref.id,
+    // The readable address, carried through so a shared link is one.
+    slug: ref.slug ?? null,
     // Server-formatted, same as bills. An unnumbered order carries a Federal
     // Register document number instead, and the server knows which is which.
     eoNumber: ref.displayId ?? `EO ${ref.masterReferenceId.replace(/^eo-/i, "").toUpperCase()}`,
@@ -493,6 +504,8 @@ export function referenceToScotusCase(ref: GovReference | GovReferenceDetail): S
 
   return {
     id: ref.id,
+    // The readable address, carried through so a shared link is one.
+    slug: ref.slug ?? null,
     docketNumber:
       ref.displayId ?? ref.masterReferenceId.replace(/^scotus-/i, "").toUpperCase(),
     caseName: ref.title,

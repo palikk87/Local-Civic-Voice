@@ -10,9 +10,11 @@ import {
   CalendarDays,
   Clock,
   Hash,
+  Link2,
   MessageSquare,
   Send,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -516,6 +518,37 @@ export default function ReferenceDetail() {
                   className="!bg-accent !px-4 !py-2 !text-sm !font-semibold !text-slate-900 hover:!bg-accent/90 hover:!text-slate-900"
                 />
                 <SendToSomeone reference={reference} />
+
+                {/*
+                  A LINK ANYBODY CAN TAKE AWAY.
+                  The two controls above both keep you inside the platform —
+                  one posts to your own page, the other messages a member — and
+                  between them there was no way to get a link to the law at all.
+                  The only route out was copying the address bar, which hands
+                  somebody /reference/<id> rather than the readable address.
+                  So: the canonical address, not window.location, because the
+                  reader may well have arrived on the id form themselves.
+
+                  NO SIGN-IN ON THIS ONE. A law is public and its address is
+                  public; the account is what "Share to My Voice" and "Send to
+                  someone" need, because those write something. Copying a link
+                  writes nothing.
+                */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const url = recordUrl(reference);
+                    void navigator.clipboard
+                      ?.writeText(url)
+                      .then(() => toast.success("Link copied"))
+                      .catch(() => toast.error("Couldn't copy that"));
+                  }}
+                  aria-label={`Copy the link to ${reference.title}`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card"
+                >
+                  <Link2 size={16} className="text-muted-foreground" />
+                  Copy link
+                </button>
               </div>
 
               <Separator className="my-6" />

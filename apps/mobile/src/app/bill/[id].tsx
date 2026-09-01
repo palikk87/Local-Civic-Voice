@@ -47,6 +47,7 @@ import * as Haptics from 'expo-haptics';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { categoryColors, categoryLabels } from '@/lib/mock-data';
 import { shareMessage } from '@/lib/config';
+import { recordPath } from '@civic/core/record-url';
 import { useVotingStore, selectUserVote } from '@/lib/voting-store';
 import {
   castReferenceVote,
@@ -429,7 +430,7 @@ export default function BillDetailScreen() {
    * act as saying "this one matters to me" where the people who can answer will
    * see it.
    *
-   * Web parity: the record page's "Share to your timeline" button. Same
+   * Web parity: the record page's "Share to My Voice" button. Same
    * behaviour on both — it opens the composer with the law already attached and
    * waits. It does not post for you. The words are the reader's.
    */
@@ -491,12 +492,21 @@ export default function BillDetailScreen() {
     // Saving to the library isn't wired up yet — signed-in users see no change.
   };
 
+  /**
+   * THE PUBLIC LINK IS PUBLIC. No sign-in on this one: it hands somebody a URL
+   * and writes nothing. Sharing to My Voice and sending to a member both still
+   * require an account, because both of those create something on the
+   * platform. Gating the plain link stopped a signed-out reader passing a law
+   * to anybody, which is the one thing that spreads this.
+   *
+   * And it sends the READABLE address. This shared /reference/<id> while the
+   * web linked to /scotus/<case-name>, so the same law reached two people as
+   * two different-looking links. Both work; only one can be read aloud.
+   */
   const handleShare = async () => {
-    if (!requireAuth('Sign in to share this bill.')) return;
-
     try {
       await Share.share({
-        message: shareMessage(bill.title, `/reference/${bill.id}`),
+        message: shareMessage(bill.title, recordPath(bill)),
       });
     } catch (error) {
       console.log('Error sharing:', error);
@@ -788,7 +798,7 @@ export default function BillDetailScreen() {
             >
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Share ${bill.title} to your timeline`}
+                accessibilityLabel={`Share ${bill.title} to My Voice`}
                 onPress={() => {
                   if (!requireAuth('Sign in to share this law.')) return;
                   if (!billRefData?.reference?.id) return;
