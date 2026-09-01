@@ -544,9 +544,9 @@ export default function ReferenceDetail() {
                       .catch(() => toast.error("Couldn't copy that"));
                   }}
                   aria-label={`Copy the link to ${reference.title}`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-card"
+                  className="inline-flex items-center gap-1.5 rounded-md px-2 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  <Link2 size={16} className="text-muted-foreground" />
+                  <Link2 size={14} />
                   Copy link
                 </button>
               </div>
