@@ -60,8 +60,14 @@ describe("bringing the stored rulings up to the rule", () => {
   test("A RULING WEARING THE PRINTER'S NOTICE GETS THE COURT'S OWN SUMMARY", async () => {
     const record = await seed("backfill-test-notice", THE_NOTICE);
 
-    expect(await backfillOpinionDescriptions()).toBeGreaterThan(0);
+    await backfillOpinionDescriptions();
 
+    // THE ROW, NOT THE COUNTER, IS THE GUARANTEE — and asserting the counter
+    // here is a race this suite actually lost. startServer() spawns the real
+    // server, whose boot runs this same backfill against this same database. On
+    // a fast runner that query can land AFTER the seed above, so the server
+    // repairs the row and the call here correctly reports nothing left to do.
+    // Zero was the honest answer; the assertion was wrong.
     const after = await prisma.governmentReference.findUniqueOrThrow({
       where: { id: record.id },
       select: { description: true },
@@ -104,9 +110,17 @@ describe("bringing the stored rulings up to the rule", () => {
   });
 
   test("IT FINDS NOTHING THE SECOND TIME — it runs at every boot", async () => {
-    await seed("backfill-test-idempotent", THE_NOTICE);
+    const record = await seed("backfill-test-idempotent", THE_NOTICE);
 
-    expect(await backfillOpinionDescriptions()).toBeGreaterThan(0);
+    await backfillOpinionDescriptions();
+    // Whoever did the repairing — this call or the server's boot — the second
+    // pass has nothing to find. That is what makes it safe at every boot.
     expect(await backfillOpinionDescriptions()).toBe(0);
+
+    const after = await prisma.governmentReference.findUniqueOrThrow({
+      where: { id: record.id },
+      select: { description: true },
+    });
+    expect(after.description).toContain("Roundup");
   });
 });
