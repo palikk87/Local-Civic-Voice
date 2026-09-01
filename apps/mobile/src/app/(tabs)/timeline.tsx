@@ -71,6 +71,7 @@ import CommentSection, { parseContentWithMentions } from '@/components/CommentSe
 import GlobalPulseDrawer from '@/components/GlobalPulseDrawer';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { cn } from '@/lib/cn';
+import { VoteButtons } from '@/components/VoteButtons';
 
 // Time ago helper
 function getTimeAgo(dateString: string): string {
@@ -218,19 +219,9 @@ function PostCard({
   const hasServerReference = Boolean(post.sharedContent?.displayId);
 
   const likeScale = useSharedValue(1);
-  const supportScale = useSharedValue(1);
-  const opposeScale = useSharedValue(1);
 
   const likeAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: likeScale.value }],
-  }));
-
-  const supportAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: supportScale.value }],
-  }));
-
-  const opposeAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: opposeScale.value }],
   }));
 
   const handleLike = () => {
@@ -285,19 +276,12 @@ function PostCard({
     }
   };
 
+  // The bounce and the haptic live in VoteButtons now, so this is only the vote.
   const handleSupport = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    supportScale.value = withSpring(1.2, { damping: 4 }, () => {
-      supportScale.value = withSpring(1);
-    });
     castVote('support');
   };
 
   const handleOppose = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    opposeScale.value = withSpring(1.2, { damping: 4 }, () => {
-      opposeScale.value = withSpring(1);
-    });
     castVote('oppose');
   };
 
@@ -563,57 +547,14 @@ function PostCard({
                 {/* Vote buttons */}
                 <View className="flex-row justify-between items-center">
                   <View className="flex-row items-center">
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleSupport();
-                      }}
-                      className={cn(
-                        'flex-row items-center px-4 py-2 rounded-full mr-2',
-                        userVote === 'support' ? 'bg-emerald-600' : 'bg-slate-700'
-                      )}
-                    >
-                      <Animated.View style={supportAnimatedStyle}>
-                        <ThumbsUp
-                          size={16}
-                          color={userVote === 'support' ? '#fff' : '#22C55E'}
-                        />
-                      </Animated.View>
-                      <Text
-                        className={cn(
-                          'ml-2 font-semibold',
-                          userVote === 'support' ? 'text-white' : 'text-emerald-500'
-                        )}
-                      >
-                        Aye {supportCount + opposeCount > 0 ? Math.round((supportCount / (supportCount + opposeCount)) * 100) : 50}%
-                      </Text>
-                    </Pressable>
-
-                    <Pressable
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleOppose();
-                      }}
-                      className={cn(
-                        'flex-row items-center px-4 py-2 rounded-full',
-                        userVote === 'oppose' ? 'bg-red-600' : 'bg-slate-700'
-                      )}
-                    >
-                      <Animated.View style={opposeAnimatedStyle}>
-                        <ThumbsDown
-                          size={16}
-                          color={userVote === 'oppose' ? '#fff' : '#EF4444'}
-                        />
-                      </Animated.View>
-                      <Text
-                        className={cn(
-                          'ml-2 font-semibold',
-                          userVote === 'oppose' ? 'text-white' : 'text-red-500'
-                        )}
-                      >
-                        Nay {supportCount + opposeCount > 0 ? Math.round((opposeCount / (supportCount + opposeCount)) * 100) : 50}%
-                      </Text>
-                    </Pressable>
+                    <VoteButtons
+                      size="sm"
+                      userVote={userVote}
+                      onAye={handleSupport}
+                      onNay={handleOppose}
+                      ayeLabel={`AYE ${supportCount + opposeCount > 0 ? Math.round((supportCount / (supportCount + opposeCount)) * 100) : 50}%`}
+                      nayLabel={`NAY ${supportCount + opposeCount > 0 ? Math.round((opposeCount / (supportCount + opposeCount)) * 100) : 50}%`}
+                    />
                   </View>
 
                   {/* THE "LIKELY PASS" BADGE IS GONE, AND NOT REPLACED.

@@ -49,6 +49,7 @@ import { castReferenceVote, yeaNayToPosition } from '@/lib/reference-votes';
 import { categoryColors, categoryLabels, branchLabels, branchColors } from '@/lib/mock-data';
 import type { FeedItem, Bill, BillCategory, GovernmentBranch } from '@/lib/types';
 import { cn } from '@/lib/cn';
+import { VoteButtons } from '@/components/VoteButtons';
 import { useTrendingBills, useRandomizedBillFeed } from '@/lib/hooks';
 import { useAlgorithmicFeed, algorithmicPostToFeedItem } from '@/lib/algorithmic-feed';
 import { useCurrentUser, useRequireAuth } from '@/lib/auth/use-civic-auth';
@@ -524,11 +525,11 @@ function BranchBadge({ branch }: { branch?: GovernmentBranch }) {
 // VOTE BUTTONS
 // ==========================================
 
-interface VoteButtonsProps {
+interface BillVoteRowProps {
   bill: Bill;
 }
 
-function VoteButtons({ bill }: VoteButtonsProps) {
+function BillVoteRow({ bill }: BillVoteRowProps) {
   const router = useRouter();
   const requireAuth = useRequireAuth();
   const queryClient = useQueryClient();
@@ -536,19 +537,9 @@ function VoteButtons({ bill }: VoteButtonsProps) {
   // My standing vote on this law — same mirror every surface reads.
   const userVote = useVotingStore(selectUserVote(bill.id));
 
-  const yeaScale = useSharedValue(1);
-  const nayScale = useSharedValue(1);
-
   const handleVote = async (vote: 'yea' | 'nay') => {
     // Guests can read the pulse but not move it — prompt instead of failing silently.
     if (!requireAuth('Sign in to cast your vote.')) return;
-
-    const scale = vote === 'yea' ? yeaScale : nayScale;
-    scale.value = withSequence(
-      withSpring(1.2, { damping: 4 }),
-      withSpring(1, { damping: 6 })
-    );
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // One central vote per citizen per law — feed cards carry the law's
     // reference id, so this lands on the same record as every other surface.
@@ -574,14 +565,6 @@ function VoteButtons({ bill }: VoteButtonsProps) {
         ]);
       });
   };
-
-  const yeaAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: yeaScale.value }],
-  }));
-
-  const nayAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: nayScale.value }],
-  }));
 
   const totalVotes = bill.communityVotes.totalVoters || 1;
   const yeaPercentage = Math.round((bill.communityVotes.yea / totalVotes) * 100);
@@ -612,49 +595,14 @@ function VoteButtons({ bill }: VoteButtonsProps) {
 
       <View className="flex-row justify-between items-center">
         <View className="flex-row items-center">
-          <AnimatedPressable
-            onPress={() => handleVote('yea')}
-            style={yeaAnimStyle}
-            className={cn(
-              'flex-row items-center px-4 py-2 rounded-full mr-2',
-              userVote === 'yea' ? 'bg-emerald-600' : 'bg-slate-700'
-            )}
-          >
-            <ThumbsUp
-              size={16}
-              color={userVote === 'yea' ? '#fff' : '#22C55E'}
-            />
-            <Text
-              className={cn(
-                'ml-2 font-semibold',
-                userVote === 'yea' ? 'text-white' : 'text-emerald-500'
-              )}
-            >
-              Aye {yeaPercentage}%
-            </Text>
-          </AnimatedPressable>
-
-          <AnimatedPressable
-            onPress={() => handleVote('nay')}
-            style={nayAnimStyle}
-            className={cn(
-              'flex-row items-center px-4 py-2 rounded-full',
-              userVote === 'nay' ? 'bg-red-600' : 'bg-slate-700'
-            )}
-          >
-            <ThumbsDown
-              size={16}
-              color={userVote === 'nay' ? '#fff' : '#EF4444'}
-            />
-            <Text
-              className={cn(
-                'ml-2 font-semibold',
-                userVote === 'nay' ? 'text-white' : 'text-red-500'
-              )}
-            >
-              Nay {nayPercentage}%
-            </Text>
-          </AnimatedPressable>
+          <VoteButtons
+            size="sm"
+            userVote={userVote}
+            onAye={() => handleVote('yea')}
+            onNay={() => handleVote('nay')}
+            ayeLabel={`AYE ${yeaPercentage}%`}
+            nayLabel={`NAY ${nayPercentage}%`}
+          />
         </View>
 
         {/* PROJECTED OUTCOME BADGE REMOVED. A prediction the platform had no
@@ -835,7 +783,7 @@ function FeedCard({ item, index, onReply, onShare }: FeedCardProps) {
             {item.bill.title}
           </Text>
 
-          <VoteButtons bill={item.bill} />
+          <BillVoteRow bill={item.bill} />
 
           {/* Representation Gap - The People vs Congress.
               The guard is the null, not a field check. */}

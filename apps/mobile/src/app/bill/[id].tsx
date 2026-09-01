@@ -55,6 +55,7 @@ import {
 } from '@/lib/reference-votes';
 import { cn } from '@/lib/cn';
 import { RecordPanels } from '@/components/RecordPanels';
+import { VoteButtons } from '@/components/VoteButtons';
 import {
   generateBillExplanation,
   askAboutBill,
@@ -436,14 +437,6 @@ export default function BillDetailScreen() {
 
   const yeaScale = useSharedValue(1);
   const nayScale = useSharedValue(1);
-
-  const yeaAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: yeaScale.value }],
-  }));
-
-  const nayAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: nayScale.value }],
-  }));
 
   // Early return AFTER all hooks
   if (!bill && billRefLoading) {
@@ -990,51 +983,11 @@ export default function BillDetailScreen() {
           {/* Fixed Vote Buttons */}
           <View className="absolute bottom-0 left-0 right-0 bg-slate-900/95 border-t border-slate-800 px-4 py-4">
             <SafeAreaView edges={['bottom']}>
-              <View className="flex-row">
-                <AnimatedPressable
-                  onPress={() => handleVote('yea')}
-                  style={yeaAnimStyle}
-                  className={cn(
-                    'flex-1 flex-row items-center justify-center py-4 rounded-xl mr-2',
-                    userVote === 'yea' ? 'bg-emerald-400' : 'bg-emerald-400/20 border border-emerald-400/70'
-                  )}
-                >
-                  <ThumbsUp
-                    size={22}
-                    color={userVote === 'yea' ? '#052E1B' : '#6EE7A8'}
-                  />
-                  <Text
-                    className={cn(
-                      'ml-2 font-bold text-lg',
-                      userVote === 'yea' ? 'text-emerald-950' : 'text-emerald-300'
-                    )}
-                  >
-                    Aye
-                  </Text>
-                </AnimatedPressable>
-
-                <AnimatedPressable
-                  onPress={() => handleVote('nay')}
-                  style={nayAnimStyle}
-                  className={cn(
-                    'flex-1 flex-row items-center justify-center py-4 rounded-xl ml-2',
-                    userVote === 'nay' ? 'bg-rose-900 border-2 border-rose-400' : 'bg-rose-950/70 border border-rose-700'
-                  )}
-                >
-                  <ThumbsDown
-                    size={22}
-                    color={userVote === 'nay' ? '#FFE4E6' : '#FDA4AF'}
-                  />
-                  <Text
-                    className={cn(
-                      'ml-2 font-bold text-lg',
-                      userVote === 'nay' ? 'text-rose-50' : 'text-rose-300'
-                    )}
-                  >
-                    Nay
-                  </Text>
-                </AnimatedPressable>
-              </View>
+              <VoteButtons
+                userVote={userVote}
+                onAye={() => handleVote('yea')}
+                onNay={() => handleVote('nay')}
+              />
             </SafeAreaView>
           </View>
         </SafeAreaView>
