@@ -16,6 +16,12 @@
  * in. The app boots on top exactly as before and replaces nothing — a person
  * sees the same page; a crawler sees a page that says what it is.
  *
+ * AND ITS OWN PICTURE. Alongside each page it draws that record's law card as a
+ * 1200×630 PNG and points og:image at it, so a link pasted into a text message
+ * or onto Facebook shows THAT law — its branch, its number, its title and where
+ * the Public Pulse stands — instead of the one house banner every record used
+ * to share. See scripts/og-card.mjs.
+ *
  * WHY STATIC FILES RATHER THAN A FUNCTION PER REQUEST. There are around 1,900
  * records and they barely change. Files on a CDN cost nothing to serve, have no
  * cold start, and — the deciding argument — keep the API off the crawl path
@@ -80,6 +86,11 @@ function descriptionFor(record) {
   return `What ${record.title} does, who is behind it, and where the public stands on it.`.slice(0, 300);
 }
 
+/** Where this record's share picture lives, relative to the site root. */
+function imagePathFor(record) {
+  return `/og/${record.slug}.png`;
+}
+
 /**
  * Structured data, from the record rather than about the site.
  *
@@ -110,7 +121,7 @@ function jsonLdFor(record, url) {
  * is a coin toss over which one a preview uses, and the generic one winning is
  * the bug this exists to fix.
  */
-function render(shell, record) {
+function render(shell, record, hasCard) {
   const url = `${SITE}${record.path}`;
   const title = titleFor(record);
   const description = descriptionFor(record);
@@ -133,6 +144,40 @@ function render(shell, record) {
     /<meta property="og:type"[^>]*>/,
     `<meta property="og:type" content="article" />`,
   );
+
+  /*
+   * NO CARD, NO CLAIM. Pointing og:image at a file this build did not write
+   * would give every preview a broken image — strictly worse than the banner it
+   * would have shown.
+   */
+  if (hasCard) {
+  /*
+   * THE SHELL'S IMAGE TAGS ARE REPLACED, NOT ADDED TO. Two og:image tags is a
+   * coin toss over which one a preview uses, and the generic one winning is the
+   * bug this exists to fix — the same trap the title and description tags above
+   * are written to avoid.
+   */
+  const image = `${SITE}${imagePathFor(record)}`;
+  // From the record's own title, not the page title — that one already ends
+  // "— AYE & NAY", and appending the brand again read as a stutter.
+  const imageAlt = `${record.title} — where the Public Pulse stands, on AYE & NAY`;
+  html = html.replace(
+    /<meta property="og:image"[^>]*>/,
+    `<meta property="og:image" content="${esc(image)}" />`,
+  );
+  html = html.replace(
+    /<meta property="og:image:alt"[^>]*>/,
+    `<meta property="og:image:alt" content="${esc(imageAlt)}" />`,
+  );
+  html = html.replace(
+    /<meta name="twitter:image"[^>]*>/,
+    `<meta name="twitter:image" content="${esc(image)}" />`,
+  );
+  html = html.replace(
+    /<meta name="twitter:image:alt"[^>]*>/,
+    `<meta name="twitter:image:alt" content="${esc(imageAlt)}" />`,
+  );
+  }
 
   const head =
     `<link rel="canonical" href="${esc(url)}" />` +
@@ -215,13 +260,85 @@ async function main() {
     return;
   }
 
-  for (const record of records) {
-    const dir = join(DIST, record.path);
-    await mkdir(dir, { recursive: true });
-    await writeFile(join(dir, "index.html"), render(shell, record), "utf8");
+  await mkdir(join(DIST, "og"), { recursive: true });
+
+  /*
+   * THE CARD DRAWER IS LOADED HERE, NOT AT THE TOP, AND IS ALLOWED TO BE
+   * ABSENT.
+   *
+   * It rests on @resvg/resvg-js, which is a native module: it ships a prebuilt
+   * binary per platform, and a build machine it has no binary for fails at
+   * IMPORT — before any of this runs. A static import would therefore turn "the
+   * pictures could not be drawn" into "the site did not deploy", which is a
+   * worse trade than it sounds: the pages are the deliverable and the share
+   * preview falls back to the site's banner, which is exactly what shipped
+   * before this existed.
+   *
+   * Loudness is reserved for the thing that matters. An unreachable API means
+   * no record pages at all and stops a production build; a missing rasteriser
+   * costs the pictures and says so.
+   */
+  let renderCard = null;
+  try {
+    ({ renderCard } = await import("./og-card.mjs"));
+  } catch (error) {
+    console.warn(
+      `prerender: no share cards this build — ${error?.message ?? error}. ` +
+        `Pages are unaffected; previews fall back to the site's banner.`,
+    );
   }
 
-  console.log(`prerender: wrote ${records.length} record page(s) with their own titles.`);
+  let drawn = 0;
+  for (const record of records) {
+    /*
+     * A CARD THAT WILL NOT DRAW MUST NOT LOSE THE PAGE. The page is the
+     * deliverable; the picture is what makes it look like something when it is
+     * shared. If one record's card throws — an unexpected character, a title
+     * that defeats the layout — that record keeps its page, its preview falls
+     * back to the banner, and the build names it so it can be looked at.
+     *
+     * Drawn BEFORE the page is written, so the page only claims a picture that
+     * exists.
+     */
+    let hasCard = false;
+    if (renderCard) {
+      try {
+        await writeFile(join(DIST, "og", `${record.slug}.png`), await renderCard(record));
+        hasCard = true;
+        drawn += 1;
+      } catch (error) {
+        console.warn(`prerender: could not draw the card for ${record.slug} (${error?.message ?? error})`);
+      }
+    }
+
+    /*
+     * EVERY ADDRESS THE RECORD ANSWERS TO GETS THE PAGE, not only the pretty
+     * one.
+     *
+     * /reference/:id is what the app's own address bar shows and what every
+     * link shared before the slugs existed still uses — a real one, pasted from
+     * a browser an hour ago, reads
+     * ayeandnay.com/reference/cmth6ynso15gsmo01297ykf09. Writing only the
+     * branch URL meant those links got the generic banner and the site-wide
+     * title, which is the exact failure all of this exists to end.
+     *
+     * The canonical inside every copy still names the branch URL, so search
+     * engines are told which one is the address; the other two exist so that a
+     * preview bot handed a link somebody actually has gets a real answer.
+     */
+    const html = render(shell, record, hasCard);
+    const addresses = [record.path, `/reference/${record.id}`, `/reference/${record.slug}`];
+    for (const address of new Set(addresses)) {
+      const dir = join(DIST, address);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, "index.html"), html, "utf8");
+    }
+  }
+
+  console.log(
+    `prerender: wrote ${records.length} record page(s) with their own titles, ` +
+      `and ${drawn} share card(s).`,
+  );
 }
 
 await main();

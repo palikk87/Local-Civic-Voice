@@ -46,9 +46,10 @@ const API = `http://127.0.0.1:${API_PORT}`;
  * number and reference-slug refuses to pretend otherwise. Cleanup keys off
  * these two exact ids instead.
  */
-const IDS = ["eo-99001", "eo-99002"];
+const IDS = ["eo-99001", "eo-99002", "hr-99001-119"];
 const LISTED_TITLE = "An order that has something on it worth reading";
 const UNLISTED_TITLE = "An order nobody has touched or written about";
+const BILL_TITLE = "A bill the Docket opens on";
 
 const TYPES = { ".js": "text/javascript", ".css": "text/css", ".html": "text/html",
                 ".svg": "image/svg+xml", ".png": "image/png", ".json": "application/json",
@@ -148,6 +149,31 @@ try {
     }});
   `);
 
+  /*
+   * AND A BILL, because the Docket opens on Legislation.
+   *
+   * The anchor assertion at the bottom of this file loads /discover and looks
+   * for a link to a record. Its first version seeded executive orders only, so
+   * the page it landed on said "0 bills" and it reported "no anchor to any
+   * record anywhere on the page" — a sentence that reads like the links had
+   * been deleted, when what had happened is that this check never gave the tab
+   * it was looking at anything to list.
+   *
+   * It passed for a while on a database that still held records other checks
+   * had left behind. A check that only works when somebody else's leftovers are
+   * present is not a check; it seeds what it intends to look at.
+   */
+  db(`
+    await prisma.governmentReference.create({ data: {
+      masterReferenceId: "hr-99001-119", referenceType: "bill",
+      title: ${JSON.stringify(BILL_TITLE)}, status: "active", category: "economy", chamber: "house",
+      congress: 119,
+      citizenBrief: "In plain English: this bill sets a deadline and names who has to meet it.",
+      introducedDate: new Date("2025-03-04T00:00:00Z"),
+      lastActionDate: new Date("2025-03-06T00:00:00Z"),
+    }});
+  `);
+
   // ------------------------------------------------------- a readable address
   const slug = db(`
     const { ensureSlug } = require("${BACKEND}/src/services/reference-slug.ts");
@@ -197,6 +223,27 @@ try {
   check("…and structured data describing the record",
     page.includes('application/ld+json') && page.includes('"@type":"Legislation"'));
 
+  // ------------------------------------------ and a picture OF THIS LAW with it
+  //
+  // A link pasted into a text message or onto Facebook is judged on its
+  // picture. Every record used to share one house banner, so the preview said
+  // nothing about which law had been sent. These assert the card exists, is a
+  // real PNG, and that the shell's generic image was REPLACED rather than
+  // joined — two og:image tags is a coin toss, and the generic one winning is
+  // the whole bug.
+  const cardBytes = await readFile(join(DIST, "og", "eo-99001.png")).catch(() => null);
+  check("THE RECORD HAS A SHARE CARD OF ITS OWN", cardBytes !== null && cardBytes.length > 1000,
+    cardBytes ? `${cardBytes.length} bytes` : "no file");
+  check("…and it is a real PNG, not an empty file",
+    cardBytes !== null && cardBytes.subarray(0, 8).toString("hex") === "89504e470d0a1a0a",
+    cardBytes ? cardBytes.subarray(0, 8).toString("hex") : "none");
+  check("…which the page points a preview bot at",
+    page.includes('og:image" content="http://127.0.0.1:4173/og/eo-99001.png"'),
+    (/og:image" content="([^"]*)"/.exec(page) ?? [])[1]);
+  check("…INSTEAD OF the site's banner, not as well as it",
+    (page.match(/property="og:image"/g) ?? []).length === 1 && !page.includes("og-aye-and-nay.png"),
+    `${(page.match(/property="og:image"/g) ?? []).length} og:image tags`);
+
   // ------------------------------------- and it reads without any JavaScript
   server = createServer(async (req, res) => {
     const url = req.url.split("?")[0];
@@ -239,16 +286,43 @@ try {
   // directly, so its results are not our records and have no page here.)
   await feed.goto("http://127.0.0.1:4173/discover", { waitUntil: "domcontentloaded" });
   await feed.waitForSelector("#root", { timeout: 25_000 });
-  await feed.waitForTimeout(4_000);
 
   // Any anchor to a record at all. A crawler follows hrefs and clicks nothing,
   // so a <button onClick={navigate}> leaves a page unreachable however well it
   // works for a person — which is what put one page of this site in Google.
-  const anchors = await feed.evaluate(() =>
-    Array.from(document.querySelectorAll("a[href]"))
-      .map((a) => a.getAttribute("href"))
-      .filter((href) => /^\/(bill|executive-order|scotus|reference)\//.test(href ?? "")),
-  );
+  //
+  // POLLED, NOT SLEPT ON. Discover fetches its records after the shell paints,
+  // so a fixed pause is a guess about how fast the machine is — and when the
+  // guess ran out this reported "no anchor to any record anywhere on the page",
+  // which is the sentence you would write if the links had been deleted.
+  const findAnchors = () =>
+    feed.evaluate(() =>
+      Array.from(document.querySelectorAll("a[href]"))
+        .map((a) => a.getAttribute("href"))
+        .filter((href) => /^\/(bill|executive-order|scotus|reference)\//.test(href ?? "")),
+    );
+  const seen = [];
+  feed.on("response", (r) => {
+    if (r.url().includes("/api/")) seen.push(`${r.status()} ${r.url().split("/api/")[1]?.slice(0, 70)}`);
+  });
+  let anchors = [];
+  for (let attempt = 0; attempt < 40 && anchors.length === 0; attempt += 1) {
+    anchors = await findAnchors();
+    if (anchors.length === 0) await feed.waitForTimeout(500);
+  }
+  if (anchors.length === 0 && process.env.FINDABLE_CHECK_DEBUG) {
+    // What the page actually showed. "No anchors" has several causes and they
+    // are indistinguishable without this — the first time it fired, the answer
+    // was "0 bills", not a missing link.
+    console.log("DEBUG api calls:", JSON.stringify(seen.slice(0, 12)));
+    console.log("DEBUG every href:", JSON.stringify(
+      await feed.evaluate(() => Array.from(document.querySelectorAll("a[href]")).map((a) => a.getAttribute("href"))),
+    ));
+    console.log("DEBUG buttons:", JSON.stringify(
+      await feed.evaluate(() => Array.from(document.querySelectorAll("button")).map((b) => (b.innerText || "").trim().slice(0, 40)).slice(0, 20)),
+    ));
+    console.log("DEBUG page text:", (await feed.evaluate(() => document.body.innerText ?? "")).slice(0, 500).replace(/\n/g, " | "));
+  }
   check("THE APP LINKS TO RECORDS WITH ANCHORS A CRAWLER CAN FOLLOW",
     anchors.length > 0,
     anchors.slice(0, 3).join(" ") || "no <a href> to any record anywhere on the page");

@@ -6,6 +6,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Input } from "@/components/ui/input";
 import { MotionDiv } from "@/components/civic/Motion";
 import { DiscoverTabSelector, type DiscoverTab } from "@/components/discover/DiscoverTabSelector";
+import { Link } from "react-router-dom";
+import { recordPath } from "@/lib/record-url";
 import { TrendingBillCard } from "@/components/discover/TrendingBillCard";
 import { TrendingHashtags } from "@/components/discover/TrendingHashtags";
 import { ExecutiveOrderCard } from "@/components/discover/ExecutiveOrderCard";
@@ -307,14 +309,20 @@ export default function Discover() {
                 transition={{ delay: Math.min(index, 8) * 0.04, type: "spring", stiffness: 260, damping: 24 }}
                 className="mb-3"
               >
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/reference/${ref.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") navigate(`/reference/${ref.id}`);
-                  }}
-                  className="cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
+                {/*
+                  A LINK, NOT A DIV THAT LISTENS FOR CLICKS. The three card
+                  components were converted; these lists were not, so the Docket
+                  — the public index of every record we hold — reached the point
+                  where its ONLY anchors were the six navigation links. A
+                  crawler follows hrefs and clicks nothing, so every record on
+                  this page was unreachable however well the page worked for a
+                  person. It also gets the keyboard and "open in new tab" for
+                  free, which the hand-rolled version reimplemented and only
+                  half did.
+                */}
+                <Link
+                  to={recordPath(ref)}
+                  className="block cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
                 >
                   <div className="mb-1 flex items-center gap-2">
                     <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-secondary-foreground">
@@ -343,7 +351,7 @@ export default function Discover() {
                   >
                     See details
                   </button>
-                </div>
+                </Link>
               </MotionDiv>
             ))}
           </div>
@@ -436,18 +444,13 @@ export default function Discover() {
                   transition={{ delay: index * 0.06, type: "spring", stiffness: 260, damping: 24 }}
                   className="mb-3"
                 >
-                  <div
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/reference/${bill.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
-                    }}
-                    className="cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
+                  <Link
+                    to={recordPath(bill)}
+                    className="block cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
                   >
                     <p className="font-semibold text-foreground">{bill.shortTitle}</p>
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{bill.title}</p>
-                  </div>
+                  </Link>
                 </MotionDiv>
               ))}
             </>
@@ -487,14 +490,9 @@ export default function Discover() {
                     transition={{ delay: index * 0.06, type: "spring", stiffness: 260, damping: 24 }}
                     className="mb-3"
                   >
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(`/reference/${bill.id}`)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
-                      }}
-                      className="cursor-pointer rounded-xl border border-blue-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
+                    <Link
+                      to={recordPath(bill)}
+                      className="block cursor-pointer rounded-xl border border-blue-700/30 bg-card/60 p-4 transition-colors hover:bg-card"
                     >
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-xs font-semibold text-blue-400">
@@ -514,7 +512,7 @@ export default function Discover() {
                       <p className="mt-2 text-xs text-muted-foreground">
                         {bill.communityVotes.totalVoters.toLocaleString()} community votes
                       </p>
-                    </div>
+                    </Link>
                   </MotionDiv>
                 ))
               )}
@@ -534,15 +532,10 @@ export default function Discover() {
               {(latestBillsData?.references ?? []).slice(0, 10).map((ref) => {
                 const bill = referenceToBill(ref);
                 return (
-                  <div
+                  <Link
                     key={`latest-${bill.id}`}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/reference/${bill.id}`)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") navigate(`/reference/${bill.id}`);
-                    }}
-                    className="mb-3 cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
+                    to={recordPath(bill)}
+                    className="mb-3 block cursor-pointer rounded-xl border border-border/40 bg-card/60 p-4 transition-colors hover:bg-card"
                   >
                     <div className="mb-1 flex flex-wrap items-center gap-2">
                       {bill.congressNumber ? (
@@ -556,7 +549,7 @@ export default function Discover() {
                     </div>
                     <p className="font-semibold text-foreground">{bill.shortTitle}</p>
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{bill.title}</p>
-                  </div>
+                  </Link>
                 );
               })}
             </>

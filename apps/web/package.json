@@ -100,6 +100,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/typography": "^0.5.19",
     "@types/node": "^22.19.1",
     "@types/react": "^18.3.27",
@@ -113,6 +114,7 @@
     "happy-dom": "^20.11.1",
     "playwright": "1.56.1",
     "postcss": "^8.5.6",
+    "satori": "^0.33.4",
     "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.47.0",
