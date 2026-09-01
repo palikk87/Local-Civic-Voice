@@ -1,0 +1,14 @@
+-- A POST THAT CHANGED AFTER PEOPLE READ IT SAYS SO.
+--
+-- Editing your own words is the right thing to allow — the menu has offered
+-- "Edit Post" all along, it simply went nowhere. But a post here is something
+-- other people reply to and pass on, so silently rewriting one under them is
+-- not an edit, it is a different post wearing the same replies.
+--
+-- updatedAt could not carry this. It is @updatedAt, so the duplicate-law merge
+-- in services/deduplication-service.ts bumps it whenever a post is repointed at
+-- a merged record — which would mark posts as edited that nobody had touched.
+--
+-- Nullable and additive: every post that exists was never edited, which is
+-- exactly what NULL says.
+ALTER TABLE "Post" ADD COLUMN IF NOT EXISTS "editedAt" TIMESTAMP(3);

@@ -187,7 +187,12 @@ try {
   const cookie = (signIn.headers.getSetCookie?.() ?? []).map((l) => l.split(";")[0])[0];
 
   browser = await launchChromium();
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1600 } });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1600 },
+    // Copy Link is under test below, so the page has to be allowed to reach
+    // the clipboard and this check has to be allowed to read it back.
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
   await acceptTermsBeforeLoad(context);
   const [name, ...rest] = cookie.split("=");
   await context.addCookies([{
@@ -239,6 +244,77 @@ try {
   await page.waitForSelector("#root", { timeout: 25_000 });
   await page.waitForTimeout(2_500);
   check("…and it is really saved, not just drawn", (await screen()).includes(WORDS));
+
+  // ------------------------------------ the three dots, and the three buttons
+  //
+  // Reported together, through the app's own bug reporter and in the same
+  // breath: "The edit post button doesn't go anywhere", "there is a button
+  // called copy link when you copy it copies this
+  // https://ayeandnay.com/timeline nothing that directs you to that post also
+  // give some quick confirmation that the link was copied and the save post
+  // button in the same menu. Doesn't do anything".
+  //
+  // All three were the same shape of bug: a row drawn in a menu with nothing
+  // behind it. A typecheck cannot see any of them — every one compiles.
+  // BY NAME, not by counting. Reaching for the last button on the card is how
+  // this first opened the Share sheet instead and "proved" a copy button that
+  // was never the broken one.
+  const dots = page.getByRole("button", { name: "More options for this post" }).first();
+  await dots.click();
+  await page.waitForTimeout(1_200);
+
+  // The sheet and the toasts both render in a portal on <body>, outside #root,
+  // so reading the app's own container finds neither of them.
+  const onPage = () => page.evaluate(() => document.body.innerText ?? "");
+  const menuText = await page.evaluate(() => {
+    const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
+    return dialogs.map((d) => d.innerText).join(" || ");
+  });
+  check("the three dots open the post's own menu", /Edit Post/i.test(menuText),
+    menuText.slice(0, 400).replace(/\n/g, " | ") || "(no dialog on the page)");
+
+  // COPY LINK — the post, not the page you happen to be standing on.
+  await page.getByRole("button", { name: /copy link/i }).first().click();
+  await page.waitForTimeout(1_200);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  check("COPY LINK COPIES THE LINK TO THE POST", /\/post\/[a-z0-9]+$/i.test(copied), copied);
+  check("…not the page the reader was standing on", !/\/timeline$/.test(copied), copied);
+  check("…and it says so, rather than copying in silence",
+    /link copied/i.test(await onPage()), (await onPage()).slice(0, 160).replace(/\n/g, " | "));
+
+  // SAVE POST — it reaches the server and reports which way it went.
+  await dots.click();
+  await page.waitForTimeout(1_000);
+  await page.getByRole("button", { name: /save post/i }).first().click();
+  await page.waitForTimeout(1_500);
+  check("SAVE POST SAYS WHAT IT DID", /saved/i.test(await onPage()),
+    (await onPage()).slice(0, 160).replace(/\n/g, " | "));
+  // The post's own id, taken from the link the button just copied.
+  const postId = copied.split("/post/")[1] ?? "";
+  const saved = db(`console.log(await prisma.postSave.count({ where: { postId: "${postId}" } }));`);
+  check("…and the server really kept it", Number(saved) === 1, `${saved} saved`);
+
+  // EDIT — the words change, the law does not.
+  const EDITED = `${WORDS} — and then I changed my mind about how to say it`;
+  await dots.click();
+  await page.waitForTimeout(1_000);
+  await page.getByRole("button", { name: /edit post/i }).first().click();
+  await page.waitForTimeout(1_500);
+  const editor = page.locator('[role="dialog"] textarea').first();
+  check("EDIT OPENS AN EDITOR, rather than closing the menu and doing nothing",
+    (await editor.count()) > 0);
+  await editor.fill(EDITED);
+  await page.getByRole("button", { name: /save changes/i }).first().click();
+  await page.waitForTimeout(2_500);
+  check("…the new words are on the timeline", (await screen()).includes(EDITED));
+  check("…marked as edited, not silently rewritten", /edited/i.test(await screen()));
+
+  // And it is the SERVER that changed, not just this screen.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#root", { timeout: 25_000 });
+  await page.waitForTimeout(2_500);
+  check("…and they survive a reload, so the edit reached the server",
+    (await screen()).includes(EDITED));
 
   // --------------------------------------------- what a shared law looks like
   //

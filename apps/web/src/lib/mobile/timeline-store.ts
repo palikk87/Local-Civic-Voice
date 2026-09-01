@@ -46,6 +46,15 @@ export interface TimelinePost {
   content: string;
   contentType: ContentType;
 
+  /**
+   * When the author last changed their own words. Null or absent means never.
+   *
+   * People reply to and pass on posts here, so a post that was rewritten after
+   * they did says so on its face. The attached law is never editable, so this
+   * only ever means the words above it moved.
+   */
+  editedAt?: string | null;
+
   // Source tracking for Library-to-Feed parity (defaults to 'user')
   source?: PostSource;
 
@@ -187,7 +196,7 @@ interface TimelineState {
     mediaIds?: string[]
   ) => Promise<void>;
   deletePost: (postId: string) => Promise<void>;
-  editPost: (postId: string, content: string) => void;
+  editPost: (postId: string, content: string) => Promise<void>;
   sharePost: (postId: string, opinion?: string) => void;
   shareContent: (contentType: ContentType, contentId: string, title: string, opinion?: string, mediaIds?: string[]) => Promise<void>;
   likePost: (postId: string) => void;
@@ -299,11 +308,35 @@ export const useTimelineStore = create<TimelineState>()(
         }));
       },
 
-      editPost: (postId, content) => {
+      /**
+       * IT REACHES THE SERVER NOW.
+       *
+       * This rewrote the post in this browser's store and stopped, so the words
+       * changed until the page was reloaded and then changed back. There was no
+       * endpoint to call either — PATCH /api/posts/:id did not exist, which is
+       * why "Edit Post" in the menu went nowhere at all.
+       *
+       * Content only. The law under a post is fixed at the moment of posting;
+       * swapping it would turn every reply into a response to something that
+       * was never said.
+       */
+      editPost: async (postId, content) => {
+        const answer = await api.patch<{ post: { content: string; editedAt: string | null } }>(
+          `/api/posts/${postId}`,
+          { content },
+        );
         set((state) => ({
           posts: state.posts.map((p) =>
             p.id === postId
-              ? { ...p, content, updatedAt: new Date().toISOString() }
+              ? {
+                  ...p,
+                  content: answer.post.content,
+                  // A reference post prints its body as the opinion above the
+                  // law card, so the edit has to land there too or the words
+                  // change everywhere except where they are actually read.
+                  ...(p.opinion !== undefined ? { opinion: answer.post.content } : {}),
+                  editedAt: answer.post.editedAt,
+                }
               : p
           ),
         }));

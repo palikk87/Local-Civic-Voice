@@ -1,4 +1,6 @@
 import { useAuthStore } from '@/lib/auth-store';
+import { shareUrlFor } from '@/lib/config';
+import { savePost } from '@/lib/api/feed';
 import React from 'react';
 import {
   View,
@@ -6,7 +8,9 @@ import {
   Pressable,
   Modal,
   ScrollView,
+  Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -105,17 +109,45 @@ export default function PostOptionsModal({
     {
       icon: <Copy size={20} color="#6E8A7C" />,
       label: 'Copy Link',
+      /*
+       * IT COPIES THE LINK TO THE POST NOW.
+       *
+       * This was a comment and a success buzz — "// Copy link logic would go
+       * here" — so the phone reported success by vibrating while the clipboard
+       * was never touched. Worse than doing nothing, because it said it worked.
+       *
+       * Web twin had the matching bug the other way: it copied
+       * window.location.href, which on the timeline is the timeline.
+       */
       onPress: () => {
-        // Copy link logic would go here
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        const link = shareUrlFor(`/post/${post.id}`);
+        if (!link) {
+          Alert.alert('No public link', 'This build has no website configured to link to.');
+          return;
+        }
+        void Clipboard.setStringAsync(link)
+          .then(() => {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert('Link copied');
+          })
+          .catch(() => Alert.alert('Could not copy the link'));
       },
     },
     {
       icon: <Bookmark size={20} color="#6E8A7C" />,
       label: 'Save Post',
+      /*
+       * IT SAVES NOW. Also a comment and a buzz. The endpoint has existed the
+       * whole time and toggles, so this reports which way it went rather than
+       * assuming it saved.
+       */
       onPress: () => {
-        // Save post logic
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void savePost(post.id)
+          .then((answer) => {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert(answer.saved ? 'Saved' : 'Removed from saved');
+          })
+          .catch(() => Alert.alert('Could not save this post', 'Please try again.'));
       },
     },
     // Non-owner options

@@ -79,7 +79,15 @@ function Conversation({ referenceId }: { referenceId: string }) {
             onPress={() => router.push(`/post/${post.id}` as never)}
             className="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 mb-3 active:bg-slate-800/70"
           >
-            <View className="flex-row items-center mb-2">
+            {/* A NAME YOU CAN READ IS A PERSON YOU CAN LOOK UP. The card as a
+                whole opens the post; the name is its own target and opens the
+                person, because a name printed with no way to reach them is the
+                thing author-links.test.ts exists to catch — and it caught
+                exactly this. */}
+            <Pressable
+              onPress={() => router.push(`/user/${post.author.id}` as never)}
+              className="flex-row items-center mb-2"
+            >
               <Image source={{ uri: post.author.avatar }} className="w-8 h-8 rounded-full" />
               <View className="ml-2 flex-1">
                 <Text className="text-white text-sm font-semibold">
@@ -87,7 +95,7 @@ function Conversation({ referenceId }: { referenceId: string }) {
                 </Text>
                 <Text className="text-slate-500 text-xs">@{post.author.username}</Text>
               </View>
-            </View>
+            </Pressable>
             {post.content ? (
               <Text className="text-slate-200 text-sm" numberOfLines={6}>
                 {post.content}

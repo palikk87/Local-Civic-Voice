@@ -72,6 +72,7 @@ import GlobalPulseDrawer from '@/components/GlobalPulseDrawer';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { cn } from '@/lib/cn';
 import { VoteButtons } from '@/components/VoteButtons';
+import { EditPostModal } from '@/components/EditPostModal';
 
 // Time ago helper
 function getTimeAgo(dateString: string): string {
@@ -760,6 +761,7 @@ function TimelineFeed() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [reportingPost, setReportingPost] = useState<string | null>(null);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [editingPost, setEditingPost] = useState<TimelinePost | null>(null);
   const [selectedPost, setSelectedPost] = useState<TimelinePost | null>(null);
   const [showPostDetail, setShowPostDetail] = useState(false);
   const [showGlobalPulse, setShowGlobalPulse] = useState(false);
@@ -1040,6 +1042,12 @@ function TimelineFeed() {
         }}
         post={selectedPost}
         onDelete={handleDeletePost}
+        /* This was never passed, so "Edit Post" called an undefined handler,
+           closed the sheet and did nothing — exactly as reported. */
+        onEdit={(post) => {
+          setShowOptionsModal(false);
+          setEditingPost(post);
+        }}
         onShare={(post) => {
           setShowOptionsModal(false);
           setSelectedPost(post);
@@ -1049,6 +1057,8 @@ function TimelineFeed() {
         onBlock={handleBlockUser}
         onMute={handleMuteUser}
       />
+
+      <EditPostModal post={editingPost} onClose={() => setEditingPost(null)} />
 
       <ReportSheet
         target={reportingPost ? { postId: reportingPost, what: 'this post' } : null}

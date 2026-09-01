@@ -53,6 +53,7 @@ import GlobalPulseDrawer from "@/components/mobile/GlobalPulseDrawer";
 import { cn } from "@/lib/utils";
 import { PersonAvatar, PersonHandle, PersonName } from "@/components/people/PersonLink";
 import { ReportDialog } from "@/components/safety/ReportDialog";
+import { EditPostDialog } from "@/components/feed/EditPostDialog";
 
 // Time ago helper
 function getTimeAgo(dateString: string): string {
@@ -349,6 +350,14 @@ function PostCard({
             >
               · {timeAgo}
             </Link>
+            {/* A post other people replied to and passed on says when its words
+                moved. The law under it never moves — only what was written
+                above it can be edited. */}
+            {post.editedAt ? (
+              <span className="ml-2 text-xs text-slate-500" title={new Date(post.editedAt).toLocaleString()}>
+                · edited
+              </span>
+            ) : null}
           </div>
           <span className="text-slate-400 text-sm">
             <PersonHandle person={post.author} />
@@ -378,7 +387,14 @@ function PostCard({
           </button>
         ) : null}
 
-        <button onClick={() => onMore(post)} className="p-2 shrink-0">
+        {/* The three dots had no accessible name at all — an icon in a button
+            and nothing else — so a screen reader announced "button" and a check
+            could only find it by counting. It is named now. */}
+        <button
+          onClick={() => onMore(post)}
+          aria-label="More options for this post"
+          className="p-2 shrink-0"
+        >
           <MoreHorizontal size={20} color="#64748B" />
         </button>
       </div>
@@ -695,6 +711,7 @@ export default function TimelineScreen() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [reportingPost, setReportingPost] = useState<string | null>(null);
+  const [editingPost, setEditingPost] = useState<TimelinePost | null>(null);
   const [selectedPost, setSelectedPost] = useState<TimelinePost | null>(null);
   const [showPostDetail, setShowPostDetail] = useState(false);
   const [showGlobalPulse, setShowGlobalPulse] = useState(false);
@@ -922,6 +939,13 @@ export default function TimelineScreen() {
         }}
         post={selectedPost}
         onDelete={handleDeletePost}
+        /* This was never passed, so "Edit Post" called an undefined handler,
+           closed the sheet and did nothing — exactly as reported. */
+        onEdit={(post) => {
+          setShowOptionsModal(false);
+          setSelectedPost(post);
+          setEditingPost(post);
+        }}
         onShare={(post) => {
           setShowOptionsModal(false);
           setSelectedPost(post);
@@ -930,6 +954,14 @@ export default function TimelineScreen() {
         onReport={handleReportPost}
         onBlock={handleBlockUser}
         onMute={handleMuteUser}
+      />
+
+      <EditPostDialog
+        post={editingPost}
+        open={editingPost !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingPost(null);
+        }}
       />
 
       <ReportDialog

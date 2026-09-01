@@ -100,6 +100,8 @@ export interface ServerPost {
     createdAt: string;
   } | null;
   createdAt: string;
+  /** When the author last changed their own words. NULL means never. */
+  editedAt?: string | null;
 }
 
 export interface ServerFeedResponse {
@@ -154,6 +156,7 @@ export function mapServerPost(post: ServerPost): TimelinePost {
     author: toAuthor(post.author),
     type: referenceType ? "share" : "original",
     content: post.content,
+    editedAt: post.editedAt ?? null,
     contentType: referenceType ?? "text",
     // A post attached to a real government action renders as a law card. Posts
     // with no attachment are plain user posts.

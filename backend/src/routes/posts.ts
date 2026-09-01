@@ -272,6 +272,8 @@ postsRouter.get("/", zValidator("query", paginationSchema), async (c) => {
           }
         : null,
       createdAt: post.createdAt.toISOString(),
+      // NULL means never edited, which is true of every post that predates this.
+      editedAt: post.editedAt?.toISOString() ?? null,
     })),
     nextCursor,
     hasMore,
@@ -712,6 +714,70 @@ postsRouter.get("/:id", async (c) => {
  * DELETE /api/posts/:id
  * Delete a post (owner only)
  */
+/**
+ * PATCH /api/posts/:id — the author changes their own words.
+ *
+ * Reported plainly: "The edit post button doesn't go anywhere ... It should
+ * allow you to edit your post and its content. Not the original law posted but
+ * the content that the poster added to it."
+ *
+ * THE LAW IS NOT EDITABLE HERE, AND THAT IS THE POINT. A post is somebody's
+ * words ABOUT a record. Letting the author swap the record underneath would
+ * turn every reply, vote and repost into a response to something that was
+ * never said — so `content` is the only field this accepts, and the attachment
+ * is fixed at the moment of posting.
+ *
+ * IT SAYS IT WAS EDITED. People reply to and pass on posts here, so rewriting
+ * one silently is not an edit; it is a different post wearing the same replies.
+ * editedAt is stamped and the card shows it.
+ */
+postsRouter.patch("/:id", zValidator("json", z.object({ content: z.string().max(5000) })), async (c) => {
+  const user = c.get("user");
+  if (!user) {
+    return c.json({ error: "Authentication required" }, 401);
+  }
+
+  const id = c.req.param("id");
+  const { content } = c.req.valid("json");
+
+  const post = await prisma.post.findUnique({
+    where: { id },
+    select: {
+      authorId: true,
+      governmentReferenceId: true,
+      referenceId: true,
+      _count: { select: { media: true } },
+    },
+  });
+  if (!post) {
+    return c.json({ error: "Post not found" }, 404);
+  }
+  if (post.authorId !== user.id) {
+    return c.json({ error: "Not authorized" }, 403);
+  }
+
+  // The same rule the composer enforces: a post must still BE something. Words
+  // may go if a law or a picture is carrying it, and may not if nothing is.
+  const carriesSomethingElse =
+    post._count.media > 0 || Boolean(post.governmentReferenceId ?? post.referenceId);
+  if (content.trim().length === 0 && !carriesSomethingElse) {
+    return c.json({ error: "Post must have text, media, or a law" }, 400);
+  }
+
+  const updated = await prisma.post.update({
+    where: { id },
+    data: { content: content.trim(), editedAt: new Date() },
+    select: { id: true, content: true, editedAt: true },
+  });
+
+  // The feed serves from a cache. Without this the row says one thing and
+  // /api/feed hands out the old words for up to two minutes, which reads as
+  // the edit not having worked.
+  invalidatePostCache(id, post.authorId);
+
+  return c.json({ post: updated });
+});
+
 postsRouter.delete("/:id", async (c) => {
   const user = c.get("user");
   if (!user) {

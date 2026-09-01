@@ -13,6 +13,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { MotionDiv } from "@/components/civic/Motion";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
 import { type TimelinePost } from "@/lib/mobile/timeline-store";
 import { useCurrentUser } from "@/hooks/use-civic-auth";
 import { cn } from "@/lib/utils";
@@ -91,14 +93,43 @@ export default function PostOptionsModal({
     {
       icon: <Copy size={20} color="#64748B" />,
       label: "Copy Link",
+      /*
+       * THE LINK TO THE POST, not to the page you happen to be standing on.
+       *
+       * Reported plainly: "there is a button called copy link when you copy it
+       * copies this https://ayeandnay.com/timeline nothing that directs you to
+       * that post". It wrote window.location.href, which on the timeline is the
+       * timeline — so every post on the page copied the same useless link.
+       *
+       * And it said nothing either way, so a copy that worked and a copy that
+       * silently failed looked identical.
+       */
       onPress: () => {
-        navigator.clipboard.writeText(window.location.href).catch(() => undefined);
+        const link = `${window.location.origin}/post/${post.id}`;
+        navigator.clipboard
+          .writeText(link)
+          .then(() => toast.success("Link copied"))
+          .catch(() => toast.error("Could not copy the link. Long-press to copy it instead."));
       },
     },
     {
       icon: <Bookmark size={20} color="#64748B" />,
       label: "Save Post",
-      onPress: () => undefined,
+      /*
+       * IT SAVES NOW. This was `() => undefined` — the row was drawn, it
+       * closed the sheet, and nothing happened anywhere.
+       *
+       * The endpoint has existed the whole time and toggles, so this reports
+       * which way it went rather than assuming it saved.
+       */
+      onPress: () => {
+        api
+          .post<{ success: boolean; saved: boolean }>(`/api/feed/posts/${post.id}/save`)
+          .then((answer) => {
+            toast.success(answer.saved ? "Saved" : "Removed from saved");
+          })
+          .catch(() => toast.error("Could not save this post. Please try again."));
+      },
     },
     // Non-owner options
     {

@@ -362,6 +362,12 @@ model Post {
   repostOfId            String?
   createdAt             DateTime             @default(now())
   updatedAt             DateTime             @updatedAt
+  /// When the author last changed their own words. NULL means never.
+  ///
+  /// Not updatedAt: that is @updatedAt, so the duplicate-law merge bumps it
+  /// whenever a post is repointed at a merged record, which would mark posts
+  /// as edited that nobody had touched.
+  editedAt              DateTime?
   comments              Comment[]
   repostOf              Post?                @relation("Reposts", fields: [repostOfId], references: [id], onDelete: Cascade)
   reposts               Post[]               @relation("Reposts")

@@ -45,6 +45,15 @@ export interface TimelinePost {
   content: string;
   contentType: ContentType;
 
+  /**
+   * When the author last changed their own words. Null or absent means never.
+   *
+   * People reply to and pass on posts here, so a post that was rewritten after
+   * they did says so on its face. The attached law is never editable, so this
+   * only ever means the words above it moved.
+   */
+  editedAt?: string | null;
+
   // Source tracking for Library-to-Feed parity (defaults to 'user')
   source?: PostSource;
 
@@ -186,7 +195,7 @@ interface TimelineState {
     mediaIds?: string[]
   ) => Promise<void>;
   deletePost: (postId: string) => Promise<void>;
-  editPost: (postId: string, content: string) => void;
+  editPost: (postId: string, content: string) => Promise<void>;
   sharePost: (postId: string, opinion?: string) => void;
   shareContent: (contentType: ContentType, contentId: string, title: string, opinion?: string, mediaIds?: string[]) => Promise<void>;
   likePost: (postId: string) => void;
@@ -296,11 +305,30 @@ export const useTimelineStore = create<TimelineState>()(
         }));
       },
 
-      editPost: (postId, content) => {
+      /*
+       * IT REACHES THE SERVER NOW.
+       *
+       * This rewrote the post in this phone's store and stopped, so the words
+       * changed until the app was reopened and then changed back. There was no
+       * endpoint to call either — PATCH /api/posts/:id did not exist, which is
+       * why "Edit Post" went nowhere at all.
+       *
+       * Content only. The law under a post is fixed at the moment of posting.
+       */
+      editPost: async (postId, content) => {
+        const answer = await api.patch<{ post: { content: string; editedAt: string | null } }>(
+          `/api/posts/${postId}`,
+          { content },
+        );
         set((state) => ({
           posts: state.posts.map((p) =>
             p.id === postId
-              ? { ...p, content, updatedAt: new Date().toISOString() }
+              ? {
+                  ...p,
+                  content: answer.post.content,
+                  ...(p.opinion !== undefined ? { opinion: answer.post.content } : {}),
+                  editedAt: answer.post.editedAt,
+                }
               : p
           ),
         }));
