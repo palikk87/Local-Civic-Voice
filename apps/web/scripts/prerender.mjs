@@ -203,6 +203,44 @@ function render(shell, record, hasCard) {
   return html;
 }
 
+/**
+ * THE PORTRAIT, FETCHED ONCE PER PERSON.
+ *
+ * Two hundred bills can share one sponsor, so this is keyed by the image URL
+ * and every record after the first is free. Failures are cached too — a face
+ * that would not download must not be retried seven hundred times, and the
+ * card is written without it.
+ *
+ * Embedded as a data URI rather than left as a URL: the card is rasterised in
+ * this process, and a renderer reaching out to bioguide.congress.gov per record
+ * mid-build is a slow build that fails when somebody else's server is having a
+ * bad morning.
+ */
+const portraits = new Map();
+async function portraitFor(record) {
+  const who = record.attribution;
+  const url = who?.photoUrl || (who?.bioguideId ? `https://bioguide.congress.gov/photo/${who.bioguideId}.jpg` : null);
+  if (!url) return null;
+  if (portraits.has(url)) return portraits.get(url);
+
+  let data = null;
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (response.ok) {
+      const type = response.headers.get("content-type") ?? "image/jpeg";
+      if (type.startsWith("image/")) {
+        const bytes = Buffer.from(await response.arrayBuffer());
+        // A "photo" that is really an error page in a trench coat.
+        if (bytes.length > 1000) data = `data:${type};base64,${bytes.toString("base64")}`;
+      }
+    }
+  } catch {
+    // Left null; the name still gets drawn.
+  }
+  portraits.set(url, data);
+  return data;
+}
+
 async function main() {
   const shellPath = join(DIST, "index.html");
   let shell;
@@ -303,7 +341,8 @@ async function main() {
     let hasCard = false;
     if (renderCard) {
       try {
-        await writeFile(join(DIST, "og", `${record.slug}.png`), await renderCard(record));
+        const portrait = await portraitFor(record);
+        await writeFile(join(DIST, "og", `${record.slug}.png`), await renderCard({ ...record, portrait }));
         hasCard = true;
         drawn += 1;
       } catch (error) {
@@ -335,9 +374,10 @@ async function main() {
     }
   }
 
+  const faces = [...portraits.values()].filter(Boolean).length;
   console.log(
     `prerender: wrote ${records.length} record page(s) with their own titles, ` +
-      `and ${drawn} share card(s).`,
+      `and ${drawn} share card(s) — ${faces} of ${portraits.size} portrait(s) downloaded.`,
   );
 }
 

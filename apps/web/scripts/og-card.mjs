@@ -59,10 +59,15 @@ const fonts = [
 ];
 
 /** Satori takes React elements; this is the same shape without a JSX step. */
-const h = (type, style, ...children) => ({
-  type,
-  props: { style, children: children.length === 1 ? children[0] : children },
-});
+const h = (type, style, ...children) => {
+  // Nulls are how "nobody is known" and "no portrait" are expressed above;
+  // satori would otherwise try to lay them out.
+  const kept = children.filter((child) => child !== null && child !== undefined);
+  return {
+    type,
+    props: { style, ...(kept.length ? { children: kept.length === 1 ? kept[0] : kept } : {}) },
+  };
+};
 
 const BRANCH = {
   bill: "BILL",
@@ -103,7 +108,7 @@ export function referenceLabel(record) {
  */
 function fitTitle(title) {
   const text = (title ?? "").replace(/\s+/g, " ").trim();
-  const LIMIT = 74;
+  const LIMIT = 66;
   if (text.length <= LIMIT) return text;
   return `${text.slice(0, LIMIT).replace(/\s+\S*$/, "")}…`;
 }
@@ -192,6 +197,46 @@ function seal() {
   );
 }
 
+/**
+ * WHO IS BEHIND IT, WITH THEIR FACE — the same line the record page carries.
+ *
+ * "The photo personifies the page, otherwise it just feels bland." A preview is
+ * the version of the page most people ever see, so it needs the person more
+ * than the page does.
+ *
+ * NOTHING IS DRAWN WHEN NOBODY IS KNOWN. A per curiam ruling has no author and
+ * a bill the provenance pass has not reached has no sponsor; both get no row
+ * rather than a grey circle standing in for a human being. The portrait is
+ * likewise optional — a face that would not download leaves the name, which is
+ * the half that matters.
+ */
+function attributionRow(record) {
+  const who = record.attribution;
+  if (!who?.name) return null;
+
+  const party =
+    who.party === "D" ? "Democrat" : who.party === "R" ? "Republican" : who.party ? "Independent" : null;
+  const under = [party, who.state].filter(Boolean).join(" — ");
+
+  return h("div", { display: "flex", alignItems: "center", gap: 14, paddingTop: 4 },
+    record.portrait
+      ? {
+          type: "img",
+          props: {
+            src: record.portrait,
+            width: 56,
+            height: 56,
+            style: { borderRadius: 999, objectFit: "cover", border: `2px solid ${HAIRLINE}` },
+          },
+        }
+      : null,
+    h("div", { display: "flex", flexDirection: "column" },
+      h("div", { display: "flex", fontSize: 22, fontWeight: 600, color: INK }, `${who.role} ${who.name}`),
+      under ? h("div", { display: "flex", fontSize: 19, color: MUTED }, under) : null,
+    ),
+  );
+}
+
 function card(record) {
   return h("div",
     {
@@ -221,6 +266,7 @@ function card(record) {
           { display: "flex", fontFamily: "Bodoni Moda", fontSize: 58, fontWeight: 600, lineHeight: 1.14, color: INK },
           fitTitle(record.title)),
         h("div", { display: "flex", fontSize: 21, color: MUTED }, referenceLabel(record)),
+        attributionRow(record),
       ),
       pulsePanel(record),
     ),

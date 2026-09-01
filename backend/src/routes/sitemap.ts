@@ -16,6 +16,7 @@ import { Hono } from "hono";
 
 import { prisma } from "../prisma";
 import { isFindable } from "../services/findable";
+import { attributionFor } from "../services/reference-attribution";
 
 export const sitemapRouter = new Hono();
 
@@ -133,6 +134,14 @@ sitemapRouter.get("/records", async (c) => {
       decidedDate: true,
       introducedDate: true,
       updatedAt: true,
+      // Who is behind the record. The share card draws them, and it must name
+      // the same person the page names — so it is computed by the same function
+      // the detail endpoint uses rather than assembled a second time here.
+      sponsorName: true,
+      sponsorBioguideId: true,
+      sponsorPhotoUrl: true,
+      sponsorParty: true,
+      sponsorState: true,
     },
     orderBy: { updatedAt: "desc" },
   });
@@ -143,6 +152,7 @@ sitemapRouter.get("/records", async (c) => {
       .map((row) => ({
         ...row,
         path: pathFor(row.referenceType, row.slug!),
+        attribution: attributionFor(row),
       })),
   });
 });
