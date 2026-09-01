@@ -1,0 +1,168 @@
+name: Rebuild the site
+
+# KEEP THE RECORD PAGES AS CURRENT AS THE RECORDS.
+#
+# The sitemap is served live by the API, so it is always right. The record pages
+# are not: `apps/web/scripts/prerender.mjs` writes them as files during the web
+# build, so a record that qualifies today has no page of its own until the next
+# web deploy. GovSync takes up to fifty new records a day, and the web app can
+# go a week without a commit. Left alone, the sitemap ends up advertising pages
+# that are only the generic shell — which is worse than not listing them.
+#
+# So the site rebuilds itself once a day, on the same rhythm the data arrives on.
+#
+# AND THEN IT CHECKS. A workflow that only fires a deploy hook proves the hook
+# was fired. It does not prove anything was rebuilt, or that prerendering ran, or
+# that a record page came out with the record's own title on it. Nobody would
+# notice the difference for months. So this asks the live site afterwards, and a
+# page still wearing the shell's title fails the run.
+#
+# INERT UNTIL A HOOK EXISTS. With no VERCEL_DEPLOY_HOOK secret this says so and
+# exits green. It never fails a build for a path that has not been set up, and it
+# never becomes a second way to deploy quietly competing with the first.
+
+on:
+  schedule:
+    # 09:00 UTC — after the overnight ingest, before the US working day.
+    - cron: "0 9 * * *"
+  # Rebuild now, without pushing anything.
+  workflow_dispatch:
+
+concurrency:
+  # One rebuild at a time. Unlike a deploy, a queued one is not stale: it is the
+  # same job with newer data, so it waits rather than being cancelled.
+  group: rebuild-site
+  cancel-in-progress: false
+
+env:
+  API: https://api.ayeandnay.com
+  SITE: https://ayeandnay.com
+
+jobs:
+  rebuild:
+    name: rebuild
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is a deploy hook configured?
+        id: hook
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Daily rebuild not configured"
+              echo ""
+              echo "No \`VERCEL_DEPLOY_HOOK\` secret, so this workflow did nothing."
+              echo ""
+              echo "Record pages are written at build time. Without this, a law that"
+              echo "qualifies today has no page of its own until somebody pushes to the"
+              echo "web app — while the sitemap has already told Google the page exists."
+              echo ""
+              echo "To turn it on:"
+              echo ""
+              echo "1. Vercel → the web project → **Settings → Git → Deploy Hooks**."
+              echo "   Create one on the production branch. Name it anything; \`daily-rebuild\`"
+              echo "   is clear enough."
+              echo "2. Copy the URL it gives you. It is a secret — anyone holding it can"
+              echo "   trigger a production build."
+              echo "3. GitHub → this repo → **Settings → Secrets and variables → Actions**"
+              echo "4. **New repository secret**, named exactly \`VERCEL_DEPLOY_HOOK\`"
+              echo ""
+              echo "Then run this workflow by hand once, from the Actions tab, and watch"
+              echo "the title check at the end pass against the live site."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ask Vercel to rebuild
+        if: steps.hook.outputs.configured == 'true'
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          # -f so a 4xx from the hook is a failed step rather than a silent
+          # success. A revoked or mistyped hook is exactly the thing that would
+          # otherwise leave this workflow green and useless for months.
+          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK" -o /dev/null
+          echo "Deploy hook fired."
+
+      - name: A record page still says what the record is
+        if: steps.hook.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+
+          # THE FORBIDDEN STRING COMES FROM THE SHELL ITSELF, not from a copy
+          # typed here. If somebody rewrites the tagline in index.html, this
+          # check follows them instead of quietly passing on a string that no
+          # longer appears anywhere.
+          SHELL_TITLE=$(
+            sed -n 's/.*<title>\(.*\)<\/title>.*/\1/p' apps/web/index.html \
+              | sed 's/^AYE &amp; NAY — //'
+          )
+          if [ -z "$SHELL_TITLE" ]; then
+            echo "::error::Could not read the shell title out of apps/web/index.html."
+            exit 1
+          fi
+          echo "The shell's title is: $SHELL_TITLE"
+
+          # Vercel builds asynchronously and the hook returns immediately, so
+          # give the build somewhere to happen before asking about it.
+          echo "Waiting 5 minutes for the build to land…"
+          sleep 300
+
+          # Five pages, not one. A partial write — the run died halfway through
+          # prerendering — leaves some pages correct and some as the shell, and
+          # one sample would find that only by luck.
+          PATHS=$(curl -fsS "$API/api/sitemap/records" | jq -r '.records[0:5][].path')
+          if [ -z "$PATHS" ]; then
+            echo "::error::$API/api/sitemap/records listed no records. Nothing to check, and that is itself wrong."
+            exit 1
+          fi
+
+          # Up to ten more minutes, because "5 minutes" is a guess about a build
+          # queue and not a fact about one.
+          for attempt in $(seq 1 20); do
+            failed=""
+            for path in $PATHS; do
+              html=$(curl -fsSL "$SITE$path" || true)
+              title=$(printf '%s' "$html" | sed -n 's/.*<title>\(.*\)<\/title>.*/\1/p' | head -1)
+              case "$title" in
+                *"$SHELL_TITLE"*) failed="$failed $path" ;;
+                "") failed="$failed $path(no-title)" ;;
+              esac
+            done
+
+            if [ -z "$failed" ]; then
+              {
+                echo "## Rebuilt, and the pages prove it"
+                echo ""
+                echo "Every sampled record page carries its own title rather than the"
+                echo "site's. Checked:"
+                echo ""
+                for path in $PATHS; do echo "- \`$SITE$path\`"; done
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "All sampled pages have their own titles."
+              exit 0
+            fi
+
+            echo "Still wearing the shell's title:$failed (attempt $attempt/20)"
+            sleep 30
+          done
+
+          {
+            echo "## The rebuild did not produce record pages"
+            echo ""
+            echo "These paths are in the live sitemap, so we are telling Google they"
+            echo "exist, but the HTML they serve still carries the site-wide title:"
+            echo ""
+            for path in $failed; do echo "- \`$SITE$path\`"; done
+            echo ""
+            echo "That means \`apps/web/scripts/prerender.mjs\` did not write them —"
+            echo "usually because the build could not reach \`$API\`. Check the Vercel"
+            echo "build log for the \`prerender:\` line."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error::Record pages are still serving the site-wide title:$failed"
+          exit 1

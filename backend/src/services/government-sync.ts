@@ -24,6 +24,7 @@ import {
   stripFederalRegisterFurniture,
 } from "./reference-content";
 import { ensureSlug } from "./reference-slug";
+import { cleanOpinionSnippet } from "./opinion-snippet";
 import { notifyLawUpdate } from "./notification-service";
 import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 import { congressGovKey, env } from "../env";
@@ -640,11 +641,24 @@ async function syncScotusCases(): Promise<number> {
       if (seen.has(masterReferenceId)) continue;
       seen.add(masterReferenceId);
 
-      const snippet = opinion.opinions
-        ?.map((o) => o.snippet)
-        .find((s): s is string => typeof s === "string" && s.trim().length > 0)
-        ?.replace(/\s+/g, " ")
-        .trim();
+      /*
+       * A ruling is listed here before its text has been fetched, so the
+       * snippet is all there is at this moment — and CourtListener's snippet is
+       * the opening characters of the opinion document, which on a slip opinion
+       * is the Reporter of Decisions' standard notice. That block is identical
+       * on every ruling the Court publishes, and storing it gave all seventeen
+       * Supreme Court records one identical description, on their pages as well
+       * as in their previews and search results.
+       *
+       * So the snippet is kept only when it says something. When it does not,
+       * nothing is stored and the description fills itself in from the real
+       * syllabus once the text arrives — see services/reference-content.ts.
+       */
+      const snippet = cleanOpinionSnippet(
+        opinion.opinions
+          ?.map((o) => o.snippet)
+          .find((s): s is string => typeof s === "string" && s.trim().length > 0),
+      );
       await upsertReference({
         masterReferenceId,
         referenceType: "scotus_case",
@@ -653,7 +667,7 @@ async function syncScotusCases(): Promise<number> {
         status: "decided",
         category: categorize(opinion.caseName + " " + (snippet ?? "")),
         sourceUrl: `https://www.courtlistener.com${opinion.absolute_url}`,
-        description: snippet ? (snippet.length > 500 ? `${snippet.slice(0, 497)}...` : snippet) : undefined,
+        description: snippet,
         // WHO WROTE IT. CourtListener has always sent this and nothing read it.
         // "Per Curiam" is left to reference-attribution.ts to reject: it is the
         // Court speaking as one body, not a person, and attributing it to

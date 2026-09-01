@@ -23,10 +23,18 @@
  * Railway is. A daily rebuild matches a daily ingest: the content is at most
  * twenty-four hours old either way.
  *
- * A BUILD MUST NOT FAIL BECAUSE THE API BLINKED. If the fetch does not work,
- * this says so and exits 0. The site deploys with the shell it always had,
- * which is exactly what shipped yesterday — a deploy blocked by a transient
- * network error is a worse outcome than a deploy without prerendered pages.
+ * A BUILD MUST NOT FAIL BECAUSE THE API BLINKED — EXCEPT IN PRODUCTION.
+ *
+ * On a laptop or a preview build, an unreachable API is a warning and this
+ * exits 0: blocking a deploy over a transient network error is worse than a
+ * deploy without prerendered pages.
+ *
+ * In production it is the other way round, and the reason is what Vercel does
+ * with a failed build: it keeps the previous deployment serving. So a red build
+ * leaves yesterday's working pages up, while exiting 0 replaces every one of
+ * them with the generic shell — green, silent, and only discoverable by
+ * curling a record URL and reading the title. That is the failure this guard
+ * exists for.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -160,6 +168,10 @@ async function main() {
     process.exit(1);
   }
 
+  // Set by Vercel on the build that becomes the live site. Absent locally and
+  // on preview deploys, which is exactly the split this guard wants.
+  const isProduction = process.env.VERCEL_ENV === "production";
+
   let records = [];
   try {
     const response = await fetch(`${API}/api/sitemap/records`, {
@@ -168,15 +180,34 @@ async function main() {
     if (!response.ok) throw new Error(`the server answered ${response.status}`);
     ({ records } = await response.json());
   } catch (error) {
-    // Deliberately not a failure. See the note at the top of this file.
-    console.warn(
-      `prerender: could not reach ${API} (${error?.message ?? error}). ` +
-        `Deploying the shell, which is what shipped yesterday.`,
-    );
+    const detail = `could not reach ${API} (${error?.message ?? error})`;
+    if (isProduction) {
+      console.error(
+        `prerender: ${detail}.\n` +
+          `Refusing to publish a site with no record pages. Vercel keeps the ` +
+          `current deployment serving, so the pages that are live stay live. ` +
+          `Check the API, then redeploy.`,
+      );
+      process.exit(1);
+    }
+    console.warn(`prerender: ${detail}. Building the shell only.`);
     return;
   }
 
   if (records.length === 0) {
+    // WHAT ZERO MEANS DEPENDS ON WHERE YOU ARE. On an empty local database it
+    // means nothing has earned a listing yet. In production it cannot mean
+    // that: findable.ts submits any record with a brief, a real description or
+    // three votes, and hundreds qualify. Zero there means something is broken
+    // upstream, and shipping it would delete every page we have.
+    if (isProduction) {
+      console.error(
+        `prerender: ${API} returned no records at all.\n` +
+          `Hundreds qualify in production, so this is a fault rather than an ` +
+          `empty shelf. Refusing to replace every record page with the shell.`,
+      );
+      process.exit(1);
+    }
     console.log(
       "prerender: no record has earned a listing yet — nothing to write. " +
         "See the backend's services/findable.ts for what earns one.",

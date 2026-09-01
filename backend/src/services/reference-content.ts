@@ -27,6 +27,7 @@ import { JobPriority, JobType, jobQueue } from "./job-queue";
 import { notifyLawUpdate } from "./notification-service";
 import { ReferenceKind, parseReferenceId } from "./master-reference-id";
 import { fetchCourtListener } from "./courtlistener";
+import { cleanOpinionSnippet, deriveOpinionDescription } from "./opinion-snippet";
 import { markSettled, markWorking } from "./brief-state";
 import { congressGovKey, env } from "../env";
 import { acceptOfficialText, officialSourceHeaders } from "./official-source";
@@ -1060,11 +1061,32 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
           !reextract &&
           !predatesExtractionFix(ref.fullTextAt);
 
+        /*
+         * A SUPREME COURT RULING LEARNS WHAT IT IS ABOUT THE MOMENT ITS TEXT
+         * ARRIVES.
+         *
+         * CourtListener's snippet — all a ruling has before this point — is the
+         * opening characters of the opinion document, which on a slip opinion is
+         * the Reporter of Decisions' printed notice, identical on every ruling
+         * the Court publishes. The real summary is the syllabus, and the
+         * syllabus is inside the text being stored on this line.
+         *
+         * Doing it here rather than in a list somewhere is what makes it apply
+         * to the next ruling as well as the seventeen we hold: any ruling whose
+         * text lands, ever, gets its description from that text in the same
+         * write. A description that would survive on the way in is left alone.
+         */
+        const derivedDescription =
+          ref.referenceType === "scotus_case" && !cleanOpinionSnippet(ref.description)
+            ? deriveOpinionDescription(fetched.text)
+            : undefined;
+
         // Stored copy is outdated (or absent) — the master reference takes the new text.
         await prisma.governmentReference.update({
           where: { id: ref.id },
           data: {
             fullText: fetched.text,
+            ...(derivedDescription ? { description: derivedDescription } : {}),
             fullTextHash: hash,
             fullTextSource: fetched.source,
             fullTextUrl: fetched.url,
@@ -1083,6 +1105,7 @@ async function runEnsure(referenceId: string, options: EnsureContentOptions): Pr
         current = {
           ...ref,
           fullText: fetched.text,
+          ...(derivedDescription ? { description: derivedDescription } : {}),
           fullTextHash: hash,
           fullTextUrl: fetched.url,
           lawVersion: lawMoved ? ref.lawVersion + 1 : ref.lawVersion,

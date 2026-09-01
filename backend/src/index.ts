@@ -18,6 +18,7 @@ import { notificationsRouter } from "./routes/notifications";
 import { mediaRouter } from "./routes/media";
 import { sitemapRouter } from "./routes/sitemap";
 import { backfillSlugs } from "./services/reference-slug";
+import { backfillOpinionDescriptions } from "./services/opinion-snippet";
 import { governmentReferencesRouter } from "./routes/government-references";
 import { portraitsRouter } from "./routes/portraits";
 import { loginRouter } from "./routes/login";
@@ -631,6 +632,21 @@ void backfillSlugs()
   })
   .catch((error) => {
     console.error("[Slug] backfill could not finish:", error);
+  });
+
+/*
+ * Supreme Court rulings whose description is the printer's notice, a caption, or
+ * a filing card get the Court's own syllabus instead, read out of the opinion
+ * text already stored. Idempotent and cheap: a description that would survive on
+ * the way in is left alone, so after the first pass this changes nothing. See
+ * services/opinion-snippet.ts.
+ */
+void backfillOpinionDescriptions()
+  .then((repaired) => {
+    if (repaired > 0) console.log(`[Opinion] ${repaired} Supreme Court record(s) now say what the case is`);
+  })
+  .catch((error) => {
+    console.error("[Opinion] description backfill could not finish:", error);
   });
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
