@@ -757,6 +757,14 @@ model NotificationPreference {
 model GovernmentReference {
   id                  String    @id @default(cuid())
   masterReferenceId   String    @unique
+  /// The address a person could have typed: /executive-order/eo-14421.
+  ///
+  /// Usually the masterReferenceId, which is already readable for bills and
+  /// orders. Not for the Supreme Court, whose ids are docket numbers nobody
+  /// searches — those are built from the case name. See
+  /// services/reference-slug.ts. Assigned once and never changed: a link that
+  /// dies is a promise broken by a refactor.
+  slug                String?   @unique
   referenceType       String
   title               String
   shortTitle          String?

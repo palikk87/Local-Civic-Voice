@@ -246,6 +246,7 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
     select: {
       id: true,
       masterReferenceId: true,
+      slug: true,
       referenceType: true,
       title: true,
       shortTitle: true,
@@ -321,6 +322,7 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
       return {
         id: ref.id,
         masterReferenceId: ref.masterReferenceId,
+        slug: ref.slug,
         // The id as printed ("H.R. 4836"), so every picker shows the same spelling
         // that referenceIdSearchVariants() can match back.
         displayId: formatReferenceDisplayId(ref.masterReferenceId, ref.referenceType),
@@ -602,6 +604,7 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
     select: {
       id: true,
       masterReferenceId: true,
+      slug: true,
       referenceType: true,
       title: true,
       shortTitle: true,
@@ -703,6 +706,7 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       return {
         id: ref.id,
         masterReferenceId: ref.masterReferenceId,
+        slug: ref.slug,
         // The id as printed ("H.R. 4836", "S.Res. 829"). Sent from here so both
         // clients render one spelling instead of each deriving its own from the
         // raw id — which is how "sres-829-119" reached a card as "SRES.829".
@@ -815,8 +819,16 @@ governmentReferencesRouter.get("/:id", async (c) => {
   // "Get Citizen Brief" (POST /:id/brief), which is the act that costs money
   // and the act a person should choose.
 
-  const reference = await prisma.governmentReference.findUnique({
-    where: { id },
+  /*
+   * BY CUID OR BY READABLE ADDRESS.
+   *
+   * /executive-order/eo-14421 is what a person types and what Google indexes;
+   * /reference/<cuid> is what every link shared before today used. Both have
+   * to land on the same record, forever — a link that dies is a promise broken
+   * by a refactor.
+   */
+  const reference = await prisma.governmentReference.findFirst({
+    where: { OR: [{ id }, { slug: id }] },
     include: {
       _count: {
         select: {
@@ -948,6 +960,8 @@ governmentReferencesRouter.get("/:id", async (c) => {
     reference: {
       id: reference.id,
       masterReferenceId: reference.masterReferenceId,
+      /** The readable address. Null until the slug backfill has reached it. */
+      slug: reference.slug,
       displayId: formatReferenceDisplayId(reference.masterReferenceId, reference.referenceType),
       referenceType: reference.referenceType,
       title: reference.title,

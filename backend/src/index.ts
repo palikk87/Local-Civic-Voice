@@ -16,6 +16,8 @@ import { billsRouter } from "./routes/bills";
 import { feedRouter } from "./routes/feed";
 import { notificationsRouter } from "./routes/notifications";
 import { mediaRouter } from "./routes/media";
+import { sitemapRouter } from "./routes/sitemap";
+import { backfillSlugs } from "./services/reference-slug";
 import { governmentReferencesRouter } from "./routes/government-references";
 import { portraitsRouter } from "./routes/portraits";
 import { loginRouter } from "./routes/login";
@@ -414,6 +416,9 @@ app.route("/api/bills", billsRouter);
 app.route("/api/feed", feedRouter);
 app.route("/api/notifications", notificationsRouter);
 app.route("/api/media", mediaRouter);
+// The list of pages we ask Google to index. See services/findable.ts for what
+// earns a place on it, and routes/sitemap.ts for why it is served live.
+app.route("/api/sitemap", sitemapRouter);
 app.route("/api/government-references", governmentReferencesRouter);
 app.route("/api/portraits", portraitsRouter);
 app.route("/api/login", loginRouter);
@@ -608,6 +613,25 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
 void ensureBuiltInRoles().catch((error) => {
   console.error("[Roles] could not ensure the built-in roles:", error);
 });
+
+/*
+ * EVERY RECORD ENDS UP WITH A READABLE ADDRESS, INCLUDING THE OLD ONES.
+ *
+ * New records get theirs at the moment they arrive — services/government-sync
+ * mints one inside the ingest. This is the same rule applied to the ~1,900
+ * held before that existed, so the two cannot diverge.
+ *
+ * Idempotent and cheap: a record that has a slug is skipped, so after the
+ * first pass this finds nothing and costs one query. Safe to run at every boot
+ * rather than being a migration somebody has to remember to run.
+ */
+void backfillSlugs()
+  .then((assigned) => {
+    if (assigned > 0) console.log(`[Slug] gave ${assigned} record(s) a readable address`);
+  })
+  .catch((error) => {
+    console.error("[Slug] backfill could not finish:", error);
+  });
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
 // SCOTUS cases at boot, then once every 24 hours. The sync itself skips if it

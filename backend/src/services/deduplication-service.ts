@@ -4,6 +4,7 @@ import { computeWeightedTally } from "./delegation-service";
 import { canonicalReferenceId } from "./master-reference-id";
 import { NameSource, claimName, findByName, namesFor, transferNames } from "./reference-names";
 import { linkOrphanRollCalls } from "./roll-call";
+import { ensureSlug } from "./reference-slug";
 
 
 /**
@@ -371,6 +372,11 @@ export async function findOrCreateReference(
 
     return created;
   });
+
+  // A readable address, the same one the ingest gives every other record.
+  // Outside the transaction: naming is not part of creating the record, and a
+  // failure here must not roll back one that was otherwise written correctly.
+  await ensureSlug(reference.id);
 
   return {
     reference,

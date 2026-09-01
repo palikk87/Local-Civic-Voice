@@ -23,6 +23,7 @@ import {
   sanitizeOfficialText,
   stripFederalRegisterFurniture,
 } from "./reference-content";
+import { ensureSlug } from "./reference-slug";
 import { notifyLawUpdate } from "./notification-service";
 import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 import { congressGovKey, env } from "../env";
@@ -177,6 +178,19 @@ interface UpsertData {
 async function upsertReference(data: UpsertData): Promise<void> {
   const { masterReferenceId, ...fields } = data;
   const notifyAfterCommit: Array<{ id: string; masterReferenceId: string; title: string }> = [];
+  /*
+   * EVERY RECORD THAT COMES THROUGH HERE GETS A READABLE ADDRESS.
+   *
+   * This is the single seam every government record arrives by, which is why
+   * the address is minted here rather than by a sweep: a bill that lands at
+   * three in the morning has /bill/hr-10184-119 at three in the morning, and
+   * is in the sitemap as soon as it has anything worth reading on it.
+   *
+   * Collected and assigned after the transaction commits — a slug is not part
+   * of writing the record, and a naming failure must never roll back a law
+   * update.
+   */
+  const slugAfterCommit: string[] = [];
 
   await prisma.$transaction(async (tx) => {
     // Which record does this name belong to? Usually the one called that, but a
@@ -260,6 +274,8 @@ async function upsertReference(data: UpsertData): Promise<void> {
       );
     }
 
+    slugAfterCommit.push(row.id);
+
     const claimed = await claimName(tx, row.id, masterReferenceId, NameSource.CREATED, {
       current: true,
     });
@@ -270,6 +286,10 @@ async function upsertReference(data: UpsertData): Promise<void> {
       );
     }
   });
+
+  for (const id of slugAfterCommit) {
+    await ensureSlug(id);
+  }
 
   for (const moved of notifyAfterCommit) {
     const { notified } = await notifyLawUpdate(moved.id, moved.masterReferenceId, moved.title);
