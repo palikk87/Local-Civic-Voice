@@ -34,6 +34,7 @@
  * also the only one measured returning rubbish.
  */
 import { prisma } from "../prisma";
+import { officialSourceHeaders } from "./official-source";
 
 /** A miss is worth re-checking eventually; somebody may have uploaded one. */
 const RETRY_A_MISS_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
@@ -52,10 +53,15 @@ const RETRY_A_MISS_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * remembered miss would have kept her faceless anyway.
  *
  * So a miss records the sources it was measured against. Change this string
- * whenever the source list changes, and every miss recorded under the old one
- * is retried the next time anybody asks — once, and then remembered again.
+ * whenever the source list changes — OR WHENEVER THE WAY THEY ARE ASKED
+ * CHANGES, which is the same thing from a missing face's point of view. The
+ * ";identified" on the end is when this began sending a User-Agent: Wikimedia
+ * answers 403 without one, so every miss taken before that was a miss against
+ * a question we were not really asking. Every miss recorded under an older
+ * string is retried the next time anybody looks — once, and then remembered
+ * again.
  */
-const SOURCES_TRIED = "roster-hint,mirror,theunitedstates,bioguide";
+const SOURCES_TRIED = "roster-hint,mirror,theunitedstates,bioguide;identified";
 
 /** Nothing smaller is a photograph of a person. */
 const TOO_SMALL_TO_BE_A_FACE = 1000;
@@ -98,11 +104,24 @@ export const BIOGUIDE_ID = /^[A-Z]\d{6}$/;
  */
 export const PORTRAIT_KEY = /^(?:[A-Z]\d{6}|official-[a-z0-9-]{2,40})$/;
 
+/**
+ * SAY WHO IS ASKING. Wikimedia's policy requires it and it enforces it: the
+ * same URL that answers 200 to curl answers 403 to a request with no
+ * User-Agent. That is not theoretical — it is why Darline Graham's photograph,
+ * which exists only on Wikimedia, was still missing after every other part of
+ * this was working, and it would have taken all thirty-six cabinet and Supreme
+ * Court portraits with it. The header this uses is the one the rest of the
+ * platform already uses for official sources, built from BACKEND_URL so a
+ * source that wants to complain can find us. See services/official-source.ts.
+ */
 async function download(
   url: string,
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; contentType: string } | null> {
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(url, {
+      headers: officialSourceHeaders(),
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!response.ok) return null;
     // Uint8Array rather than Buffer: it is what Prisma's Bytes column takes.
     const bytes = new Uint8Array(await response.arrayBuffer()) as Uint8Array<ArrayBuffer>;

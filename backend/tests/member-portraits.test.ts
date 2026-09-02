@@ -25,9 +25,15 @@ const PNG = Buffer.concat([
 /** What congress.gov actually sends for J000293: not an image, and 64KB of it. */
 const THE_CORRUPT_ANSWER = Buffer.concat([Buffer.from("\x00nod"), Buffer.alloc(65_532, 0)]);
 
+/** Every User-Agent a source was asked with during a test. */
+let identifiedAs: Array<string | undefined> = [];
+
 function answerWith(byUrl: (url: string) => { status: number; body?: Buffer } | null) {
-  globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+  globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
+    identifiedAs.push(
+      new Headers(init?.headers ?? {}).get("user-agent") ?? undefined,
+    );
     const answer = byUrl(url);
     if (!answer) return new Response("no", { status: 404 });
     return new Response(answer.body ?? null, {
@@ -182,6 +188,24 @@ describe("collecting a member's face", () => {
 
     const got = await mod.memberPortrait("Z000007", "https://example.test/found-at-last.jpg");
     expect(got?.contentType).toBe("image/jpeg");
+  });
+
+  test("WE SAY WHO WE ARE, BECAUSE ONE SOURCE ANSWERS 403 IF WE DO NOT", async () => {
+    // Wikimedia's policy requires a descriptive User-Agent and it enforces it:
+    // the URL that answers 200 to curl answers 403 to a request without one.
+    // That is where Darline Graham's photograph lives, and where all thirty-six
+    // cabinet and Supreme Court portraits live. Asking anonymously lost every
+    // one of them, and the failure looked exactly like "nobody has a photo".
+    await forget("Z000008");
+    identifiedAs = [];
+    answerWith(() => ({ status: 200, body: JPEG }));
+
+    await mod.memberPortrait("Z000008", "https://upload.wikimedia.org/her-face.jpg");
+    expect(identifiedAs.length).toBeGreaterThan(0);
+    for (const agent of identifiedAs) {
+      expect(agent, "a source was asked without saying who we are").toBeDefined();
+      expect(agent).toContain("AyeAndNay");
+    }
   });
 
   test("an id that is not an id never reaches a fetch or a query", async () => {
