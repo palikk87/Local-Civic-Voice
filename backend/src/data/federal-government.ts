@@ -609,3 +609,24 @@ const DEPARTMENTS: Department[] = [
 ];
 
 export { EXECUTIVE, JUDICIAL, DEPARTMENTS, CABINET, CABINET_RANK, PRINCIPALS, WHITE_HOUSE_STAFF };
+
+/**
+ * WHERE EACH OFFICIAL'S PHOTOGRAPH COMES FROM.
+ *
+ * The `photoUrl` recorded against every official above is a Wikimedia address,
+ * and until now it was handed straight to the reader's browser — so every
+ * Government screen on this platform fetched thirty-six pictures from somebody
+ * else's server, every time it painted, and a face was missing whenever that
+ * server said no.
+ *
+ * Now the screen is given our address instead, and the first request for a post
+ * fetches the photograph once and keeps it. This map is what that fetch reads.
+ * The URLs stay here rather than being replaced: a face on a public official
+ * should say where it came from, and a post added to this file tomorrow is
+ * collected the first time anybody opens the screen. See routes/portraits.ts.
+ */
+export const OFFICIAL_PORTRAIT_SOURCES: Record<string, string> = Object.fromEntries(
+  [...EXECUTIVE, ...JUDICIAL]
+    .filter((official) => official.photoUrl)
+    .map((official) => [`official-${official.id}`, official.photoUrl as string]),
+);

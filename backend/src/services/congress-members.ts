@@ -71,6 +71,25 @@ const PHOTO_FALLBACKS: Record<string, string> = {
     "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Darline_Graham%2C_2026_%28cropped%29.png/330px-Darline_Graham%2C_2026_%28cropped%29.png",
 };
 
+/**
+ * A MEMBER'S FACE IS SERVED FROM HERE, NOT FROM CONGRESS.GOV.
+ *
+ * Every screen used to be handed the address this function is given, and every
+ * screen then fetched it from congress.gov on every paint. That is how five
+ * sponsors ended up faceless: measured across all 244 people who have sponsored
+ * something on this platform, that host has no photograph for four of them and
+ * answers Ron Johnson with 65,536 bytes that are not an image.
+ *
+ * So the client is told our address, and we collect the face the first time
+ * anybody asks for it: one fetch, the bytes checked, then kept for good. The
+ * URL we were given is kept as `photoSource` — it is the best hint for that
+ * fetch, and it is the honest record of where the picture came from.
+ */
+function ourPortrait(bioguideId: string, source: string | null): Pick<Member, "photoUrl" | "photoSource"> {
+  const base = (process.env.BACKEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+  return { photoUrl: `${base}/api/portraits/${bioguideId}.jpg`, photoSource: source };
+}
+
 const PARTY_NAMES: Record<Party, string> = {
   R: "Republican",
   D: "Democrat",
@@ -200,7 +219,10 @@ async function fetchRoster(key: string): Promise<Member[]> {
         phone: null,
         website: null,
         twitter: null,
-        photoUrl: m.depiction?.imageUrl ?? PHOTO_FALLBACKS[m.bioguideId] ?? null,
+        ...ourPortrait(
+          m.bioguideId,
+          m.depiction?.imageUrl ?? PHOTO_FALLBACKS[m.bioguideId] ?? null,
+        ),
         office: null,
         servingSince: latestTerm?.startYear ?? null,
       });
@@ -269,7 +291,14 @@ async function enrichRoster(roster: Roster, key: string, congress: number): Prom
 
 function fallbackRoster(): Roster {
   return {
-    members: FALLBACK_MEMBERS,
+    // The bundled list was written with congress.gov addresses in it, from
+    // before every face was served from here. Same treatment as the live one,
+    // so a reader cannot tell which roster they got by where the pictures load
+    // from — and so a cold start with no API key still shows faces we hold.
+    members: FALLBACK_MEMBERS.map((member) => ({
+      ...member,
+      ...ourPortrait(member.id, member.photoUrl),
+    })),
     congress: 119,
     source: "fallback",
     fetchedAt: Date.now(),
@@ -326,6 +355,31 @@ export async function getMembers(): Promise<Roster> {
     });
 
   return inFlight;
+}
+
+/**
+ * WHERE CONGRESS ITSELF SAYS THIS MEMBER'S PHOTOGRAPH IS.
+ *
+ * The roster carries a URL for each member that Congress.gov's own API names —
+ * a content hash, not something that can be built from a bioguide id, so it is
+ * only knowable by having asked. It matters because for at least one sitting
+ * member it is the ONLY place a photograph exists: Darline Graham (G000608) has
+ * none at bioguide.congress.gov and none at the unitedstates.io mirror.
+ *
+ * routes/portraits.ts asks this before collecting somebody's face, so that
+ * fetch starts from the best URL anybody has rather than from a guess. It reads
+ * the roster already in memory and never fetches a member's detail — a missing
+ * face must not cost a page an API call.
+ */
+export async function memberPhotoSource(bioguideId: string): Promise<string | null> {
+  try {
+    const roster = await getMembers();
+    return roster.members.find((member) => member.id === bioguideId)?.photoSource ?? null;
+  } catch {
+    // The roster being unreachable is not a reason to fail a portrait. The
+    // other sources are still there, and they cover almost everybody.
+    return null;
+  }
 }
 
 export async function getMemberById(id: string): Promise<Member | undefined> {

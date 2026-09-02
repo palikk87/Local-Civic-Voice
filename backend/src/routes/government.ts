@@ -220,6 +220,31 @@ governmentRouter.get("/officials", async (c) => {
   );
   const { getLeadership } = await import("../services/congress-members");
 
+  /*
+   * A PUBLIC OFFICIAL'S FACE COMES FROM US, NOT FROM WIKIMEDIA.
+   *
+   * The photoUrl written against each official in data/federal-government is a
+   * Wikimedia address, and it used to be handed straight to the reader — so
+   * every Government screen fetched thirty-six pictures from somebody else's
+   * server on every paint, and a face went missing whenever that server said
+   * no. The photographs are downloaded now and served from our own domain; the
+   * Wikimedia URL stays in the file as the record of where each one came from,
+   * and as the hint the fallback route uses for a post added since the
+   * download. See routes/portraits.ts.
+   *
+   * An official with no photograph on file keeps their empty photoUrl. Pointing
+   * it at an address that answers 404 would turn "nobody has published one"
+   * into "something is broken", and those are different facts.
+   */
+  const base = (process.env.BACKEND_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const servedFromHere = (official: Official): Official =>
+    official.photoUrl
+      ? { ...official, photoUrl: `${base}/api/portraits/official-${official.id}.jpg` }
+      : official;
+
+  const executive = EXECUTIVE.map(servedFromHere);
+  const judicial = JUDICIAL.map(servedFromHere);
+
   // Positions 2 and 3 in the line of succession are held by Congress, so they have to
   // be stitched in from the live roster rather than hardcoded.
   const leaders = await getLeadership();
@@ -253,16 +278,16 @@ governmentRouter.get("/officials", async (c) => {
   const presidentProTempore = findLeader(/President Pro Tempore/i);
 
   const succession: Official[] = [
-    ...EXECUTIVE.filter((o) => o.successionOrder === 1),
+    ...executive.filter((o) => o.successionOrder === 1),
     ...(speaker ? [{ ...speaker, successionOrder: 2 }] : []),
     ...(presidentProTempore ? [{ ...presidentProTempore, successionOrder: 3 }] : []),
-    ...EXECUTIVE.filter((o) => o.successionOrder !== null && o.successionOrder > 3),
+    ...executive.filter((o) => o.successionOrder !== null && o.successionOrder > 3),
   ].sort((a, b) => (a.successionOrder ?? 99) - (b.successionOrder ?? 99));
 
   return c.json({
     data: {
-      executive: EXECUTIVE,
-      judicial: JUDICIAL,
+      executive,
+      judicial,
       departments: DEPARTMENTS,
       succession,
       congressionalLeadership,

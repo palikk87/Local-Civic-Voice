@@ -10,7 +10,12 @@
 
 import type { Member } from "../types";
 
-export const FALLBACK_MEMBERS: Member[] = [
+/**
+ * `photoSource` is absent on purpose: these entries record where each face came
+ * from, and services/congress-members.ts turns that into our own address before
+ * anybody sees it — the same treatment the live roster gets.
+ */
+export const FALLBACK_MEMBERS: Array<Omit<Member, "photoSource">> = [
   {
     "id": "B001314",
     "name": "Aaron Bean",

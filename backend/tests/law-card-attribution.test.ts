@@ -369,7 +369,7 @@ describe("a Supreme Court ruling names the justice who wrote the majority", () =
 });
 
 describe("a bill still names its sponsor, the way it always did", () => {
-  test("and carries the bioguide id the client builds the portrait from", async () => {
+  test("and points its face at us rather than at congress.gov", async () => {
     const id = await record({
       id: "hr-test-1-119",
       referenceType: "bill",
@@ -381,9 +381,14 @@ describe("a bill still names its sponsor, the way it always did", () => {
     expect(attribution?.name).toBe("Adam Smith");
     expect(attribution?.role).toBe("Sponsored by");
     expect(attribution?.bioguideId).toBe("S000510");
-    // Built by the client from the bioguide id — one place for that pattern,
-    // not two.
-    expect(attribution?.photoUrl).toBeNull();
+    // This used to be null, and the client built a congress.gov URL from the
+    // bioguide id itself. That is how five sponsors ended up with no face:
+    // measured across all 244 people who have sponsored something here, that
+    // host has no photograph for four of them and answers a fifth with bytes
+    // that are not an image. The address is ours now, and it is the server's to
+    // give — there is one place a face comes from, and it is not a guess made
+    // in two apps. See routes/portraits.ts.
+    expect(attribution?.photoUrl).toEndWith("/api/portraits/S000510.jpg");
   });
 
   test("and a bill the provenance pass has not reached has no attribution at all", async () => {

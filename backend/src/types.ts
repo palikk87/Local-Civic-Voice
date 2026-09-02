@@ -216,7 +216,19 @@ export const memberSchema = z.object({
   phone: z.string().nullable(),
   website: z.string().nullable(),
   twitter: z.string().nullable(),
+  /**
+   * OUR OWN ADDRESS FOR THIS PERSON'S FACE, always — /api/portraits/<id>.jpg.
+   * It used to be a congress.gov URL handed straight to the reader's browser,
+   * which is how five sponsors ended up with no face: that host has no
+   * photograph for four of them and answers a fifth with bytes that are not an
+   * image. See routes/portraits.ts.
+   */
   photoUrl: z.string().nullable(),
+  /**
+   * Where that photograph came from, kept so a face can be traced back to a
+   * source rather than just appearing. Null when nobody published one.
+   */
+  photoSource: z.string().nullable(),
   office: z.string().nullable(),
   servingSince: z.number().nullable(),
 });
