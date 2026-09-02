@@ -359,11 +359,26 @@ export function attributionFor(ref: AttributableReference): Attribution | null {
 
   const name = ref.sponsorName?.trim();
   if (!name) return null;
+  const bioguideId = ref.sponsorBioguideId?.trim() || null;
   return {
     name,
     role: "Sponsored by",
-    photoUrl: ref.sponsorPhotoUrl ?? null,
-    bioguideId: ref.sponsorBioguideId ?? null,
+    /*
+     * ONE ADDRESS FOR A FACE, AND IT IS OURS.
+     *
+     * This used to be null so every client could build a congress.gov URL
+     * itself. Measured across the live set, that source has no photograph for
+     * several sitting members and serves 64KB of something that is not an
+     * image for at least one — which killed the share card that tried to draw
+     * it. services/member-portraits.ts asks the official source first, then
+     * two mirrors, checks the bytes really are a picture, and keeps whatever
+     * answered. Pointing here means the page, the card and the phone all get
+     * the same face from the same place, and get it once.
+     */
+    photoUrl: bioguideId
+      ? `${(process.env.BACKEND_URL || "http://localhost:3000").replace(/\/+$/, "")}/api/portraits/${bioguideId}.jpg`
+      : (ref.sponsorPhotoUrl ?? null),
+    bioguideId,
     party: ref.sponsorParty ?? null,
     state: ref.sponsorState ?? null,
   };

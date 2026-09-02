@@ -2110,3 +2110,41 @@ model Justice {
   @@unique([name, startDate], name: "name_startDate")
   @@index([startDate, endDate])
 }
+
+/// A MEMBER OF CONGRESS'S PORTRAIT, KEPT ONCE WE HAVE SEEN IT.
+///
+/// Presidents and justices are a closed set of 158 people, so their portraits
+/// were downloaded once and committed beside the code. Congress is not closed
+/// and it turns over, so theirs are collected as they are met: the first time
+/// anything asks for a member's face — a record page, a share card, the
+/// delegates screen — it is fetched, checked, and kept here. Nothing is
+/// bulk-downloaded and nobody's face is fetched twice.
+///
+/// WHY THE DATABASE AND NOT A DISK. The container's filesystem is replaced on
+/// every deploy, so a portrait written there is collected again a day later,
+/// forever. This survives.
+///
+/// A MISS IS A RESULT TOO. congress.gov has no photograph on file for some
+/// members, and for at least one it serves 64KB of something that is not an
+/// image at all. Remembering that stops every later build asking again, and
+/// `checkedAt` lets us look once more in a week in case somebody uploaded one.
+model MemberPortrait {
+  /// The Bioguide id — the one identifier every source keys on.
+  bioguideId String @id
+
+  /// Absent when every source refused. The name still renders without it.
+  image       Bytes?
+  contentType String?
+
+  /// Which source answered, so a source that starts lying can be found.
+  source String?
+
+  /// When we last asked. A miss is retried after a week, a hit never.
+  checkedAt DateTime @default(now())
+  attempts  Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([checkedAt])
+}

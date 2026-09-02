@@ -204,40 +204,98 @@ function render(shell, record, hasCard) {
 }
 
 /**
- * THE PORTRAIT, FETCHED ONCE PER PERSON.
+ * THE PORTRAIT, FETCHED ONCE PER PERSON — AND NOT GIVEN UP ON TOO EASILY.
  *
- * Two hundred bills can share one sponsor, so this is keyed by the image URL
- * and every record after the first is free. Failures are cached too — a face
- * that would not download must not be retried seven hundred times, and the
- * card is written without it.
+ * Two hundred bills can share one sponsor, so this is keyed by the image and
+ * every record after the first is free.
  *
- * Embedded as a data URI rather than left as a URL: the card is rasterised in
- * this process, and a renderer reaching out to bioguide.congress.gov per record
- * mid-build is a slow build that fails when somebody else's server is having a
- * bad morning.
+ * WHY IT RETRIES. The first version cached failures as permanently as
+ * successes, which is wrong for the failure that actually happens: an image
+ * host answering 429 because we asked for two hundred faces in a hurry. One
+ * throttled response would have poisoned that person for the whole build and
+ * shipped their cards faceless, quietly. Measured against the live set, six of
+ * the nine "missing" portraits were exactly this — they downloaded fine when
+ * asked one at a time. So a 404 is believed and cached; a 429 or a 5xx is
+ * waited out and asked again.
+ *
+ * WHY bioguide COMES FIRST. congress.gov serves member portraits from a stable
+ * path built out of the bioguide id and does not throttle us; the Wikipedia
+ * copy is the one that does. When a record carries both, take the one that
+ * answers reliably.
  */
 const portraits = new Map();
+/** Records that should carry a face, and whether they got one. */
+const faceLedger = { expected: 0, drawn: 0, missing: [] };
+
+/*
+ * THE SERVER DECIDES WHERE A FACE COMES FROM, NOT THIS SCRIPT.
+ *
+ * This used to build a congress.gov URL itself, which is how it inherited that
+ * source's two failures: four sitting members with no photograph there, and one
+ * whose "photo" is 64KB of bytes that are not a picture. The API now serves
+ * every portrait from /api/portraits — official source first, then two mirrors,
+ * bytes checked, kept once — so `photoUrl` is the answer and there is nothing
+ * left here to get wrong.
+ */
+function portraitSources(who) {
+  return who?.photoUrl ? [who.photoUrl] : [];
+}
+
+/** What these bytes actually are, by their own signature, or null. */
+function imageKind(bytes) {
+  if (bytes.length < 1000) return null;
+  const head = bytes.subarray(0, 12);
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg";
+  if (head.subarray(0, 8).toString("hex") === "89504e470d0a1a0a") return "image/png";
+  return null;
+}
+
+async function download(url) {
+  // Three goes, backing off. Anything that is not a 404 gets another chance.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (response.status === 404) return null;
+      if (response.ok) {
+        const bytes = Buffer.from(await response.arrayBuffer());
+        const kind = imageKind(bytes);
+        // THE HEADER IS NOT EVIDENCE. congress.gov serves exactly 65,536 bytes
+        // of something beginning "\x00nod" for at least one member, labelled
+        // image/jpeg, every time it is asked. It passed a size check and a
+        // content-type check, and then the rasteriser died on it and took that
+        // record's whole card with it. So the bytes are asked what they are.
+        return kind ? `data:${kind};base64,${bytes.toString("base64")}` : null;
+      }
+    } catch {
+      // Timed out or the connection went; the wait below covers it.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400 * 2 ** attempt));
+  }
+  return null;
+}
+
 async function portraitFor(record) {
   const who = record.attribution;
-  const url = who?.photoUrl || (who?.bioguideId ? `https://bioguide.congress.gov/photo/${who.bioguideId}.jpg` : null);
-  if (!url) return null;
-  if (portraits.has(url)) return portraits.get(url);
+  const sources = portraitSources(who);
+  if (!sources.length) return null;
+
+  faceLedger.expected += 1;
+  const key = sources[0];
+  if (portraits.has(key)) {
+    const cached = portraits.get(key);
+    if (cached) faceLedger.drawn += 1;
+    else faceLedger.missing.push(`${record.slug} (${who.name})`);
+    return cached;
+  }
 
   let data = null;
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-    if (response.ok) {
-      const type = response.headers.get("content-type") ?? "image/jpeg";
-      if (type.startsWith("image/")) {
-        const bytes = Buffer.from(await response.arrayBuffer());
-        // A "photo" that is really an error page in a trench coat.
-        if (bytes.length > 1000) data = `data:${type};base64,${bytes.toString("base64")}`;
-      }
-    }
-  } catch {
-    // Left null; the name still gets drawn.
+  for (const source of sources) {
+    data = await download(source);
+    if (data) break;
   }
-  portraits.set(url, data);
+  portraits.set(key, data);
+  if (data) faceLedger.drawn += 1;
+  else faceLedger.missing.push(`${record.slug} (${who.name})`);
   return data;
 }
 
@@ -340,9 +398,30 @@ async function main() {
      */
     let hasCard = false;
     if (renderCard) {
+      const portrait = await portraitFor(record);
       try {
-        const portrait = await portraitFor(record);
-        await writeFile(join(DIST, "og", `${record.slug}.png`), await renderCard({ ...record, portrait }));
+        let png;
+        try {
+          png = await renderCard({ ...record, portrait });
+        } catch (error) {
+          /*
+           * A PORTRAIT THAT WILL NOT DRAW COSTS THE PORTRAIT, NOT THE CARD.
+           *
+           * An image can download intact and still defeat the rasteriser. When
+           * that happened the whole card was lost and the record fell back to
+           * the house banner — trading a face for everything else on it, which
+           * is the wrong way round. Draw it again without the picture.
+           */
+          if (!portrait) throw error;
+          console.warn(
+            `prerender: ${record.slug} would not draw with its portrait ` +
+              `(${error?.message ?? error}); drawing it without.`,
+          );
+          faceLedger.drawn -= 1;
+          faceLedger.missing.push(`${record.slug} (portrait would not render)`);
+          png = await renderCard({ ...record, portrait: null });
+        }
+        await writeFile(join(DIST, "og", `${record.slug}.png`), png);
         hasCard = true;
         drawn += 1;
       } catch (error) {
@@ -374,11 +453,38 @@ async function main() {
     }
   }
 
-  const faces = [...portraits.values()].filter(Boolean).length;
   console.log(
     `prerender: wrote ${records.length} record page(s) with their own titles, ` +
-      `and ${drawn} share card(s) — ${faces} of ${portraits.size} portrait(s) downloaded.`,
+      `and ${drawn} share card(s). ${faceLedger.drawn} of ${faceLedger.expected} ` +
+      `expected face(s) drawn, from ${portraits.size} distinct people.`,
   );
+  if (faceLedger.missing.length) {
+    console.warn(
+      `prerender: no portrait for ${faceLedger.missing.length} record(s): ` +
+        `${faceLedger.missing.slice(0, 8).join(", ")}` +
+        `${faceLedger.missing.length > 8 ? ", …" : ""}`,
+    );
+  }
+
+  /*
+   * A FACELESS BATCH IS A FAULT, NOT A RESULT.
+   *
+   * Three members of Congress genuinely have no portrait on file, and a per
+   * curiam ruling has no author to photograph — a few missing faces is the
+   * truth. Losing a fifth of them is not: that is an image host throttling or
+   * refusing us, and the cards would ship looking finished while saying less
+   * than they should. In production that stops the build; the previous
+   * deployment keeps serving cards that do have faces.
+   */
+  const shortfall = faceLedger.expected - faceLedger.drawn;
+  if (isProduction && faceLedger.expected > 0 && shortfall / faceLedger.expected > 0.2) {
+    console.error(
+      `prerender: ${shortfall} of ${faceLedger.expected} portraits could not be ` +
+        `downloaded. That is not a handful of people without a photograph, it is ` +
+        `an image host refusing us. Refusing to publish cards without their faces.`,
+    );
+    process.exit(1);
+  }
 }
 
 await main();
