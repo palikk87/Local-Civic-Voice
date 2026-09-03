@@ -52,14 +52,20 @@ const RETRY_A_MISS_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
  * own URL is the only place hers exists. The moment that source was added, the
  * remembered miss would have kept her faceless anyway.
  *
- * So a miss records the sources it was measured against. Change this string
- * whenever the source list changes — OR WHENEVER THE WAY THEY ARE ASKED
- * CHANGES, which is the same thing from a missing face's point of view. The
- * ";identified" on the end is when this began sending a User-Agent: Wikimedia
- * answers 403 without one, so every miss taken before that was a miss against
- * a question we were not really asking. Every miss recorded under an older
- * string is retried the next time anybody looks — once, and then remembered
- * again.
+ * So a miss records the question it was the answer to, and is thrown out when
+ * the question changes. Two things make it change:
+ *
+ *   THE SOURCE LIST, or the way the sources are asked. The ";identified" below
+ *   is when this began sending a User-Agent — Wikimedia answers 403 without
+ *   one, so every miss taken before that was an answer to a question we were
+ *   not really asking.
+ *
+ *   THE HINT ITSELF, appended per person. Everton Blair was sworn in with no
+ *   photograph published anywhere, so we recorded a miss; days later
+ *   Congress.gov published one, and the miss would have kept his face off the
+ *   platform for the rest of the week. A new member is exactly who this happens
+ *   to, and a week is a long time to be the only person on the site with no
+ *   face. The moment a source names a URL we have not tried, we try it.
  */
 const SOURCES_TRIED = "roster-hint,mirror,theunitedstates,bioguide;identified";
 
@@ -187,13 +193,19 @@ export async function memberPortrait(
       contentType: held.contentType ?? "image/jpeg",
     };
   }
-  // A miss we recorded recently is an answer, not a reason to ask again —
-  // unless it was recorded before the sources changed, in which case it is an
-  // answer to a question nobody is asking any more.
-  const stale = held?.source !== SOURCES_TRIED;
-  if (held && !stale && Date.now() - held.checkedAt.getTime() < RETRY_A_MISS_AFTER_MS) return null;
 
+  // Only now is the hint worth resolving. A face we already hold returned
+  // above without touching the roster; from here we are going to look.
   const url = typeof hint === "function" ? await hint() : (hint ?? null);
+  const question = `${SOURCES_TRIED}|${url ?? "no hint"}`;
+
+  // A miss we recorded recently is an answer, not a reason to ask again — but
+  // only while it is still an answer to the question being asked. A different
+  // source list, or a URL nobody had last time, makes it stale on the spot.
+  const answersThis = held?.source === question;
+  if (held && answersThis && Date.now() - held.checkedAt.getTime() < RETRY_A_MISS_AFTER_MS) {
+    return null;
+  }
 
   for (const source of portraitSourcesFor(key, url)) {
     const got = await download(source);
@@ -217,8 +229,8 @@ export async function memberPortrait(
   // and remember WHICH sources refused, so adding one un-remembers it.
   await prisma.memberPortrait.upsert({
     where: { bioguideId: key },
-    create: { bioguideId: key, source: SOURCES_TRIED, attempts: 1 },
-    update: { source: SOURCES_TRIED, checkedAt: new Date(), attempts: { increment: 1 } },
+    create: { bioguideId: key, source: question, attempts: 1 },
+    update: { source: question, checkedAt: new Date(), attempts: { increment: 1 } },
   });
   return null;
 }

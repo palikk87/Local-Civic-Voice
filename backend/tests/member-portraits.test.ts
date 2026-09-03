@@ -190,6 +190,32 @@ describe("collecting a member's face", () => {
     expect(got?.contentType).toBe("image/jpeg");
   });
 
+  test("A PHOTOGRAPH PUBLISHED AFTER WE GAVE UP IS PICKED UP AT ONCE", async () => {
+    // Everton Blair was sworn in with no photograph anywhere, so we recorded a
+    // miss. Days later Congress.gov published one — and a remembered miss would
+    // have kept the only faceless person on the platform faceless for the rest
+    // of the week. A new member is exactly who this happens to.
+    await forget("Z000009");
+    answerWith(() => null);
+    expect(await mod.memberPortrait("Z000009")).toBeNull();
+
+    // Nothing has changed: still no photograph, still no hint. Stays a miss,
+    // and asks nobody.
+    let calls = 0;
+    answerWith(() => {
+      calls += 1;
+      return null;
+    });
+    expect(await mod.memberPortrait("Z000009")).toBeNull();
+    expect(calls).toBe(0);
+
+    // Now the source names a URL it did not have before. That is a different
+    // question, so the old answer does not apply — today, not in seven days.
+    answerWith((url) => (url.includes("published-today") ? { status: 200, body: JPEG } : null));
+    const got = await mod.memberPortrait("Z000009", "https://example.test/published-today.jpg");
+    expect(got?.contentType).toBe("image/jpeg");
+  });
+
   test("WE SAY WHO WE ARE, BECAUSE ONE SOURCE ANSWERS 403 IF WE DO NOT", async () => {
     // Wikimedia's policy requires a descriptive User-Agent and it enforces it:
     // the URL that answers 200 to curl answers 403 to a request without one.
