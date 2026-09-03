@@ -101,6 +101,58 @@ export interface ProvenanceResult {
 }
 
 /**
+ * ONE BILL'S DATES AND SPONSOR, FETCHED AND WRITTEN.
+ *
+ * Pulled out of the sweep below so a bill can be filled the moment it arrives
+ * rather than only on the sweep's four-hourly turn. See resolveLibraryDocument
+ * in services/library-resolve.ts for why that matters: a law somebody finds in
+ * the Library is created from a search result, and a search result does not
+ * carry the sponsor. Waiting for the sweep meant the law sat with no name and
+ * no face on it for up to four hours — which is exactly the window in which the
+ * person who just found it shares it.
+ *
+ * Returns true when something was written. A source that will not answer leaves
+ * the columns null, which renders as nothing rather than as a guess, and the
+ * sweep picks the bill up later.
+ */
+export async function fillProvenanceForBill(
+  id: string,
+  masterReferenceId: string,
+): Promise<boolean> {
+  const detail = await fetchDetail(masterReferenceId);
+  if (!detail) return false;
+
+  const sponsor = detail.sponsors?.[0];
+  const introduced = toDate(detail.introducedDate);
+  const lastAction = toDate(detail.latestAction?.actionDate);
+
+  const data: Record<string, unknown> = {};
+  if (introduced) data.introducedDate = introduced;
+  if (lastAction) data.lastActionDate = lastAction;
+  if (detail.latestAction?.text) data.lastActionText = detail.latestAction.text;
+  if (sponsor?.bioguideId) data.sponsorBioguideId = sponsor.bioguideId;
+
+  // fullName is "Rep. Smith, Adam [D-WA-9]" in some responses; first + last is
+  // the clean form when both are present.
+  const name =
+    sponsor?.firstName && sponsor?.lastName
+      ? `${sponsor.firstName} ${sponsor.lastName}`
+      : sponsor?.fullName;
+  if (name) data.sponsorName = name;
+
+  const party = partyLetter(sponsor?.party);
+  if (party) data.sponsorParty = party;
+  if (sponsor?.state) data.sponsorState = sponsor.state.toUpperCase();
+
+  // Nothing usable came back. Writing an empty update would only touch
+  // updatedAt and make the record look freshly checked when it is not.
+  if (Object.keys(data).length === 0) return false;
+
+  await prisma.governmentReference.update({ where: { id }, data });
+  return true;
+}
+
+/**
  * Fill dates and sponsor for stored bills that are still missing them.
  *
  * `limit` is small by default and this runs on the sync's schedule rather than
@@ -124,43 +176,8 @@ export async function fillBillProvenance(limit = 25): Promise<ProvenanceResult> 
   let skipped = 0;
 
   for (const ref of pending) {
-    const detail = await fetchDetail(ref.masterReferenceId);
-    if (!detail) {
-      skipped++;
-      continue;
-    }
-
-    const sponsor = detail.sponsors?.[0];
-    const introduced = toDate(detail.introducedDate);
-    const lastAction = toDate(detail.latestAction?.actionDate);
-
-    const data: Record<string, unknown> = {};
-    if (introduced) data.introducedDate = introduced;
-    if (lastAction) data.lastActionDate = lastAction;
-    if (detail.latestAction?.text) data.lastActionText = detail.latestAction.text;
-    if (sponsor?.bioguideId) data.sponsorBioguideId = sponsor.bioguideId;
-
-    // fullName is "Rep. Smith, Adam [D-WA-9]" in some responses; first + last is
-    // the clean form when both are present.
-    const name =
-      sponsor?.firstName && sponsor?.lastName
-        ? `${sponsor.firstName} ${sponsor.lastName}`
-        : sponsor?.fullName;
-    if (name) data.sponsorName = name;
-
-    const party = partyLetter(sponsor?.party);
-    if (party) data.sponsorParty = party;
-    if (sponsor?.state) data.sponsorState = sponsor.state.toUpperCase();
-
-    // Nothing usable came back. Writing an empty update would only touch
-    // updatedAt and make the record look freshly checked when it is not.
-    if (Object.keys(data).length === 0) {
-      skipped++;
-      continue;
-    }
-
-    await prisma.governmentReference.update({ where: { id: ref.id }, data });
-    filled++;
+    if (await fillProvenanceForBill(ref.id, ref.masterReferenceId)) filled++;
+    else skipped++;
   }
 
   if (pending.length > 0) {

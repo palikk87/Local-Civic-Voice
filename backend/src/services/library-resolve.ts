@@ -21,6 +21,7 @@ import {
   normalizeReferenceId,
 } from "./deduplication-service";
 import { billStatusFromAction, categorize } from "./government-sync";
+import { fillProvenanceForBill } from "./bill-provenance";
 
 const FR_LOOKUP_TIMEOUT_MS = 6_000;
 
@@ -170,6 +171,34 @@ export async function resolveLibraryDocument(
     category: categorize(`${title} ${input.summary ?? ""}`),
     ...(input.summary ? { description: input.summary.slice(0, 500) } : {}),
   });
+
+  /*
+   * WHO WROTE IT, ASKED FOR NOW RATHER THAN IN FOUR HOURS.
+   *
+   * A search result names the bill and nothing about the member behind it, so a
+   * law arriving this way was created with no sponsor, no party, no state and no
+   * introduced date. Those were filled by the Provenance sweep — which runs every
+   * four hours.
+   *
+   * Measured on a real one. H.R. 5183 was found in the Library, pulled in, given
+   * its official text and its brief, and shared to a timeline, all inside four
+   * minutes; the page it produced carried no name and no face, and would not have
+   * until the sweep's next turn. The moment somebody finds a law is the moment
+   * they share it, so that window is the whole of the law's first impression.
+   *
+   * ONE CALL, THE SAME ONE THE SWEEP MAKES. Only for a bill, only when the record
+   * is new, and awaited so the caller is handed a finished record rather than one
+   * that fills itself in behind them. congress.gov refusing costs nothing: the
+   * columns stay null, which renders as nothing rather than as a guess, and the
+   * sweep still picks the bill up on its own schedule.
+   */
+  if (created && referenceType === ReferenceType.BILL) {
+    try {
+      await fillProvenanceForBill(reference.id, reference.masterReferenceId);
+    } catch (error) {
+      console.error(`[Library] could not fill provenance for ${reference.masterReferenceId}:`, error);
+    }
+  }
 
   return {
     ok: true,

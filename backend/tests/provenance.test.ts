@@ -125,3 +125,115 @@ describe("freshness is answerable", () => {
     expect((await asJson(res)).cadence).toBeDefined();
   });
 });
+
+/**
+ * A LAW FOUND IN THE LIBRARY ARRIVES WITH ITS SPONSOR ALREADY ON IT.
+ *
+ * WHY THIS EXISTS, measured on a real one. H.R. 5183 was found in the Library,
+ * pulled in, given its official text and its Citizen's Brief, and shared to a
+ * timeline — all inside four minutes. The page that produced carried no name and
+ * no face, because the Library creates a record from a SEARCH RESULT and a
+ * search result does not name the member behind the bill. That was filled by the
+ * Provenance sweep, which runs every four hours.
+ *
+ * The moment somebody finds a law is the moment they share it. So the four-hour
+ * window was the whole of that law's first impression, on every screen it
+ * reached.
+ */
+describe("a law pulled in from the Library", () => {
+  const realFetch = globalThis.fetch;
+  const realKey = process.env.CONGRESS_API_KEY;
+
+  beforeEach(() => {
+    // congress.gov is not called without a key, so without one this would pass
+    // for the wrong reason — proving only that we never asked. Not a credential:
+    // every request in these tests is answered by the stub below.
+    process.env.CONGRESS_API_KEY = "test-key-not-a-credential";
+  });
+
+  afterAll(() => {
+    globalThis.fetch = realFetch;
+    if (realKey === undefined) delete process.env.CONGRESS_API_KEY;
+    else process.env.CONGRESS_API_KEY = realKey;
+  });
+
+  test("COMES OUT WITH THE SPONSOR AND THE DATES, NOT FOUR HOURS LATER", async () => {
+    const { resolveLibraryDocument } = await import("../src/services/library-resolve");
+
+    // congress.gov's real answer shape for the detail call, which is the one
+    // call this makes and the same one the sweep makes.
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("api.congress.gov") && url.includes("/bill/119/hr/9411")) {
+        return new Response(
+          JSON.stringify({
+            bill: {
+              introducedDate: "2025-08-14",
+              latestAction: { actionDate: "2025-09-02", text: "Referred to the Committee." },
+              sponsors: [
+                { bioguideId: "S000510", firstName: "Adam", lastName: "Smith", party: "D", state: "WA" },
+              ],
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+      return realFetch(input, init);
+    }) as typeof fetch;
+
+    const result = await resolveLibraryDocument({
+      branch: "legislative",
+      title: "A bill to prove the sponsor arrives with the law",
+      masterReferenceId: "hr-9411-119",
+      congress: 119,
+      billType: "hr",
+      billNumber: "9411",
+      chamber: "House",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.created).toBe(true);
+
+    // The record as it stands the instant the Library hands it back — before any
+    // sweep has run, and before the reader has had time to share it.
+    const stored = await prisma.governmentReference.findUnique({ where: { id: result.id } });
+    expect(stored?.sponsorName).toBe("Adam Smith");
+    expect(stored?.sponsorBioguideId).toBe("S000510");
+    expect(stored?.sponsorParty).toBe("D");
+    expect(stored?.sponsorState).toBe("WA");
+    expect(stored?.introducedDate?.toISOString().slice(0, 10)).toBe("2025-08-14");
+    expect(stored?.lastActionText).toBe("Referred to the Committee.");
+  });
+
+  test("a source that will not answer leaves the law whole, and empty", async () => {
+    const { resolveLibraryDocument } = await import("../src/services/library-resolve");
+
+    // congress.gov down. The law must still arrive — with nothing invented in
+    // place of the sponsor, and nothing thrown.
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("api.congress.gov")) return new Response("no", { status: 503 });
+      return realFetch(input, init);
+    }) as typeof fetch;
+
+    const result = await resolveLibraryDocument({
+      branch: "legislative",
+      title: "A bill nobody could tell us about",
+      masterReferenceId: "hr-9412-119",
+      congress: 119,
+      billType: "hr",
+      billNumber: "9412",
+      chamber: "House",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const stored = await prisma.governmentReference.findUnique({ where: { id: result.id } });
+    expect(stored?.title).toBe("A bill nobody could tell us about");
+    // Null, not a stand-in. The sweep will try again on its own schedule.
+    expect(stored?.sponsorName).toBeNull();
+    expect(stored?.sponsorBioguideId).toBeNull();
+  });
+});
