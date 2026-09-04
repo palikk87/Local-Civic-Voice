@@ -98,20 +98,94 @@ jobs:
             //                 another project. Not optional, ever.
             const GUARDS = ['backend', 'no db push'];
 
-            // TEN MINUTES, AND THEN IT ASKS.
+            // NO CLOCK. IT WATCHES THE WORK INSTEAD.
             //
-            // The suite this waits for takes about sixteen minutes on a runner,
-            // so this window will usually run out before the answer is in. That
-            // is deliberate: Khalid's instruction is that nothing waits silently
-            // for half an hour — it comes back at ten and a person decides
-            // whether to keep waiting.
+            // There used to be a ten-minute deadline here, written in the
+            // belief that the suite took about sixteen minutes and that nobody
+            // should be made to wait that long without being asked. Both halves
+            // were wrong. Measured across three consecutive runs, the backend
+            // job takes 8m15s, 28m29s and 8m36s — it normally finishes at about
+            // NINE AND A HALF MINUTES, so a ten-minute deadline was not a
+            // safeguard, it was a coin toss. The 8m36s run cleared it with
+            // seconds to spare. The 28m29s run was stopped by the clock and
+            // needed a person to press re-run on a job whose tests had passed —
+            // and that run was slow because the runner's database was slow, not
+            // because anything was wrong with the code.
             //
-            // Running out is therefore NOT a verdict on the tests. It means the
-            // answer is not in yet, and the message below says so. Re-running
-            // this job once CI has finished picks up the real result — which is
-            // still a refusal if any guard failed.
-            const deadline = Date.now() + 10 * 60 * 1000;
-            while (Date.now() < deadline) {
+            // A clock cannot tell those apart. It only ever measured how long
+            // something had taken, never whether it was getting anywhere.
+            //
+            // Khalid: "take the time limit off and get things done, but every 5
+            // minutes check on the process and make sure it's not jammed or
+            // stuck or failing rather than just letting it run and run ... as
+            // long as you routinely check on the process and make sure it's
+            // actually working not that it's still running".
+            //
+            // So the deadline is gone and the question changed. Every five
+            // minutes this reads the running guard's own log and compares it
+            // with the last look. A log that grew is a job doing work. A log
+            // that has not gained a single byte across two checks — ten minutes
+            // of silence, from a suite whose slowest single file takes sixty
+            // seconds — is jammed, and this stops and says so.
+            const HEARTBEAT_MS = 5 * 60 * 1000;
+
+            // Between heartbeats it still asks the cheap question — have the
+            // guards finished? — so a normal run is not made to wait for the
+            // next five-minute mark before deploying.
+            const POLL_MS = 20 * 1000;
+
+            /** Two heartbeats of a log that has not gained a byte. */
+            const SILENT_CHECKS_THAT_MEAN_JAMMED = 2;
+
+            // AND A LIMIT ON NOT BEING ABLE TO TELL, KEPT SEPARATE ON PURPOSE.
+            //
+            // If the log cannot be read, that is NOT evidence the job is stuck.
+            // Treating those two as one thing is exactly how a purge in this
+            // codebase reported success seventeen times while deleting nothing:
+            // the source refused to answer, and the refusal was read as the
+            // source saying everything was fine. A FAILURE TO REACH THE
+            // EVIDENCE AND THE EVIDENCE SAYING ALL IS WELL MUST NEVER LAND ON
+            // THE SAME BRANCH.
+            //
+            // So an unreadable log keeps the wait alive and is counted on its
+            // own. Half an hour of never once being able to tell is its own
+            // failure, and it is reported as that rather than as a jam.
+            const BLIND_CHECKS_THAT_MEAN_GIVE_UP = 6;
+
+            /**
+             * How far a running job has got, measured in bytes of log written.
+             *
+             * The jobs API cannot answer this: the backend's whole test suite
+             * is ONE step, so its step list does not move for nine minutes and
+             * a stuck job and a busy one look identical through it. The log is
+             * the only thing that changes while a step is running.
+             */
+            async function logSize(jobId) {
+              const response = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                job_id: jobId,
+              });
+              const body = response.data;
+              if (typeof body === 'string') return body.length;
+              if (body instanceof ArrayBuffer) return body.byteLength;
+              if (body && typeof body.byteLength === 'number') return body.byteLength;
+              if (response.url) {
+                const followed = await fetch(response.url);
+                if (!followed.ok) throw new Error(`the log download answered ${followed.status}`);
+                return (await followed.arrayBuffer()).byteLength;
+              }
+              throw new Error('the log came back in a shape this cannot measure');
+            }
+
+            let silent = 0;
+            let blind = 0;
+            let lastSize = null;
+            let nextHeartbeat = Date.now() + HEARTBEAT_MS;
+            const startedAt = Date.now();
+            const minutesIn = () => Math.round((Date.now() - startedAt) / 60000);
+
+            for (;;) {
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -120,6 +194,7 @@ jobs:
                 per_page: 1,
               });
               const run = runs.data.workflow_runs[0];
+              let mine = [];
 
               if (run) {
                 const { data } = await github.rest.actions.listJobsForWorkflowRun({
@@ -128,31 +203,108 @@ jobs:
                   run_id: run.id,
                   per_page: 100,
                 });
-                const mine = data.jobs.filter((job) => GUARDS.includes(job.name));
+                mine = data.jobs.filter((job) => GUARDS.includes(job.name));
+
+                // A GUARD THAT HAS ALREADY FAILED IS A DECISION.
+                //
+                // This used to wait for every guard to finish before looking at
+                // any of them, so a `no db push` failure in the first seconds
+                // still cost a full wait on the test suite before saying no.
+                // Nothing about the second answer can rescue the first.
+                const failed = mine.filter(
+                  (job) => job.status === 'completed' && job.conclusion !== 'success',
+                );
+                if (failed.length) {
+                  core.setFailed(
+                    `Not deploying: ${failed.map((j) => `${j.name} (${j.conclusion})`).join(', ')}.`,
+                  );
+                  return;
+                }
 
                 // A guard that is missing is not a guard that passed. If the
                 // workflow did not even start these jobs, refuse rather than
                 // read "no failures" as "all clear".
                 if (mine.length === GUARDS.length && mine.every((job) => job.status === 'completed')) {
-                  const failed = mine.filter((job) => job.conclusion !== 'success');
-                  if (failed.length) {
-                    core.setFailed(
-                      `Not deploying: ${failed.map((j) => `${j.name} (${j.conclusion})`).join(', ')}.`,
-                    );
-                    return;
-                  }
-                  core.info(`Backend guards passed: ${mine.map((j) => j.name).join(', ')}.`);
+                  core.info(
+                    `Backend guards passed after ${minutesIn()} minute(s): ` +
+                      `${mine.map((j) => j.name).join(', ')}.`,
+                  );
                   return;
                 }
               }
 
-              await new Promise((r) => setTimeout(r, 20000));
+              if (Date.now() >= nextHeartbeat) {
+                nextHeartbeat = Date.now() + HEARTBEAT_MS;
+                const running = mine.find((job) => job.status === 'in_progress');
+
+                if (!running) {
+                  // Queued is not jammed — no runner has picked the job up, so
+                  // there is nothing yet that could be stuck. It is not
+                  // progress either, and something has to end this if a runner
+                  // never arrives at all, so it counts as "cannot tell".
+                  const where = mine.length
+                    ? mine.map((j) => `${j.name}: ${j.status}`).join(', ')
+                    : 'CI has not started the guard jobs yet';
+                  blind += 1;
+                  core.info(
+                    `${minutesIn()}min check — nothing running to measure (${where}). ` +
+                      `Waiting. ${blind} of ${BLIND_CHECKS_THAT_MEAN_GIVE_UP}.`,
+                  );
+                } else {
+                  try {
+                    const size = await logSize(running.id);
+                    if (lastSize !== null && size <= lastSize) {
+                      silent += 1;
+                      core.warning(
+                        `${minutesIn()}min check — "${running.name}" has written nothing new ` +
+                          `(${size} bytes, unchanged since the last look). ` +
+                          `${silent} of ${SILENT_CHECKS_THAT_MEAN_JAMMED} before this is called jammed.`,
+                      );
+                    } else {
+                      if (silent > 0) core.info('It is moving again.');
+                      silent = 0;
+                      core.info(
+                        `${minutesIn()}min check — "${running.name}" is working: log ` +
+                          `${lastSize === null ? `${size}` : `${lastSize} → ${size}`} bytes.`,
+                      );
+                    }
+                    blind = 0;
+                    lastSize = size;
+                  } catch (error) {
+                    blind += 1;
+                    core.warning(
+                      `${minutesIn()}min check — could not read "${running.name}"'s log ` +
+                        `(${error.message}). That is a fact about this check, not about the ` +
+                        `job, so the wait continues. ${blind} of ${BLIND_CHECKS_THAT_MEAN_GIVE_UP}.`,
+                    );
+                  }
+                }
+
+                if (silent >= SILENT_CHECKS_THAT_MEAN_JAMMED) {
+                  core.setFailed(
+                    `Stopping after ${minutesIn()} minutes: the backend guard has produced no ` +
+                      `output for ten minutes. The slowest single test file in that suite takes ` +
+                      `sixty seconds, so this is jammed rather than slow. Nothing is known about ` +
+                      `the tests themselves — this is not a test failure. Look at the CI run, ` +
+                      `then re-run this job.`,
+                  );
+                  return;
+                }
+
+                if (blind >= BLIND_CHECKS_THAT_MEAN_GIVE_UP) {
+                  core.setFailed(
+                    `Stopping after ${minutesIn()} minutes: half an hour of checks and not one ` +
+                      `of them could tell whether the backend guard is working — either no ` +
+                      `runner ever picked it up, or its log could not be read. That is a ` +
+                      `failure to find out, not a verdict on the tests. Re-run this job once ` +
+                      `CI has finished and it will read the real result.`,
+                  );
+                  return;
+                }
+              }
+
+              await new Promise((r) => setTimeout(r, POLL_MS));
             }
-            core.setFailed(
-              'Stopped after 10 minutes: the backend guards have not finished, ' +
-                'so nothing is known about them yet. This is not a test failure. ' +
-                'Re-run this job when CI is done and it will read the real result.',
-            );
 
       - uses: oven-sh/setup-bun@v2
         if: steps.token.outputs.configured == 'true'
