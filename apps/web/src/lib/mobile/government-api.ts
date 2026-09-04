@@ -80,6 +80,12 @@ export interface JudicialResult {
   id: number;
   case_name: string;
   court: string;
+  /**
+   * CourtListener's id for the court — "scotus". Carried so it can be handed
+   * back when a ruling is opened: the display name is not enough, because
+   * several STATE supreme courts are also called "Supreme Court".
+   */
+  court_id?: string;
   date_filed: string;
   docket_number: string;
   absolute_url: string;
@@ -228,6 +234,9 @@ export function judicialToSearchResult(item: JudicialResult): GovernmentSearchRe
     rawText: `${title}. Court: ${item.court}. Docket: ${item.docket_number}`,
     metadata: {
       court: item.court,
+      // The court's ID, so the server can refuse to store a ruling from any
+      // court but the Supreme Court. See backend services/library-resolve.ts.
+      courtId: item.court_id,
       docketNumber: item.docket_number,
       // opinionId lets the server fetch the real opinion text when resolving.
       opinionId: item.id,

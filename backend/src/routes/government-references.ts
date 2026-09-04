@@ -1091,6 +1091,15 @@ governmentReferencesRouter.post(
 
     const resolved = await resolveLibraryDocument(input);
     if (!resolved.ok) {
+      // Two different refusals, because they mean different things to a reader.
+      // One is "we could not work out what this is"; the other is "this is a
+      // real document and it is not ours to carry".
+      if (resolved.reason === "not_the_supreme_court") {
+        return c.json(
+          { error: "AYE & NAY carries rulings of the Supreme Court of the United States only" },
+          400
+        );
+      }
       return c.json(
         { error: "Could not identify this document from the official source" },
         400

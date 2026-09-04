@@ -84,11 +84,32 @@ function stub({ intent, throttleFirst = 0, emptyCaseName = false }: StubOptions)
       asked.push(url);
       const params = new URL(url).searchParams;
       const q = params.get("q") ?? "";
+
+      /*
+       * WHAT court=scotus ACTUALLY DOES TO A RESPONSE.
+       *
+       * These fixtures are real recorded answers, and two of them were recorded
+       * from an UNSCOPED search — cl-search-raw-prose.json is five results and
+       * not one of them is the Supreme Court: the D.C. Circuit, two Texas
+       * Courts of Appeals, the Court of Federal Claims, the Tennessee Supreme
+       * Court. That is what the old ladder was putting in front of readers, and
+       * what could then be opened and filed as a ruling of the Supreme Court.
+       *
+       * Serving them back unfiltered would test a request this code can no
+       * longer make. So the stub filters by court the way the API does, which
+       * keeps the recorded data honest and lets the emptiness show.
+       */
+      const scoped = (fixture: { count?: number; results?: Array<{ court_id?: string }> }) => {
+        if (params.get("court") !== "scotus") return Response.json(fixture);
+        const results = (fixture.results ?? []).filter((r) => r.court_id === "scotus");
+        return Response.json({ ...fixture, count: results.length, results });
+      };
+
       if (q.startsWith("caseName:")) {
-        return Response.json(emptyCaseName ? { count: 0, results: [] } : phraseScotus);
+        return emptyCaseName ? Response.json({ count: 0, results: [] }) : scoped(phraseScotus);
       }
-      if (!q.includes('"')) return Response.json(rawProse);
-      return Response.json(params.get("court") === "scotus" ? phraseScotus : phraseAllCourts);
+      if (!q.includes('"')) return scoped(rawProse);
+      return scoped(params.get("court") === "scotus" ? phraseScotus : phraseAllCourts);
     }
 
     return new Response("{}", { status: 404 });
@@ -191,8 +212,177 @@ describe("judicial search", () => {
   });
 });
 
+describe("nothing but the Supreme Court leaves this building", () => {
+  test("EVERY REQUEST CARRIES court=scotus, WHATEVER WAS TYPED", async () => {
+    /*
+     * The ladder test above proves there is no unscoped rung. This proves the
+     * thing that actually matters: the URL. The filter is set unconditionally in
+     * urlFor now, so no rung, no intent and no future field can reach past it.
+     *
+     * It is asserted on the wire rather than on the ladder because that is where
+     * the failure happened — the rungs looked reasonable and the requests went
+     * out to the whole federal judiciary.
+     */
+    for (const query of [
+      "compulsory vaccination",
+      "Jacobson v. Massachusetts",
+      "phone privacy",
+      "location information disclosure order",
+      "",
+    ]) {
+      stub({ intent: null });
+      await searchJudicialOpinions(query || "anything", 5).catch(() => undefined);
+      expect(asked.length, `"${query}" asked nothing`).toBeGreaterThan(0);
+      for (const url of asked) {
+        expect(new URL(url).searchParams.get("court"), `"${query}" -> ${url}`).toBe("scotus");
+      }
+    }
+  });
+});
+
+describe("THE GUARD: a lower court never reaches a reader", () => {
+  /*
+   * The request is scoped and the ingest refuses another court. This is the
+   * guard on the middle step, and the only one that does not depend on anybody
+   * else keeping their word: even if CourtListener ignores court=scotus and
+   * answers with the whole federal judiciary, none of it is shown.
+   *
+   * It matters because a result a reader can SEE is a result a reader can open,
+   * and opening a judicial document files it as a ruling of the Supreme Court.
+   * That is how a Maryland magistrate judge's order came to be published here.
+   *
+   * The fixture is a real recorded answer to a real query from this search, and
+   * every one of its five results is a court we must never publish:
+   *
+   *   cadc      Make The Road New York v. Kristi Noem
+   *   txctapp2  Jonathan Stickland ... v. Texans for Vaccine Choice
+   *   txctapp1  In Re C.J.S., a Child v. the State of Texas
+   *   uscfc     A. v. Secretary of Health and Human Services
+   *   tenn      Thomas Fleming Mabry v. ... the Tennessee Supreme Court
+   *
+   * Note the last one. It is a STATE supreme court — which is why the court's
+   * display name can never be the test, and the id has to be.
+   */
+  test("NOT ONE RESULT SURVIVES WHEN THE SOURCE IGNORES THE FILTER", async () => {
+    asked = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        // Deliberately unfiltered: the whole recorded page, court=scotus ignored.
+        return Response.json(rawProse);
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const output = await searchJudicialOpinions("vaccine mandates", 20);
+
+    expect(asked.length).toBeGreaterThan(0);
+    expect(output.results).toEqual([]);
+  });
+
+  test("A RULING THAT TALKS ABOUT LOWER COURTS IS STILL A SUPREME COURT RULING", async () => {
+    /*
+     * The guard must not be fooled by what a case is ABOUT.
+     *
+     * Almost every Supreme Court ruling reviews a lower court, so its name and
+     * its text are full of them: Rodriguez v. United States — one of the
+     * rulings this platform actually holds — reviews the Eighth Circuit and
+     * says so repeatedly. A guard that read the title, the snippet or the
+     * description would throw out most of the Supreme Court's work.
+     *
+     * So it reads exactly one thing: court_id, CourtListener's machine id for
+     * the court that ISSUED the opinion. Nothing else is consulted, and this
+     * fixture is built to punish anything that does.
+     */
+    asked = [];
+    const talksAboutLowerCourts = {
+      count: 1,
+      results: [
+        {
+          cluster_id: 999002,
+          caseName: "Rodriguez v. United States (on certiorari to the Eighth Circuit)",
+          court: "Supreme Court of the United States",
+          court_id: "scotus",
+          dateFiled: "2015-04-21",
+          docketNumber: "13-9972",
+          absolute_url: "/opinion/2795278/rodriguez-v-united-states/",
+          opinions: [
+            {
+              id: 2795278,
+              snippet:
+                "The Eighth Circuit affirmed. The District Court adopted the Magistrate Judge's " +
+                "recommendation. We granted certiorari to resolve a split among the Courts of " +
+                "Appeals, including the Ninth Circuit and the Tennessee Supreme Court.",
+            },
+          ],
+        },
+      ],
+    };
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        return Response.json(talksAboutLowerCourts);
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const output = await searchJudicialOpinions("traffic stop dog sniff", 20);
+
+    expect(output.results.length).toBe(1);
+    expect(output.results[0]!.case_name).toContain("Rodriguez v. United States");
+  });
+
+  test("a Supreme Court ruling in the same answer still gets through", async () => {
+    // The guard must drop the lower courts, not the search. A filter that
+    // returns nothing at all would be indistinguishable from a broken source.
+    asked = [];
+    const mixed = {
+      count: 2,
+      results: [
+        ...(rawProse.results ?? []).slice(0, 2),
+        {
+          cluster_id: 999001,
+          caseName: "A Real Supreme Court Ruling",
+          court: "Supreme Court of the United States",
+          court_id: "scotus",
+          dateFiled: "2026-06-30",
+          docketNumber: "25-999",
+          absolute_url: "/opinion/999001/a-real-supreme-court-ruling/",
+          opinions: [{ id: 999001, snippet: "Held: the guard lets this through." }],
+        },
+      ],
+    };
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        return Response.json(mixed);
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const output = await searchJudicialOpinions("vaccine mandates", 20);
+    const names = output.results.map((r) => r.case_name);
+
+    expect(names).toContain("A Real Supreme Court Ruling");
+    expect(names).not.toContain("Make The Road New York v. Kristi Noem");
+    expect(output.results.every((r) => r.court_id === "scotus")).toBe(true);
+  });
+});
+
 describe("the judicial ladder", () => {
-  test("a named case leads, and is searched across every court", () => {
+  test("a named case still leads the ladder", () => {
     const intent = {
       ...plainIntent("the vaccine case", "judicial"),
       caseNames: ["Jacobson v. Massachusetts"],
@@ -202,23 +392,40 @@ describe("the judicial ladder", () => {
     const ladder = buildLadder(intent);
 
     expect(ladder[0]!.q).toBe('caseName:("Jacobson v. Massachusetts")');
-    // Not scoped: the case a reader names may well be a lower court's.
-    expect(ladder[0]!.court).toBeUndefined();
   });
 
-  test("the Supreme Court rung outranks the all-courts rung for the same phrase", () => {
-    const intent = {
-      ...plainIntent("vaccine mandates", "judicial"),
-      phrases: ["compulsory vaccination"],
-      interpreted: true,
-    };
-    const ladder = buildLadder(intent);
-
-    const scotus = ladder.find((r) => r.court === "scotus");
-    const all = ladder.find((r) => r.court === undefined && r.q.includes('"'));
-    expect(scotus).toBeDefined();
-    expect(all).toBeDefined();
-    expect(scotus!.weight).toBeGreaterThan(all!.weight);
+  test("THERE IS NO LONGER AN ALL-COURTS RUNG, FOR ANY QUERY", () => {
+    /*
+     * There used to be two rungs per query — one scoped to the Supreme Court
+     * and one deliberately not — and the ladder was described as reaching
+     * "every federal court", with the Supreme Court merely asked first.
+     *
+     * A result from the unscoped rung could be opened, and opening a judicial
+     * document files it as a scotus_case. That published a Maryland magistrate
+     * judge's order as a ruling of the Supreme Court of the United States.
+     * Ranking did not save it: being second on a list is still being on it.
+     */
+    for (const intent of [
+      { ...plainIntent("vaccine mandates", "judicial"), phrases: ["compulsory vaccination"], interpreted: true },
+      { ...plainIntent("privacy", "judicial"), topic: "phone privacy", interpreted: true },
+      { ...plainIntent("something nobody parsed", "judicial") },
+      {
+        ...plainIntent("the vaccine case", "judicial"),
+        caseNames: ["Jacobson v. Massachusetts"],
+        phrases: ["compulsory vaccination"],
+        topic: "vaccines",
+        interpreted: true,
+      },
+    ]) {
+      const ladder = buildLadder(intent);
+      expect(ladder.length).toBeGreaterThan(0);
+      for (const rung of ladder) {
+        expect(rung.label, `"${rung.label}" still offers an unscoped search`).not.toContain("all courts");
+      }
+      // The scope is not a rung's to choose any more, so there is no field on a
+      // rung that could carry another court.
+      expect(ladder.every((rung) => !("court" in rung))).toBe(true);
+    }
   });
 });
 

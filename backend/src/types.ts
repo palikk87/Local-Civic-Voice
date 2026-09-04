@@ -322,6 +322,15 @@ export const libraryResolveRequestSchema = z.object({
   // Judicial identity
   docketNumber: z.string().optional(),
   opinionId: z.number().int().positive().optional(),
+  /**
+   * CourtListener's id for the court that issued it — "scotus", or another.
+   *
+   * Sent so the server can refuse a document from any other court. This
+   * platform carries the Supreme Court; a district court order stored as one of
+   * its rulings is a false record. Optional because a client built before this
+   * existed cannot send it, and the search can no longer return anything else.
+   */
+  courtId: z.string().optional(),
 });
 
 export const libraryResolveResponseSchema = z.object({

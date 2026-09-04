@@ -25,6 +25,7 @@ import {
 } from "./reference-content";
 import { ensureSlug } from "./reference-slug";
 import { cleanOpinionSnippet } from "./opinion-snippet";
+import { SUPREME_COURT } from "./judicial-search";
 import { notifyLawUpdate } from "./notification-service";
 import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 import { congressGovKey, env } from "../env";
@@ -595,6 +596,8 @@ interface CourtListenerSearchResponse {
     dateArgued?: string | null;
     absolute_url: string;
     status?: string;
+    /** The court that issued it. Read so a scoped request can be verified. */
+    court_id?: string;
     /**
      * WHO WROTE THE MAJORITY OPINION, or "Per Curiam" when the Court issued it
      * as one body with no individual author. CourtListener has always returned
@@ -618,7 +621,7 @@ async function syncScotusCases(): Promise<number> {
 
   const firstPage = new URL("https://www.courtlistener.com/api/rest/v4/search/");
   firstPage.searchParams.set("type", "o");
-  firstPage.searchParams.set("court", "scotus");
+  firstPage.searchParams.set("court", SUPREME_COURT);
   firstPage.searchParams.set("order_by", "dateFiled desc");
 
   let nextUrl: string | null = firstPage.toString();
@@ -635,6 +638,26 @@ async function syncScotusCases(): Promise<number> {
     for (const opinion of data.results) {
       if (synced >= SYNC_COUNT) break;
       if (!opinion.caseName || !opinion.docketNumber) continue;
+      /*
+       * THE SCOPE, VERIFIED RATHER THAN ASSUMED.
+       *
+       * The request above asks for the Supreme Court and always has, so this
+       * has never had anything to reject. It is here because the Library's
+       * search made exactly the opposite assumption — that asking politely was
+       * the same as being answered correctly — and a Maryland magistrate
+       * judge's order was published as a Supreme Court ruling. A stored record
+       * is a claim about which court decided something; it should not rest on
+       * a query parameter nobody checks.
+       *
+       * A result that does not say which court is kept: the request asked for
+       * one, and discarding an answer for being quiet would stop the sync.
+       */
+      if (opinion.court_id && opinion.court_id.trim().toLowerCase() !== SUPREME_COURT) {
+        console.warn(
+          `[GovSync] skipped "${opinion.caseName.slice(0, 60)}" — court "${opinion.court_id}" is not the Supreme Court`,
+        );
+        continue;
+      }
       // Skip housekeeping entries like "Trump v. ... Revisions: 7/01/26"
       if (/revisions?:/i.test(opinion.caseName)) continue;
       const masterReferenceId = normalizeReferenceId(ReferenceType.SCOTUS_CASE, opinion.docketNumber);

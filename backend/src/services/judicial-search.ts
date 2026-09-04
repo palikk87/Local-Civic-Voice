@@ -37,6 +37,14 @@ export interface JudicialResult {
   id: number;
   case_name: string;
   court: string;
+  /**
+   * CourtListener's id for the court — "scotus". Sent on to the client so it
+   * can be handed back when a ruling is opened, and the server can refuse to
+   * store anything else. The display name is not enough: several STATE supreme
+   * courts are also called "Supreme Court", and one of them turned up in a
+   * recorded response from this very search.
+   */
+  court_id: string;
   date_filed: string;
   docket_number: string;
   absolute_url: string;
@@ -68,12 +76,19 @@ const DEADLINE_MS = 20_000;
 /** Requests per search. Five a minute is the account ceiling; two is a search. */
 const MAX_QUERIES = 2;
 
+/**
+ * CourtListener's id for the Supreme Court of the United States.
+ *
+ * Named rather than typed inline because it is the whole of this platform's
+ * judicial scope — the one court whose rulings we carry — and it should be
+ * greppable rather than a string in a query builder.
+ */
+export const SUPREME_COURT = "scotus";
+
 interface Rung {
   q: string;
   label: string;
   weight: number;
-  /** Restrict to one court, or search them all. */
-  court?: "scotus";
 }
 
 /**
@@ -105,23 +120,11 @@ export function buildLadder(intent: SearchIntent): Rung[] {
 
   if (intent.phrases.length > 0) {
     const phrases = intent.phrases.map((p) => `"${p}"`).join(" OR ");
-    rungs.push({
-      q: phrases,
-      label: `phrase ${phrases} (Supreme Court)`,
-      weight: 120,
-      court: "scotus",
-    });
-    rungs.push({ q: phrases, label: `phrase ${phrases} (all courts)`, weight: 100 });
+    rungs.push({ q: phrases, label: `phrase ${phrases}`, weight: 120 });
   }
 
   if (intent.topic) {
-    rungs.push({
-      q: intent.topic,
-      label: `topic "${intent.topic}" (Supreme Court)`,
-      weight: 60,
-      court: "scotus",
-    });
-    rungs.push({ q: intent.topic, label: `topic "${intent.topic}" (all courts)`, weight: 50 });
+    rungs.push({ q: intent.topic, label: `topic "${intent.topic}"`, weight: 60 });
   }
 
   if (rungs.length === 0) {
@@ -136,9 +139,28 @@ function urlFor(intent: SearchIntent, rung: Rung, perPage: number): string {
   url.searchParams.set("q", rung.q);
   url.searchParams.set("type", "o");
   url.searchParams.set("page_size", String(perPage));
-  // Scope belongs to the rung, not to the search. Every federal court is still
-  // reachable — the Supreme Court is simply asked first.
-  if (rung.court) url.searchParams.set("court", rung.court);
+  /*
+   * THE SUPREME COURT, AND NOTHING ELSE. SET HERE, NOT PER RUNG.
+   *
+   * This used to read `if (rung.court)`, with scope described as belonging to
+   * the rung — "every federal court is still reachable, the Supreme Court is
+   * simply asked first". Four of the six rungs then carried no court at all,
+   * two of them labelled "(all courts)", and CourtListener answered with
+   * whatever matched anywhere in the federal judiciary.
+   *
+   * A result from that search could be opened, and opening it files the
+   * document as a scotus_case, because that is what the judicial branch maps
+   * to. So a Maryland magistrate judge's order — "In re the United States for
+   * an Order Authorizing Disclosure of Location Information", docket
+   * case-no-10-2188-skg — was published on this platform as a ruling of the
+   * Supreme Court of the United States, with Aye and Nay buttons under it.
+   *
+   * This platform carries the Supreme Court. A district court order presented
+   * as one of its rulings is a false record, and no ranking or labelling makes
+   * it less false. The filter is unconditional now: there is no rung that can
+   * reach past it and no field a caller can leave unset.
+   */
+  url.searchParams.set("court", SUPREME_COURT);
   if (intent.from) url.searchParams.set("filed_after", intent.from);
   if (intent.to) url.searchParams.set("filed_before", intent.to);
   return url.toString();
@@ -181,6 +203,9 @@ function normalize(cluster: RawCluster, matchedVia: string[]): JudicialResult {
     id: cluster.opinions?.find((o) => typeof o.id === "number")?.id ?? cluster.cluster_id ?? 0,
     case_name: cluster.caseName ?? "",
     court: cluster.court ?? "",
+    // The id, not just the display name: "Supreme Court" is also what several
+    // STATE supreme courts are called, and the id is what tells them apart.
+    court_id: cluster.court_id ?? "",
     date_filed: cluster.dateFiled ?? "",
     docket_number: cluster.docketNumber ?? "",
     absolute_url: cluster.absolute_url ?? "",
@@ -310,6 +335,20 @@ export async function searchJudicialOpinions(
     next ??= page.next ?? undefined;
 
     (page.results ?? []).forEach((raw, rank) => {
+      /*
+       * THE THIRD DOOR, AND THE ONLY ONE THAT DOES NOT DEPEND ON ANYBODY ELSE.
+       *
+       * The request is scoped to the Supreme Court and the ingest refuses
+       * another court. This refuses to so much as SHOW one — because a result
+       * a reader can see is a result a reader can open, and opening a judicial
+       * document files it as a ruling of the Supreme Court.
+       *
+       * A cluster that does not say which court it came from is kept: the
+       * request that fetched it asked for one court, and discarding an answer
+       * for being quiet would silently empty the Library.
+       */
+      if (raw.court_id && raw.court_id.trim().toLowerCase() !== SUPREME_COURT) return;
+
       const key = caseKey(raw);
       if (!key) return;
       const existing = found.get(key);

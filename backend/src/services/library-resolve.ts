@@ -21,6 +21,7 @@ import {
   normalizeReferenceId,
 } from "./deduplication-service";
 import { billStatusFromAction, categorize } from "./government-sync";
+import { SUPREME_COURT } from "./judicial-search";
 import { fillProvenanceForBill } from "./bill-provenance";
 
 const FR_LOOKUP_TIMEOUT_MS = 6_000;
@@ -47,6 +48,8 @@ export interface LibraryDocumentInput {
   // Judicial identity
   docketNumber?: string;
   opinionId?: number;
+  /** CourtListener's court id. Anything but the Supreme Court is refused. */
+  courtId?: string;
 }
 
 export type LibraryResolveResult =
@@ -57,7 +60,7 @@ export type LibraryResolveResult =
       referenceType: ReferenceTypeValue;
       created: boolean;
     }
-  | { ok: false; reason: "unidentifiable" };
+  | { ok: false; reason: "unidentifiable" | "not_the_supreme_court" };
 
 const BRANCH_TO_TYPE: Record<LibraryBranch, ReferenceTypeValue> = {
   legislative: ReferenceType.BILL,
@@ -154,6 +157,33 @@ function statusFor(input: LibraryDocumentInput): string {
 export async function resolveLibraryDocument(
   input: LibraryDocumentInput
 ): Promise<LibraryResolveResult> {
+  /*
+   * THE SUPREME COURT, OR NOTHING.
+   *
+   * The judicial branch maps to referenceType "scotus_case", so whatever is
+   * opened here is stored and published as a ruling of the Supreme Court of the
+   * United States. That was true of documents from every other federal court
+   * too, because the search that produced them was not scoped — and a Maryland
+   * magistrate judge's order, docket case-no-10-2188-skg, was published on this
+   * platform as a Supreme Court ruling with Aye and Nay buttons under it.
+   *
+   * The search is scoped now (services/judicial-search.ts), so nothing else
+   * should reach this. This is the second door: scoping a search is a rule
+   * about what we ask for, and this is a rule about what we are willing to
+   * store. A client that cannot tell us the court is trusted, because the only
+   * search that feeds it can no longer return another one.
+   */
+  if (
+    input.branch === "judicial" &&
+    input.courtId &&
+    input.courtId.trim().toLowerCase() !== SUPREME_COURT
+  ) {
+    console.warn(
+      `[Library] refused "${input.title.slice(0, 80)}" — court "${input.courtId}" is not the Supreme Court`,
+    );
+    return { ok: false, reason: "not_the_supreme_court" };
+  }
+
   const masterReferenceId = await canonicalIdFor(input);
   if (!masterReferenceId) return { ok: false, reason: "unidentifiable" };
 

@@ -69,6 +69,10 @@ export function toResolveRequest(result: GovernmentSearchResult): LibraryResolve
         ...base,
         docketNumber: str(meta.docketNumber),
         opinionId: num(meta.opinionId),
+        // Which court issued it. The server refuses anything but the Supreme
+        // Court: this platform carries its rulings, and a district court order
+        // stored as one of them is a false record.
+        courtId: str(meta.courtId),
       };
   }
 }

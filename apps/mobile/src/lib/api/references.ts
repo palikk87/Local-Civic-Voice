@@ -225,6 +225,8 @@ export interface LibraryResolveRequest {
   eoNumber?: string;
   docketNumber?: string;
   opinionId?: number;
+  /** CourtListener's court id. The server refuses anything but "scotus". */
+  courtId?: string;
 }
 
 export interface LibraryResolveResponse {

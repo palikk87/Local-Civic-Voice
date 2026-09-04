@@ -19,6 +19,7 @@ import { mediaRouter } from "./routes/media";
 import { sitemapRouter } from "./routes/sitemap";
 import { backfillSlugs } from "./services/reference-slug";
 import { backfillOpinionDescriptions } from "./services/opinion-snippet";
+import { purgeNonScotusRulings } from "./services/scotus-only";
 import { governmentReferencesRouter } from "./routes/government-references";
 import { portraitsRouter } from "./routes/portraits";
 import { loginRouter } from "./routes/login";
@@ -647,6 +648,30 @@ void backfillOpinionDescriptions()
   })
   .catch((error) => {
     console.error("[Opinion] description backfill could not finish:", error);
+  });
+
+/*
+ * NOTHING BUT THE SUPREME COURT WEARS ITS NAME.
+ *
+ * The Library's judicial search used to ask CourtListener across the whole
+ * federal judiciary, and opening any result files it as a scotus_case. A
+ * Maryland magistrate judge's order was published here as a ruling of the
+ * Supreme Court of the United States. The search is scoped now and the ingest
+ * refuses another court; this removes what was stored before either existed.
+ *
+ * Safe at every boot by construction: a record goes only when CourtListener
+ * POSITIVELY names another court, and never when somebody has voted on it —
+ * votes cascade, and tidying up our own mistake must not take a person's
+ * recorded position with it. See services/scotus-only.ts.
+ */
+void purgeNonScotusRulings()
+  .then((result) => {
+    if (result.purged.length > 0) {
+      console.warn(`[ScotusOnly] ${result.purged.length} record(s) removed — not the Supreme Court`);
+    }
+  })
+  .catch((error) => {
+    console.error("[ScotusOnly] the check could not finish:", error);
   });
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
