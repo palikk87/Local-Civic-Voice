@@ -279,15 +279,42 @@ export async function searchExecutive(query: string, limit = 20): Promise<Govern
   }
 }
 
-export async function searchJudicial(query: string, limit = 20): Promise<GovernmentSearchResult[]> {
+/**
+ * WHAT ONE SEARCH CAME BACK WITH, AND WHETHER IT GOT TO ASK.
+ *
+ * An empty list means nothing on its own. The court records answering "no such
+ * ruling" and the court records not answering at all are completely different
+ * facts, and until this existed they arrived here as the same empty array.
+ *
+ * MEASURED, NOT IMAGINED. CourtListener allows FIVE REQUESTS A MINUTE to one
+ * caller and a single search spends several of them, so the second search in a
+ * minute can come back with nothing. Eight identical live searches for "phone
+ * privacy" against production: six returned five rulings each, TWO returned
+ * nothing. Both of those two would have rendered "No results found" — the
+ * platform stating, in its own voice, something it did not know.
+ */
+export interface GovernmentSearchOutcome {
+  results: GovernmentSearchResult[];
+  /** True only when NOT ONE query reached the court records. */
+  courtRecordsUnavailable: boolean;
+}
+
+export async function searchJudicial(
+  query: string,
+  limit = 20,
+): Promise<GovernmentSearchOutcome> {
   try {
-    const data = await api.get<{ results: JudicialResult[] }>(
+    const data = await api.get<{ results: JudicialResult[]; sourceUnavailable?: boolean }>(
       `/api/government/judicial/search${buildQ(query, limit)}`,
     );
-    return (data?.results ?? []).map(judicialToSearchResult);
+    return {
+      results: (data?.results ?? []).map(judicialToSearchResult),
+      courtRecordsUnavailable: Boolean(data?.sourceUnavailable),
+    };
   } catch (error) {
     console.error('Judicial search failed:', error);
-    return [];
+    // The request itself failed, so we certainly did not reach the records.
+    return { results: [], courtRecordsUnavailable: true };
   }
 }
 
@@ -299,20 +326,26 @@ export async function searchGovernment(
   branch: SearchBranch,
   query: string,
   limit = 20
-): Promise<GovernmentSearchResult[]> {
+): Promise<GovernmentSearchOutcome> {
   if (!query.trim()) {
-    return [];
+    return { results: [], courtRecordsUnavailable: false };
   }
 
   switch (branch) {
     case 'legislative':
-      return searchLegislation(query.trim(), limit);
+      return {
+        results: await searchLegislation(query.trim(), limit),
+        courtRecordsUnavailable: false,
+      };
     case 'executive':
-      return searchExecutive(query.trim(), limit);
+      return {
+        results: await searchExecutive(query.trim(), limit),
+        courtRecordsUnavailable: false,
+      };
     case 'judicial':
       return searchJudicial(query.trim(), limit);
     default:
-      return [];
+      return { results: [], courtRecordsUnavailable: false };
   }
 }
 
@@ -335,17 +368,21 @@ export async function searchGovernment(
 export async function searchAllBranches(
   query: string,
   limit = 20
-): Promise<GovernmentSearchResult[]> {
+): Promise<GovernmentSearchOutcome> {
   const trimmed = query.trim();
-  if (!trimmed) return [];
+  if (!trimmed) return { results: [], courtRecordsUnavailable: false };
 
-  const settled = await Promise.allSettled([
+  const [legislative, executive, judicial] = await Promise.allSettled([
     searchLegislation(trimmed, limit),
     searchExecutive(trimmed, limit),
     searchJudicial(trimmed, limit),
   ]);
 
-  const lists = settled.map((outcome) => (outcome.status === 'fulfilled' ? outcome.value : []));
+  const lists: GovernmentSearchResult[][] = [
+    legislative.status === 'fulfilled' ? legislative.value : [],
+    executive.status === 'fulfilled' ? executive.value : [],
+    judicial.status === 'fulfilled' ? judicial.value.results : [],
+  ];
 
   const interleaved: GovernmentSearchResult[] = [];
   const longest = Math.max(...lists.map((list) => list.length), 0);
@@ -355,7 +392,14 @@ export async function searchAllBranches(
       if (item) interleaved.push(item);
     }
   }
-  return interleaved;
+
+  return {
+    results: interleaved,
+    // The other two branches answering does not make the court records
+    // reachable, so this is only ever the judicial branch's own answer.
+    courtRecordsUnavailable:
+      judicial.status === 'fulfilled' ? judicial.value.courtRecordsUnavailable : true,
+  };
 }
 
 // ===========================================

@@ -9,6 +9,18 @@ import { BranchTabs } from "@/components/library/BranchTabs";
 import { LibraryEmptyState } from "@/components/library/LibraryEmptyState";
 import { LibraryResults } from "@/components/library/LibraryResults";
 import { CitizensBriefPanel } from "@/components/library/CitizensBriefPanel";
+/**
+ * What one Library search comes back with.
+ *
+ * The rows, and whether the court records answered at all. The second is not a
+ * property of the rows — an empty list means nothing on its own — so it has to
+ * travel beside them rather than be inferred from them.
+ */
+interface LibrarySearch {
+  rows: LibraryRow[];
+  courtRecordsUnavailable: boolean;
+}
+
 import {
   libraryApi,
   congressToSearchResult,
@@ -59,20 +71,23 @@ export default function Library() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["library", branch, submitted],
-    queryFn: async (): Promise<LibraryRow[]> => {
+    queryFn: async (): Promise<LibrarySearch> => {
       const q = submitted.trim();
 
       if (branch === "congress") {
         const { results } = await libraryApi.congress(q);
-        return results.map((item) => ({ branch: "congress", item }));
+        return { rows: results.map((item) => ({ branch: "congress", item })), courtRecordsUnavailable: false };
       }
       if (branch === "executive") {
         const { results } = await libraryApi.executive(q);
-        return results.map((item) => ({ branch: "executive", item }));
+        return { rows: results.map((item) => ({ branch: "executive", item })), courtRecordsUnavailable: false };
       }
       if (branch === "judicial") {
-        const { results } = await libraryApi.judicial(q);
-        return results.map((item) => ({ branch: "judicial", item }));
+        const { results, sourceUnavailable } = await libraryApi.judicial(q);
+        return {
+          rows: results.map((item) => ({ branch: "judicial", item })),
+          courtRecordsUnavailable: Boolean(sourceUnavailable),
+        };
       }
 
       /*
@@ -117,13 +132,33 @@ export default function Library() {
         }
       }
 
-      return interleaved;
+      return {
+        rows: interleaved,
+        // Only the judicial source can say this, and only when it reached
+        // nothing at all. The other two branches answering normally does not
+        // make the court records reachable.
+        courtRecordsUnavailable:
+          judicial.status === "fulfilled" && Boolean(judicial.value.sourceUnavailable),
+      };
     },
     enabled,
     staleTime: 60_000,
   });
 
-  const rows = data ?? [];
+  const rows = data?.rows ?? [];
+  /*
+   * THE COURT RECORDS DID NOT ANSWER, AND THAT IS NOT A FINDING.
+   *
+   * An empty judicial result used to mean one of two completely different
+   * things with no way to tell them apart: the Supreme Court has never ruled on
+   * this, or CourtListener refused us. It allows five requests a minute and one
+   * search spends several, so the second search in a minute can come back with
+   * nothing. Measured against production, two of eight identical searches did.
+   *
+   * Saying "no rulings found" in that case is the platform stating something it
+   * does not know. So it says what actually happened instead.
+   */
+  const courtRecordsUnavailable = data?.courtRecordsUnavailable ?? false;
   // FIRST LOAD ONLY. This was (isLoading || isFetching), which swapped the
   // whole result list for a skeleton every time a background refetch ran —
   // including the one a vote triggers. The page lost its height and the reader
@@ -227,6 +262,17 @@ export default function Library() {
         </form>
 
         {/* Results */}
+        {enabled && courtRecordsUnavailable ? (
+          <div
+            role="status"
+            className="mb-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+          >
+            <span className="font-semibold">We couldn't reach the court records.</span>{" "}
+            This isn't a finding about the Supreme Court — the source didn't answer.
+            Try that search again in a moment.
+          </div>
+        ) : null}
+
         {enabled ? (
           <LibraryResults
             rows={rows}

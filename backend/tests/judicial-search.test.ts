@@ -604,3 +604,103 @@ describe("the same case is never listed twice", () => {
     expect(riley!.docket_number).toBe("13-132");
   });
 });
+
+/*
+ * AN EMPTY ANSWER IS NOT AN ANSWER UNTIL WE KNOW WE GOT TO ASK.
+ *
+ * Measured against production, eight identical searches for "phone privacy":
+ * six returned five rulings, TWO returned nothing. Nothing had changed about
+ * the Supreme Court in the seconds between them — CourtListener allows five
+ * requests a minute and this ladder spends several of them.
+ *
+ * Both of those empty answers rendered as "No results found", which is the
+ * platform asserting something it does not know. This is the same failure the
+ * SCOTUS purge shipped with: a source that refuses to answer and a source that
+ * says all is well must never arrive on the same branch.
+ */
+describe("the difference between nothing found and nobody answered", () => {
+  function stubSilence(status: number): void {
+    asked = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        if (status === 429) {
+          return new Response(
+            JSON.stringify({
+              detail:
+                "Request was throttled. Rate limit exceeded: 5/min. Expected available in 40 seconds.",
+            }),
+            { status: 429 },
+          );
+        }
+        return new Response("upstream unavailable", { status });
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+  }
+
+  test("throttled into silence says the source was never reached", async () => {
+    stubSilence(429);
+    const output = await searchJudicialOpinions("phone privacy", 10);
+
+    expect(output.results).toHaveLength(0);
+    expect(output.reachedSource).toBe(false);
+    // And it tried — this is not a search that gave up before asking.
+    expect(asked.length).toBeGreaterThan(0);
+  });
+
+  test("a server error is the same: we do not know, so we do not say", async () => {
+    stubSilence(503);
+    const output = await searchJudicialOpinions("phone privacy", 10);
+
+    expect(output.results).toHaveLength(0);
+    expect(output.reachedSource).toBe(false);
+  });
+
+  test("a genuine zero-hit answer is NOT reported as unreachable", async () => {
+    // The distinction only earns its keep if it stays narrow. CourtListener
+    // answering "nothing matched" is a real finding and must read as one.
+    asked = [];
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes("generativelanguage.googleapis.com") || url.includes("api.openai.com")) {
+        return new Response("upstream unavailable", { status: 503 });
+      }
+      if (url.includes("courtlistener.com")) {
+        asked.push(url);
+        return Response.json({ count: 0, results: [] });
+      }
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+
+    const output = await searchJudicialOpinions("a question nobody has litigated", 10);
+
+    expect(output.results).toHaveLength(0);
+    expect(output.reachedSource).toBe(true);
+  });
+
+  test("results coming back always counts as reached", async () => {
+    stub({ intent: GOOD_INTENT });
+    const output = await searchJudicialOpinions(QUESTION, 10);
+
+    expect(output.results.length).toBeGreaterThan(0);
+    expect(output.reachedSource).toBe(true);
+  });
+
+  test("every result carries the court id the ingest guard needs", async () => {
+    // The guard in library-resolve refuses a document whose courtId is not
+    // scotus. It can only do that if the id reaches the client, and the client
+    // can only send back what this search gave it.
+    stub({ intent: GOOD_INTENT });
+    const output = await searchJudicialOpinions(QUESTION, 10);
+
+    expect(output.results.length).toBeGreaterThan(0);
+    for (const result of output.results) {
+      expect(result.court_id).toBe("scotus");
+    }
+  });
+});

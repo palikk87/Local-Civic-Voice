@@ -41,12 +41,37 @@ interface CourtListenerResult {
     id: number;
     case_name: string;
     court: string;
+    /**
+     * CourtListener's id for the court — "scotus". CARRIED ON PURPOSE, and it
+     * used to be dropped here.
+     *
+     * The Library hands this back when a reader opens a ruling, and
+     * services/library-resolve.ts refuses to store a document from any other
+     * court. Both apps already read `item.court_id` off this response and put
+     * it in the metadata they send back. It was never in the response, so the
+     * value they sent was always undefined, and a guard that only refuses a
+     * court it has been TOLD about refuses nothing. One of the four barriers
+     * against a district court order being published as a Supreme Court ruling
+     * was, in production, doing nothing at all.
+     *
+     * The display name cannot stand in for it: several STATE supreme courts
+     * are also called "Supreme Court", and one turned up in a recorded response
+     * from this very search.
+     */
+    court_id: string;
     date_filed: string;
     docket_number: string;
     absolute_url: string;
   }>;
   count: number;
   next?: string;
+  /**
+   * True when NOT ONE query reached CourtListener, so the empty list above is
+   * our failure rather than an answer. The clients say "we could not reach the
+   * court records" instead of "no rulings found" — see the note on
+   * JudicialSearchOutput.reachedSource for why the difference matters.
+   */
+  sourceUnavailable?: boolean;
 }
 
 /**
@@ -195,12 +220,17 @@ governmentRouter.get(
           id: item.id,
           case_name: item.case_name,
           court: item.court,
+          court_id: item.court_id,
           date_filed: item.date_filed,
           docket_number: item.docket_number,
           absolute_url: item.absolute_url,
         })),
         count: output.count,
         next: output.next,
+        // Only said when it is the whole story: no results AND nothing answered.
+        ...(output.results.length === 0 && !output.reachedSource
+          ? { sourceUnavailable: true }
+          : {}),
       };
 
       return c.json(result);

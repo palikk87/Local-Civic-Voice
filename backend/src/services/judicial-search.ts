@@ -57,6 +57,26 @@ export interface JudicialSearchOutput {
   next?: string | undefined;
   intent: SearchIntent;
   attempted: string[];
+  /**
+   * DID WE ACTUALLY GET TO ASK THE COURT RECORDS?
+   *
+   * False means every rung of the ladder failed — CourtListener refused,
+   * timed out, or throttled us — and the empty result below is OUR failure,
+   * not an answer about the Supreme Court.
+   *
+   * MEASURED, NOT HYPOTHETICAL. CourtListener allows FIVE REQUESTS A MINUTE
+   * to one caller. This ladder spends several of them on a single search, so
+   * two searches close together can exhaust the whole allowance. Eight
+   * identical live searches for "phone privacy" against production: six came
+   * back with five rulings each, and TWO came back with nothing at all.
+   *
+   * Without this flag those two are indistinguishable from "the Supreme Court
+   * has never ruled on this" — which is a sentence this platform may only say
+   * when it is true. Same failure as the purge that reported success because
+   * the source refused to answer: A FAILURE TO REACH THE SOURCE AND THE SOURCE
+   * SAYING THERE IS NOTHING THERE MUST NEVER LOOK THE SAME.
+   */
+  reachedSource: boolean;
 }
 
 interface RawCluster {
@@ -316,6 +336,9 @@ export async function searchJudicialOpinions(
   const attempted: string[] = [];
   let count = 0;
   let next: string | undefined;
+  // One rung answering is enough to know the source was reachable; a rung that
+  // answers with zero hits is a real "nothing matched".
+  let reachedSource = false;
 
   for (const rung of ladder) {
     const page = await fetchCourtListener<{
@@ -330,6 +353,7 @@ export async function searchJudicialOpinions(
 
     attempted.push(`${rung.label} -> ${page ? `${page.results?.length ?? 0} hit(s)` : "failed"}`);
     if (!page) continue;
+    reachedSource = true;
 
     count = Math.max(count, page.count ?? 0);
     next ??= page.next ?? undefined;
@@ -385,5 +409,12 @@ export async function searchJudicialOpinions(
     .slice(0, limit)
     .map((entry) => entry.result);
 
-  return { results, count: Math.max(count, results.length), next, intent, attempted };
+  return {
+    results,
+    count: Math.max(count, results.length),
+    next,
+    intent,
+    attempted,
+    reachedSource,
+  };
 }

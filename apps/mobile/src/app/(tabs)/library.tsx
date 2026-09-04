@@ -715,15 +715,22 @@ export default function LibraryScreen() {
   } = useQuery({
     queryKey: ['government-search', activeTab, submittedQuery],
     queryFn: async () => {
-      const results =
+      const outcome =
         activeTab === 'all'
           ? await searchAllBranches(submittedQuery, 20)
           : await searchGovernment(activeTab, submittedQuery, 20);
       // Deduplicate results by ID before returning
       const uniqueResults = Array.from(
-        new Map(results.map(r => [r.id, r])).values()
+        new Map(outcome.results.map(r => [r.id, r])).values()
       );
-      return uniqueResults;
+      return {
+        results: uniqueResults,
+        // Carried beside the rows because an empty list cannot say it. See the
+        // note on GovernmentSearchOutcome: the court records not answering and
+        // the court records having nothing are different facts, and this screen
+        // used to print "No results found" for both.
+        courtRecordsUnavailable: outcome.courtRecordsUnavailable,
+      };
     },
     enabled: submittedQuery.length >= 2,
     staleTime: 0, // Always fetch fresh data - search results should be current
@@ -827,17 +834,31 @@ export default function LibraryScreen() {
           </View>
         ) : (
           <FlatList
-            data={searchResults ?? []}
+            data={searchResults?.results ?? []}
             renderItem={renderResult}
             keyExtractor={(item) => item.id}
             contentContainerStyle={{ paddingBottom: 20 }}
             ListEmptyComponent={
               !searchLoading ? (
-                <View className="items-center justify-center py-20">
-                  <Text className="text-slate-400 text-lg">No results found</Text>
-                  <Text className="text-slate-500 text-sm mt-2">
-                    Try a different search term
-                  </Text>
+                <View className="items-center justify-center py-20 px-6">
+                  {searchResults?.courtRecordsUnavailable ? (
+                    <>
+                      <Text className="text-amber-300 text-lg text-center">
+                        We couldn't reach the court records
+                      </Text>
+                      <Text className="text-slate-400 text-sm mt-2 text-center">
+                        This isn't a finding about the Supreme Court — the source didn't
+                        answer. Try that search again in a moment.
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text className="text-slate-400 text-lg">No results found</Text>
+                      <Text className="text-slate-500 text-sm mt-2">
+                        Try a different search term
+                      </Text>
+                    </>
+                  )}
                 </View>
               ) : null
             }

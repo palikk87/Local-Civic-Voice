@@ -68,6 +68,16 @@ interface ExecutiveResponse {
 }
 interface JudicialResponse {
   results: JudicialResult[];
+  /**
+   * The court records could not be reached at all — not "there is no such
+   * ruling". CourtListener allows five requests a minute and one search spends
+   * several of them, so two searches close together can come back empty for a
+   * reason that has nothing to do with the Supreme Court. Measured on
+   * production: two of eight identical searches returned nothing.
+   *
+   * The Library says so rather than letting an outage read as a finding.
+   */
+  sourceUnavailable?: boolean;
 }
 
 function buildQ(q: string, limit = 15, offset = 0): string {
