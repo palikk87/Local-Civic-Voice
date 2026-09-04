@@ -40,6 +40,7 @@
  */
 import { prisma } from "../prisma";
 
+import { authorshipIn, justiceBySurname } from "./opinion-author";
 import {
   EARLIEST_SLIP_TERM,
   PER_CURIAM_INITIALS,
@@ -123,16 +124,76 @@ async function readEveryTerm(
   return { index, read, unreadable };
 }
 
-/** The justices sitting on the day a ruling came down, by name. */
-async function benchNamesOn(when: Date): Promise<string[]> {
+/** The justices sitting on the day a ruling came down. */
+async function benchOnDay(when: Date): Promise<Array<{ name: string; isChief: boolean }>> {
   const rows = await prisma.justice.findMany({
     where: {
       startDate: { lte: when },
       OR: [{ endDate: null }, { endDate: { gte: when } }],
     },
-    select: { name: true },
+    select: { name: true, isChief: true },
   });
-  return [...new Set(rows.map((row) => row.name))];
+
+  const seen = new Set<string>();
+  return rows.filter((row) => !seen.has(row.name) && seen.add(row.name));
+}
+
+/** The same bench, by name alone. */
+async function benchNamesOn(when: Date): Promise<string[]> {
+  return (await benchOnDay(when)).map((justice) => justice.name);
+}
+
+/**
+ * A RULING OLDER THAN THE COURT'S TABLES STILL SAYS WHO WROTE IT.
+ *
+ * The slip opinion tables begin at October Term 2018. Rodriguez v. United
+ * States was decided in 2015 and is not on one, but the opinion we already
+ * hold opens "JUSTICE GINSBURG delivered the opinion of the Court" — the
+ * Court's own words, on our own shelf, needing no request at all.
+ *
+ * Only ever fills an EMPTY author. Where the Court's table has spoken, it has
+ * already spoken; this is for the records it cannot reach.
+ *
+ * Marbury stays empty on purpose. Its stored text is the 1803 report, which
+ * says only "Opinion of the court." Everybody knows Marshall wrote it. The
+ * document does not say so, and this platform does not fill a gap with a thing
+ * everybody knows.
+ */
+async function readAuthorsOutOfTheOpinions(result: CourtFactsResult): Promise<void> {
+  const unnamed = await prisma.governmentReference.findMany({
+    where: {
+      referenceType: "scotus_case",
+      mergedIntoId: null,
+      sponsorName: null,
+      decidedDate: { not: null },
+      fullText: { not: null },
+    },
+    select: { id: true, masterReferenceId: true, title: true, decidedDate: true, fullText: true },
+  });
+
+  for (const ruling of unnamed) {
+    const said = authorshipIn(ruling.fullText);
+    const author =
+      said.kind === "per_curiam"
+        ? PER_CURIAM
+        : said.kind === "justice"
+          ? justiceBySurname(said.surname, await benchOnDay(ruling.decidedDate!))
+          : null;
+
+    if (!author) continue;
+
+    await prisma.governmentReference.update({
+      where: { id: ruling.id },
+      data: { sponsorName: author, sponsorPhotoUrl: null },
+    });
+    const change = `author unknown -> ${author} (from the opinion's own text)`;
+    result.corrected.push({
+      masterReferenceId: ruling.masterReferenceId,
+      title: ruling.title,
+      changes: [change],
+    });
+    console.log(`[CourtFacts] ${ruling.masterReferenceId}: ${change}`);
+  }
 }
 
 const ISO_DAY = (when: Date): string => when.toISOString().slice(0, 10);
@@ -166,13 +227,25 @@ export async function fillFactsFromTheCourt(now: Date = new Date()): Promise<Cou
     corrected: [],
   };
 
-  // NOT ONE PAGE COULD BE READ. Correct nothing. An index that is empty because
-  // supremecourt.gov was unreachable looks exactly like an index that is empty
-  // because the Court has decided nothing, and only one of those is ever true.
+  /*
+   * THE OPINIONS WE ALREADY HOLD, FIRST, because they need no network at all.
+   *
+   * A ruling older than October Term 2018 is on no slip opinion table, and its
+   * author is only ever going to come out of the text on our own shelf. That
+   * is true whether or not supremecourt.gov answered today, so it runs before
+   * the check below rather than behind it.
+   */
+  await readAuthorsOutOfTheOpinions(result);
+
+  // NOT ONE PAGE COULD BE READ. Correct nothing FROM THE COURT. An index that
+  // is empty because supremecourt.gov was unreachable looks exactly like an
+  // index that is empty because the Court has decided nothing, and only one of
+  // those is ever true.
   if (read === 0) {
     console.error(
       `[CourtFacts] could not read a single term page (${unreadable.join(", ")}) — ` +
-        `nothing corrected. This is a failure to reach the Court, not a finding about it.`,
+        `nothing corrected from the Court. This is a failure to reach it, not a finding ` +
+        `about it.`,
     );
     return result;
   }

@@ -73,6 +73,7 @@ async function storeRuling(input: {
   title: string;
   decidedDate: Date | null;
   sponsorName?: string | null;
+  fullText?: string | null;
 }): Promise<string> {
   const row = await prisma.governmentReference.create({
     data: {
@@ -82,6 +83,7 @@ async function storeRuling(input: {
       status: "decided",
       decidedDate: input.decidedDate,
       sponsorName: input.sponsorName ?? null,
+      fullText: input.fullText ?? null,
       sourceUrl: "https://www.courtlistener.com/opinion/1/x/",
     },
   });
@@ -259,3 +261,109 @@ describe("the Court corrects its own record", () => {
     expect(after!.sponsorName).toBeNull();
   });
 });
+
+/*
+ * A RULING THE COURT'S TABLES CANNOT REACH STILL SAYS WHO WROTE IT.
+ *
+ * The slip opinion tables begin at October Term 2018. Rodriguez v. United
+ * States was decided in April 2015 and is on none of them — but the opinion
+ * this platform already holds opens with the Court's own sentence. The excerpt
+ * below is verbatim from the stored text on production, missing space and all.
+ */
+describe("older rulings, read out of their own opinions", () => {
+  const RODRIGUEZ = `
+           APPEALS FOR THE EIGHTH CIRCUIT
+
+                                 [April 21, 2015]
+
+
+   JUSTICE GINSBURG delivered the opinion of the Court.
+   In advancing its de minimis rule, the Eighth Circuit relied heavily
+on Pennsylvania v. Mimms, 434 U. S. 106 (1977) (per curiam).
+`;
+
+  async function seat2015(): Promise<void> {
+    const sworn = new Date("1993-08-10T00:00:00.000Z");
+    for (const [name, isChief] of [
+      ["John G. Roberts Jr.", true],
+      ["Ruth Bader Ginsburg", false],
+      ["Elena Kagan", false],
+    ] as Array<[string, boolean]>) {
+      await prisma.justice.create({ data: { name, startDate: sworn, endDate: null, isChief } });
+    }
+  }
+
+  test("Rodriguez gets its author from the text, with no table to consult", async () => {
+    await seat2015();
+    const id = await storeRuling({
+      masterReferenceId: "13-9972",
+      title: "Rodriguez v. United States",
+      decidedDate: new Date("2015-04-21T00:00:00.000Z"),
+      fullText: RODRIGUEZ,
+    });
+
+    stubTheCourt();
+    await fillFactsFromTheCourt(NOW);
+
+    const after = await prisma.governmentReference.findUnique({ where: { id } });
+    // NOT "Per Curiam", which is what a naive read of the citation above gives.
+    expect(after!.sponsorName).toBe("Ruth Bader Ginsburg");
+  });
+
+  test("it still works when the Court's site is unreachable", async () => {
+    // The text is on our own shelf. Nothing about reading it needs the network,
+    // so a bad day at supremecourt.gov must not stop it.
+    await seat2015();
+    const id = await storeRuling({
+      masterReferenceId: "13-9972",
+      title: "Rodriguez v. United States",
+      decidedDate: new Date("2015-04-21T00:00:00.000Z"),
+      fullText: RODRIGUEZ,
+    });
+
+    stubTheCourt({ everythingFails: true });
+    await fillFactsFromTheCourt(NOW);
+
+    const after = await prisma.governmentReference.findUnique({ where: { id } });
+    expect(after!.sponsorName).toBe("Ruth Bader Ginsburg");
+  });
+
+  test("Marbury keeps its honest empty state", async () => {
+    await seat2015();
+    const id = await storeRuling({
+      masterReferenceId: "cl-84759",
+      title: "Marbury v. Madison",
+      decidedDate: new Date("1803-02-24T00:00:00.000Z"),
+      // The 1803 report, verbatim. Everyone knows Marshall wrote it; the
+      // document does not say so.
+      fullText: "## Opinion\n\nOpinion of\n \n the court.\n \n At the last term",
+    });
+
+    stubTheCourt();
+    await fillFactsFromTheCourt(NOW);
+
+    const after = await prisma.governmentReference.findUnique({ where: { id } });
+    expect(after!.sponsorName).toBeNull();
+  });
+
+  test("an author the Court's table already gave is not overwritten by the text", async () => {
+    await seatTheCourt();
+    const id = await storeRuling({
+      masterReferenceId: "20-1029",
+      title: "City of Austin",
+      decidedDate: new Date("2002-07-10T00:00:00.000Z"),
+      fullText: "   JUSTICE KAGAN delivered the opinion of the Court.",
+    });
+
+    stubTheCourt();
+    await fillFactsFromTheCourt(NOW);
+
+    const after = await prisma.governmentReference.findUnique({ where: { id } });
+    // The text pass runs first and would read KAGAN out of that line. Then the
+    // Court's own J. column says SS, and the Court wins — which is the whole
+    // ordering rule: our shelf answers where the Court cannot be asked, and
+    // the Court answers wherever it can.
+    expect(after!.sponsorName).toBe("Sonia Sotomayor");
+  });
+});
+
