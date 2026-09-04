@@ -40,10 +40,16 @@
  * problem must never be able to empty this table.
  */
 import { prisma } from "../prisma";
-import { env } from "../env";
+import { officialSourceHeaders } from "./official-source";
 import { SUPREME_COURT } from "./judicial-search";
 
-/** The opinion id inside a CourtListener URL: /opinion/6461471/case-name/ */
+/**
+ * The id inside a CourtListener URL: /opinion/6461471/case-name/
+ *
+ * It addresses the CLUSTER, not the individual opinion document — confirmed by
+ * asking for both: `id:8713868` returns a different case entirely, while
+ * `cluster_id:8713868` returns the one our URL points at.
+ */
 export function opinionIdFromUrl(sourceUrl: string | null | undefined): number | null {
   const match = /courtlistener\.com\/opinion\/(\d+)/.exec(sourceUrl ?? "");
   const id = match ? Number(match[1]) : NaN;
@@ -70,24 +76,39 @@ export function courtIdOf(cluster: { court_id?: unknown; court?: unknown } | nul
   return null;
 }
 
-interface ClusterPage {
+interface SearchPage {
   results?: Array<{ court_id?: string; court?: string }>;
 }
 
-/** Which court issued this opinion, or null when we could not find out. */
-async function courtFor(opinionId: number): Promise<string | null> {
-  const apiKey = env.COURTLISTENER_API_KEY;
-  if (!apiKey) return null;
+/**
+ * Which court issued this opinion, or null when we could not find out.
+ *
+ * ASKED THROUGH THE SEARCH ENDPOINT, WHICH NEEDS NO KEY. The obvious call is
+ * /clusters/?sub_opinions=<id>, and that is what this did first. It returns 401
+ * without a token — so on a deployment where COURTLISTENER_API_KEY is not in the
+ * environment, every lookup answered "I could not find out", every record was
+ * kept, and the purge reported success having deleted nothing. It ran in
+ * production and removed nothing at all.
+ *
+ * The search endpoint answers the same question anonymously and carries the same
+ * court_id. Verified against the record this whole change exists for:
+ *
+ *   q=cluster_id:8713868  ->  court_id "mdd", In re the United States for an
+ *                             Order Authorizing Disclosure of Location Information
+ *
+ * A deletion must not be able to fail quietly for want of a credential.
+ */
+async function courtFor(clusterId: number): Promise<string | null> {
   try {
-    const response = await fetch(
-      `https://www.courtlistener.com/api/rest/v4/clusters/?sub_opinions=${opinionId}`,
-      {
-        headers: { Authorization: `Token ${apiKey}` },
-        signal: AbortSignal.timeout(20_000),
-      },
-    );
+    const url =
+      "https://www.courtlistener.com/api/rest/v4/search/?type=o&q=" +
+      encodeURIComponent(`cluster_id:${clusterId}`);
+    const response = await fetch(url, {
+      headers: officialSourceHeaders(),
+      signal: AbortSignal.timeout(20_000),
+    });
     if (!response.ok) return null;
-    const page = (await response.json()) as ClusterPage;
+    const page = (await response.json()) as SearchPage;
     return courtIdOf(page.results?.[0] ?? null);
   } catch {
     return null;

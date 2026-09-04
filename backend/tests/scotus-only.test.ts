@@ -19,13 +19,25 @@ import { courtIdOf, opinionIdFromUrl, purgeNonScotusRulings } from "../src/servi
 const realFetch = globalThis.fetch;
 const realKey = process.env.COURTLISTENER_API_KEY;
 
-/** CourtListener answers with the court for each opinion id it is asked about. */
-function courtSays(byOpinionId: Record<number, string | null>): void {
+/**
+ * CourtListener answers with the court for each cluster id it is asked about.
+ *
+ * The query is asserted, not just parsed: this must go through the SEARCH
+ * endpoint, which answers without a key. The first version of this asked
+ * /clusters/?sub_opinions=, which returns 401 anonymously — so in production
+ * every lookup failed, every record was kept, and the purge deleted nothing
+ * while reporting success.
+ */
+function courtSays(byClusterId: Record<number, string | null>): void {
   globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = typeof input === "string" ? input : input.toString();
-    const match = /sub_opinions=(\d+)/.exec(url);
-    if (!match) return realFetch(input, init);
-    const court = byOpinionId[Number(match[1])];
+    if (!url.includes("courtlistener.com")) return realFetch(input, init);
+    if (!url.includes("/search/")) {
+      throw new Error(`the purge must ask the keyless search endpoint, not: ${url}`);
+    }
+    const match = /cluster_id(?:%3A|:)(\d+)/.exec(url);
+    if (!match) throw new Error(`no cluster_id in the query: ${url}`);
+    const court = byClusterId[Number(match[1])];
     if (court === undefined) return new Response("no", { status: 503 });
     if (court === null) return Response.json({ results: [] });
     return Response.json({ results: [{ court_id: court }] });
@@ -77,6 +89,25 @@ describe("reading the court out of an answer", () => {
 });
 
 describe("purging what is not the Supreme Court", () => {
+  test("IT ASKS AN ENDPOINT THAT ANSWERS WITHOUT A KEY", async () => {
+    /*
+     * The failure this exists for did not throw and did not log. The purge
+     * asked an authenticated endpoint, got 401 on every record, read that as
+     * "could not find out", kept everything, and reported success. It ran in
+     * production against a real district court order and removed nothing.
+     *
+     * A deletion must not be able to fail quietly for want of a credential.
+     */
+    delete process.env.COURTLISTENER_API_KEY;
+    await ruling("no-key-needed", 8713868);
+    courtSays({ 8713868: "mdd" });
+
+    const result = await purgeNonScotusRulings();
+    expect(result.purged.length).toBe(1);
+    expect(await prisma.governmentReference.findUnique({ where: { id: "no-key-needed" } })).toBeNull();
+    process.env.COURTLISTENER_API_KEY = "test-token-never-sent-anywhere";
+  });
+
   test("A DISTRICT COURT ORDER IS REMOVED", async () => {
     await ruling("keep-1", 111);
     await ruling("magistrate-1", 222);
