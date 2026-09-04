@@ -117,6 +117,15 @@ export const FIRST_RUN = {
    */
   courtRoster: 2 * 60_000,
   /**
+   * THE COURT'S OWN LIST OF WHAT IT HAS DECIDED, read after its roster so the
+   * bench that resolves an author's initials is already current.
+   *
+   * Up to nine static pages from supremecourt.gov, which does not rate-limit
+   * the way CourtListener does — but it corrects stored dates and authors, so
+   * it must never run before the roster it matches initials against.
+   */
+  courtFacts: 2 * 60_000 + 30_000,
+  /**
    * Last, because it is the only one with a finish line — everything else has
    * to be responsive, this only has to arrive.
    */

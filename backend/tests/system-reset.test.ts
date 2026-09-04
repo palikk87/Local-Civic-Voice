@@ -445,10 +445,39 @@ describe("system reset: what executing it does", () => {
     });
   });
 
+  /**
+   * WAIT FOR THE SETUP'S OWN WRITES TO LAND BEFORE COUNTING.
+   *
+   * castVote returns as soon as the vote is recorded; the PositionEvent that
+   * goes with it is written fire-and-forget afterwards — tests/helpers/server.ts
+   * has the note on why several writes here deliberately outlive their request.
+   * So a count taken the instant setup returns can be one short, and the
+   * missing row then arrives DURING the reset, where it looks exactly like the
+   * reset having created one.
+   *
+   * That is precisely what happened in CI, on a run where nothing about this
+   * behaviour had changed: `before` read 1, the count after read 2, and
+   * positionEventsTouched was 0 — the reset had touched nothing at all. The
+   * test only fails on a loaded machine, which is the worst kind of red build:
+   * it looks like a regression and it is a stopwatch.
+   *
+   * Two identical reads in a row means the writes have stopped arriving.
+   */
+  async function positionEventsSettled(): Promise<number> {
+    let previous = -1;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const now = await prisma.positionEvent.count();
+      if (now > 0 && now === previous) return now;
+      previous = now;
+      await Bun.sleep(50);
+    }
+    return previous;
+  }
+
   test("POSITIONEVENT IS NOT TOUCHED — every citizen keeps their own record", async () => {
     const { leader, followerA, followerB } = await platformWithHistory();
 
-    const before = await prisma.positionEvent.count();
+    const before = await positionEventsSettled();
     expect(before).toBeGreaterThan(0);
 
     const { report } = await runAReset(leader.cookie, [leader, followerA, followerB]);

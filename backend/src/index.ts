@@ -695,15 +695,23 @@ void purgeNonScotusRulings()
  * services/scotus-court-facts.ts — nothing is written if no page can be read.
  */
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
-  const correctFromTheCourt = () =>
-    void fillFactsFromTheCourt().catch((error) =>
-      console.error("[CourtFacts] the correction pass could not finish:", error),
-    );
-
-  correctFromTheCourt();
-  // Daily, alongside the government sync: the Court adds rows as it decides
-  // cases, and a ruling pulled in from anywhere else needs its facts settled.
-  setInterval(correctFromTheCourt, 24 * 60 * 60 * 1000);
+  /*
+   * schedule(), NOT A BARE setInterval, and the difference is the whole job.
+   *
+   * A container restarts on every deploy, several times an hour on a working
+   * day. A job whose first run is twenty-four hours out is never reached — not
+   * rarely, NEVER — and it fails silently, because an interval that does not
+   * fire raises nothing. This codebase has already paid for that lesson twice;
+   * services/scheduled-work.ts exists because of it, and there is a test that
+   * fails the build when somebody reaches for setInterval again. It caught this
+   * one, which is exactly what it is for.
+   */
+  schedule({
+    name: "CourtFacts",
+    firstRunAfterMs: FIRST_RUN.courtFacts,
+    everyMs: 24 * 60 * 60 * 1000,
+    run: fillFactsFromTheCourt,
+  });
 }
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
