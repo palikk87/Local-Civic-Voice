@@ -115,6 +115,28 @@ export function termOf(when: Date): number {
   return term % 100;
 }
 
+/**
+ * THE COURT APPENDS ITS OWN HOUSEKEEPING TO A CASE NAME.
+ *
+ * Six of the 462 rows across terms 18 to 25 carry a revision note glued onto
+ * the end of the name:
+ *
+ *   Trump v. Barbara Revisions : 7/01/26
+ *   Trump v. Slaughter Revisions : 7/07/26
+ *   United States v. Hemani Revisions : 6/29/26
+ *
+ * A record created from one of those rows would be titled "Trump v. Slaughter
+ * Revisions : 7/07/26" on every card and every share.
+ *
+ * NOTED HERE BECAUSE THE COMMIT THAT ADDED THIS FILE SAID THE OPPOSITE — that
+ * CourtListener carried re-posting noise "the Court's list does not". It does.
+ * The Court is still the better source, for the reason that has not changed:
+ * one row per decision, and every row a Supreme Court case by construction.
+ */
+function withoutRevisionNote(caseName: string): string {
+  return caseName.replace(/\s*revisions?\s*:?\s*[\d/]*\s*$/i, "").trim();
+}
+
 function stripTags(html: string): string {
   return html
     .replace(/<[^>]+>/g, " ")
@@ -177,7 +199,7 @@ export function parseSlipOpinions(html: string): SlipOpinion[] {
       sequence: Number(sequence),
       decidedDate,
       docket: docket.trim(),
-      caseName: caseName.trim(),
+      caseName: withoutRevisionNote(caseName),
       authorInitials: initials.trim().toUpperCase(),
       citation: citation.trim() || null,
       pdfUrl: href ? new URL(href, "https://www.supremecourt.gov").href : null,

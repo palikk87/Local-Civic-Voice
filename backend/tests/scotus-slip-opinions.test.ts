@@ -98,6 +98,22 @@ describe("reading the Court's slip opinion table", () => {
     );
   });
 
+  /*
+   * THE COURT GLUES ITS OWN HOUSEKEEPING ONTO A CASE NAME. Six of the 462 rows
+   * across terms 18 to 25 do this, and a record built from one would be
+   * titled "Trump v. Slaughter Revisions : 7/07/26" on every card it appears
+   * on. Both of these are real rows from the recorded page.
+   */
+  test("a revision note is not part of the case's name", () => {
+    const names = parseSlipOpinions(term25).map((o) => o.caseName);
+
+    expect(names).toContain("Trump v. Slaughter");
+    expect(names).toContain("Trump v. Barbara");
+    for (const name of names) {
+      expect(name).not.toMatch(/revisions?/i);
+    }
+  });
+
   test("a page this cannot read parses to nothing, so a caller can refuse it", () => {
     expect(parseSlipOpinions("<html><body><p>Not a table</p></body></html>")).toHaveLength(0);
     expect(parseSlipOpinions("")).toHaveLength(0);
