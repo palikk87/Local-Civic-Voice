@@ -26,6 +26,7 @@ import {
 import { ensureSlug } from "./reference-slug";
 import { cleanOpinionSnippet } from "./opinion-snippet";
 import { SUPREME_COURT } from "./judicial-search";
+import { fetchSlipOpinions, termOf } from "./scotus-slip-opinions";
 import { notifyLawUpdate } from "./notification-service";
 import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 import { congressGovKey, env } from "../env";
@@ -612,7 +613,100 @@ interface CourtListenerSearchResponse {
 // Cap the cursor walk so a page full of skippable entries can't loop forever.
 const COURTLISTENER_MAX_PAGES = 4;
 
+/**
+ * WHAT THE COURT HAS PUBLISHED THAT WE DO NOT ALREADY HOLD.
+ *
+ * A KNOCK, NOT A HAUL. This used to re-read the ten most recent rulings from
+ * CourtListener every single day, forever, whether or not anything had
+ * happened. Measured from the Supreme Court Database, the Court decides 58-65
+ * cases a year — the last five terms are 60, 65, 65, 58, 59 — so the daily haul
+ * re-read the same ten cases about three hundred times a year to catch roughly
+ * one new one a week, in bursts, mostly in June.
+ *
+ * The Court's own term table answers the actual question — "is there anything
+ * here we have not got?" — in one request, and every case on it is a Supreme
+ * Court case BY CONSTRUCTION. There is no court filter to get right and no
+ * third party to verify.
+ *
+ * Returns null when the Court's list could not be read, so the caller can fall
+ * back rather than conclude the Court has published nothing.
+ */
+async function syncFromTheCourtsOwnList(): Promise<number | null> {
+  const listed = await fetchSlipOpinions(termOf(new Date()));
+  if (!listed) return null;
+
+  const ids = listed.map((opinion) => ({
+    opinion,
+    masterReferenceId: normalizeReferenceId(ReferenceType.SCOTUS_CASE, opinion.docket),
+  }));
+
+  const held = new Set(
+    (
+      await prisma.governmentReference.findMany({
+        where: { masterReferenceId: { in: ids.map((entry) => entry.masterReferenceId) } },
+        select: { masterReferenceId: true },
+      })
+    ).map((row) => row.masterReferenceId),
+  );
+
+  const missing = ids.filter((entry) => !held.has(entry.masterReferenceId));
+  if (missing.length === 0) {
+    console.log(
+      `[GovSync] the Court lists ${listed.length} decision(s) this term and we hold every one`,
+    );
+    return 0;
+  }
+
+  let synced = 0;
+  // Newest first, because that is what somebody is looking for today.
+  for (const { opinion, masterReferenceId } of missing.slice(0, SYNC_COUNT)) {
+    await upsertReference({
+      masterReferenceId,
+      referenceType: "scotus_case",
+      title: opinion.caseName,
+      shortTitle:
+        opinion.caseName.length > 200 ? `${opinion.caseName.slice(0, 197)}...` : opinion.caseName,
+      status: "decided",
+      category: categorize(opinion.caseName),
+      // THE COURT'S OWN PDF. Not a third party's copy of the opinion — the
+      // document the Court published, on the Court's own server.
+      sourceUrl: opinion.pdfUrl ?? `https://www.supremecourt.gov/opinions/slipopinion/${termOf(opinion.decidedDate)}`,
+      decidedDate: opinion.decidedDate,
+    });
+    synced += 1;
+    console.log(
+      `[GovSync] the Court published ${opinion.docket} "${opinion.caseName.slice(0, 60)}" on ` +
+        `${opinion.decidedDate.toISOString().slice(0, 10)}`,
+    );
+  }
+
+  // The author, the precedential status and any date we already had wrong are
+  // settled by services/scotus-court-facts, which reads the same table.
+  return synced;
+}
+
 async function syncScotusCases(): Promise<number> {
+  /*
+   * THE COURT FIRST, ALWAYS.
+   *
+   * Khalid: "or maybe that can go thru the direct SCOTUS site" — and it is the
+   * better signal of the two, measured side by side. Both are equally current,
+   * but CourtListener carries re-posting noise the Court's list does not:
+   *
+   *   Court's site   8/31/26  26A203  National Park Service v. National Trust
+   *   CourtListener  2026-08-31  26A203  National Park Service v. National Trust
+   *                  2026-06-30  25-365  Trump v. Barbara Revisions: 7/01/26  <- noise
+   *
+   * The Court cannot lag its own opinions, and every case on its list is a
+   * Supreme Court case with no filter to get wrong.
+   */
+  const fromTheCourt = await syncFromTheCourtsOwnList();
+  if (fromTheCourt !== null) return fromTheCourt;
+
+  console.warn(
+    "[GovSync] the Court's slip opinion table could not be read — falling back to CourtListener",
+  );
+
   const apiKey = env.COURTLISTENER_API_KEY;
   if (!apiKey) {
     console.warn("[GovSync] COURTLISTENER_API_KEY not set — skipping SCOTUS cases");

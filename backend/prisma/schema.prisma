@@ -888,6 +888,21 @@ model GovernmentReference {
   /// "asked, found none" and "never asked" are different states, and only the
   /// second is worth spending a request on again.
   dissentCheckedAt DateTime?
+
+  /// WHETHER A RULING IS BINDING LAW, IN THE COURT'S OWN VOCABULARY.
+  ///
+  /// Khalid: "id also like to display our Precedential Status as part of what
+  /// we show people which will be built into part of their badge of verified
+  /// or lesser badges."
+  ///
+  /// CourtListener's own values, stored verbatim rather than translated:
+  /// Published, Unpublished, Errata, Separate, In-chambers, Relating-to,
+  /// Unknown. Every opinion on the Court's own slip opinion table is Published.
+  ///
+  /// Null means we have not established it, which is NOT the same as
+  /// "Unknown" — that is a value the source itself can return, and the two say
+  /// different things about whose gap it is.
+  precedentialStatus String?
   /// "D", "R", "I" — the letter the roster uses.
   sponsorParty      String?
   /// Two-letter state.

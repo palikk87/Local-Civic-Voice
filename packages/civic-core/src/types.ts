@@ -134,6 +134,15 @@ export interface SupremeCourtCase {
   arguedDate?: string;
   decidedDate?: string;
   status: 'pending' | 'argued' | 'decided' | 'dismissed' | 'remanded';
+  /**
+   * WHETHER THIS RULING IS BINDING LAW, in the Court's own vocabulary:
+   * 'Published', 'Unpublished', 'Errata', 'Separate', 'In-chambers',
+   * 'Relating-to', 'Unknown'.
+   *
+   * Absent when we have not established it. Shown as nothing rather than
+   * guessed at — the record's badge already reports the gap.
+   */
+  precedentialStatus?: string | null;
   outcome?: 'affirmed' | 'reversed' | 'vacated' | 'remanded' | 'dismissed' | 'per_curiam';
   voteBreakdown?: {
     majority: number;

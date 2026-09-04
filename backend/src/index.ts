@@ -20,6 +20,7 @@ import { sitemapRouter } from "./routes/sitemap";
 import { backfillSlugs } from "./services/reference-slug";
 import { backfillOpinionDescriptions } from "./services/opinion-snippet";
 import { purgeNonScotusRulings } from "./services/scotus-only";
+import { fillFactsFromTheCourt } from "./services/scotus-court-facts";
 import { governmentReferencesRouter } from "./routes/government-references";
 import { portraitsRouter } from "./routes/portraits";
 import { loginRouter } from "./routes/login";
@@ -673,6 +674,37 @@ void purgeNonScotusRulings()
   .catch((error) => {
     console.error("[ScotusOnly] the check could not finish:", error);
   });
+
+/*
+ * THE COURT SETTLES THE FACTS ABOUT ITS OWN RULINGS.
+ *
+ * Two rulings carried dates that are impossible on the face of our own data —
+ * City of Austin, docket 20-1029, filed in the 2020 term and stored as decided
+ * in 2002; Fuld, docket 24-20, stored as decided in 2013. Both came from
+ * CourtListener holding several clusters for one case and the record taking
+ * whichever it was handed. Six more carried no author, rendering with the same
+ * words a genuine per curiam gets.
+ *
+ * supremecourt.gov publishes one row per decision, with the date, the author's
+ * initials and the citation. There is nothing to pick, so there is nothing to
+ * pick wrongly.
+ *
+ * Held back under CIVIC_NO_BACKGROUND_SYNC like every other outbound boot job:
+ * this reads up to nine pages from supremecourt.gov, and a suite that starts a
+ * server per file must not do that ninety-four times. See
+ * services/scotus-court-facts.ts — nothing is written if no page can be read.
+ */
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  const correctFromTheCourt = () =>
+    void fillFactsFromTheCourt().catch((error) =>
+      console.error("[CourtFacts] the correction pass could not finish:", error),
+    );
+
+  correctFromTheCourt();
+  // Daily, alongside the government sync: the Court adds rows as it decides
+  // cases, and a ruling pulled in from anywhere else needs its facts settled.
+  setInterval(correctFromTheCourt, 24 * 60 * 60 * 1000);
+}
 
 // Government data refresh protocol: pull fresh bills, executive orders, and
 // SCOTUS cases at boot, then once every 24 hours. The sync itself skips if it

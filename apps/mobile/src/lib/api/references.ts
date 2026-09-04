@@ -101,6 +101,12 @@ export interface GovReference {
     checks: Array<{ id: string; label: string; met: boolean; detail: string | null }>;
   } | null;
   decidedDate: string | null;
+  /**
+   * Whether a ruling is binding law, in the Court's own vocabulary —
+   * "Published", "Unpublished", "Errata". Null on anything that is not a court
+   * case, and on a ruling whose status we have not established.
+   */
+  precedentialStatus?: string | null;
   votes: { support: number; oppose: number; total: number };
   engagement: { comments: number; shares: number; posts: number };
   createdAt: string;
@@ -514,6 +520,7 @@ export function referenceToScotusCase(ref: GovReference | GovReferenceDetail): S
     shortName: ref.shortTitle ?? ref.title,
     term,
     decidedDate: ref.decidedDate ?? undefined,
+    precedentialStatus: ref.precedentialStatus ?? null,
     status: statusMap[ref.status] ?? (ref.decidedDate ? "decided" : "pending"),
     category: toCategory(ref.category),
     lowerCourt: "Federal courts",

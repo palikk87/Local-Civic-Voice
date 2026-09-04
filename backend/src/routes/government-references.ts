@@ -276,6 +276,7 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
       sourceCheckedAt: true,
       citizenBriefJson: true,
       citizenBriefVersion: true,
+      precedentialStatus: true,
       lawVersion: true,
       rollCalls: { select: { id: true }, take: 1 },
       sponsorParty: true,
@@ -363,6 +364,10 @@ governmentReferencesRouter.get("/", zValidator("query", searchSchema), async (c)
         sourceUrl: ref.sourceUrl,
         signedDate: ref.signedDate?.toISOString() ?? null,
         decidedDate: ref.decidedDate?.toISOString() ?? null,
+        // Whether a ruling is binding law, in the Court's own vocabulary.
+        // Null on anything that is not a court case, and on a ruling whose
+        // status we have not established — the clients show nothing for both.
+        precedentialStatus: ref.precedentialStatus ?? null,
         votes: {
           support: ref.supportVotes,
           oppose: ref.opposeVotes,
@@ -636,6 +641,7 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
       sourceCheckedAt: true,
       citizenBriefJson: true,
       citizenBriefVersion: true,
+      precedentialStatus: true,
       lawVersion: true,
       rollCalls: { select: { id: true }, take: 1 },
       sponsorParty: true,
@@ -750,6 +756,10 @@ governmentReferencesRouter.get("/trending", zValidator("query", z.object({
         citizenBrief: ref.citizenBrief,
         signedDate: ref.signedDate?.toISOString() ?? null,
         decidedDate: ref.decidedDate?.toISOString() ?? null,
+        // Whether a ruling is binding law, in the Court's own vocabulary.
+        // Null on anything that is not a court case, and on a ruling whose
+        // status we have not established — the clients show nothing for both.
+        precedentialStatus: ref.precedentialStatus ?? null,
         votes: {
           support: ref.supportVotes,
           oppose: ref.opposeVotes,
@@ -1030,6 +1040,7 @@ governmentReferencesRouter.get("/:id", async (c) => {
       sourceCheckedAt: reference.sourceCheckedAt?.toISOString() ?? null,
       signedDate: reference.signedDate?.toISOString() ?? null,
       decidedDate: reference.decidedDate?.toISOString() ?? null,
+      precedentialStatus: reference.precedentialStatus ?? null,
       aliases,
       votes: {
         support: reference.supportVotes,
@@ -1113,6 +1124,7 @@ governmentReferencesRouter.post(
         contentStartedAt: true,
         citizenBriefJson: true,
         citizenBriefVersion: true,
+        precedentialStatus: true,
         lawVersion: true,
       },
     });
@@ -1875,6 +1887,7 @@ governmentReferencesRouter.post("/:id/brief", async (c) => {
       contentStartedAt: true,
       citizenBriefJson: true,
       citizenBriefVersion: true,
+      precedentialStatus: true,
       lawVersion: true,
       referenceType: true,
       status: true,

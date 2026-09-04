@@ -12,6 +12,7 @@ import {
   Hash,
   Link2,
   MessageSquare,
+  Scale,
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -658,6 +659,16 @@ export default function ReferenceDetail() {
                   ) : null}
                   {reference.decidedDate ? (
                     <MetaRow icon={CalendarDays} label="Decided" value={formatDate(reference.decidedDate) ?? ""} />
+                  ) : null}
+                  {/* WHETHER THIS RULING IS BINDING LAW, in the Court's own
+                      word for it. Shown only when we hold it: an empty line is
+                      honest, and the badge already reports the gap. */}
+                  {reference.precedentialStatus ? (
+                    <MetaRow
+                      icon={Scale}
+                      label="Precedential status"
+                      value={reference.precedentialStatus}
+                    />
                   ) : null}
                 </div>
                 {reference.sourceUrl ? (

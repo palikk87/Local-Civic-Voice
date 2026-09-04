@@ -207,6 +207,9 @@ describe("nothing is marked down for a fact that cannot exist", () => {
       sponsorName: "Anthony M. Kennedy",
       sponsorBioguideId: null,
       sponsorPhotoUrl: "https://upload.wikimedia.org/portrait.jpg",
+      // A ruling IS asked for its precedential status, so it is supplied here
+      // to keep this test about the roll call and nothing else.
+      precedentialStatus: "Published",
     });
     expect(idsOf(ruling)).not.toContain("roll_call");
     expect(recordCompleteness(ruling, NOW).level).toBe("verified");
@@ -383,3 +386,78 @@ describe("every endpoint reports the same badge for the same record", () => {
     expect(body.reference.completeness.checks.every((c) => c.met)).toBe(true);
   });
 });
+
+/*
+ * A RULING IS RATED ON ONE MORE THING THAN A BILL IS.
+ *
+ * Khalid: "id also like to display our Precedential Status as part of what we
+ * show people which will be built into part of their badge of verified or
+ * lesser badges."
+ *
+ * Which means a court case is scored out of SEVEN and a bill out of SIX. That
+ * is not an inconsistency to be smoothed over — it is the applicability rule
+ * this badge was built on, the same one that stops a bill in committee being
+ * marked down for a floor vote it never had. A bill has no precedential status
+ * to hold, so it is not asked for one.
+ */
+describe("precedential status, for a ruling and nothing else", () => {
+  function ruling(over: Partial<CompletableReference> = {}): CompletableReference {
+    return complete({
+      referenceType: "scotus_case",
+      status: "decided",
+      sourceUrl: "https://www.supremecourt.gov/opinions/21pdf/596us1r22_4315.pdf",
+      introducedDate: null,
+      decidedDate: new Date("2022-04-21T00:00:00Z"),
+      sponsorName: "Sonia Sotomayor",
+      sponsorBioguideId: null,
+      sponsorPhotoUrl: "https://upload.wikimedia.org/portrait.jpg",
+      precedentialStatus: "Published",
+      ...over,
+    });
+  }
+
+  test("a ruling is asked the question", () => {
+    expect(idsOf(ruling())).toContain("precedential_status");
+  });
+
+  test("a bill and an executive order are not", () => {
+    expect(idsOf(complete())).not.toContain("precedential_status");
+    expect(
+      idsOf(complete({ referenceType: "executive_order", signedDate: new Date("2026-01-20") })),
+    ).not.toContain("precedential_status");
+  });
+
+  test("holding it is a tick, and the value itself is shown", () => {
+    const result = recordCompleteness(ruling(), NOW);
+    const check = result.checks.find((c) => c.id === "precedential_status")!;
+
+    expect(check.met).toBe(true);
+    expect(check.detail).toBe("Published");
+    expect(result.level).toBe("verified");
+  });
+
+  /*
+   * THE VALUE IS HELD, NOT JUDGED. "Unpublished" is a fact about the ruling.
+   * The badge rates OUR RECORD, so holding an honest "Unpublished" is a tick
+   * exactly like holding "Published" — marking the platform down for what the
+   * Court decided would be the badge grading the law again, which is the
+   * mistake it exists to have stopped making.
+   */
+  test("an unpublished ruling is a complete record, not a poor one", () => {
+    const result = recordCompleteness(ruling({ precedentialStatus: "Unpublished" }), NOW);
+
+    expect(result.checks.find((c) => c.id === "precedential_status")!.met).toBe(true);
+    expect(result.level).toBe("verified");
+  });
+
+  test("not having established it is the one miss", () => {
+    expect(missing(ruling({ precedentialStatus: null }))).toEqual(["precedential_status"]);
+    expect(missing(ruling({ precedentialStatus: "   " }))).toEqual(["precedential_status"]);
+  });
+
+  test("a ruling is scored out of seven where a bill is scored out of six", () => {
+    expect(recordCompleteness(ruling(), NOW).applicable).toBe(7);
+    expect(recordCompleteness(complete(), NOW).applicable).toBe(6);
+  });
+});
+

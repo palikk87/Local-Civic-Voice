@@ -392,6 +392,17 @@ export default function SupremeCourtDetailScreen() {
                     {scotusCase.docketNumber}
                   </Text>
                 </View>
+                {/* WHETHER THIS RULING IS BINDING LAW, in the Court's own word
+                    for it. Shown only when we hold it — an empty chip would be
+                    a claim we cannot make, and the record's badge already
+                    reports the gap. */}
+                {scotusCase.precedentialStatus ? (
+                  <View className="bg-slate-500/20 px-3 py-1 rounded-full mr-2 mb-2">
+                    <Text className="text-slate-300 text-sm font-medium">
+                      {scotusCase.precedentialStatus}
+                    </Text>
+                  </View>
+                ) : null}
                 <View
                   className="px-3 py-1 rounded-full mr-2 mb-2"
                   style={{ backgroundColor: `${categoryColor}30` }}

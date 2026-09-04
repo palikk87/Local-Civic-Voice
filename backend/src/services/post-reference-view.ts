@@ -62,6 +62,7 @@ export async function loadPostReferenceViews(
         sponsorPhotoUrl: true,
         citizenBriefJson: true,
         citizenBriefVersion: true,
+        precedentialStatus: true,
         // Existence only. The tally itself belongs to the law page; all the
         // badge asks is whether a recorded vote is stored at all.
         rollCalls: { select: { id: true }, take: 1 },

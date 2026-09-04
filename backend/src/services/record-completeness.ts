@@ -103,6 +103,12 @@ export interface CompletableReference {
   citizenBriefJson: string | null;
   citizenBriefVersion: number | null;
   lawVersion: number;
+  /**
+   * "Published", "Unpublished", "Errata" — the Court's own vocabulary for
+   * whether a ruling is binding law. Null means we have not established it,
+   * which is not the same as the source answering "Unknown".
+   */
+  precedentialStatus?: string | null;
   /** True when a recorded chamber vote is stored for this law. */
   hasRollCall?: boolean;
 }
@@ -234,7 +240,36 @@ export function recordCompleteness(
     });
   }
 
-  // ---- 8. How the chamber actually voted, where there was a vote to record.
+  /*
+   * ---- 8. WHETHER A RULING IS BINDING LAW, AND ONLY FOR A RULING.
+   *
+   * Khalid: "id also like to display our Precedential Status as part of what we
+   * show people which will be built into part of their badge of verified or
+   * lesser badges."
+   *
+   * APPLICABLE ONLY TO A COURT CASE, which is why it belongs here rather than
+   * in the six above. A bill has no precedential status and an executive order
+   * has none; marking them down for a fact that cannot exist is the same
+   * mistake as calling a 1964 statute unverified. This is exactly how the roll
+   * call below already works — the badge counts what APPLIES to this record,
+   * so a ruling is scored out of seven and a bill out of six, and neither is
+   * held to the other's standard.
+   *
+   * The value is not judged, only held. "Unpublished" is a fact about the
+   * ruling; "we never found out" is a fact about us, and only the second is a
+   * miss.
+   */
+  if (ref.referenceType === "scotus_case") {
+    const status = ref.precedentialStatus?.trim();
+    checks.push({
+      id: "precedential_status",
+      label: "Precedential status recorded",
+      met: Boolean(status),
+      detail: status ?? null,
+    });
+  }
+
+  // ---- 9. How the chamber actually voted, where there was a vote to record.
   if (rollCallApplies(ref)) {
     checks.push({
       id: "roll_call",

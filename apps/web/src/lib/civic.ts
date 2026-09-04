@@ -41,6 +41,16 @@ export interface GovReference {
   signedDate: string | null;
   decidedDate: string | null;
   /**
+   * WHETHER A RULING IS BINDING LAW, in the Court's own vocabulary:
+   * "Published", "Unpublished", "Errata", "Separate", "In-chambers",
+   * "Relating-to", "Unknown".
+   *
+   * Null on anything that is not a court case, and on a ruling whose status we
+   * have not established — the page shows nothing for either, because an empty
+   * line is honest and a guessed one is not.
+   */
+  precedentialStatus?: string | null;
+  /**
    * Real provenance from congress.gov, filled by the background pass in
    * backend/src/services/bill-provenance.ts. Null until it has been asked,
    * which the cards render as nothing — these two used to be the row's own

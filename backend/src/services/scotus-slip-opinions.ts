@@ -66,6 +66,14 @@ export interface SlipOpinion {
    * preliminary print, null when the column is empty.
    */
   citation: string | null;
+  /**
+   * The Court's own PDF of the opinion, absolute.
+   *
+   * THE BEST SOURCE LINK THERE IS for a ruling — the document the Court
+   * published, on the Court's own server, rather than a third party's copy of
+   * it. A record created from this table gets this as its sourceUrl.
+   */
+  pdfUrl: string | null;
 }
 
 /** The Court's slip opinion table for one October Term. */
@@ -148,7 +156,8 @@ export function parseSlipOpinions(html: string): SlipOpinion[] {
   const found: SlipOpinion[] = [];
 
   for (const row of html.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) ?? []) {
-    const cells = (row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) ?? []).map(stripTags);
+    const rawCells = row.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) ?? [];
+    const cells = rawCells.map(stripTags);
     if (cells.length < 6) continue;
 
     const [sequence = "", date = "", docket = "", caseName = "", initials = "", citation = ""] =
@@ -161,6 +170,9 @@ export function parseSlipOpinions(html: string): SlipOpinion[] {
     const decidedDate = parseSlipDate(date);
     if (!decidedDate || !docket.trim() || !caseName.trim()) continue;
 
+    // The case name is a link to the Court's own PDF of the opinion.
+    const href = /href=['"]([^'"]+)['"]/i.exec(rawCells[3] ?? "")?.[1];
+
     found.push({
       sequence: Number(sequence),
       decidedDate,
@@ -168,6 +180,7 @@ export function parseSlipOpinions(html: string): SlipOpinion[] {
       caseName: caseName.trim(),
       authorInitials: initials.trim().toUpperCase(),
       citation: citation.trim() || null,
+      pdfUrl: href ? new URL(href, "https://www.supremecourt.gov").href : null,
     });
   }
 

@@ -92,6 +92,10 @@ describe("reading the Court's slip opinion table", () => {
     expect(ruling!.authorInitials).toBe("SS");
     expect(ruling!.citation).toBe("596 U.S. 61");
     expect(ruling!.caseName).toBe("City of Austin v. Reagan National Advertising of Austin, LLC");
+    // The Court's own PDF, which is a better source link than anybody's copy.
+    expect(ruling!.pdfUrl).toBe(
+      "https://www.supremecourt.gov/opinions/21pdf/596us1r22_4315.pdf",
+    );
   });
 
   test("a page this cannot read parses to nothing, so a caller can refuse it", () => {
@@ -204,7 +208,7 @@ describe("a page that answers 200 with somebody else's term", () => {
   const realFetch = globalThis.fetch;
 
   function serve(body: string, status = 200): void {
-    globalThis.fetch = (async () => new Response(body, { status })) as typeof fetch;
+    globalThis.fetch = (async () => new Response(body, { status })) as unknown as typeof fetch;
   }
 
   afterEach(() => {
