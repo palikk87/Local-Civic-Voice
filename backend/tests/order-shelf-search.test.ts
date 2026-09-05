@@ -178,7 +178,7 @@ describe("the shelf answers what the Register cannot", () => {
     delete process.env.OPENAI_API_KEY;
     globalThis.fetch = (async () => {
       throw new Error("no request should be made without a key");
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
     try {
       expect(await searchPendingOrders("mexican wolf")).toEqual([]);
       expect(await embedPendingOrders()).toEqual({ embedded: 0, skipped: 0, failed: 0 });
@@ -195,13 +195,13 @@ describe("the shelf answers what the Register cannot", () => {
     const { embedPendingOrders, searchPendingOrders } = await import("../src/services/order-embeddings");
     await embedPendingOrders();
 
-    globalThis.fetch = (async () => new Response("nope", { status: 401 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("nope", { status: 401 })) as unknown as typeof fetch;
     expect(await searchPendingOrders("mexican wolf")).toEqual([]);
   });
 
   test("a provider that refuses mid-backfill reports the failure rather than storing nothing quietly", async () => {
     await order();
-    globalThis.fetch = (async () => new Response("nope", { status: 429 })) as typeof fetch;
+    globalThis.fetch = (async () => new Response("nope", { status: 429 })) as unknown as typeof fetch;
 
     const { embedPendingOrders } = await import("../src/services/order-embeddings");
     const result = await embedPendingOrders();

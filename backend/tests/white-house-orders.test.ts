@@ -24,6 +24,7 @@ import {
   signedOn,
   titleCloseness,
 } from "../src/services/white-house-orders";
+import { formatReferenceDisplayId } from "../src/services/reference-id";
 
 const xml = readFileSync(
   new URL("./fixtures/wh-eo-feed.xml", import.meta.url).pathname,
@@ -277,5 +278,25 @@ describe("matching a White House title to the Federal Register's", () => {
     // signed the day before this fixture was taken, and two the Register
     // published without an order number at all.
     expect(orderTitleKey("Ending Birth Tourism")).toBe("ending birth tourism");
+  });
+});
+
+describe("what a reader is shown while the number is still pending", () => {
+  test("a starred id is never printed as an order number", () => {
+    // "EO 2026-09-04*" would put something shaped exactly like an order number
+    // in front of a reader, on a platform whose whole claim is that its records
+    // are the real ones.
+    expect(formatReferenceDisplayId("eo-2026-09-04*", "executive_order")).toBe("Signed 2026-09-04");
+  });
+
+  test("the second order of a day is counted, not dated twice", () => {
+    // The trailing "-2" is ours, not the government's.
+    expect(formatReferenceDisplayId("eo-2026-09-04-2*", "executive_order")).toBe(
+      "Signed 2026-09-04 (2)",
+    );
+  });
+
+  test("a real order number is still shown as one", () => {
+    expect(formatReferenceDisplayId("eo-14421", "executive_order")).toBe("EO 14421");
   });
 });

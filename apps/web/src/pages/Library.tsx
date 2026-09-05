@@ -280,7 +280,22 @@ export default function Library() {
             isError={isError}
             statusLabelFor={(item) => determineStatusLabel(item.latestAction?.text)}
             onOpenCongress={(item) => setSelectedResult(congressToSearchResult(item))}
-            onOpenExecutive={(item) => setSelectedResult(executiveToSearchResult(item))}
+            onOpenExecutive={(item) => {
+              /*
+               * An order we already hold goes straight to its own page.
+               *
+               * The brief panel resolves a result by asking the Federal
+               * Register for its document number, and an order signed three
+               * days ago does not have one yet — so that path would dead-end on
+               * exactly the orders this was built to surface. We have the whole
+               * record, including its text; open it.
+               */
+              if (item.reference_id) {
+                navigate(`/reference/${encodeURIComponent(item.reference_id)}`);
+                return;
+              }
+              setSelectedResult(executiveToSearchResult(item));
+            }}
             onOpenJudicial={(item) => setSelectedResult(judicialToSearchResult(item))}
           />
         ) : (

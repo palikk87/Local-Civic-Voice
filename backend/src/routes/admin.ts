@@ -43,6 +43,7 @@ import { mergeReferences, unmergeReferences } from "../services/deduplication-se
 import { undoSystemReset } from "../services/system-reset";
 import { LOOK_ALIKE } from "../services/reference-lineage";
 import { formatReferenceDisplayId } from "../services/reference-id";
+import { textFingerprint } from "../services/merge-adjudicator";
 import { JobPriority, JobType, enqueueLineageSync, jobQueue } from "../services/job-queue";
 import { officialSources } from "../services/reference-content";
 import { purgeBlockedText } from "../services/blocked-text-purge";
@@ -3249,6 +3250,17 @@ const MERGE_SIDE_SELECT = {
   opposeVotes: true,
   citizenBrief: true,
   createdAt: true,
+  // FOR A PAIR WITH NO GOVERNMENT LINEAGE.
+  //
+  // A bill pair carries congress.gov's own label and a named analyst. Two
+  // executive orders claiming one number carry neither — the government
+  // publishes no relationship between presidential documents — so a reviewer
+  // needs the facts that are actually available: when each was signed, whether
+  // one is still waiting on its number, and whether the two texts are the same
+  // document once formatting is normalised.
+  signedDate: true,
+  numberStatus: true,
+  fullText: true,
   _count: { select: { posts: true, votes: true } },
 } as const;
 
@@ -3264,6 +3276,9 @@ function toMergeSide(row: {
   opposeVotes: number;
   citizenBrief: string | null;
   createdAt: Date;
+  signedDate: Date | null;
+  numberStatus: string | null;
+  fullText: string | null;
   _count: { posts: number; votes: number };
 }) {
   return {
@@ -3281,6 +3296,17 @@ function toMergeSide(row: {
     realVotes: row._count.votes,
     hasBrief: Boolean(row.citizenBrief),
     createdAt: row.createdAt.toISOString(),
+    signedDate: row.signedDate ? row.signedDate.toISOString().slice(0, 10) : null,
+    /** "pending" while an executive order is still waiting on its number. */
+    numberStatus: row.numberStatus,
+    /*
+     * The normalised fingerprint, so the two sides can be compared without
+     * shipping two full texts to a browser. Computed rather than read from
+     * fullTextHash, which hashes raw bytes: the same order fetched from
+     * whitehouse.gov and from the Federal Register differs in whitespace and
+     * would look like two documents.
+     */
+    textFingerprint: row.fullText ? textFingerprint(row.fullText) : null,
   };
 }
 

@@ -73,6 +73,17 @@ export interface ExecutiveResult {
   agencies: Array<{ name: string }>;
   html_url: string;
   document_number: string;
+  /**
+   * OUR OWN RECORD, on an order the Federal Register has not published yet.
+   *
+   * Present only on results that came from our database rather than from the
+   * Register — an order signed in the last few days. The Register has no
+   * document number for it, so opening it has to go straight to the record we
+   * already hold.
+   */
+  reference_id?: string;
+  /** Signed and posted by the White House; not yet in the Federal Register. */
+  just_signed?: boolean;
 }
 
 export interface JudicialResult {
@@ -195,7 +206,14 @@ export function executiveToSearchResult(item: ExecutiveResult): GovernmentSearch
     ? `EO ${item.executive_order_number}`
     : item.document_number;
   return {
-    id: `federal-register-${item.document_number}`,
+    /*
+     * An order signed in the last few days has no Federal Register document
+     * number, because the Register has not published it. It has something
+     * better: a record here already, with its full text. Identified by that,
+     * so nothing downstream tries to resolve `federal-register-` with nothing
+     * after it.
+     */
+    id: item.reference_id ? `reference-${item.reference_id}` : `federal-register-${item.document_number}`,
     branch: 'executive',
     title,
     shortTitle: truncate(title),
@@ -214,6 +232,8 @@ export function executiveToSearchResult(item: ExecutiveResult): GovernmentSearch
       type: item.type,
       subtype: item.subtype,
       agencies,
+      ...(item.reference_id ? { referenceId: item.reference_id } : {}),
+      ...(item.just_signed ? { justSigned: true } : {}),
     },
   };
 }

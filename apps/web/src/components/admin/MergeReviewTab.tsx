@@ -57,6 +57,12 @@ interface MergeSide {
   realVotes: number;
   hasBrief: boolean;
   createdAt: string;
+  /** Executive orders only. The day the President signed it. */
+  signedDate: string | null;
+  /** "pending" while an executive order is still waiting on its number. */
+  numberStatus: string | null;
+  /** The text, normalised and hashed. Two sides that match are one document. */
+  textFingerprint: string | null;
 }
 
 interface MergeCandidate {
@@ -81,6 +87,17 @@ const RELATIONSHIP_MEANING: Record<string, string> = {
   "Procedurally-related": "Linked by a rule or a motion, not by their text.",
   look_alike:
     "A title match this platform noticed. No source, no analyst — a suggestion only.",
+  /*
+   * Two executive orders claiming one order number. There is no government
+   * lineage to lean on here — nobody publishes relationships between
+   * presidential documents — so the card below shows the evidence that does
+   * exist: signing dates, title overlap, and whether the two texts are the
+   * same document.
+   */
+  same_executive_order_number:
+    "Both records claim the same Federal Register order number. One of them is wrong, or they are one order held twice.",
+  same_executive_order:
+    "One executive order, held twice — read from the White House the day it was signed and again from the Federal Register.",
 };
 
 export function MergeReviewTab() {
@@ -258,6 +275,14 @@ function CandidateCard({
 }) {
   const meaning = RELATIONSHIP_MEANING[candidate.relationship];
   const decided = candidate.status !== "pending";
+  /*
+   * Null when either side has no stored text — which is a different thing from
+   * the texts differing, and must not be shown as if it were.
+   */
+  const sameDocument =
+    candidate.left.textFingerprint && candidate.right.textFingerprint
+      ? candidate.left.textFingerprint === candidate.right.textFingerprint
+      : null;
 
   return (
     <div
@@ -297,6 +322,28 @@ function CandidateCard({
             ) : null}
           </div>
           {meaning ? <p className="text-sm text-muted-foreground">{meaning}</p> : null}
+          {/*
+            THE EVIDENCE AVAILABLE WHEN THE GOVERNMENT PUBLISHES NONE.
+            Identical text is proof; different text is not proof of the
+            opposite, so it is stated as a fact rather than as a verdict.
+          */}
+          {sameDocument !== null ? (
+            <p
+              className={`text-xs ${sameDocument ? "text-emerald-500" : "text-muted-foreground"}`}
+            >
+              {sameDocument
+                ? "The two stored texts are the same document, character for character once formatting is normalised."
+                : "The two stored texts are not identical."}
+            </p>
+          ) : null}
+          {candidate.left.signedDate || candidate.right.signedDate ? (
+            <p className="text-xs text-muted-foreground">
+              Signed {candidate.left.signedDate ?? "unknown"}
+              {candidate.left.signedDate === candidate.right.signedDate
+                ? " — both on the same day"
+                : ` and ${candidate.right.signedDate ?? "unknown"}`}
+            </p>
+          ) : null}
           {candidate.note ? (
             <p className="text-sm italic text-muted-foreground">{candidate.note}</p>
           ) : null}
@@ -357,6 +404,11 @@ function SideCard({ side }: { side: MergeSide }) {
         <span className="font-mono text-sm font-semibold">{side.displayId}</span>
         <span className="text-xs capitalize text-muted-foreground">{side.status}</span>
       </div>
+      {side.numberStatus === "pending" ? (
+        <p className="mt-1 text-xs text-amber-500">
+          Waiting on its order number from the Federal Register.
+        </p>
+      ) : null}
       <p className="mt-1 line-clamp-2 text-sm">{side.title}</p>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span>{side.posts} post{side.posts === 1 ? "" : "s"}</span>

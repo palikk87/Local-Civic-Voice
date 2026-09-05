@@ -35,6 +35,11 @@ function slugify(text: string, maxWords = 8): string {
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
+    // An apostrophe joins a word, it does not separate one. Turned into a
+    // space it leaves a stray letter behind — "america's" becomes
+    // "america-s-" — which now matters for every executive order, since their
+    // addresses are built from their titles.
+    .replace(/['\u2018\u2019]/g, "")
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/[\s-]+/)
     .filter(Boolean);
@@ -48,10 +53,20 @@ function slugify(text: string, maxWords = 8): string {
 /**
  * The slug a record should have, before collisions are resolved.
  *
- * Bills and executive orders already have a readable master id — hr-10184-119,
- * eo-14421 — and those ARE the thing people type, so they are used as they
- * stand. The Supreme Court's are docket numbers, so the case name is used and
- * the docket is kept only as a tiebreaker in `candidates` below.
+ * A BILL IS KNOWN BY ITS NUMBER. "H.R. 1" is what people say, write and search
+ * for, so hr-1-119 is the address.
+ *
+ * AN EXECUTIVE ORDER IS NOT. Nobody has ever gone looking for "EO 14421"; they
+ * go looking for the order about vaccines, or tariffs, or ranchers. And the
+ * number is not even available when it matters most: an order arrives here the
+ * day it is signed and the Federal Register does not assign a number for
+ * another three to seven days, so a number-based address would either not
+ * exist yet or be built on a guess that later turns out wrong. Built from the
+ * title, the address is right the moment the order lands and never has to
+ * change again — which is what lets the number be corrected freely.
+ *
+ * THE SUPREME COURT'S ids are docket numbers, so the case name is used and the
+ * docket is kept only as a tiebreaker in `candidates` below.
  */
 export function preferredSlug(reference: {
   referenceType: string;
@@ -64,6 +79,11 @@ export function preferredSlug(reference: {
     return canonicalReferenceId(ReferenceKind.BILL, masterReferenceId) || null;
   }
   if (referenceType === "executive_order") {
+    // "Ending Birth Tourism" is what somebody searches for. "eo-14419" is
+    // bookkeeping, and for the first few days of an order's life we do not
+    // have it.
+    const fromTitle = title ? slugify(title) : "";
+    if (fromTitle) return fromTitle;
     return canonicalReferenceId(ReferenceKind.EXECUTIVE_ORDER, masterReferenceId) || null;
   }
   if (referenceType === "scotus_case") {

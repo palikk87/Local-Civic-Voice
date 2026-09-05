@@ -150,6 +150,14 @@ function CongressCard({
 function ExecutiveCard({ item, onOpen }: { item: ExecutiveResult; onOpen: () => void }) {
   const color = branchColor("executive");
   const agency = item.agencies?.[0]?.name;
+  /*
+   * An order signed in the last few days. The Federal Register has not
+   * published it yet — so it has no order number, no publication date and no
+   * page on their site, and every one of those is shown as absent rather than
+   * filled in with something that looks right.
+   */
+  const justSigned = item.just_signed === true;
+  const shownDate = item.publication_date || item.signing_date;
   return (
     <CardShell sourceUrl={item.html_url} color={color} onOpen={onOpen}>
       <div className="flex flex-wrap items-center gap-2">
@@ -157,13 +165,24 @@ function ExecutiveCard({ item, onOpen }: { item: ExecutiveResult; onOpen: () => 
         <StatusLabelBadge
           status={item.type === "Presidential Document" ? "active" : "proposed"}
         />
+        {justSigned ? (
+          <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+            Just signed
+          </span>
+        ) : null}
       </div>
       <h3 className="text-sm font-semibold leading-snug text-foreground">{item.title}</h3>
       <p className="text-xs text-muted-foreground">
         {agency ? <span className="text-foreground/80">{agency}</span> : null}
-        {agency && item.publication_date ? " · " : null}
-        {item.publication_date ? shortDate(item.publication_date) : null}
+        {agency && shownDate ? " · " : null}
+        {shownDate ? shortDate(shownDate) : null}
       </p>
+      {justSigned ? (
+        <p className="text-xs text-amber-200/80">
+          Signed and published by the White House. The Federal Register usually
+          takes a few more days to assign its order number.
+        </p>
+      ) : null}
       {item.abstract ? (
         <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
           {item.abstract}

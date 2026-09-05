@@ -320,7 +320,11 @@ export async function settleOneNumber(
       aId: record.id,
       bId: otherId,
       relationship: "same_executive_order",
-      identifiedBy: verdict.basis,
+      // Null on purpose: identifiedBy means an official analyst signed the
+      // claim, the way congress.gov names one on an "Identical bill". Nobody
+      // signed this — we worked it out — and writing our own reasoning into
+      // that field would dress a machine's opinion as the government's.
+      identifiedBy: null,
       evidenceUrl: match.html_url ?? undefined,
     });
     await prisma.referenceMergeCandidate.updateMany({
@@ -362,7 +366,7 @@ export async function settleOneNumber(
     aId: record.id,
     bId: otherId,
     relationship: "same_executive_order_number",
-    identifiedBy: verdict.basis,
+    identifiedBy: null,
     evidenceUrl: match.html_url ?? undefined,
     similarity: titleCloseness(mine.title, theirs.title),
   });

@@ -80,13 +80,34 @@ describe("a readable address", () => {
     expect(await ensureSlug(bill.id)).toBe("hr-10184-119");
   });
 
-  test("an executive order keeps its number", async () => {
+  test("AN EXECUTIVE ORDER IS NAMED, NOT NUMBERED", async () => {
+    // It used to be addressed /executive-order/eo-14421. Nobody has ever gone
+    // looking for "EO 14421" — they go looking for the order about vaccines,
+    // or tariffs, or ranchers. And the number is not even available when it
+    // matters most: an order now arrives here the day it is signed, three to
+    // seven days before the Federal Register assigns one, so a number-based
+    // address would either not exist yet or be built on a guess. Built from
+    // the title it is right on day one and never has to move — which is what
+    // makes correcting the number later a non-event.
     const order = await record({
       referenceType: "executive_order",
       masterReferenceId: "eo-14421",
       title: "Declaring a National Emergency",
     });
-    expect(await ensureSlug(order.id)).toBe("eo-14421");
+    expect(await ensureSlug(order.id)).toBe("declaring-national-emergency");
+  });
+
+  test("an order still waiting on its number gets its address anyway", async () => {
+    const order = await record({
+      referenceType: "executive_order",
+      masterReferenceId: "eo-2026-09-04*",
+      title: "Supporting America's Ranchers",
+    });
+    const slug = await ensureSlug(order.id);
+    expect(slug).toBe("supporting-americas-ranchers");
+    // Nothing in the address hints at a number we do not have.
+    expect(slug).not.toContain("2026");
+    expect(slug).not.toContain("*");
   });
 
   test("A SUPREME COURT CASE IS NAMED, NOT NUMBERED", async () => {
@@ -159,7 +180,9 @@ describe("a readable address", () => {
     await ensureSlug(order.id);
 
     const byId = await fetch(`${BASE_URL}/api/government-references/${order.id}`);
-    const bySlug = await fetch(`${BASE_URL}/api/government-references/eo-14421`);
+    const bySlug = await fetch(
+      `${BASE_URL}/api/government-references/declaring-national-emergency`,
+    );
     expect(byId.status).toBe(200);
     expect(bySlug.status).toBe(200);
 
@@ -229,8 +252,8 @@ describe("what the sitemap advertises", () => {
 
     const xml = await response.text();
     expect(xml).toContain("<urlset");
-    expect(xml).toContain("/executive-order/eo-14421");
-    expect(xml).not.toContain("/executive-order/eo-12891");
+    expect(xml).toContain("/executive-order/order-somebody-wrote-about");
+    expect(xml).not.toContain("/executive-order/order-nobody-has-touched");
   });
 
   test("the merged-away half of a duplicate is never advertised", async () => {

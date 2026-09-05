@@ -42,6 +42,25 @@ export function formatReferenceDisplayId(
   }
 
   if (referenceType === "executive_order") {
+    /*
+     * AN ORDER WAITING ON ITS NUMBER MUST NOT BE SHOWN ONE.
+     *
+     * An order read from whitehouse.gov the day it was signed is called
+     * eo-2026-09-04*, and printing that as "EO 2026-09-04*" would put something
+     * shaped exactly like an order number in front of a reader — on a platform
+     * whose whole claim is that its records are the real ones. The Federal
+     * Register assigns the number, and until it has, the true thing to say is
+     * when the order was signed.
+     *
+     * The trailing "-2" on the second order of a day is ours, not the
+     * government's, so it is shown as a plain count rather than as part of a
+     * date.
+     */
+    const provisional = /^eo-(\d{4}-\d{2}-\d{2})(?:-(\d+))?\*$/i.exec(raw);
+    if (provisional?.[1]) {
+      return provisional[2] ? `Signed ${provisional[1]} (${provisional[2]})` : `Signed ${provisional[1]}`;
+    }
+
     // "eo-14147" → "EO 14147". Federal Register document numbers such as
     // "2026-08928" have no EO number, so they are shown as printed.
     const match = /^eo-?(.+)$/i.exec(raw);

@@ -20,7 +20,8 @@
     "adjudicate-merges": "bun run scripts/adjudicate-merges.ts",
     "purge-blocked-text": "bun run scripts/purge-blocked-text.ts",
     "backfill-executive-orders": "bun run scripts/backfill-executive-orders.ts",
-    "build-zip-districts": "bun run scripts/build-zip-districts.ts"
+    "build-zip-districts": "bun run scripts/build-zip-districts.ts",
+    "reslug-executive-orders": "bun run scripts/reslug-executive-orders.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
