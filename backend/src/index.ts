@@ -71,6 +71,9 @@ import { refreshJusticeRoster, fillScotusDissents } from "./services/court-compo
 import { runContentSelfHeal } from "./services/content-self-heal";
 import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
+import { intakeOrdersSignedOn } from "./services/executive-order-intake";
+import { settleOutstandingNumbers } from "./services/executive-order-numbering";
+import { signedOn } from "./services/white-house-orders";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { startImpeachmentSweep } from "./services/impeachment";
 import { scheduleJurySweeps } from "./services/jury";
@@ -796,6 +799,79 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
  * See services/executive-order-archive.ts for why it resumes from the data
  * rather than from a bookmark.
  */
+/**
+ * AN EXECUTIVE ORDER, THE DAY IT IS SIGNED.
+ *
+ * The Federal Register publishes three to seven days after signing, and until
+ * this existed that was how long the platform took to hear about an order. The
+ * White House posts the full text the same day — 83 of 83 measured — so this
+ * asks them, by date, for what was signed today.
+ *
+ * EVERY THREE HOURS, NOT ONCE A DAY. The design is one question per day
+ * ("what was signed on this date?"), and a single evening run would satisfy it
+ * — but orders are posted between 10am and 7pm Eastern, and an order that lands
+ * at 3pm being invisible until 8pm is exactly the gap this was built to close.
+ * Re-reading a day costs one request and writes nothing new: the intake matches
+ * on title and signing date before it creates anything.
+ *
+ * YESTERDAY IS READ ALONGSIDE TODAY. Not belt and braces — the day rolls over
+ * at midnight Eastern, and a container that was restarting through the last run
+ * of the evening would otherwise lose that day permanently.
+ */
+const WH_ORDERS_INTERVAL_MS = 3 * 60 * 60 * 1000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  schedule({
+    name: "WhiteHouseOrders",
+    firstRunAfterMs: FIRST_RUN.whiteHouseOrders,
+    everyMs: WH_ORDERS_INTERVAL_MS,
+    run: async () => {
+      const today = signedOn(new Date());
+      const yesterday = signedOn(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      for (const day of [today, yesterday]) {
+        const report = await intakeOrdersSignedOn(day);
+        if (!report.reached) {
+          console.warn(`[WhiteHouse] ${day}: could not read the feed`);
+          continue;
+        }
+        if (report.created > 0 || report.found > 0) {
+          console.log(
+            `[WhiteHouse] ${day}: ${report.found} order(s) signed, ` +
+              `${report.created} new, ${report.alreadyHeld} already held`,
+          );
+        }
+      }
+    },
+  });
+}
+
+/**
+ * The Federal Register hands out the number, and this is what goes and gets it.
+ *
+ * Daily. Orders read from the White House carry a starred date until the
+ * Register publishes them, and the Register's median lag is five days — so this
+ * has nothing to do most of the time, which is the point. See
+ * services/executive-order-numbering.ts for the three answers it acts on and
+ * the fourth, an unreachable source, that it deliberately does not.
+ */
+const EO_NUMBERING_INTERVAL_MS = 24 * 60 * 60 * 1000;
+if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
+  schedule({
+    name: "EONumbering",
+    firstRunAfterMs: FIRST_RUN.executiveOrderNumbering,
+    everyMs: EO_NUMBERING_INTERVAL_MS,
+    run: async () => {
+      const report = await settleOutstandingNumbers();
+      if (report.asked > 0) {
+        console.log(
+          `[EONumber] asked about ${report.asked}: ${report.confirmed} numbered, ` +
+            `${report.neverNumbered} never will be, ${report.stillWaiting} still waiting, ` +
+            `${report.unreachable} unreachable, ${report.collided} collided`,
+        );
+      }
+    },
+  });
+}
+
 const EO_ARCHIVE_INTERVAL_MS = 30 * 60 * 1000;
 if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
   schedule({

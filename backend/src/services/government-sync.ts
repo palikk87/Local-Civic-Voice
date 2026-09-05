@@ -163,6 +163,13 @@ interface UpsertData {
    * justice who wrote the majority.
    */
   sponsorName?: string;
+  /**
+   * "pending" for an order read from whitehouse.gov before the Federal Register
+   * has numbered it. Written on create only: the Register's own sync never
+   * passes it, so a numbered order stays null, and the numbering pass owns
+   * every transition after that. See executive-order-numbering.ts.
+   */
+  numberStatus?: string;
 }
 
 /**
@@ -178,7 +185,7 @@ interface UpsertData {
  * nothing; and it never steals a name another record holds, so a sync cannot
  * quietly reassign one.
  */
-async function upsertReference(data: UpsertData): Promise<void> {
+export async function upsertReference(data: UpsertData): Promise<void> {
   const { masterReferenceId, ...fields } = data;
   const notifyAfterCommit: Array<{ id: string; masterReferenceId: string; title: string }> = [];
   /*
@@ -232,6 +239,10 @@ async function upsertReference(data: UpsertData): Promise<void> {
         // said about it yet.
       },
       update: {
+        // numberStatus is deliberately absent. It is create-only: once a record
+        // exists, only the numbering pass may move it between pending,
+        // confirmed and never_numbered, and a re-read of the White House feed
+        // must not push a confirmed order back to pending.
         title: fields.title,
         status: fields.status,
         ...(fields.shortTitle ? { shortTitle: fields.shortTitle } : {}),

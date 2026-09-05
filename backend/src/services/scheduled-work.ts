@@ -126,6 +126,19 @@ export const FIRST_RUN = {
    */
   courtFacts: 2 * 60_000 + 30_000,
   /**
+   * THE ONE JOB A READER IS ACTUALLY WAITING ON. An order signed this afternoon
+   * is news this afternoon, and until this runs the platform does not have it.
+   * Early, and cheap: one request that asks the White House what was signed
+   * today.
+   */
+  whiteHouseOrders: 45_000,
+  /**
+   * After the intake, and after the Federal Register's own sync — it is looking
+   * for the number the Register assigned, so there is nothing to find until
+   * both of those have had a turn.
+   */
+  executiveOrderNumbering: 7 * 60_000,
+  /**
    * Last, because it is the only one with a finish line — everything else has
    * to be responsive, this only has to arrive.
    */
