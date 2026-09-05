@@ -159,6 +159,61 @@ export async function ensureSlug(referenceId: string): Promise<string | null> {
 }
 
 /**
+ * THE ONE TIME AN ADDRESS IS ALLOWED TO CHANGE.
+ *
+ * The rule at the top of this file — assigned once, never changed — is what
+ * makes a link a promise. This is the single deliberate exception to it, and it
+ * exists because the RULE changed, not because a title did.
+ *
+ * Executive orders were addressed by number: /executive-order/eo-14420. Nobody
+ * searches for "EO 14420", and worse, the number is not available when it
+ * matters most — an order now arrives the day it is signed, three to seven days
+ * before the Federal Register assigns one. So orders are addressed by title
+ * now, and the ~1,536 already held were still carrying the old form.
+ *
+ * SELF-LIMITING BY CONSTRUCTION. It only touches an executive order whose slug
+ * still looks like its own master id — eo-14420, eo-2026-09-04 — so once it has
+ * run, nothing matches and it costs one indexed query per boot forever after.
+ * It cannot touch a bill (whose number IS what people type), a Supreme Court
+ * case, or an order somebody has since re-addressed by hand.
+ *
+ * Khalid's call, and the reason this is allowed to break old links at all: the
+ * platform is in beta and barely used, so nothing of consequence points at the
+ * old addresses yet.
+ */
+export async function retitleExecutiveOrderSlugs(): Promise<number> {
+  let moved = 0;
+
+  const orders = await prisma.governmentReference.findMany({
+    where: { referenceType: "executive_order", slug: { not: null } },
+    select: { id: true, slug: true, referenceType: true, masterReferenceId: true, title: true },
+  });
+
+  for (const order of orders) {
+    // Only the number-shaped ones. `clean()` strips the star from a
+    // provisional id, so eo-2026-09-04* is matched by eo-2026-09-04.
+    const oldForm = canonicalReferenceId(ReferenceKind.EXECUTIVE_ORDER, order.masterReferenceId);
+    if (!oldForm || order.slug !== oldForm) continue;
+
+    const wanted = preferredSlug(order);
+    if (!wanted || wanted === order.slug) continue;
+
+    // Clearing first is what lets ensureSlug do the collision handling — it
+    // already knows how to fall back when a name is taken, and duplicating that
+    // logic here is how the two versions of it start to disagree.
+    try {
+      await prisma.governmentReference.update({ where: { id: order.id }, data: { slug: null } });
+      const assigned = await ensureSlug(order.id);
+      if (assigned && assigned !== oldForm) moved += 1;
+    } catch (error) {
+      console.error("[Slug] could not re-address", order.masterReferenceId, error);
+    }
+  }
+
+  return moved;
+}
+
+/**
  * The records already held, brought up to the rule that governs new ones.
  *
  * Idempotent: a record with a slug is skipped, so this can be run as often as

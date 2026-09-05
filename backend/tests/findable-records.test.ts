@@ -29,11 +29,14 @@ type FindableModule = typeof import("../src/services/findable");
 let ensureSlug: SlugModule["ensureSlug"];
 let preferredSlug: SlugModule["preferredSlug"];
 let backfillSlugs: SlugModule["backfillSlugs"];
+let retitleExecutiveOrderSlugs: SlugModule["retitleExecutiveOrderSlugs"];
 let isFindable: FindableModule["isFindable"];
 
 beforeAll(async () => {
   await startServer();
-  ({ ensureSlug, preferredSlug, backfillSlugs } = await import("../src/services/reference-slug"));
+  ({ ensureSlug, preferredSlug, backfillSlugs, retitleExecutiveOrderSlugs } = await import(
+    "../src/services/reference-slug",
+  ));
   ({ isFindable } = await import("../src/services/findable"));
 });
 
@@ -159,6 +162,85 @@ describe("a readable address", () => {
     });
 
     expect(await ensureSlug(ruling.id)).toBe(original);
+  });
+
+  test("orders already addressed by number are moved to their titles, once", async () => {
+    // The one deliberate exception to "assigned once, never changed": the RULE
+    // changed, not the title. 1,536 orders were carrying /executive-order/eo-14420.
+    const order = await record({
+      referenceType: "executive_order",
+      masterReferenceId: "eo-14420",
+      title: "Delivering Gold Standard Childhood Vaccine Recommendations",
+    });
+    await prisma.governmentReference.update({
+      where: { id: order.id },
+      data: { slug: "eo-14420" },
+    });
+
+    expect(await retitleExecutiveOrderSlugs()).toBe(1);
+    const after = await prisma.governmentReference.findUnique({ where: { id: order.id } });
+    expect(after!.slug).toBe("delivering-gold-standard-childhood-vaccine-recommendations");
+
+    // Self-limiting: run again and there is nothing left to find.
+    expect(await retitleExecutiveOrderSlugs()).toBe(0);
+  });
+
+  test("it leaves every other branch alone", async () => {
+    // A bill's number IS what people type, and a ruling was never addressed by
+    // its docket. Neither rule changed, so neither address may.
+    const bill = await record({
+      referenceType: "bill",
+      masterReferenceId: "hr-1-119",
+      title: "A bill about something",
+    });
+    const ruling = await record({
+      referenceType: "scotus_case",
+      masterReferenceId: "24-20",
+      title: "Fuld v. Palestine Liberation Organization",
+    });
+    const billSlug = await ensureSlug(bill.id);
+    const rulingSlug = await ensureSlug(ruling.id);
+
+    expect(await retitleExecutiveOrderSlugs()).toBe(0);
+    expect((await prisma.governmentReference.findUnique({ where: { id: bill.id } }))!.slug).toBe(billSlug);
+    expect((await prisma.governmentReference.findUnique({ where: { id: ruling.id } }))!.slug).toBe(rulingSlug);
+  });
+
+  test("an address somebody already changed by hand is not overwritten", async () => {
+    // It only touches an order still sitting at its own master id. Anything
+    // else is a decision somebody made, and this is not entitled to undo it.
+    const order = await record({
+      referenceType: "executive_order",
+      masterReferenceId: "eo-14419",
+      title: "Ending Birth Tourism",
+    });
+    await prisma.governmentReference.update({
+      where: { id: order.id },
+      data: { slug: "a-name-somebody-chose" },
+    });
+
+    expect(await retitleExecutiveOrderSlugs()).toBe(0);
+    expect((await prisma.governmentReference.findUnique({ where: { id: order.id } }))!.slug).toBe(
+      "a-name-somebody-chose",
+    );
+  });
+
+  test("an order already addressed by its title is left exactly where it is", async () => {
+    // Orders that arrived after the rule changed are already right. This must
+    // not churn them, because moving an address that is already correct breaks
+    // links for no gain at all.
+    const order = await record({
+      referenceType: "executive_order",
+      masterReferenceId: "eo-2026-09-04*",
+      title: "Supporting America's Ranchers",
+    });
+    const minted = await ensureSlug(order.id);
+    expect(minted).toBe("supporting-americas-ranchers");
+
+    expect(await retitleExecutiveOrderSlugs()).toBe(0);
+    expect((await prisma.governmentReference.findUnique({ where: { id: order.id } }))!.slug).toBe(
+      minted,
+    );
   });
 
   test("the records held before this existed get one too, idempotently", async () => {

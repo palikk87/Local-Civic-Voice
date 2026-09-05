@@ -17,7 +17,7 @@ import { feedRouter } from "./routes/feed";
 import { notificationsRouter } from "./routes/notifications";
 import { mediaRouter } from "./routes/media";
 import { sitemapRouter } from "./routes/sitemap";
-import { backfillSlugs } from "./services/reference-slug";
+import { backfillSlugs, retitleExecutiveOrderSlugs } from "./services/reference-slug";
 import { backfillOpinionDescriptions } from "./services/opinion-snippet";
 import { purgeNonScotusRulings } from "./services/scotus-only";
 import { fillFactsFromTheCourt } from "./services/scotus-court-facts";
@@ -635,6 +635,22 @@ void ensureBuiltInRoles().catch((error) => {
 void backfillSlugs()
   .then((assigned) => {
     if (assigned > 0) console.log(`[Slug] gave ${assigned} record(s) a readable address`);
+    /*
+     * And the one-time correction, after the backfill rather than beside it:
+     * an order with no address at all should get one before anything starts
+     * moving the addresses that already exist.
+     *
+     * Self-limiting — it only matches an executive order still addressed by its
+     * own number, so after the first boot that runs it there is nothing left to
+     * find. See retitleExecutiveOrderSlugs for why this is the single place the
+     * "assigned once, never changed" rule is allowed an exception.
+     */
+    return retitleExecutiveOrderSlugs();
+  })
+  .then((moved) => {
+    if (moved > 0) {
+      console.log(`[Slug] re-addressed ${moved} executive order(s) by title instead of number`);
+    }
   })
   .catch((error) => {
     console.error("[Slug] backfill could not finish:", error);
