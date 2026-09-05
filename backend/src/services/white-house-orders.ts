@@ -132,6 +132,27 @@ export function orderBody(contentEncoded: string): string {
   const footer = markup.lastIndexOf("<p>The post ");
   if (footer >= 0) markup = markup.slice(0, footer);
 
+  /*
+   * THE SIGNED PDF IS AN ATTACHMENT, NOT THE ORDER.
+   *
+   * Once the signed copy exists the White House re-publishes the post with a
+   * file widget bolted on, and the widget's link text is the PDF's name —
+   * "eo-14422", "Download". Left in, three things go wrong: an order number we
+   * have explicitly refused to take from this source is written into the law's
+   * own text; the brief is generated from text ending in "Download"; and the
+   * republished copy no longer fingerprints the same as the copy we already
+   * hold, so the same order becomes two records with a split vote.
+   *
+   * That last one is not hypothetical. The White House published "Establishing
+   * an America First Arms Transfer Strategy" twice — two post ids, two URLs —
+   * and the two texts are identical through 10,273 characters, differing only
+   * by this widget.
+   */
+  markup = markup.replace(
+    /<div[^>]*class="[^"]*\bwp-block-file\b[^"]*"[\s\S]*?<\/div>/gi,
+    " ",
+  );
+
   return sanitizeOfficialText(decodeWordPressEntities(htmlToText(markup)));
 }
 
@@ -236,7 +257,21 @@ export async function fetchOrdersSignedOn(
     reachedSource = true;
     if (orders.length === 0) break;
 
-    found.push(...orders.filter((order) => order.signedOn === day));
+    /*
+     * Pages overlap. Page 2 of the feed ended on 11 December 2025 and page 3
+     * began on it, so an order sitting on a page boundary is served twice —
+     * and a day that lands there would be ingested twice without this.
+     *
+     * Keyed on the URL, which is the post itself. NOT on title and date: the
+     * White House has published one order under two posts with two URLs, and
+     * that is a real duplicate for the merge machinery to decide on, not a
+     * paging artefact for this loop to silently drop.
+     */
+    for (const order of orders) {
+      if (order.signedOn !== day) continue;
+      if (found.some((held) => held.url === order.url)) continue;
+      found.push(order);
+    }
 
     // The feed runs newest first, so once a page ends older than the day we
     // asked for, no later page can hold it.
@@ -273,6 +308,61 @@ export function provisionalOrderId(day: string, taken: (id: string) => boolean):
     const id = `eo-${day}-${n}*`;
     if (!taken(id)) return id;
   }
+}
+
+/**
+ * A title reduced to the thing both sides agree on.
+ *
+ * The White House and the Federal Register print the same order under titles
+ * that are usually identical and occasionally not. Measured across 83 orders in
+ * both places, 80 matched character for character. All three that did not were
+ * the Register's:
+ *
+ *   WH  ...Glyphosate-Based Herbicides
+ *   FR  ...Glyphosate- Based Herbicides      a hyphen broken across a line
+ *
+ *   WH  ...Federal Labor-Management Relations Program
+ *   FR  ...Federal Labor- Management Relations Program
+ *
+ *   WH  ...the Reciprocal Tariff with Respect to...
+ *   FR  ...the Reciprocal Tariffs With Respect to...
+ *
+ * So two of the three are typesetting damage and one is house style plus a
+ * plural. Repairing the broken hyphen and folding a trailing "s" turns all
+ * three into matches, which is why both happen here and neither is a guess
+ * about meaning.
+ */
+export function orderTitleKey(title: string): string {
+  return title
+    .toLowerCase()
+    // "labor- management" is one word the Register's typesetter split. Only
+    // when a letter follows, so a genuine dash between words is left alone.
+    .replace(/([a-z0-9])-\s+(?=[a-z0-9])/g, "$1-")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    // Fold a trailing plural: "tariff" and "tariffs" are the same word here.
+    // "ss" is left alone so "congress" does not become "congres".
+    .map((word) => (word.length > 3 && word.endsWith("s") && !word.endsWith("ss") ? word.slice(0, -1) : word))
+    .join(" ");
+}
+
+/**
+ * How much two titles have in common, 0 to 1.
+ *
+ * The fallback for when orderTitleKey does not match exactly — a word inserted,
+ * a word dropped. Deliberately a blunt instrument used with a high threshold:
+ * two orders signed on one day about neighbouring subjects ("Promoting Fair
+ * Competition In Livestock Markets" and "Supporting America's Ranchers", both
+ * 4 September 2026) must never be mistaken for each other.
+ */
+export function titleCloseness(left: string, right: string): number {
+  const a = new Set(orderTitleKey(left).split(" ").filter(Boolean));
+  const b = new Set(orderTitleKey(right).split(" ").filter(Boolean));
+  if (a.size === 0 || b.size === 0) return 0;
+  let shared = 0;
+  for (const word of a) if (b.has(word)) shared++;
+  return shared / Math.max(a.size, b.size);
 }
 
 /** Is this the placeholder name of an order still waiting for its number? */

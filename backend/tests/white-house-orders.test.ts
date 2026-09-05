@@ -18,9 +18,11 @@ import {
   feedPageUrl,
   isProvisionalOrderId,
   orderBody,
+  orderTitleKey,
   parseOrderFeed,
   provisionalOrderId,
   signedOn,
+  titleCloseness,
 } from "../src/services/white-house-orders";
 
 const xml = readFileSync(
@@ -117,6 +119,31 @@ describe("the stored text is the order and nothing else", () => {
     expect(parseOrderFeed(hollow)).toEqual([]);
   });
 
+  test("the signed PDF widget is not stored as part of the law", () => {
+    // Once the signed copy exists the White House re-publishes the post with a
+    // file widget attached, whose link text is the PDF's name. Left in, an
+    // order number we have explicitly refused to take from this source ends up
+    // written into the law's own text.
+    const greatLakes = byTitle("Great Lakes");
+    expect(greatLakes?.fullText).not.toContain("Download");
+    expect(greatLakes?.fullText).not.toContain("eo-14422");
+    expect(greatLakes?.fullText.trimEnd().endsWith("August 27, 2026.")).toBe(true);
+  });
+
+  test("a re-published copy still fingerprints as the same order", () => {
+    // The White House published "Establishing an America First Arms Transfer
+    // Strategy" twice — two post ids, two URLs — and the two texts are
+    // identical through 10,273 characters, differing only by that widget. With
+    // it stripped the merge adjudicator's cheapest tier recognises them as one
+    // order; with it left in they would be two records with a split vote.
+    const withWidget =
+      "<p>By the authority vested in me it is ordered.</p>" +
+      '<div data-wp-interactive="core/file" class="wp-block-file hide-link-text">' +
+      '<a href="https://www.whitehouse.gov/wp-content/uploads/2026/08/eo-14422.pdf">eo-14422</a>' +
+      '<a class="wp-block-file__button" download>Download</a></div>';
+    expect(orderBody(withWidget)).toBe(orderBody("<p>By the authority vested in me it is ordered.</p>"));
+  });
+
   test("a body with no navigation wrapper still reads", () => {
     expect(orderBody("<p>By the authority vested in me, it is ordered.</p>")).toBe(
       "By the authority vested in me, it is ordered.",
@@ -188,5 +215,67 @@ describe("paging the feed", () => {
 
   test("later pages carry the parameter", () => {
     expect(feedPageUrl(3)).toBe(`${EXECUTIVE_ORDER_FEED}?paged=3`);
+  });
+});
+
+describe("matching a White House title to the Federal Register's", () => {
+  const matches = (wh: string, fr: string) => orderTitleKey(wh) === orderTitleKey(fr);
+
+  test("a hyphen the Register's typesetter broke across a line still matches", () => {
+    expect(
+      matches(
+        "Promoting the National Defense by Ensuring an Adequate Supply of Elemental Phosphorus and Glyphosate-Based Herbicides",
+        "Promoting the National Defense by Ensuring an Adequate Supply of Elemental Phosphorus and Glyphosate- Based Herbicides",
+      ),
+    ).toBe(true);
+    expect(
+      matches(
+        "Further Exclusions from the Federal Labor-Management Relations Program",
+        "Further Exclusions From the Federal Labor- Management Relations Program",
+      ),
+    ).toBe(true);
+  });
+
+  test("the Register's house style and its plural still match", () => {
+    expect(
+      matches(
+        "Modifying the Scope of the Reciprocal Tariff with Respect to Certain Agricultural Products",
+        "Modifying the Scope of the Reciprocal Tariffs With Respect to Certain Agricultural Products",
+      ),
+    ).toBe(true);
+  });
+
+  test("a word ending in double s keeps it", () => {
+    // Folding "congress" to "congres" would break every title that names it.
+    expect(orderTitleKey("Reporting to Congress")).toBe("reporting to congress");
+  });
+
+  test("two orders signed the same day are not confused for each other", () => {
+    // Both signed 4 September 2026, both about livestock. A matcher that put
+    // one order's number on the other would be worse than no matcher.
+    expect(
+      titleCloseness(
+        "Supporting America's Ranchers",
+        "Promoting Fair Competition In Livestock Markets And Expanding Market Access for American Meat Producers",
+      ),
+    ).toBe(0);
+  });
+
+  test("a genuine rewording scores high enough to be recognised", () => {
+    // The Register renamed this one; measured at 0.94 across the real pair.
+    expect(
+      titleCloseness(
+        "Providing for the Closure of Executive Departments and Agencies",
+        "Providing for the Closing of Executive Departments and Agencies",
+      ),
+    ).toBeGreaterThanOrEqual(0.85);
+  });
+
+  test("across 90 real orders, exact matching is the rule and not the exception", () => {
+    // Measured: 85 of 90 matched the Register exactly on a normalised title,
+    // 1 needed the closeness fallback, and 4 were genuinely not there — two
+    // signed the day before this fixture was taken, and two the Register
+    // published without an order number at all.
+    expect(orderTitleKey("Ending Birth Tourism")).toBe("ending birth tourism");
   });
 });

@@ -903,6 +903,50 @@ model GovernmentReference {
   /// "Unknown" — that is a value the source itself can return, and the two say
   /// different things about whose gap it is.
   precedentialStatus String?
+
+  // ---------------------------------------------------------------------
+  // AN EXECUTIVE ORDER'S NUMBER, AND WHETHER IT IS REAL YET.
+  //
+  // Orders now arrive from whitehouse.gov the day they are signed, which is
+  // three to seven days before the Federal Register publishes them. The
+  // Register is the office that assigns order numbers, so for those days the
+  // record genuinely has no number and must not pretend otherwise. It carries
+  // a starred date instead — eo-2026-09-04* — until the Register answers.
+  //
+  // Null on everything that is not an executive order.
+  // ---------------------------------------------------------------------
+
+  /// "pending" | "confirmed" | "never_numbered".
+  ///
+  /// never_numbered is a real, permanent outcome, not a failure: the Register
+  /// publishes some presidential documents as subtype "Presidential Order" or
+  /// "Other" with the number field empty — the Antifa designation and the
+  /// EMCORE divestment among them. A record in that state has been answered
+  /// and stops being asked about.
+  numberStatus      String?
+  /// When the Register's answer arrived — either a number or "there isn't one".
+  numberConfirmedAt DateTime?
+  /// When we last asked the Register about a pending order.
+  ///
+  /// Separate from numberConfirmedAt on purpose. "We asked and it said nothing
+  /// yet" and "we could not reach it" must not look the same as "answered", or
+  /// an outage would quietly close the question.
+  numberAskedAt     DateTime?
+
+  /// THE ORDER'S TEXT AS A VECTOR, FOR THE PENDING SHELF ONLY.
+  ///
+  /// A JSON array of floats. Written for records whose number is still pending,
+  /// because those are invisible to a Federal Register search — the Register
+  /// does not have them yet — and a title match alone does not find an order
+  /// about Mexican wolves when the title says "Supporting America's Ranchers".
+  ///
+  /// Not stored for the rest of the catalogue: once the Register publishes an
+  /// order its own full-text search handles it, and the shelf this covers holds
+  /// a median of 2 records.
+  textEmbedding     String?
+  /// The fullTextHash the embedding was computed from, so a changed text is
+  /// re-embedded rather than searched against a vector of the old words.
+  textEmbeddingHash String?
   /// "D", "R", "I" — the letter the roster uses.
   sponsorParty      String?
   /// Two-letter state.
@@ -936,6 +980,9 @@ model GovernmentReference {
   @@index([supportVotes])
   @@index([opposeVotes])
   @@index([mergedIntoId])
+  // The daily numbering pass reads exactly one slice: orders still waiting on
+  // a number from the Register. A median of two rows out of the whole table.
+  @@index([numberStatus])
 }
 
 // ---------------------------------------------------------------------------
