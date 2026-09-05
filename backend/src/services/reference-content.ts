@@ -30,7 +30,12 @@ import { fetchCourtListener } from "./courtlistener";
 import { cleanOpinionSnippet, deriveOpinionDescription } from "./opinion-snippet";
 import { markSettled, markWorking } from "./brief-state";
 import { congressGovKey, env } from "../env";
-import { acceptOfficialText, officialSourceHeaders } from "./official-source";
+import {
+  acceptOfficialText,
+  htmlToText,
+  officialSourceHeaders,
+  sanitizeOfficialText,
+} from "./official-source";
 
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -154,34 +159,16 @@ async function fetchJson<T>(
   }
 }
 
-/** Strip markup so stored "full text" is readable plain text regardless of source format. */
-export function htmlToText(input: string): string {
-  return input
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-/**
- * Official sources (GPO/Federal Register raw text especially) embed stray NUL
- * and other control bytes. SQLite treats NUL as a string terminator, silently
- * cutting the stored text off at the first one — strip everything but \n and \t.
+/*
+ * htmlToText and sanitizeOfficialText now live in official-source.ts.
+ *
+ * They are pure string functions and they were the only reason a caller that
+ * just wanted to turn markup into text had to import this module — which pulls
+ * in Prisma, the job queue and the AI clients, and so cannot run without a
+ * DATABASE_URL. They are re-exported here so every existing call site keeps
+ * working unchanged; a new caller should import them from official-source.
  */
-export function sanitizeOfficialText(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
-}
+export { htmlToText, sanitizeOfficialText } from "./official-source";
 
 async function fetchDocumentText(url: string, deadlineAt: number): Promise<string | null> {
   const timeout = withDeadline(deadlineAt);
