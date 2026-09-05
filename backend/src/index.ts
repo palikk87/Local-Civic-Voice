@@ -73,6 +73,7 @@ import { ensureBuiltInRoles } from "./services/admin-permissions";
 import { runExecutiveOrderArchiveSweep } from "./services/executive-order-archive";
 import { intakeOrdersSignedOn } from "./services/executive-order-intake";
 import { settleOutstandingNumbers } from "./services/executive-order-numbering";
+import { embedPendingOrders } from "./services/order-embeddings";
 import { signedOn } from "./services/white-house-orders";
 import { FIRST_RUN, schedule } from "./services/scheduled-work";
 import { startImpeachmentSweep } from "./services/impeachment";
@@ -839,6 +840,23 @@ if (!process.env.CIVIC_NO_BACKGROUND_SYNC) {
               `${report.created} new, ${report.alreadyHeld} already held`,
           );
         }
+      }
+
+      /*
+       * Straight after, in the same run, and not on a schedule of its own.
+       *
+       * An order nobody can find is not on the platform in any sense that
+       * matters to a reader, and the Federal Register cannot find it for us for
+       * another five days. Leaving the vector to a separate job would mean a
+       * window where the record exists and is unsearchable, which is the exact
+       * failure this whole pipeline was built to remove.
+       */
+      const vectors = await embedPendingOrders();
+      if (vectors.embedded > 0 || vectors.failed > 0) {
+        console.log(
+          `[Embeddings] ${vectors.embedded} embedded, ${vectors.skipped} already current, ` +
+            `${vectors.failed} failed`,
+        );
       }
     },
   });

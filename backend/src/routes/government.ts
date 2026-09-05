@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { searchCongressBills } from "../services/congress-search";
-import { searchExecutiveDocuments } from "../services/executive-search";
+import { pendingOrderAsDocument, searchExecutiveDocuments } from "../services/executive-search";
+import { searchPendingOrders } from "../services/order-embeddings";
+import { orderTitleKey } from "../services/white-house-orders";
 import { searchJudicialOpinions } from "../services/judicial-search";
 import type { CongressSearchResponse, Member, Official } from "../types";
 import { env } from "../env";
@@ -32,6 +34,10 @@ interface FederalRegisterResult {
     agencies: Array<{ name: string }>;
     html_url: string;
     document_number: string;
+    /** Our own record, on an order the Register has not published yet. */
+    reference_id?: string;
+    /** Signed and posted by the White House; not yet in the Federal Register. */
+    just_signed?: boolean;
   }>;
   count: number;
 }
@@ -173,12 +179,50 @@ governmentRouter.get(
     const { q, limit, offset } = c.req.valid("query");
 
     try {
-      const output = await searchExecutiveDocuments(q, limit, offset);
-      console.log(`[executive-search] "${q}" -> ${output.count} hit(s), ${output.results.length} shown`);
+      /*
+       * TWO SOURCES, AND THE SECOND ONE ONLY MATTERS FOR A FEW DAYS.
+       *
+       * The Federal Register handles everything it has published, which is
+       * every order older than about five days. It cannot handle an order
+       * signed this morning, because it does not have it — and that is exactly
+       * when a reader is most likely to come looking.
+       *
+       * So the orders we hold that the Register has not published yet are
+       * searched here too, by meaning rather than by keyword: the order that
+       * prompted this is called "Supporting America's Ranchers" and the reader
+       * was looking for "Mexican wolves", a phrase in its body seven times and
+       * in its title never. See services/order-embeddings.ts.
+       *
+       * Only the first page: the shelf holds a median of two records, and
+       * repeating them under every page of Register results would be a bug the
+       * reader sees.
+       */
+      const [output, shelf] = await Promise.all([
+        searchExecutiveDocuments(q, limit, offset),
+        offset === 0 ? searchPendingOrders(q) : Promise.resolve([]),
+      ]);
+
+      /*
+       * An order can be in both at once, for a few hours on the day the
+       * Register publishes it and before the numbering pass has run. Matched on
+       * the normalised title, which is what the Register itself rewords —
+       * see orderTitleKey.
+       */
+      const published = new Set(output.results.map((doc) => orderTitleKey(doc.title)));
+      const justSigned = shelf
+        .filter((hit) => !published.has(orderTitleKey(hit.title)))
+        .map(pendingOrderAsDocument);
+
+      console.log(
+        `[executive-search] "${q}" -> ${output.count} hit(s), ${output.results.length} shown` +
+          (justSigned.length > 0 ? `, ${justSigned.length} signed but not yet published` : ""),
+      );
 
       const result: FederalRegisterResult = {
-        results: output.results,
-        count: output.count,
+        // First, deliberately. They are the newest thing that exists and the
+        // only results the Register could not have given.
+        results: [...justSigned, ...output.results],
+        count: output.count + justSigned.length,
       };
       return c.json(result);
     } catch (error) {

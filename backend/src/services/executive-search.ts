@@ -49,6 +49,17 @@ export interface ExecutiveDocument {
   agencies: Array<{ name: string }>;
   html_url: string;
   document_number: string;
+  /**
+   * OUR OWN RECORD, when this is an order we already hold and the Register does
+   * not. Present only on results from the pending shelf.
+   *
+   * Carried so the client opens the order we have rather than trying to resolve
+   * a Federal Register document number that does not exist yet — see
+   * services/order-embeddings.ts for why those orders are in the results at all.
+   */
+  reference_id?: string;
+  /** Signed, published by the White House, not yet in the Federal Register. */
+  just_signed?: boolean;
 }
 
 export interface ExecutiveSearchOutput {
@@ -156,5 +167,41 @@ export async function searchExecutiveDocuments(
   return {
     results: (data.results ?? []).map(normalize),
     count: data.count ?? 0,
+  };
+}
+
+/**
+ * Orders signed but not yet published, shaped like a Register document.
+ *
+ * WHY THIS SHAPE. The Register is the source for everything it has, and the
+ * clients are built around its vocabulary. An order it has not published yet is
+ * the same kind of thing — a presidential document, signed on a date, with a
+ * title and a body — so it goes in the same list rather than a second one the
+ * reader has to know to look at. What it does NOT have is an order number, and
+ * that field stays empty rather than being filled with a guess.
+ */
+export function pendingOrderAsDocument(hit: {
+  slug: string | null;
+  masterReferenceId: string;
+  title: string;
+  signedDate: Date | null;
+}): ExecutiveDocument {
+  return {
+    title: hit.title,
+    type: "Presidential Document",
+    subtype: "Executive Order",
+    abstract: "",
+    // Empty because it is true: the Federal Register has not published this.
+    publication_date: "",
+    signing_date: hit.signedDate ? hit.signedDate.toISOString().slice(0, 10) : "",
+    // No number, because no number has been assigned. The White House prints
+    // one and it is wrong on new orders.
+    executive_order_number: "",
+    president: "",
+    agencies: [],
+    html_url: "",
+    document_number: "",
+    reference_id: hit.slug ?? hit.masterReferenceId,
+    just_signed: true,
   };
 }
