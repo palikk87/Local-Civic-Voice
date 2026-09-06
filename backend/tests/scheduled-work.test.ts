@@ -100,3 +100,97 @@ describe("a job's first run has to be reachable", () => {
     expect(ran).toBe(true);
   });
 });
+
+/**
+ * SOME WORK HAS AN END, and the schedule has to hear about it.
+ *
+ * Every other job here is a watcher: it checks something that keeps changing
+ * and there is no last time to check. A backfill is not like that. The Federal
+ * Register publishes a fixed corpus of past executive orders, and once the
+ * oldest is held there is nothing further back — not today, not ever. Left
+ * running, that sweep asks a government API the same question every thirty
+ * minutes to be told the same thing.
+ */
+describe("a job that has finished stops being scheduled", () => {
+  test("returning FINISHED stops the next run", async () => {
+    const { schedule, FINISHED } = await import("../src/services/scheduled-work");
+
+    let runs = 0;
+    schedule({
+      name: "FinishingJob",
+      firstRunAfterMs: 20,
+      // Short enough that it would run several more times inside this test if
+      // nothing stopped it — which is the whole assertion.
+      everyMs: 30,
+      run: async () => {
+        runs++;
+        return FINISHED;
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runs).toBe(1);
+  });
+
+  test("a job that has NOT finished keeps running", async () => {
+    // The other half of the same guard: a sweep with work left must not be
+    // silenced by this, or a backfill stops at its first successful batch.
+    const { schedule } = await import("../src/services/scheduled-work");
+
+    let runs = 0;
+    schedule({
+      name: "UnfinishedJob",
+      firstRunAfterMs: 20,
+      everyMs: 30,
+      run: async () => {
+        runs++;
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runs).toBeGreaterThan(2);
+  });
+
+  test("only the sentinel stops it — a truthy result does not", async () => {
+    // Why FINISHED is a symbol and not a boolean. A sweep returning `true` to
+    // mean "that worked" must never be read as "never run me again".
+    const { schedule } = await import("../src/services/scheduled-work");
+
+    let runs = 0;
+    schedule({
+      name: "TruthyJob",
+      firstRunAfterMs: 20,
+      everyMs: 30,
+      run: async () => {
+        runs++;
+        return true;
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(runs).toBeGreaterThan(2);
+  });
+
+  test("the archive sweep is the job that uses it", async () => {
+    // Reads the source: the behaviour is a request to a government API that
+    // does not happen, half an hour from now, and there is no runtime moment at
+    // which its absence can be observed.
+    const archive = readFileSync(
+      join(import.meta.dir, "../src/services/executive-order-archive.ts"),
+      "utf8",
+    );
+    expect(code(archive)).toContain("return FINISHED");
+  });
+
+  test("nothing else has quietly stopped scheduling itself", async () => {
+    // The two jobs that keep executive orders current must not learn this
+    // trick. WhiteHouseOrders reads the day's signings and the nightly Federal
+    // Register sync catches the handful the White House feed never carries —
+    // three in the last sixteen months. Neither has an end.
+    const services = ["executive-order-intake", "executive-order-numbering", "government-sync"];
+    for (const name of services) {
+      const source = readFileSync(join(import.meta.dir, `../src/services/${name}.ts`), "utf8");
+      expect(code(source)).not.toContain("FINISHED");
+    }
+  });
+});

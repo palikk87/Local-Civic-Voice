@@ -28,6 +28,7 @@
  */
 
 import { prisma } from "../prisma";
+import { FINISHED } from "./scheduled-work";
 import { syncExecutiveOrdersDetailed } from "./government-sync";
 
 /**
@@ -128,7 +129,7 @@ export async function sweepExecutiveOrderArchive(
  * job that reports "nothing to do" every half hour teaches everyone to skim
  * past it, and the interesting line goes with it.
  */
-export async function runExecutiveOrderArchiveSweep(): Promise<void> {
+export async function runExecutiveOrderArchiveSweep(): Promise<unknown> {
   try {
     const result = await sweepExecutiveOrderArchive();
 
@@ -144,8 +145,28 @@ export async function runExecutiveOrderArchiveSweep(): Promise<void> {
           `beginning of what the Federal Register publishes. Future orders arrive with the ` +
           `daily sync.`,
       );
+      /*
+       * AND THIS IS WHERE IT STOPS, PERMANENTLY.
+       *
+       * This job has an end, unlike every other scheduled job here. The Federal
+       * Register publishes a fixed corpus of past orders, and once the oldest
+       * one is held there is nothing further back to fetch — not today, not
+       * ever. Without this it would go on asking a government API the same
+       * question every thirty minutes to be told the same thing.
+       *
+       * The two jobs that keep executive orders current are unaffected and
+       * still run: WhiteHouseOrders reads the day's signings, and the nightly
+       * Federal Register sync catches the handful the White House feed never
+       * carries — three in the last sixteen months, including EO 14423.
+       *
+       * A restart starts it again, which is correct: it will do one sweep, find
+       * the archive still complete, say so, and stop again.
+       */
+      return FINISHED;
     }
   } catch (error) {
     console.error("[EOArchive] sweep failed:", error);
   }
+
+  return undefined;
 }

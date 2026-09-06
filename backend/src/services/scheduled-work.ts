@@ -30,6 +30,22 @@
  * everything at once.
  */
 
+/**
+ * What a job returns when it has finished for good.
+ *
+ * SOME WORK HAS AN END. Most jobs here are watchers — they check something that
+ * keeps changing and there is never a last time to check. A backfill is not
+ * like that: the executive order archive has 1,559 orders in it and when the
+ * last one is held there is nothing further to do, forever. Left running it
+ * makes a request to a government API every thirty minutes to be told the same
+ * thing.
+ *
+ * A symbol rather than a boolean or a string on purpose. `return true` from a
+ * sweep is ambiguous — it reads as "it worked" at least as easily as "stop
+ * scheduling me" — and this is not a decision to make by accident.
+ */
+export const FINISHED = Symbol("scheduled-work:finished");
+
 export interface ScheduledJob {
   /** Appears in the log line, so a run can be traced to a name. */
   name: string;
@@ -37,6 +53,7 @@ export interface ScheduledJob {
   firstRunAfterMs: number;
   /** How often after that. */
   everyMs: number;
+  /** Return FINISHED to say this work is done and must not be scheduled again. */
   run: () => Promise<unknown>;
 }
 
@@ -48,14 +65,28 @@ export interface ScheduledJob {
  * thing keeping a process alive.
  */
 export function schedule(job: ScheduledJob): void {
+  let repeat: ReturnType<typeof setInterval> | null = null;
+  let done = false;
+
   const once = (trigger: string) => {
+    // A run that starts before the previous one reported FINISHED would
+    // otherwise keep going after it. Cheap to check, and the alternative is a
+    // "stopped" job that runs one more time.
+    if (done) return;
+
     void job
       .run()
+      .then((result) => {
+        if (result !== FINISHED) return;
+        done = true;
+        if (repeat) clearInterval(repeat);
+        console.log(`[${job.name}] finished — not scheduling it again.`);
+      })
       .catch((error) => console.error(`[${job.name}] ${trigger} run failed:`, error));
   };
 
   setTimeout(() => once("first"), job.firstRunAfterMs).unref?.();
-  setInterval(() => once("scheduled"), job.everyMs);
+  repeat = setInterval(() => once("scheduled"), job.everyMs);
 }
 
 /**
