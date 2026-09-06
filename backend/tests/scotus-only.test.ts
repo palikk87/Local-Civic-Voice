@@ -219,3 +219,49 @@ describe("purging what is not the Supreme Court", () => {
     expect(second.kept).toBe(2);
   });
 });
+
+/**
+ * ONLY NEWLY HANDED DOWN DECISIONS ARRIVE ON THEIR OWN.
+ *
+ * Khalid: "We should only pull newly handed down decisions automatically."
+ *
+ * The daily pass used to take whatever it did not hold from the Court's whole
+ * term, so a boot after any gap imported the backlog — which is how the count
+ * went from 43 to 75 without anybody asking for those cases. A case nobody has
+ * looked for does not need to exist here in advance: opening one in the Library
+ * creates it on the spot.
+ */
+describe("the automatic pull takes only what was just decided", () => {
+  test("a decision handed down today is taken", async () => {
+    const { isNewlyHandedDown } = await import("../src/services/government-sync");
+    const now = new Date("2026-09-06T12:00:00Z");
+    expect(isNewlyHandedDown(new Date("2026-09-06T09:00:00Z"), now)).toBe(true);
+  });
+
+  test("a decision from earlier in the term is left to the Library", async () => {
+    const { isNewlyHandedDown } = await import("../src/services/government-sync");
+    const now = new Date("2026-09-06T12:00:00Z");
+    expect(isNewlyHandedDown(new Date("2026-03-01T00:00:00Z"), now)).toBe(false);
+  });
+
+  test("the window is wide enough to survive a deploy gap", async () => {
+    // The pass runs every 24 hours. A one-day window would lose a day's
+    // decisions to any restart that straddled a hand-down, so it reaches back a
+    // week — far wider than any gap this container has had, far narrower than a
+    // term.
+    const { isNewlyHandedDown, NEWLY_DECIDED_DAYS } = await import(
+      "../src/services/government-sync"
+    );
+    expect(NEWLY_DECIDED_DAYS).toBeGreaterThanOrEqual(3);
+
+    const now = new Date("2026-09-06T12:00:00Z");
+    expect(isNewlyHandedDown(new Date("2026-09-01T12:00:00Z"), now)).toBe(true);
+  });
+
+  test("the boundary is the day it was decided, not the hour", async () => {
+    const { isNewlyHandedDown } = await import("../src/services/government-sync");
+    const now = new Date("2026-09-06T12:00:00Z");
+    // Eight days back is outside a seven-day window, whatever the clock says.
+    expect(isNewlyHandedDown(new Date("2026-08-29T12:00:00Z"), now)).toBe(false);
+  });
+});

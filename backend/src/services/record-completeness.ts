@@ -1,3 +1,4 @@
+import { isPerCuriam } from "./reference-attribution";
 /**
  * HOW COMPLETE IS OUR RECORD OF THIS LAW — and we publish the misses.
  *
@@ -204,14 +205,28 @@ export function recordCompleteness(
   //
   // A name alone is not enough to put a face on the card, and the face is what
   // makes a law read as somebody's decision rather than a filing.
-  const named = Boolean(ref.sponsorName?.trim());
-  const identifiable = named && Boolean(ref.sponsorPhotoUrl || ref.sponsorBioguideId);
-  checks.push({
-    id: "attribution",
-    label: "Who is behind it, named",
-    met: identifiable,
-    detail: named ? ref.sponsorName : null,
-  });
+  //
+  // UNLESS THE COURT CHOSE NOT TO SIGN IT. A per curiam ruling is issued by the
+  // Court as a body with no individual name on it, on purpose. There is no
+  // author to hold, so a record that says "per curiam" is COMPLETE, and marking
+  // it down asks it forever for something that does not exist — the same
+  // mistake rollCallApplies exists to avoid, and the same one precedentialStatus
+  // is careful about: their answer is not our gap.
+  //
+  // A ruling with NO author recorded is still a failure. That is our gap, and
+  // the two are told apart by name rather than by the shared perCuriam display
+  // flag, which unattributedCourt() also sets for a ruling whose author we
+  // simply never read.
+  if (!isPerCuriam(ref.sponsorName)) {
+    const named = Boolean(ref.sponsorName?.trim());
+    const identifiable = named && Boolean(ref.sponsorPhotoUrl || ref.sponsorBioguideId);
+    checks.push({
+      id: "attribution",
+      label: "Who is behind it, named",
+      met: identifiable,
+      detail: named ? ref.sponsorName : null,
+    });
+  }
 
   // ---- 6. A brief, if a reader has asked for one.
   //

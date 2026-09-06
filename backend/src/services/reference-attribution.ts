@@ -111,11 +111,25 @@ export function presidentAttribution(
  * bench. `perCuriam` is the flag that asks for it; the bench itself is looked
  * up from the decision date, in services/court-composition.
  */
+/**
+ * Did the Court sign this ruling, or deliberately not sign it?
+ *
+ * The distinction matters beyond attribution, so it lives in one place. A
+ * ruling recorded as "Per Curiam" is unsigned BY CHOICE — the Court's own
+ * answer to who wrote it — and that is a complete record, not a missing one.
+ * A ruling with no author recorded at all is our gap, and reads differently
+ * everywhere it is used.
+ */
+export function isPerCuriam(name: string | null | undefined): boolean {
+  const trimmed = name?.trim();
+  return Boolean(trimmed) && /^per\s*curiam$/i.test(trimmed!);
+}
+
 export function justiceAttribution(name: string | null | undefined): Attribution | null {
   const trimmed = name?.trim();
   if (!trimmed) return null;
 
-  if (/^per\s*curiam$/i.test(trimmed)) {
+  if (isPerCuriam(trimmed)) {
     return {
       name: "The Supreme Court",
       role: "Decided per curiam by",

@@ -215,6 +215,61 @@ describe("nothing is marked down for a fact that cannot exist", () => {
     expect(recordCompleteness(ruling, NOW).level).toBe("verified");
   });
 
+  test("A PER CURIAM RULING IS NOT ASKED WHO WROTE IT", () => {
+    // The Court issues these as a body and deliberately puts no individual name
+    // on them. There is no author to hold, so asking forever is the same
+    // mistake the roll call check exists to avoid: their answer is not our gap.
+    const perCuriam = complete({
+      referenceType: "scotus_case",
+      status: "decided",
+      introducedDate: null,
+      decidedDate: new Date("2025-11-24T00:00:00Z"),
+      sponsorName: "Per Curiam",
+      sponsorBioguideId: null,
+      sponsorPhotoUrl: null,
+      precedentialStatus: "Published",
+    });
+
+    expect(idsOf(perCuriam)).not.toContain("attribution");
+    // And with nothing else outstanding it reaches the top rung, rather than
+    // sitting one below it forever.
+    const scored = recordCompleteness(perCuriam, NOW);
+    expect(scored.met).toBe(scored.applicable);
+  });
+
+  test("but a ruling with NO author recorded is still asked, and drops", () => {
+    // The other half. "Per curiam" is the Court's answer; a blank is our gap,
+    // and the badge has to tell them apart.
+    const unattributed = complete({
+      referenceType: "scotus_case",
+      status: "decided",
+      introducedDate: null,
+      decidedDate: new Date("1803-02-24T00:00:00Z"),
+      sponsorName: null,
+      sponsorBioguideId: null,
+      sponsorPhotoUrl: null,
+      precedentialStatus: "Published",
+    });
+
+    expect(idsOf(unattributed)).toContain("attribution");
+    const check = recordCompleteness(unattributed, NOW).checks.find((c) => c.id === "attribution");
+    expect(check?.met).toBe(false);
+  });
+
+  test("a signed opinion is asked, and answers", () => {
+    const signed = complete({
+      referenceType: "scotus_case",
+      status: "decided",
+      introducedDate: null,
+      decidedDate: new Date("2015-06-26T00:00:00Z"),
+      sponsorName: "Sonia Sotomayor",
+      sponsorBioguideId: null,
+      sponsorPhotoUrl: "https://upload.wikimedia.org/portrait.jpg",
+      precedentialStatus: "Published",
+    });
+    expect(idsOf(signed)).toContain("attribution");
+  });
+
   test("A BILL SITTING IN COMMITTEE IS NOT ASKED FOR ONE EITHER", () => {
     // Most bills die there and never get a recorded vote. Marking them down for
     // it would put every one of them a rung below where it belongs.

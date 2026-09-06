@@ -32,6 +32,25 @@ import { acceptOfficialText, officialSourceHeaders } from "./official-source";
 import { congressGovKey, env } from "../env";
 
 const SYNC_COUNT = 10;
+
+/**
+ * How far back "newly handed down" reaches for the Supreme Court.
+ *
+ * See syncFromTheCourtsOwnList for why this exists and why it is a week rather
+ * than a day.
+ */
+export const NEWLY_DECIDED_DAYS = 7;
+
+/**
+ * Was this decision handed down recently enough for the daily pass to take it?
+ *
+ * Pure and exported so the rule can be tested without a network or a term page:
+ * the thing that can be wrong here is the boundary, not the fetching.
+ */
+export function isNewlyHandedDown(decidedDate: Date, now: Date = new Date()): boolean {
+  const oldest = now.getTime() - NEWLY_DECIDED_DAYS * 24 * 60 * 60 * 1000;
+  return decidedDate.getTime() >= oldest;
+}
 const FETCH_TIMEOUT_MS = 20_000;
 
 // Re-syncing more often than this is a no-op (guards against dev hot reloads).
@@ -660,10 +679,40 @@ async function syncFromTheCourtsOwnList(): Promise<number | null> {
     ).map((row) => row.masterReferenceId),
   );
 
-  const missing = ids.filter((entry) => !held.has(entry.masterReferenceId));
-  if (missing.length === 0) {
+  const unheld = ids.filter((entry) => !held.has(entry.masterReferenceId));
+  if (unheld.length === 0) {
     console.log(
       `[GovSync] the Court lists ${listed.length} decision(s) this term and we hold every one`,
+    );
+    return 0;
+  }
+
+  /*
+   * NEWLY HANDED DOWN, NOT "ANY CASE THIS TERM WE HAPPEN TO BE MISSING".
+   *
+   * Khalid: "We should only pull newly handed down decisions automatically."
+   *
+   * This used to take whatever it did not hold from the whole term, so a boot
+   * after any gap imported the term's backlog — which is how the count went
+   * from 43 to 75 without anybody asking for those cases. A case nobody has
+   * looked for does not need to exist here in advance: opening one in the
+   * Library creates it on the spot, through findOrCreateReference in
+   * services/library-resolve.ts. That is the door that matters, because it is
+   * driven by somebody actually wanting the case.
+   *
+   * SEVEN DAYS, and the width is doing real work. The pass runs every 24 hours,
+   * so a one-day window would lose a day's decisions to any deploy gap, outage
+   * or restart that straddled a hand-down. A week is far wider than any gap
+   * this container has ever had and far narrower than a term.
+   */
+  const now = new Date();
+  const missing = unheld.filter((entry) => isNewlyHandedDown(entry.opinion.decidedDate, now));
+
+  if (missing.length === 0) {
+    console.log(
+      `[GovSync] nothing handed down in the last ${NEWLY_DECIDED_DAYS} days. ` +
+        `${unheld.length} older decision(s) this term are not held and are not being fetched — ` +
+        `they arrive when a reader opens one.`,
     );
     return 0;
   }
